@@ -692,6 +692,8 @@ namespace MonoDevelop.VersionControl.Views
 			if (string.IsNullOrEmpty (rev.Email))
 				return;
 			ImageLoader img = ImageService.GetUserIcon (rev.Email, 16);
+			if (img == null)
+				return;
 
 			renderer.Image = img.Image;
 			if (img.Downloading) {

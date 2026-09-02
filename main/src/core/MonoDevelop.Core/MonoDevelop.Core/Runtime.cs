@@ -33,7 +33,6 @@ using System.Net;
 using System.Net.Security;
 using System.Reflection;
 using System.Runtime.InteropServices;
-using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -99,15 +98,11 @@ namespace MonoDevelop.Core
 				defaultSynchronizationContext = SynchronizationContext.Current;
 
 
-			// Hook up the SSL certificate validation codepath
-			ServicePointManager.ServerCertificateValidationCallback += delegate(object sender, X509Certificate certificate, X509Chain chain, SslPolicyErrors sslPolicyErrors) {
-				if (sslPolicyErrors == SslPolicyErrors.None)
-					return true;
-				
-				if (sender is WebRequest)
-					sender = ((WebRequest)sender).RequestUri.Host;
-				return WebCertificateService.GetIsCertificateTrusted (sender as string, certificate.GetPublicKeyString ());
-			};
+// Certificate validation is intentionally left to the OS/CLR trust chain. Registering a
+			// global ServerCertificateValidationCallback here would weaken TLS for *all* HTTPS
+			// connections in the process and could block headless runs in the old UI prompt path
+			// (see Fase 2.2). If support for pinned self-signed certificates is ever desired, it must
+			// be done per-connection with an exact SHA-256 thumbprint + hostname check, not globally.
 			
 			AddinManager.AddinLoadError += OnLoadError;
 			AddinManager.AddinLoaded += OnLoad;
@@ -213,8 +208,8 @@ namespace MonoDevelop.Core
 			Runtime.Preferences.EnableInstrumentation.Changed += (s,e) => InstrumentationService.Enabled = IsInstrumentationServiceEnabled ();
 		}
 
-		static bool IsInstrumentationServiceEnabled ()
-			=> !string.IsNullOrEmpty (Environment.GetEnvironmentVariable ("MONO_AUTOTEST_CLIENT")) || Runtime.Preferences.EnableInstrumentation;
+static bool IsInstrumentationServiceEnabled ()
+			=> Environment.GetEnvironmentVariable ("MONO_AUTOTEST_ENABLE") == "1" || Runtime.Preferences.EnableInstrumentation;
 
 		static void OnLoadError (object s, AddinErrorEventArgs args)
 		{
@@ -646,8 +641,13 @@ namespace MonoDevelop.Core
 	{
 		internal RuntimePreferences () { }
 
-		public readonly ConfigurationProperty<bool> EnableInstrumentation = ConfigurationProperty.Create ("MonoDevelop.EnableInstrumentation", false);
+public readonly ConfigurationProperty<bool> EnableInstrumentation = ConfigurationProperty.Create ("MonoDevelop.EnableInstrumentation", false);
 		public readonly ConfigurationProperty<bool> EnableAutomatedTesting = ConfigurationProperty.Create ("MonoDevelop.EnableAutomatedTesting", false);
+		/// <summary>
+		/// Opt-in for Gravatar avatars. Off by default: fetching an avatar sends the user's email
+		/// hash to a third-party service (gravatar.com); see Fase 2.4.
+		/// </summary>
+		public readonly ConfigurationProperty<bool> EnableGravatarAvatars = ConfigurationProperty.Create ("MonoDevelop.Ide.EnableGravatarAvatars", false);
 		public readonly ConfigurationProperty<string> UserInterfaceLanguage = ConfigurationProperty.Create ("MonoDevelop.Ide.UserInterfaceLanguage", "");
 		public readonly ConfigurationProperty<MonoDevelop.Projects.MSBuild.MSBuildVerbosity> MSBuildVerbosity = ConfigurationProperty.Create ("MonoDevelop.Ide.MSBuildVerbosity", MonoDevelop.Projects.MSBuild.MSBuildVerbosity.Normal);
 

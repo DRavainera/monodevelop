@@ -34,6 +34,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Threading;
 using System.Runtime.Serialization.Formatters.Binary;
+using Newtonsoft.Json;
 
 using MonoDevelop.Projects;
 using MonoDevelop.Core;
@@ -762,24 +763,41 @@ namespace MonoDevelop.UnitTesting.NUnit
 			
 			public static TestInfoCache Read (string file)
 			{
-				BinaryFormatter bf = new BinaryFormatter ();
-				Stream s = new FileStream (file, FileMode.Open, FileAccess.Read);
-				try {
-					return (TestInfoCache) bf.Deserialize (s);
-				} finally {
-					s.Close ();
+				TestInfoCache cache = new TestInfoCache ();
+				using (Stream s = new FileStream (file, FileMode.Open, FileAccess.Read)) {
+					// Preferred format: JSON (type-stable, no arbitrary deserialization).
+					// Fall back to the legacy BinaryFormatter format for data saved by older versions.
+					try {
+						using (var reader = new System.IO.StreamReader (s, System.Text.Encoding.UTF8, true, 1024, true)) {
+							var json = reader.ReadToEnd ();
+							var dict = JsonConvert.DeserializeObject<Dictionary<string, CachedTestInfo>> (json);
+							cache.table = new Hashtable ();
+							if (dict != null) {
+								foreach (var kv in dict)
+									cache.table [kv.Key] = kv.Value;
+							}
+						}
+					} catch (JsonException) {
+						s.Position = 0;
+						BinaryFormatter bf = new BinaryFormatter ();
+						var data = (TestInfoCache) bf.Deserialize (s);
+						if (data != null)
+							cache = data;
+					}
 				}
+				return cache;
 			}
 			
 			public void Write (string file)
 			{
 				if (modified) {
-					BinaryFormatter bf = new BinaryFormatter ();
-					Stream s = new FileStream (file, FileMode.Create, FileAccess.Write);
-					try {
-						bf.Serialize (s, this);
-					} finally {
-						s.Close ();
+					using (Stream s = new FileStream (file, FileMode.Create, FileAccess.Write)) {
+						using (var writer = new System.IO.StreamWriter (s, System.Text.Encoding.UTF8, 1024, true)) {
+							var dict = new Dictionary<string, CachedTestInfo> ();
+							foreach (DictionaryEntry e in table)
+								dict [(string)e.Key] = (CachedTestInfo)e.Value;
+							writer.Write (JsonConvert.SerializeObject (dict));
+						}
 					}
 				}
 			}

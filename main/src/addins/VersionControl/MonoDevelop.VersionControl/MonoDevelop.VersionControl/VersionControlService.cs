@@ -7,6 +7,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Threading;
 using System.Runtime.Serialization.Formatters.Binary;
+using Newtonsoft.Json;
 
 using MonoDevelop.Ide.Gui;
 using MonoDevelop.Core;
@@ -341,9 +342,26 @@ namespace MonoDevelop.VersionControl
 				try {
 					AppDomain.CurrentDomain.AssemblyResolve += localResolve;
 
-					stream = File.OpenRead (file);
-					BinaryFormatter formatter = new BinaryFormatter ();
-					comments = (Hashtable) formatter.Deserialize (stream);
+					// Preferred format: JSON (type-stable, no arbitrary deserialization).
+					// Fall back to the legacy BinaryFormatter format for data saved by older versions.
+					try {
+						stream = File.OpenRead (file);
+						using (var reader = new System.IO.StreamReader (stream)) {
+							var json = reader.ReadToEnd ();
+							var dict = Newtonsoft.Json.JsonConvert.DeserializeObject<Dictionary<string, CommitComment>> (json);
+							comments = new Hashtable ();
+							if (dict != null) {
+								foreach (var kv in dict)
+									comments [kv.Key] = kv.Value;
+							}
+						}
+					} catch (Newtonsoft.Json.JsonException) {
+						stream?.Close ();
+						stream = null;
+						stream = File.OpenRead (file);
+						BinaryFormatter formatter = new BinaryFormatter ();
+						comments = (Hashtable) formatter.Deserialize (stream);
+					}
 				
 					// Remove comments for files that don't exists
 					// Remove comments more than 60 days old
@@ -409,8 +427,12 @@ namespace MonoDevelop.VersionControl
 				
 					Directory.CreateDirectory (file.ParentDirectory);
 					stream = new FileStream (file, FileMode.Create, FileAccess.Write);
-					BinaryFormatter formatter = new BinaryFormatter ();
-					formatter.Serialize (stream, comments);
+					using (var writer = new System.IO.StreamWriter (stream)) {
+						var dict = new Dictionary<string, CommitComment> ();
+						foreach (DictionaryEntry e in comments)
+							dict [(string)e.Key] = (CommitComment)e.Value;
+						writer.Write (Newtonsoft.Json.JsonConvert.SerializeObject (dict));
+					}
 				} catch (Exception ex) {
 					// If there is an error, just discard the file
 					LoggingService.LogError (ex.ToString ());

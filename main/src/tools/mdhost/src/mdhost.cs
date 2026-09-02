@@ -36,7 +36,6 @@ using System.IO;
 using System.Runtime.Remoting;
 using System.Runtime.Remoting.Channels;
 using System.Runtime.Remoting.Channels.Ipc;
-using System.Runtime.Serialization.Formatters.Binary;
 using System.Runtime.Remoting.Lifetime;
 using System.Reflection;
 using System.Collections;
@@ -82,11 +81,11 @@ public class MonoDevelopProcessHost
 			WatchParentProcess (int.Parse (pidToWatch));
 			
 			string unixPath = RegisterRemotingChannel ();
-			
-			byte[] data = Convert.FromBase64String (sref);
-			MemoryStream ms = new MemoryStream (data);
-			BinaryFormatter bf = new BinaryFormatter ();
-			IProcessHostController pc = (IProcessHostController) bf.Deserialize (ms);
+
+			// The first line is a textually-encoded URL to the parent's marshaled controller.
+			// Reconstruct the proxy with Activator.GetObject instead of deserializing a binary
+			// ObjRef (a BinaryFormatter deserialization surface).
+			IProcessHostController pc = (IProcessHostController) Activator.GetObject (typeof (IProcessHostController), sref);
 			
 			LoggingService.AddLogger (new LocalLogger (pc.GetLogger (), args[0]));
 			
@@ -135,6 +134,12 @@ public class MonoDevelopProcessHost
 			string unixRemotingFile = Path.GetTempFileName ();
 			dict ["portName"] = Path.GetFileName (unixRemotingFile);
 			ChannelServices.RegisterChannel (new IpcChannel (dict, clientProvider, serverProvider), false);
+			// Restrict the IPC unix socket to the current user (defaults to world-accessible).
+			try {
+				Mono.Unix.Native.Syscall.chmod (unixRemotingFile, Mono.Unix.Native.FilePermissions.S_IRUSR | Mono.Unix.Native.FilePermissions.S_IWUSR);
+			} catch (Exception ex) {
+				Console.WriteLine ("Could not restrict permissions of the remoting IPC socket: " + ex.Message);
+			}
 			return unixRemotingFile;
 		}
 	}

@@ -16,6 +16,10 @@
     <Reference Include="System.Runtime.Remoting" />
     <Reference Include="System.Xml" />
     <Reference Include="System.Core" />
+    <Reference Include="Mono.Posix">
+      <HintPath>/usr/lib/mono/4.5/Mono.Posix.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
     <PackageReference Include="Mono.Cecil" Version="0.10.1" />
     <SuppressCopyLocal Include="Mono.Cecil.Mdb.dll" />
     <SuppressCopyLocal Include="Mono.Cecil.Pdb.dll" />

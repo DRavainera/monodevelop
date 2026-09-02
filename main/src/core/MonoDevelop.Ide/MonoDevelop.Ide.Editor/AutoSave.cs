@@ -67,12 +67,16 @@ namespace MonoDevelop.Ide.Editor
 			return Path.Combine (autoSavePath, GetMD5 (fileName) + ".sav");
 		}
 
-		static MD5 md5 = MD5.Create ();
 		static string GetMD5 (string data)
 		{
+			// SHA-256 instead of the deprecated MD5. Hashes are only used to derive a
+			// deterministic autosave filename from the source file name (not for security),
+			// but the shared static MD5 instance was not thread-safe; a per-call instance is used.
 			var result = StringBuilderCache.Allocate();
-			foreach (var b in md5.ComputeHash (Encoding.ASCII.GetBytes (data))) {
-				result.Append(b.ToString("X2"));
+			using (var sha256 = SHA256.Create ()) {
+				foreach (var b in sha256.ComputeHash (Encoding.ASCII.GetBytes (data))) {
+					result.Append(b.ToString("X2"));
+				}
 			}
 			return StringBuilderCache.ReturnAndFree (result);
 		}

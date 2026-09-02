@@ -211,9 +211,7 @@ namespace MonoDevelop.AspNet.Execution
 	
 	public enum XspSslProtocol {
 		Default,
-		Tls,
-		Ssl2,
-		Ssl3
+		Tls
 	}
 	
 	public enum XspSslMode {

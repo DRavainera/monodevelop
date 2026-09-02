@@ -34,6 +34,7 @@ using System.Runtime.Remoting.Channels.Ipc;
 using System.Runtime.Remoting.Messaging;
 using System.Runtime.Remoting.Channels.Tcp;
 using System.Reflection;
+using Mono.Unix.Native;
 
 namespace MonoDevelop.Core.Execution
 {
@@ -78,6 +79,17 @@ namespace MonoDevelop.Core.Execution
 				IDictionary dict = new Hashtable ();
 				dict ["portName"] = Path.GetFileName (unixRemotingFile);
 				ChannelServices.RegisterChannel (new IpcChannel (dict, clientProvider, serverProvider), false);
+
+				// Restrict the IPC unix socket to the current user. Without this, the socket is
+				// created with world-readable/writable permissions, allowing any local user to
+				// connect to the remoting channel (which is a deserialization attack surface).
+				if (!Platform.IsWindows) {
+					try {
+						Mono.Unix.Native.Syscall.chmod (unixRemotingFile, FilePermissions.S_IRUSR | FilePermissions.S_IWUSR);
+					} catch (Exception ex) {
+						LoggingService.LogWarning ("Could not restrict permissions of the remoting IPC socket", ex);
+					}
+				}
 				
 				// Register the TCP channel too. It is used for communication of Mono -> .NET. The IPC channel
 				// has interoperabilitu issues.
@@ -148,6 +160,27 @@ namespace MonoDevelop.Core.Execution
 		internal static void RegisterAssemblyForSimpleResolve (string name)
 		{
 			simpleResolveAssemblies.Add (name);
+		}
+		
+		/// <summary>
+		/// Returns a textually-encoded URL that can be used by a remote process to connect to an
+		/// object marshaled on one of the channels registered by this service. This avoids having
+		/// to serialize a binary <see cref="ObjRef"/> across process boundaries (a BinaryFormatter
+		/// deserialization surface). The object is expected to have been published via
+		/// <see cref="RemotingServices.Marshal"/>, so it is reachable on the registered channels.
+		/// </summary>
+		public static string GetMarshaledUrl (string objectUri)
+		{
+			// Prefer the loopback TCP channel: it is hardened with rejectRemoteRequests=true (binds
+			// to 127.0.0.1 only) and is interoperable across Mono and .NET runtimes.
+			foreach (IChannel ch in ChannelServices.RegisteredChannels) {
+				if (ch.ChannelName != "tcp")
+					continue;
+				ChannelDataStore store = ((IChannelReceiver)ch).ChannelData as ChannelDataStore;
+				if (store != null && store.ChannelUris.Length > 0)
+					return store.ChannelUris[0] + "/" + objectUri;
+			}
+			throw new InvalidOperationException ("No marshaled TCP channel is available.");
 		}
 		
 		internal static CallbackData GetCallbackData (string uri, string method)

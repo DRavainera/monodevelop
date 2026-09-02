@@ -35,6 +35,10 @@ obj/
 /main/src/addins/PerformanceDiagnostics/UIThreadMonitorDaemon/bin
 /main/src/core/MonoDevelop.Core/BuildVariables.cs
 /scripts/configure.exe
+/scripts/configure.dll
+/scripts/configure.deps.json
+/scripts/configure.pdb
+/scripts/configure.runtimeconfig.json
 /main/packages
 /main/.nuget/
 pull-package.exe
@@ -279,3 +283,9 @@ main/po/StripMnemonics.exe
 *.binlog
 *.ProjectImports.zip
 main/tests/StressTest/bin
+
+#claves / materiales de firma (Fase 3.4)
+*.snk
+*.pfx
+*.pem
+*.key
