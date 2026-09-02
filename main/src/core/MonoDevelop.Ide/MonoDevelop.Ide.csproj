@@ -63,7 +63,6 @@
     </Reference>
     <PackageReference Include="Microsoft.TemplateEngine.Edge" Version="$(NuGetVersionMicrosoftTemplateEngine)" PrivateAssets="runtime" />
     <PackageReference Include="Microsoft.TemplateEngine.Orchestrator.RunnableProjects" Version="$(NuGetVersionMicrosoftTemplateEngine)" PrivateAssets="runtime" />
-    <PackageReference Include="Microsoft.VisualStudio.CodingConventions" Version="1.1.20180503.2" PrivateAssets="runtime" />
     <PackageReference Include="YamlDotNet.Signed" Version="5.2.1" />
     <IncludeCopyLocal Include="ICSharpCode.NRefactory.Cecil.dll" />
     <IncludeCopyLocal Include="ICSharpCode.NRefactory.CSharp.dll" />
@@ -6026,6 +6025,7 @@
     <Compile Include="MonoDevelop.Ide.Editor\DocumentRegion.cs" />
     <Compile Include="MonoDevelop.Ide.Editor\TextMarkerMouseEventArgs.cs" />
     <Compile Include="MonoDevelop.Ide.Editor\DefaultSourceEditorOptions.cs" />
+    <Compile Include="MonoDevelop.Ide.Editor\CodingConventionsShim.cs" />
     <Compile Include="MonoDevelop.Ide.Editor\TextEditor.cs" />
     <Compile Include="MonoDevelop.Ide.Editor\ITextDocument.cs" />
     <Compile Include="MonoDevelop.Ide.Editor\TextEditorDisplayBinding.cs" />

@@ -55,11 +55,75 @@
     <Reference Include="System.Configuration" />
     <Reference Include="System.Core" />
     <Reference Include="System.Net.Http" />
+    <Reference Include="System.Collections.Immutable, Version=7.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a">
+      <HintPath>$(NuGetPackageRoot)system.collections.immutable/7.0.0/lib/netstandard2.0/System.Collections.Immutable.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
     <Reference Include="System.Runtime.InteropServices.RuntimeInformation" />
     <Reference Include="System.Xml.Linq" />
     <Reference Include="System.Web" />
     <Reference Include="System.ServiceModel" />
     <Reference Include="Microsoft.CSharp" />
+    <Reference Include="Mono.Posix">
+      <HintPath>/usr/lib/mono/4.5/Mono.Posix.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Mono.Security">
+      <HintPath>/usr/lib/mono/4.5/Mono.Security.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="monodoc, Version=1.0.0.0, Culture=neutral, PublicKeyToken=0738eb9f132ed756">
+      <HintPath>/usr/lib/mono/monodoc/monodoc.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Mono.Cecil, Version=0.10.1.0, Culture=neutral, PublicKeyToken=50cebf1cceb9d05e">
+      <HintPath>/home/daniel/.nuget/packages/mono.cecil/0.10.1/lib/net40/Mono.Cecil.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Mono.Cecil.Mdb, Version=0.10.1.0, Culture=neutral, PublicKeyToken=50cebf1cceb9d05e">
+      <HintPath>/home/daniel/.nuget/packages/mono.cecil/0.10.1/lib/net40/Mono.Cecil.Mdb.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Mono.Cecil.Pdb, Version=0.10.1.0, Culture=neutral, PublicKeyToken=50cebf1cceb9d05e">
+      <HintPath>/home/daniel/.nuget/packages/mono.cecil/0.10.1/lib/net40/Mono.Cecil.Pdb.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Mono.Cecil.Rocks, Version=0.10.1.0, Culture=neutral, PublicKeyToken=50cebf1cceb9d05e">
+      <HintPath>/home/daniel/.nuget/packages/mono.cecil/0.10.1/lib/net40/Mono.Cecil.Rocks.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="ICSharpCode.Decompiler">
+      <HintPath>$(NuGetPackageRoot)icsharpcode.decompiler/6.1.0.5902/lib/netstandard2.0/ICSharpCode.Decompiler.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Newtonsoft.Json">
+      <HintPath>$(NuGetPackageRoot)newtonsoft.json/13.0.3/lib/netstandard2.0/Newtonsoft.Json.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="System.Reflection.Metadata">
+      <HintPath>$(NuGetPackageRoot)system.reflection.metadata/1.6.0/lib/netstandard2.0/System.Reflection.Metadata.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="System.Memory">
+      <HintPath>$(NuGetPackageRoot)system.memory/4.5.5/lib/netstandard2.0/System.Memory.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="System.Runtime.CompilerServices.Unsafe">
+      <HintPath>$(NuGetPackageRoot)system.runtime.compilerservices.unsafe/6.0.0/lib/netstandard2.0/System.Runtime.CompilerServices.Unsafe.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Microsoft.Build.Locator">
+      <HintPath>$(NuGetPackageRoot)microsoft.build.locator/1.1.2/lib/net46/Microsoft.Build.Locator.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Microsoft.Extensions.ObjectPool">
+      <HintPath>$(NuGetPackageRoot)microsoft.extensions.objectpool/3.0.0-preview9.19423.4/lib/netstandard2.0/Microsoft.Extensions.ObjectPool.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Microsoft.CodeAnalysis, Version=4.8.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35">
+      <HintPath>$(NuGetPackageRoot)microsoft.codeanalysis.common/4.8.0-7.25569.21/lib/netstandard2.0/Microsoft.CodeAnalysis.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
     <Reference Include="Microsoft.Build">
       <Private>False</Private>
       <HintPath>$(MSBuildToolsPath)\Microsoft.Build.dll</HintPath>
@@ -76,7 +140,6 @@
       <HintPath>$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll</HintPath>
       <Private>False</Private>
     </Reference>
-    <Reference Include="monodoc, Version=1.0.0.0, Culture=neutral, PublicKeyToken=0738eb9f132ed756" />
     <Reference Include="System" />
     <Reference Include="System.IO.FileSystem" />
     <Reference Include="System.IO.FileSystem.Primitives" />
@@ -86,16 +149,12 @@
     <PackageReference Include="ClrHeapAllocationAnalyzer" Version="1.0.0.9" />
     -->
     <PackageReference Include="Microsoft.Build.Locator" Version="1.1.2" PrivateAssets="runtime" />
-    <PackageReference Include="Microsoft.CodeAnalysis.EditorFeatures" Version="$(NuGetVersionRoslyn)" PrivateAssets="runtime" />
-    <PackageReference Include="Microsoft.CodeAnalysis.Workspaces.MSBuild" Version="$(NuGetVersionRoslyn)" PrivateAssets="runtime" />
-    <PackageReference Include="Microsoft.VisualStudio.CodingConventions" Version="1.1.20180503.2" PrivateAssets="runtime" />
     <PackageReference Include="Microsoft.VisualStudio.Composition" Version="$(NuGetVersionVSComposition)" ExcludeAssets="all" />
     <!-- Need the net45 version, see https://github.com/mono/mono/issues/12461 -->
     <Reference Include="$(NuGetPackageRoot)microsoft.visualstudio.composition/$(NuGetVersionVSComposition)/lib/net45/Microsoft.VisualStudio.Composition.dll">
       <NuGetPackageId>Microsoft.VisualStudio.Composition</NuGetPackageId>
       <Private>true</Private>
     </Reference>
-    <PackageReference Include="Mono.Cecil" Version="$(NuGetVersionCecil)" PrivateAssets="runtime" />
     <PackageReference Include="MonoDevelopDev.Analyzers" Version="$(NuGetVersionMonoDevelopAnalyzers)" />
     <PackageReference Include="Newtonsoft.Json" Version="$(NuGetVersionNewtonsoftJson)" PrivateAssets="runtime" />
     <PackageReference Include="SharpZipLib" Version="1.2.0" PrivateAssets="runtime" />
@@ -114,28 +173,18 @@
     <IncludeCopyLocal Include="ICSharpCode.SharpZipLib.dll" />
     <IncludeCopyLocal Include="Microsoft.Build.Locator.dll" />
     <IncludeCopyLocal Include="Microsoft.CodeAnalysis.CSharp.dll" />
-    <IncludeCopyLocal Include="Microsoft.CodeAnalysis.CSharp.EditorFeatures.dll" />
-    <IncludeCopyLocal Include="Microsoft.CodeAnalysis.CSharp.Features.dll" />
     <IncludeCopyLocal Include="Microsoft.CodeAnalysis.CSharp.Workspaces.dll" />
     <IncludeCopyLocal Include="Microsoft.CodeAnalysis.dll" />
-    <IncludeCopyLocal Include="Microsoft.CodeAnalysis.EditorFeatures.dll" />
-    <IncludeCopyLocal Include="Microsoft.CodeAnalysis.EditorFeatures.Text.dll" />
-    <IncludeCopyLocal Include="Microsoft.CodeAnalysis.EditorFeatures.Wpf.dll" />
     <IncludeCopyLocal Include="Microsoft.CodeAnalysis.Elfie.dll" />
     <IncludeCopyLocal Include="Microsoft.CodeAnalysis.ExternalAccess.MonoDevelop.dll" />
-    <IncludeCopyLocal Include="Microsoft.CodeAnalysis.Features.dll" />
     <IncludeCopyLocal Include="Microsoft.CodeAnalysis.FlowAnalysis.Utilities.dll" />
     <IncludeCopyLocal Include="Microsoft.CodeAnalysis.InteractiveHost.dll" />
     <IncludeCopyLocal Include="Microsoft.CodeAnalysis.Scripting.dll" />
     <IncludeCopyLocal Include="Microsoft.CodeAnalysis.VisualBasic.dll" />
-    <IncludeCopyLocal Include="Microsoft.CodeAnalysis.VisualBasic.EditorFeatures.dll" />
-    <IncludeCopyLocal Include="Microsoft.CodeAnalysis.VisualBasic.Features.dll" />
     <IncludeCopyLocal Include="Microsoft.CodeAnalysis.VisualBasic.Workspaces.dll" />
     <IncludeCopyLocal Include="Microsoft.CodeAnalysis.Workspaces.dll" />
-    <IncludeCopyLocal Include="Microsoft.CodeAnalysis.Workspaces.MSBuild.dll" />
     <IncludeCopyLocal Include="Microsoft.DiaSymReader.dll" />
     <IncludeCopyLocal Include="Microsoft.Extensions.ObjectPool.dll" />
-    <IncludeCopyLocal Include="Microsoft.VisualStudio.CodingConventions.dll" />
     <IncludeCopyLocal Include="Microsoft.VisualStudio.Composition.dll" />
     <IncludeCopyLocal Include="Microsoft.VisualStudio.Composition.NetFxAttributes.dll" />
     <IncludeCopyLocal Include="Microsoft.VisualStudio.CoreUtility.dll" />
@@ -789,12 +838,15 @@
   </ItemGroup>
   <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />
   <Target Name="BeforeBuild" Inputs="BuildVariables.cs.in; $(MSBuildProjectDirectory)\..\..\..\..\version.config" Outputs="BuildVariables.cs" Condition="Exists('$(MSBuildProjectDirectory)\..\..\..\..\version.config')">
+    <PropertyGroup>
+      <ConfigureNet8Project>$(MSBuildProjectDirectory)\..\..\..\..\scripts\configure.net8.csproj</ConfigureNet8Project>
+      <ConfigureNet8Output>$(MSBuildProjectDirectory)\..\..\..\..\scripts\</ConfigureNet8Output>
+      <ConfigureDll>$(MSBuildProjectDirectory)\..\..\..\..\scripts\configure.dll</ConfigureDll>
+    </PropertyGroup>
     <MakeDir Directories="$(FullBuildInfo)" />
-    <Csc Sources="$(ConfigureScript)" OutputAssembly="$(ConfigureScriptExe)" ToolExe="$(CscToolExe)" ToolPath="$(CscToolPath)" Condition="!Exists('$(ConfigureScriptExe)')" />
-    <Exec Command="$(MonoLauncher)&quot;$(ConfigureScriptExe)&quot; gen-buildinfo $(FullBuildInfo)" WorkingDirectory="$(MSBuildProjectDirectory)" />
-    <Csc Sources="BuildVariables.gen.cs" OutputAssembly="BuildVariables.gen.exe" ToolExe="$(CscToolExe)" ToolPath="$(CscToolPath)" />
-    <Exec Command="$(MonoLauncher)&quot;$(MSBuildProjectDirectory)\BuildVariables.gen.exe&quot; ." WorkingDirectory="$(MSBuildProjectDirectory)" />
-    <Delete Files="BuildVariables.gen.exe" />
+    <Exec Command="&quot;dotnet&quot; build &quot;$(ConfigureNet8Project)&quot; -nologo -v minimal -p:OutputPath=&quot;$(ConfigureNet8Output)&quot; -p:AppendTargetFrameworkToOutputPath=false" Condition="!Exists('$(ConfigureDll)')" />
+    <Exec Command="&quot;dotnet&quot; &quot;$(ConfigureDll)&quot; gen-buildinfo $(FullBuildInfo)" WorkingDirectory="$(MSBuildProjectDirectory)" />
+    <Exec Command="&quot;dotnet&quot; &quot;$(ConfigureDll)&quot; gen-buildvariables $(MSBuildProjectDirectory)" WorkingDirectory="$(MSBuildProjectDirectory)" />
     <MakeDir Directories="$(OutputPath)" />
     <Exec Command="&quot;$(Git)&quot; rev-parse HEAD &gt; $(BuildInfo)" WorkingDirectory="$(MSBuildProjectDirectory)" IgnoreExitCode="True" />
     <Exec Command="&quot;$(Git)&quot; rev-parse HEAD &gt; $(VcRevision)" WorkingDirectory="$(MSBuildProjectDirectory)" IgnoreExitCode="True" />

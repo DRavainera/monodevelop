@@ -70,15 +70,12 @@ namespace MonoDevelop.Ide
 
 		static string GetMonoDisplayName ()
 		{
-			var t = Type.GetType ("Mono.Runtime");
-			if (t == null)
-				return "unknown";
-			var mi = t.GetMethod ("GetDisplayName", BindingFlags.NonPublic | BindingFlags.Static);
-			if (mi == null) {
+			var displayName = Platform.GetMonoDisplayName ();
+			if (displayName == null) {
 				LoggingService.LogError ("No Mono.Runtime.GetDisplayName method found.");
 				return "error";
 			}
-			return (string)mi.Invoke (null, null);
+			return displayName;
 		}
 
 		static string GetMonoVersionNumber ()
@@ -91,17 +88,12 @@ namespace MonoDevelop.Ide
 
 		static bool IsMono ()
 		{
-			return Type.GetType ("Mono.Runtime") != null;
+			return Platform.IsMonoRuntime;
 		}
 
 		public static string GetRuntimeInfo ()
 		{
-			string val;
-			if (IsMono ()) {
-				val = "Mono " + GetMonoDisplayName ();
-			} else {
-				val = "Microsoft .NET " + Environment.Version;
-			}
+			string val = Platform.GetRuntimeDescription ();
 
 			if (IntPtr.Size == 8)
 				val += (" (64-bit)");

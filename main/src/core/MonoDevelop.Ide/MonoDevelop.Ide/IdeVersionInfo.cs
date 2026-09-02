@@ -33,20 +33,17 @@ namespace MonoDevelop.Ide
 	{
 		static bool IsMono ()
 		{
-			return Type.GetType ("Mono.Runtime") != null;
+			return Platform.IsMonoRuntime;
 		}
 
 		static string GetMonoVersionNumber ()
 		{
-			var t = Type.GetType ("Mono.Runtime"); 
-			if (t == null)
-				return "unknown";
-			var mi = t.GetMethod ("GetDisplayName", BindingFlags.NonPublic | BindingFlags.Static);
-			if (mi == null) {
+			var displayName = Platform.GetMonoDisplayName ();
+			if (displayName == null) {
 				LoggingService.LogError ("No Mono.Runtime.GetDisplayName method found.");
 				return "error";
 			}
-			return (string)mi.Invoke (null, null); 
+			return displayName;
 		}
 		
 		public static string GetGtkVersion ()

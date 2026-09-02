@@ -32,7 +32,7 @@ using Microsoft.VisualStudio.Text.Editor.Commanding.Commands;
 using Microsoft.VisualStudio.Text.Editor.OptionsExtensionMethods;
 using Microsoft.VisualStudio.Text.Utilities;
 
-using Microsoft.VisualStudio.CodingConventions;
+using CodingConventions = MonoDevelop.Ide.Editor.CodingConventions;
 using Microsoft.VisualStudio.Threading;
 using Microsoft.VisualStudio.Utilities;
 
@@ -86,7 +86,7 @@ namespace MonoDevelop.TextEditor
 		static bool settingZoomLevel;
 
 		PolicyContainer policyContainer;
-		ICodingConventionContext editorConfigContext;
+		CodingConventions.ICodingConventionContext editorConfigContext;
 		bool warnOverwrite;
 		IDisposable textBufferRegistration;
 
@@ -438,7 +438,7 @@ namespace MonoDevelop.TextEditor
 #endif
 		}
 
-		private Task UpdateOptionsFromEditorConfigAsync (object sender, CodingConventionsChangedEventArgs args)
+		private Task UpdateOptionsFromEditorConfigAsync (object sender, CodingConventions.CodingConventionsChangedEventArgs args)
 		{
 			// Set base options first, then override with editorconfig values
 			UpdateOptionsFromPolicy ();
@@ -447,7 +447,7 @@ namespace MonoDevelop.TextEditor
 				return Task.CompletedTask;
 
 			if (editorConfigContext.CurrentConventions.UniversalConventions.TryGetIndentStyle (out var indentStyle))
-				SetOptionValue (DefaultOptions.ConvertTabsToSpacesOptionName, indentStyle == IndentStyle.Spaces);
+				SetOptionValue (DefaultOptions.ConvertTabsToSpacesOptionName, indentStyle == CodingConventions.IndentStyle.Spaces);
 			if (editorConfigContext.CurrentConventions.UniversalConventions.TryGetTabWidth (out var tabWidth))
 				SetOptionValue (DefaultOptions.TabSizeOptionName, tabWidth);
 			if (editorConfigContext.CurrentConventions.UniversalConventions.TryGetIndentSize (out var indentSize))
