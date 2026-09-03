@@ -510,8 +510,8 @@ namespace MonoDevelop.Ide.Templates
 			int tabWidth = textPolicy.TabWidth;
 
 			if (ctx != null) {
-				if (ctx.CurrentConventions.UniversalConventions.TryGetIndentStyle (out Microsoft.VisualStudio.CodingConventions.IndentStyle result))
-					convertTabsToSpaces = result == Microsoft.VisualStudio.CodingConventions.IndentStyle.Spaces;
+				if (ctx.CurrentConventions.UniversalConventions.TryGetIndentStyle (out MonoDevelop.Ide.Editor.CodingConventions.IndentStyle result))
+					convertTabsToSpaces = result == MonoDevelop.Ide.Editor.CodingConventions.IndentStyle.Spaces;
 				if (ctx.CurrentConventions.UniversalConventions.TryGetTabWidth (out int editorConfigTabWidth))
 					tabWidth = editorConfigTabWidth;
 			}

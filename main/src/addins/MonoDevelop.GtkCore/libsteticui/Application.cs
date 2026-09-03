@@ -53,7 +53,12 @@ namespace Stetic
 				remotingChannel = "tcp";
 				IChannel ch = ChannelServices.GetChannel ("tcp");
 				if (ch == null) {
-					ChannelServices.RegisterChannel (new TcpChannel (0), false);
+					Hashtable props = new Hashtable ();
+					props ["port"] = 0;
+					props ["name"] = "__internal_tcp";
+					// Bind the remoting channel to loopback only; reject remote (non-local) requests.
+					props ["rejectRemoteRequests"] = true;
+					ChannelServices.RegisterChannel (new TcpChannel (props, null, null), false);
 				}
 			} else {
 				remotingChannel = "unix";
@@ -61,6 +66,13 @@ namespace Stetic
 				if (ch == null) {
 					string unixRemotingFile = Path.GetTempFileName ();
 					ChannelServices.RegisterChannel (new UnixChannel (unixRemotingFile), false);
+					// Restrict the unix socket to the current user (defaults to world-accessible).
+					// The backend process runs under the same user, so access is preserved.
+					try {
+						Mono.Unix.Native.Syscall.chmod (unixRemotingFile, Mono.Unix.Native.FilePermissions.S_IRUSR | Mono.Unix.Native.FilePermissions.S_IWUSR);
+					} catch (Exception) {
+						// Best-effort: if the chmod fails, silently degrade to the default permissions.
+					}
 				}
 			}
 			return remotingChannel;

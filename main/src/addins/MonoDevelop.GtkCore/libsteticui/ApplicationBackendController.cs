@@ -3,7 +3,6 @@ using System;
 using System.IO;
 using System.Diagnostics;
 using System.Threading;
-using System.Runtime.Serialization.Formatters.Binary;
 using System.Runtime.Remoting;
 using System.Runtime.Remoting.Channels;
 using System.Runtime.Remoting.Channels.Tcp;
@@ -40,12 +39,12 @@ namespace Stetic
 			runningEvent.Reset ();
 			
 			string asm = GetType().Assembly.Location;
-			
-			BinaryFormatter bf = new BinaryFormatter ();
+
+			// Publish this controller over the registered remoting channel and hand the child a
+			// textually-encoded URL to it, instead of serializing a binary ObjRef (a BinaryFormatter
+			// deserialization surface). The child reconstructs the proxy with Activator.GetObject.
 			ObjRef oref = RemotingServices.Marshal (this);
-			MemoryStream ms = new MemoryStream ();
-			bf.Serialize (ms, oref);
-			string sref = Convert.ToBase64String (ms.ToArray ());
+			string controllerUrl = GetMarshaledUrl (oref.URI);
 		
 			Process process = new Process ();
 			process.StartInfo = new ProcessStartInfo ("sh", "-c \"mono --debug " + asm + "\"");
@@ -55,12 +54,35 @@ namespace Stetic
 			process.EnableRaisingEvents = true;
 			process.Start ();
 			process.StandardInput.WriteLine (channelId);
-			process.StandardInput.WriteLine (sref);
+			process.StandardInput.WriteLine (controllerUrl);
 			process.StandardInput.Flush ();
 			process.Exited += OnExited;
 			
 			if (!runningEvent.WaitOne (10000, false))
 				throw new ApplicationException ("Couldn't create a remote process.");
+		}
+
+		// Builds the connectable URL for the marshaled object on the channel registered for this
+		// backend (see IsolatedApplication.RegisterRemotingChannel). TCP uses "tcp://host:port/uri",
+		// Mono's Unix channel uses "unix://<socket-path>?<object-uri>".
+		string GetMarshaledUrl (string objectUri)
+		{
+			string targetName = channelId == "tcp" ? "__internal_tcp" : "unix";
+			bool isTcp = channelId == "tcp";
+			foreach (IChannel ch in ChannelServices.RegisteredChannels) {
+				if (ch.ChannelName != targetName)
+					continue;
+				ChannelDataStore store = ((IChannelReceiver)ch).ChannelData as ChannelDataStore;
+				if (store == null || store.ChannelUris.Length == 0)
+					continue;
+				string baseUrl = store.ChannelUris[0];
+				if (isTcp)
+					return baseUrl + "/" + objectUri;
+				// Mono's UnixChannel URL grammar is unix://<socket-path>?<object-uri>
+				string path = baseUrl.Substring ("unix://".Length);
+				return "unix://" + path + "?" + objectUri;
+			}
+			throw new InvalidOperationException ("No remoting channel is available for the backend.");
 		}
 		
 		public void StopBackend (bool waitUntilDone)

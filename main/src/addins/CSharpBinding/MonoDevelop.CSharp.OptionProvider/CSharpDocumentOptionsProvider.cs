@@ -34,7 +34,7 @@ using MonoDevelop.CSharp.Formatting;
 using MonoDevelop.Ide.Gui.Content;
 using MonoDevelop.Ide.TypeSystem;
 using MonoDevelop.Projects.Policies;
-using Microsoft.VisualStudio.CodingConventions;
+using CodingConventions = MonoDevelop.Ide.Editor.CodingConventions;
 using System.IO;
 using MonoDevelop.Core;
 using System.Linq;
@@ -53,7 +53,7 @@ namespace MonoDevelop.CSharp.OptionProvider
 			var project = mdws?.GetMonoProject (document.Project.Id);
 
 			var path = GetPath (document);
-			ICodingConventionContext conventions = null;
+			CodingConventions.ICodingConventionContext conventions = null;
 			try {
 				if (path != null)
 					conventions = await EditorConfigService.GetEditorConfigContext (path, cancellationToken);
@@ -88,11 +88,11 @@ namespace MonoDevelop.CSharp.OptionProvider
 			TextStylePolicy textpolicy;
 			TextStylePolicy TextPolicy => textpolicy ?? (textpolicy = policyBag?.Get<TextStylePolicy> (types) ?? PolicyService.InvariantPolicies?.Get<TextStylePolicy> (types));
 
-			readonly ICodingConventionsSnapshot codingConventionsSnapshot;
+			readonly CodingConventions.ICodingConventionsSnapshot codingConventionsSnapshot;
 			private static readonly ConditionalWeakTable<IReadOnlyDictionary<string, object>, IReadOnlyDictionary<string, string>> s_convertedDictionaryCache =
 				new ConditionalWeakTable<IReadOnlyDictionary<string, object>, IReadOnlyDictionary<string, string>> ();
 
-			public DocumentOptions (PolicyBag policyBag, ICodingConventionsSnapshot codingConventionsSnapshot)
+			public DocumentOptions (PolicyBag policyBag, CodingConventions.ICodingConventionsSnapshot codingConventionsSnapshot)
 			{
 				this.policyBag = policyBag;
 				this.codingConventionsSnapshot = codingConventionsSnapshot;

@@ -62,11 +62,7 @@ namespace MonoDevelop.AspNet.Execution
 			//index should be equivalent to XspSslProtocol enum
 			((ListStore) sslProtocol.Model).Clear ();
 			sslProtocol.AppendText (GettextCatalog.GetString ("Default"));
-#pragma warning disable MD0005
 			sslProtocol.AppendText ("TLS");
-			sslProtocol.AppendText ("SSL 2");
-			sslProtocol.AppendText ("SSL 3");
-#pragma warning restore MD0005
 
 			((ListStore) keyType.Model).Clear ();
 			keyType.AppendText (GettextCatalog.GetString ("None"));

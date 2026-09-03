@@ -47,7 +47,7 @@ using MonoDevelop.Projects.Policies;
 using Roslyn.Utilities;
 using Microsoft.CodeAnalysis.Options;
 using MonoDevelop.CSharp.OptionProvider;
-using Microsoft.VisualStudio.CodingConventions;
+using CodingConventions = MonoDevelop.Ide.Editor.CodingConventions;
 using System.Linq;
 using System.Collections.Immutable;
 using System.Runtime.CompilerServices;
@@ -159,12 +159,12 @@ namespace MonoDevelop.CSharp.Formatting
 		sealed class DocumentOptions : IDocumentOptions
 		{
 			readonly OptionSet optionSet;
-			readonly ICodingConventionsSnapshot codingConventionsSnapshot;
+			readonly CodingConventions.ICodingConventionsSnapshot codingConventionsSnapshot;
 			private static readonly ConditionalWeakTable<IReadOnlyDictionary<string, object>, IReadOnlyDictionary<string, string>> s_convertedDictionaryCache =
 				new ConditionalWeakTable<IReadOnlyDictionary<string, object>, IReadOnlyDictionary<string, string>> ();
 
 
-			public DocumentOptions (OptionSet optionSet, ICodingConventionsSnapshot codingConventionsSnapshot)
+			public DocumentOptions (OptionSet optionSet, CodingConventions.ICodingConventionsSnapshot codingConventionsSnapshot)
 			{
 				this.optionSet = optionSet;
 				this.codingConventionsSnapshot = codingConventionsSnapshot;

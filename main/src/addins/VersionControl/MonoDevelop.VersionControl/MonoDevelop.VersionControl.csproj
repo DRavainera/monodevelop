@@ -818,6 +818,7 @@
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Humanizer.Core" Version="2.2.0" />
+    <PackageReference Include="Newtonsoft.Json" Version="$(NuGetVersionNewtonsoftJson)" />
   </ItemGroup>
   <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />
 </Project>

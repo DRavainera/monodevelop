@@ -40,13 +40,19 @@ namespace MonoDevelop.Ide
 			TrustedCertificates = new Dictionary<string, bool> ();
 		}
 		
+		/// <param name="certificateFingerprint">Exact SHA-256 thumbprint of the certificate.</param>
 		public bool GetIsCertificateTrusted (string uri, string certificateFingerprint)
 		{
 			bool value;
 			
 			if (!TrustedCertificates.TryGetValue (certificateFingerprint, out value)) {
+				// Show an interactive confirmation when a Gtk main loop is present. In headless
+				// runs the Application.Invoke delegate never executes, so bound the wait: if the
+				// prompt cannot be shown within the timeout, deny instead of blocking forever.
 				using (var handle = new System.Threading.ManualResetEvent (false)) {
+					bool shown = false;
 					Gtk.Application.Invoke ((o, args) => {
+						shown = true;
 						value = MessageService.AskQuestion (
 							GettextCatalog.GetString ("Untrusted HTTP certificate detected"),
 							GettextCatalog.GetString ("Do you want to temporarily trust this certificate in order to connect to the server at {0}?", uri),
@@ -54,7 +60,11 @@ namespace MonoDevelop.Ide
 						TrustedCertificates [certificateFingerprint] = value;
 						handle.Set ();
 					});
-					handle.WaitOne ();
+					// Bounded wait: if no main loop runs, the delegate is never invoked and we deny.
+					if (!handle.WaitOne (15000) && !shown) {
+						value = false;
+						TrustedCertificates [certificateFingerprint] = value;
+					}
 				}
 			}
 

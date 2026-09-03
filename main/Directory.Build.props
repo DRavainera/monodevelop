@@ -2,6 +2,13 @@
   <Import Project="$(MSBuildThisFileDirectory)msbuild\RoslynVersion.props"/>
 
   <PropertyGroup>
+    <NuGetPackageRoot Condition="'$(NuGetPackageRoot)' == '' and '$(NUGET_PACKAGES)' != ''">$(NUGET_PACKAGES)</NuGetPackageRoot>
+    <NuGetPackageRoot Condition="'$(NuGetPackageRoot)' == '' and '$(OS)' == 'Windows_NT'">$(USERPROFILE)\.nuget\packages\</NuGetPackageRoot>
+    <NuGetPackageRoot Condition="'$(NuGetPackageRoot)' == '' and '$(OS)' != 'Windows_NT'">$(HOME)/.nuget/packages/</NuGetPackageRoot>
+    <RuntimeIdentifiers Condition="'$(RuntimeIdentifiers)' == '' and '$(OS)' != 'Windows_NT'">win</RuntimeIdentifiers>
+    <UseSharedCompilation Condition="'$(UseSharedCompilation)' == '' and '$(MSBuildRuntimeType)' == 'Core'">false</UseSharedCompilation>
+    <!-- Fase 3.1: auditar dependencias NuGet frente a CVEs conocidos durante el restore. -->
+    <NuGetAudit>true</NuGetAudit>
     <RootDirectory>$(MSBuildThisFileDirectory)</RootDirectory>
     <PackagesDirectory>$(RootDirectory)packages</PackagesDirectory>
     <MdAddinsDirectory>$(MSBuildThisFileDirectory)..\..\md-addins\</MdAddinsDirectory>
@@ -13,10 +20,10 @@
     <NuGetVersionAllocationAnalyzer>1.0.0.9</NuGetVersionAllocationAnalyzer>
     <NuGetVersionCecil>0.10.1</NuGetVersionCecil>
     <NuGetVersionErrorProneNetStructs>0.1.2</NuGetVersionErrorProneNetStructs>
-    <NuGetVersionMicrosoftTemplateEngine>3.0.0-rc1.19464.2</NuGetVersionMicrosoftTemplateEngine>
+    <NuGetVersionMicrosoftTemplateEngine>5.0.0-rc.1.20431.3</NuGetVersionMicrosoftTemplateEngine>
     <NuGetVersionMicrosoftTestPlatform>16.2.0</NuGetVersionMicrosoftTestPlatform>
     <NuGetVersionMonoDevelopAnalyzers>0.1.0.2</NuGetVersionMonoDevelopAnalyzers>
-    <NuGetVersionNewtonsoftJson>12.0.2</NuGetVersionNewtonsoftJson>
+    <NuGetVersionNewtonsoftJson>13.0.3</NuGetVersionNewtonsoftJson>
     <NuGetVersionNuGet>5.4.0</NuGetVersionNuGet>
     <NuGetVersionNUnit2>2.7.0</NuGetVersionNUnit2>
     <NuGetVersionNUnit3>3.9.0</NuGetVersionNUnit3>
@@ -24,4 +31,38 @@
     <NuGetVersionVSComposition>15.8.112</NuGetVersionVSComposition>
     <NuGetVersionVSEditor>16.1.28-g2ad4df7366</NuGetVersionVSEditor>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(OS)' != 'Windows_NT' AND Exists('/usr/lib/mono')">
+    <MonoFrameworkDirectory Condition="'$(MonoFrameworkDirectory)' == ''">/usr/lib/mono</MonoFrameworkDirectory>
+    <MonoFrameworkNet45Directory Condition="'$(MonoFrameworkNet45Directory)' == ''">$(MonoFrameworkDirectory)/4.5</MonoFrameworkNet45Directory>
+    <MonoGtkSharpDirectory Condition="'$(MonoGtkSharpDirectory)' == ''">$(MonoFrameworkDirectory)/gtk-sharp-2.0</MonoGtkSharpDirectory>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(OS)' != 'Windows_NT' AND Exists('/usr/lib/mono') AND ('$(TargetFrameworkIdentifier)' == '.NETFramework' OR '$(TargetFramework)' == 'net40' OR '$(TargetFramework)' == 'net45' OR '$(TargetFramework)' == 'net451' OR '$(TargetFramework)' == 'net452' OR '$(TargetFrameworkVersion)' == 'v4.0' OR '$(TargetFrameworkVersion)' == '4.0' OR '$(TargetFrameworkVersion)' == 'v4.5' OR '$(TargetFrameworkVersion)' == '4.5' OR '$(TargetFrameworkVersion)' == 'v4.5.1' OR '$(TargetFrameworkVersion)' == '4.5.1' OR '$(TargetFrameworkVersion)' == 'v4.5.2' OR '$(TargetFrameworkVersion)' == '4.5.2' OR '$(TargetFrameworkVersion)' == 'v4.6.1' OR '$(TargetFrameworkVersion)' == '4.6.1' OR '$(TargetFrameworkVersion)' == 'v4.7.2' OR '$(TargetFrameworkVersion)' == '4.7.2')">
+    <ReferencePath>$(ReferencePath);$(MonoFrameworkNet45Directory);$(MonoGtkSharpDirectory)</ReferencePath>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(MSBuildRuntimeType)' == 'Core' AND ('$(TargetFramework)' == 'net40' OR '$(TargetFramework)' == 'net45' OR '$(TargetFramework)' == 'net451' OR '$(TargetFramework)' == 'net452' OR '$(TargetFrameworkVersion)' == 'v4.0' OR '$(TargetFrameworkVersion)' == '4.0' OR '$(TargetFrameworkVersion)' == 'v4.5' OR '$(TargetFrameworkVersion)' == '4.5' OR '$(TargetFrameworkVersion)' == 'v4.5.1' OR '$(TargetFrameworkVersion)' == '4.5.1' OR '$(TargetFrameworkVersion)' == 'v4.5.2' OR '$(TargetFrameworkVersion)' == '4.5.2')">
+    <TargetFrameworkRootPath Condition="'$(TargetFramework)' == 'net40' OR '$(TargetFrameworkVersion)' == 'v4.0' OR '$(TargetFrameworkVersion)' == '4.0'">$(NuGetPackageRoot)microsoft.netframework.referenceassemblies.net40/1.0.3/build/.NETFramework/</TargetFrameworkRootPath>
+    <FrameworkPathOverride Condition="'$(TargetFramework)' == 'net40' OR '$(TargetFrameworkVersion)' == 'v4.0' OR '$(TargetFrameworkVersion)' == '4.0'">$(NuGetPackageRoot)microsoft.netframework.referenceassemblies.net40/1.0.3/build/.NETFramework/v4.0</FrameworkPathOverride>
+    <TargetFrameworkRootPath Condition="'$(TargetFramework)' == 'net45' OR '$(TargetFramework)' == 'net451' OR '$(TargetFramework)' == 'net452' OR '$(TargetFrameworkVersion)' == 'v4.5' OR '$(TargetFrameworkVersion)' == '4.5' OR '$(TargetFrameworkVersion)' == 'v4.5.1' OR '$(TargetFrameworkVersion)' == '4.5.1' OR '$(TargetFrameworkVersion)' == 'v4.5.2' OR '$(TargetFrameworkVersion)' == '4.5.2'">$(NuGetPackageRoot)microsoft.netframework.referenceassemblies.net45/1.0.3/build/.NETFramework/</TargetFrameworkRootPath>
+    <FrameworkPathOverride Condition="'$(TargetFramework)' == 'net45' OR '$(TargetFramework)' == 'net451' OR '$(TargetFramework)' == 'net452' OR '$(TargetFrameworkVersion)' == 'v4.5' OR '$(TargetFrameworkVersion)' == '4.5' OR '$(TargetFrameworkVersion)' == 'v4.5.1' OR '$(TargetFrameworkVersion)' == '4.5.1' OR '$(TargetFrameworkVersion)' == 'v4.5.2' OR '$(TargetFrameworkVersion)' == '4.5.2'">$(NuGetPackageRoot)microsoft.netframework.referenceassemblies.net45/1.0.3/build/.NETFramework/v4.5</FrameworkPathOverride>
+    <EnableFrameworkPathOverride>false</EnableFrameworkPathOverride>
+    <NoStdLib>true</NoStdLib>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(MSBuildRuntimeType)' == 'Core' AND ('$(TargetFramework)' == 'net40' OR '$(TargetFramework)' == 'net45' OR '$(TargetFramework)' == 'net451' OR '$(TargetFramework)' == 'net452' OR '$(TargetFrameworkVersion)' == 'v4.0' OR '$(TargetFrameworkVersion)' == '4.0' OR '$(TargetFrameworkVersion)' == 'v4.5' OR '$(TargetFrameworkVersion)' == '4.5' OR '$(TargetFrameworkVersion)' == 'v4.5.1' OR '$(TargetFrameworkVersion)' == '4.5.1' OR '$(TargetFrameworkVersion)' == 'v4.5.2' OR '$(TargetFrameworkVersion)' == '4.5.2')">
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies.net40" Version="1.0.3" PrivateAssets="all" Condition="'$(TargetFramework)' == 'net40' OR '$(TargetFrameworkVersion)' == 'v4.0' OR '$(TargetFrameworkVersion)' == '4.0'" />
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies.net45" Version="1.0.3" PrivateAssets="all" Condition="'$(TargetFramework)' == 'net45' OR '$(TargetFramework)' == 'net451' OR '$(TargetFramework)' == 'net452' OR '$(TargetFrameworkVersion)' == 'v4.5' OR '$(TargetFrameworkVersion)' == '4.5' OR '$(TargetFrameworkVersion)' == 'v4.5.1' OR '$(TargetFrameworkVersion)' == '4.5.1' OR '$(TargetFrameworkVersion)' == 'v4.5.2' OR '$(TargetFrameworkVersion)' == '4.5.2'" />
+  </ItemGroup>
+
+  <PropertyGroup Condition="'$(MSBuildRuntimeType)' == 'Core' AND ('$(TargetFramework)' == 'net461' OR '$(TargetFramework)' == 'net472' OR '$(TargetFrameworkVersion)' == 'v4.6.1' OR '$(TargetFrameworkVersion)' == '4.6.1' OR '$(TargetFrameworkVersion)' == 'v4.7.2' OR '$(TargetFrameworkVersion)' == '4.7.2')">
+    <TargetFrameworkRootPath>$(NuGetPackageRoot)microsoft.netframework.referenceassemblies.net472/1.0.3/build/.NETFramework/</TargetFrameworkRootPath>
+    <FrameworkPathOverride>$(NuGetPackageRoot)microsoft.netframework.referenceassemblies.net472/1.0.3/build/.NETFramework/v4.7.2</FrameworkPathOverride>
+    <EnableFrameworkPathOverride>false</EnableFrameworkPathOverride>
+    <NoStdLib>true</NoStdLib>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(MSBuildRuntimeType)' == 'Core' AND ('$(TargetFramework)' == 'net461' OR '$(TargetFramework)' == 'net472' OR '$(TargetFrameworkVersion)' == 'v4.6.1' OR '$(TargetFrameworkVersion)' == '4.6.1' OR '$(TargetFrameworkVersion)' == 'v4.7.2' OR '$(TargetFrameworkVersion)' == '4.7.2')">
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+  </ItemGroup>
 </Project>

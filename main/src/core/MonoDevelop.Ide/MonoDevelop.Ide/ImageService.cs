@@ -825,8 +825,13 @@ namespace MonoDevelop.Ide
 		//TODO: size-limit the on-disk cache
 		static Dictionary<string,ImageLoader> gravatars = new Dictionary<string,ImageLoader> ();
 
-		public static ImageLoader GetUserIcon (string email, int size, Xwt.Screen screen = null)
+public static ImageLoader GetUserIcon (string email, int size, Xwt.Screen screen = null)
 		{
+
+			//Fase 2.4: Gravatar is opt-in (off by default). When disabled we do not
+			//contact gravatar.com nor send the user's email hash to a third party.
+			if (!Runtime.Preferences.EnableGravatarAvatars)
+				return null;
 
 			if (screen == null) {
 				screen = Xwt.Desktop.PrimaryScreen;
@@ -867,7 +872,9 @@ namespace MonoDevelop.Ide
 		{
 			image.WidthRequest = size;
 			image.HeightRequest = size;
-			ImageLoader gravatar = GetUserIcon (email, size);
+ImageLoader gravatar = GetUserIcon (email, size);
+			if (gravatar == null)
+				return;
 			gravatar.Completed += delegate {
 				if (gravatar.Image != null)
 					image.Pixbuf = gravatar.Image.ToPixbuf ();

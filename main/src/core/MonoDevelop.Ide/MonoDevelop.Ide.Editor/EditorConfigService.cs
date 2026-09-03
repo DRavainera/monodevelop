@@ -29,7 +29,7 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using Microsoft.VisualStudio.CodingConventions;
+using CodingConventions = MonoDevelop.Ide.Editor.CodingConventions;
 using System.Collections.Generic;
 using MonoDevelop.Core;
 using MonoDevelop.Projects;
@@ -42,10 +42,10 @@ namespace MonoDevelop.Ide.Editor
 		public readonly static string RulersConvention = "rulers";
 
 		readonly static object contextCacheLock = new object ();
-		readonly static ICodingConventionsManager codingConventionsManager = CodingConventionsManagerFactory.CreateCodingConventionsManager (new ConventionsFileManager());
-		static ImmutableDictionary<string, ICodingConventionContext> contextCache = ImmutableDictionary<string, ICodingConventionContext>.Empty;
+		readonly static CodingConventions.ICodingConventionsManager codingConventionsManager = CodingConventions.CodingConventionsManagerFactory.CreateCodingConventionsManager (new ConventionsFileManager());
+		static ImmutableDictionary<string, CodingConventions.ICodingConventionContext> contextCache = ImmutableDictionary<string, CodingConventions.ICodingConventionContext>.Empty;
 
-		public static async Task<ICodingConventionContext> GetEditorConfigContext (string fileName, CancellationToken token = default (CancellationToken))
+		public static async Task<CodingConventions.ICodingConventionContext> GetEditorConfigContext (string fileName, CancellationToken token = default (CancellationToken))
 		{
 			if (string.IsNullOrEmpty (fileName))
 				return null;
@@ -88,7 +88,7 @@ namespace MonoDevelop.Ide.Editor
 		public static Task RemoveEditConfigContext (string fileName)
 		{
 			return Task.Run (() => {
-				ICodingConventionContext ctx;
+				CodingConventions.ICodingConventionContext ctx;
 				lock (contextCacheLock) {
 					if (!contextCache.TryGetValue (fileName, out ctx))
 						return;

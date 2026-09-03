@@ -28,7 +28,7 @@ using MonoDevelop.Core;
 using MonoDevelop.Ide.Gui.Content;
 using MonoDevelop.Ide.Fonts;
 using MonoDevelop.Ide.Editor.Extension;
-using Microsoft.VisualStudio.CodingConventions;
+using CodingConventions = MonoDevelop.Ide.Editor.CodingConventions;
 using System.Threading.Tasks;
 using MonoDevelop.Ide.TypeSystem;
 
@@ -58,7 +58,7 @@ namespace MonoDevelop.Ide.Editor
 		static DefaultSourceEditorOptions instance;
 		static ITextEditorOptions plainEditor;
 		static bool inited;
-		ICodingConventionContext context;
+		CodingConventions.ICodingConventionContext context;
 
 		public static DefaultSourceEditorOptions Instance {
 			get {
@@ -319,7 +319,7 @@ namespace MonoDevelop.Ide.Editor
 			return result;
 		}
 
-		internal void SetContext (ICodingConventionContext context)
+		internal void SetContext (CodingConventions.ICodingConventionContext context)
 		{
 			if (this.context == context)
 				return;
@@ -330,7 +330,7 @@ namespace MonoDevelop.Ide.Editor
 			UpdateContextOptions (null, null).Ignore ();
 		}
 
-		private Task UpdateContextOptions (object sender, CodingConventionsChangedEventArgs arg)
+		private Task UpdateContextOptions (object sender, CodingConventions.CodingConventionsChangedEventArgs arg)
 		{
 			if (context == null)
 				return Task.CompletedTask;
@@ -342,8 +342,8 @@ namespace MonoDevelop.Ide.Editor
 				defaultEolMarkerFromContext = eolMarker;
 
 			tabsToSpacesFromContext = null;
-			if (followCodingConventions && context.CurrentConventions.UniversalConventions.TryGetIndentStyle (out Microsoft.VisualStudio.CodingConventions.IndentStyle result))
-				tabsToSpacesFromContext = result == Microsoft.VisualStudio.CodingConventions.IndentStyle.Spaces;
+			if (followCodingConventions && context.CurrentConventions.UniversalConventions.TryGetIndentStyle (out CodingConventions.IndentStyle result))
+				tabsToSpacesFromContext = result == CodingConventions.IndentStyle.Spaces;
 
 			indentationSizeFromContext = null;
 			if (followCodingConventions && context.CurrentConventions.UniversalConventions.TryGetIndentSize (out int indentSize)) 

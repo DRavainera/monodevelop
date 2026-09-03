@@ -31,9 +31,11 @@
 using System;
 using System.IO;
 using System.Collections;
+using System.Collections.Generic;
 using System.ComponentModel;
 using System.ComponentModel.Design;
 using System.Drawing.Design;
+using System.Runtime.Serialization;
 using System.Runtime.Serialization.Formatters.Binary;
 
 using MonoDevelop.Core.Serialization;
@@ -125,6 +127,11 @@ namespace MonoDevelop.DesignerSupport.Toolbox
 			
 			MemoryStream ms = new MemoryStream(bytes);
 			BinaryFormatter BF = new BinaryFormatter ();
+			// Only allow types in the ToolboxItem family (or trusted framework
+			// types) to be deserialized, so a tampered toolbox file cannot be
+			// abused to instantiate arbitrary types (e.g. deserialization
+			// gadgets).
+			BF.Binder = ToolboxItemSerializationBinder.Instance;
 			
 			object obj = BF.Deserialize (ms);
    			ms.Close ();
@@ -139,6 +146,7 @@ namespace MonoDevelop.DesignerSupport.Toolbox
 		{
 			MemoryStream ms = new MemoryStream ();
 			BinaryFormatter BF = new BinaryFormatter ();
+			BF.Binder = ToolboxItemSerializationBinder.Instance;
 			
 			BF.Serialize (ms, toolboxItem);
 			byte[] bytes = ms.ToArray ();
@@ -153,5 +161,56 @@ namespace MonoDevelop.DesignerSupport.Toolbox
 		}
 		
 		#endregion
+	}
+
+	// Restricts the types BinaryFormatter is allowed to construct when loading /
+	// saving the ToolboxItem blob embedded in the toolbox XML. The toolbox file
+	// is a local user config: a tampered file must not be able to force the
+	// creation of arbitrary types (deserialization gadget). Only ToolboxItem and
+	// its subclasses (any assembly) and trusted framework helpers are allowed.
+	sealed class ToolboxItemSerializationBinder : SerializationBinder
+	{
+		public static readonly ToolboxItemSerializationBinder Instance = new ToolboxItemSerializationBinder ();
+
+		static readonly HashSet<string> TrustedAssemblies = new HashSet<string> (StringComparer.Ordinal) {
+			"mscorlib",
+			"netstandard",
+			"System",
+			"System.Core",
+			"System.Drawing",
+			"System.Design",
+			"System.Windows.Forms",
+			"System.Web",
+			"System.ComponentModel",
+			"System.ComponentModel.DataAnnotations",
+			"System.Runtime.Serialization",
+			"System.Collections",
+			"System.Private.CoreLib",
+			"System.Xml",
+		};
+
+		public override Type BindToType (string assemblyName, string typeName)
+		{
+			string simpleName = assemblyName;
+			int comma = assemblyName.IndexOf (',');
+			if (comma > 0)
+				simpleName = assemblyName.Substring (0, comma);
+
+			Type type = Type.GetType (typeName + ", " + assemblyName, throwOnError: false);
+			if (type != null && typeof (ToolboxItem).IsAssignableFrom (type))
+				return type;
+
+			if (TrustedAssemblies.Contains (simpleName))
+				return type ?? Type.GetType ("System.Object, mscorlib");
+
+			throw new SerializationException ("Blocked deserialization of untrusted type: " + typeName + " in assembly " + assemblyName);
+		}
+
+		public override void BindToName (Type serializedType, out string assemblyName, out string typeName)
+		{
+			// Keep the default BCL behavior when serializing.
+			assemblyName = null;
+			typeName = null;
+		}
 	}	
 }

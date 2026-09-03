@@ -34,7 +34,14 @@ namespace MonoDevelop.Core
 	{
 		const string WebCertificateProvidersPath = "/MonoDevelop/Core/WebCertificateProvider";
 		
-		public static bool GetIsCertificateTrusted (string uri, string certificateFingerprint)
+		/// <summary>
+	/// Dispatches a certificate trust question to the configured <see cref="IWebCertificateProvider"/>s.
+	/// The <paramref name="certificateFingerprint"/> must be the exact SHA-256 thumbprint of the
+	/// certificate (NOT its public key), so a pinned self-signed certificate can be identified
+	/// unambiguously. Prefer leaving TLS validation to the OS trust chain (Fase 2.2); this path is
+	/// only for an opt-in, per-connection, pinned-certificate override.
+	/// </summary>
+	public static bool GetIsCertificateTrusted (string uri, string certificateFingerprint)
 		{
 			var provider = AddinManager.GetExtensionObjects <IWebCertificateProvider> (WebCertificateProvidersPath).FirstOrDefault ();
 			return provider == null ? false : provider.GetIsCertificateTrusted (uri, certificateFingerprint);

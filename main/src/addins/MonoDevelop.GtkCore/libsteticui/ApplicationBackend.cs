@@ -4,7 +4,6 @@ using System.IO;
 using System.Collections;
 using System.Collections.Generic;
 using System.CodeDom;
-using System.Runtime.Serialization.Formatters.Binary;
 using System.Runtime.Remoting;
 using System.Runtime.Remoting.Channels;
 using System.Runtime.Remoting.Channels.Tcp;
@@ -58,21 +57,29 @@ namespace Stetic
 				props ["path"] = unixPath;
 				props ["name"] = "__internal_unix";
 				ChannelServices.RegisterChannel (new UnixChannel (props, null, formatterSink), false);
+				// Restrict the unix socket to the current user (defaults to world-accessible).
+				// The design-time backend and the IDE run under the same user, so access is preserved.
+				try {
+					Mono.Unix.Native.Syscall.chmod (unixPath, Mono.Unix.Native.FilePermissions.S_IRUSR | Mono.Unix.Native.FilePermissions.S_IWUSR);
+				} catch (Exception ex) {
+					Console.WriteLine ("Could not restrict permissions of the design-time socket: " + ex.Message);
+				}
 			} else {
 				Hashtable props = new Hashtable ();
 				props ["port"] = 0;
 				props ["name"] = "__internal_tcp";
+				// Bind the remoting channel to loopback only; reject remote (non-local) requests.
+				props ["rejectRemoteRequests"] = true;
 				ChannelServices.RegisterChannel (new TcpChannel (props, null, formatterSink), false);
 			}
 			
 			// Read the reference to the application
-			
+
+			// The line is a textually-encoded URL to the parent's marshaled controller.
+			// Reconstruct the proxy with Activator.GetObject instead of deserializing a binary
+			// ObjRef (a BinaryFormatter deserialization surface).
 			string sref = Console.In.ReadLine ();
-			byte[] data = Convert.FromBase64String (sref);
-			MemoryStream ms = new MemoryStream (data);
-			BinaryFormatter bf = new BinaryFormatter ();
-			
-			controller = (ApplicationBackendController) bf.Deserialize (ms);
+			controller = (ApplicationBackendController) Activator.GetObject (typeof (ApplicationBackendController), sref);
 			ApplicationBackend backend = new ApplicationBackend (controller.Application);
 			
 			controller.Connect (backend);

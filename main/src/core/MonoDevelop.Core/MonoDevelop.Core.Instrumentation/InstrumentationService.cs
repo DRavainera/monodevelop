@@ -169,7 +169,7 @@ namespace MonoDevelop.Core.Instrumentation
 			while (!stopping) {
 				Thread.Sleep (interval);
 				lock (counters) {
-					Save (file, (fs, data) => new BinaryFormatter ().Serialize (fs, data));
+					SaveJson (file);
 				}
 			}
 			autoSaveThread = null;
@@ -185,7 +185,7 @@ namespace MonoDevelop.Core.Instrumentation
 					NullValueHandling = NullValueHandling.Ignore,
 					Formatting = Formatting.Indented
 				});
-				serializer.Serialize (writer, data);
+				serializer.Serialize (writer, InstrumentationDataCodec.FromService (data));
 			});
 		}
 
@@ -218,11 +218,25 @@ namespace MonoDevelop.Core.Instrumentation
 		public static IInstrumentationService LoadServiceDataFromFile (string file)
 		{
 			using (Stream s = File.OpenRead (file)) {
-				var f = new BinaryFormatter ();
-				var data = f.Deserialize (s) as IInstrumentationService;
-				if (data == null)
-					throw new Exception ("Invalid instrumentation service data file");
-				return data;
+				// Prefer the new JSON format; fall back to the legacy
+				// BinaryFormatter format for files written by older versions.
+				try {
+					using (var reader = new StreamReader (s))
+					using (var jsonText = new Newtonsoft.Json.JsonTextReader (reader)) {
+						var serializer = JsonSerializer.CreateDefault ();
+						var dto = serializer.Deserialize<InstrumentationSnapshotDto> (jsonText);
+						if (dto == null)
+							throw new InvalidOperationException ("Invalid instrumentation service data file");
+						return InstrumentationDataCodec.ToService (dto);
+					}
+				} catch {
+					s.Position = 0;
+					var f = new BinaryFormatter ();
+					var data = f.Deserialize (s) as IInstrumentationService;
+					if (data == null)
+						throw new Exception ("Invalid instrumentation service data file");
+					return data;
+				}
 			}
 		}
 		

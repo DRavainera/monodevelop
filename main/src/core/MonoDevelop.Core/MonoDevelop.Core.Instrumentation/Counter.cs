@@ -73,6 +73,26 @@ namespace MonoDevelop.Core.Instrumentation
 			this.category = category;
 		}
 
+		// Restores persisted snapshot state when loading instrumentation data
+		// (MonoDevelop.Core.Instrumentation.InstrumentationDataCodec).
+		internal void RestoreState (string? id, bool logMessages, bool disposed, TimeSpan resolution, int count, int totalCount)
+		{
+			this.id = id;
+			this.logMessages = logMessages;
+			this.disposed = disposed;
+			this.resolution = resolution;
+			this.count = count;
+			this.totalCount = totalCount;
+		}
+
+		internal void RestoreValues (IEnumerable<CounterValue> values)
+		{
+			lock (this.values) {
+				this.values.Clear ();
+				this.values.AddRange (values);
+			}
+		}
+
 		public override string ToString ()
 		{
 			return string.Format ("[Counter: Name={0}, Enabled={1}, Id={2}, Category={3}, Count={4}, TotalCount={5}, LastValue={6}]", Name, Enabled, Id, Category, Count, TotalCount, LastValue);

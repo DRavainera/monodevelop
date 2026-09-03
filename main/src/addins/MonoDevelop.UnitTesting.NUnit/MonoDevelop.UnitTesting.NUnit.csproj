@@ -79,5 +79,8 @@
     <Compile Include="AssemblyInfo.cs" />
     <Compile Include="MonoDevelop.UnitTesting.NUnit\RemoteTestResult.cs" />
   </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Newtonsoft.Json" Version="$(NuGetVersionNewtonsoftJson)" />
+  </ItemGroup>
   <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />
 </Project>

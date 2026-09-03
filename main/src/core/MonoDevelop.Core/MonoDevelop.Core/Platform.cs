@@ -39,6 +39,27 @@ namespace MonoDevelop.Core
 		public readonly static bool IsLinux;
 
 		public static Version OSVersion { get; private set; }
+		public static bool IsMonoRuntime => Type.GetType ("Mono.Runtime") != null;
+
+		public static string GetMonoDisplayName ()
+		{
+			var monoRuntimeType = Type.GetType ("Mono.Runtime");
+			if (monoRuntimeType == null)
+				return null;
+			var method = monoRuntimeType.GetMethod ("GetDisplayName", BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Public);
+			if (method == null)
+				return null;
+			return method.Invoke (null, null) as string;
+		}
+
+		public static string GetRuntimeDescription ()
+		{
+			if (IsMonoRuntime) {
+				var displayName = GetMonoDisplayName () ?? "unknown";
+				return "Mono " + displayName;
+			}
+			return "Microsoft .NET " + Environment.Version;
+		}
 
 		static Platform ()
 		{

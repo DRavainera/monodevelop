@@ -58,6 +58,9 @@ namespace MonoDevelop.Configuration
                     case "gen-buildinfo":
                         GenerateBuildInfo(args);
                         break;
+                    case "gen-buildvariables":
+                        GenerateBuildVariables(args);
+                        break;
                     case "is-preview":
                         GetIsPreview(args);
                         break;
@@ -113,10 +116,18 @@ namespace MonoDevelop.Configuration
         {
             if (args.Length == 0)
                 throw new UserException("Target directory not provided");
-
+ 
             config.GenerateBuildInfo(args[0]);
         }
 
+        static void GenerateBuildVariables(string[] args)
+        {
+            if (args.Length == 0)
+                throw new UserException("Target directory not provided");
+
+            config.GenerateBuildVariables(args[0]);
+        }
+ 
         static void PrintHelp()
         {
             Console.WriteLine("MonoDevelop Configuration Script");
@@ -128,6 +139,7 @@ namespace MonoDevelop.Configuration
             Console.WriteLine("\tgen-updateinfo <config-file> <path>: Generates the updateinfo file");
             Console.WriteLine("\t\tin the provided path");
             Console.WriteLine("\tgen-buildinfo <path>: Generates the buildinfo file in the provided path");
+            Console.WriteLine("\tgen-buildvariables <path>: Generates BuildVariables.cs in the provided directory");
             Console.WriteLine();
         }
     }
@@ -197,20 +209,77 @@ namespace MonoDevelop.Configuration
         public void GenerateBuildInfo(string targetDir)
 		{
             string head = SystemUtil.RunProcess(SystemUtil.GitExe, "rev-parse HEAD", MonoDevelopPath).Trim();
-
+ 
 			var txt = "Release ID: " + ReleaseId + "\n";
 			txt += "Git revision: " + head + "\n";
 			txt += "Build date: " + DateTime.Now.ToString ("yyyy-MM-dd HH:mm:sszz") + "\n";
-
+ 
 			var buildBranch = Environment.GetEnvironmentVariable ("BUILD_SOURCEBRANCHNAME");
 			if (!string.IsNullOrWhiteSpace (buildBranch))
 				txt += "Build branch: " + buildBranch;
-
+ 
             File.WriteAllText(Path.Combine(targetDir, "buildinfo"), txt);
 		}
 
-		static int GetVersionCommitDistance (string path)
+		public void GenerateBuildVariables(string targetDir)
 		{
+            var versionConfigPath = Path.Combine(MonoDevelopPath, "version.config");
+            if (!File.Exists(versionConfigPath))
+                throw new UserException("version.config not found at " + versionConfigPath);
+
+            var lines = File.ReadAllLines(versionConfigPath);
+
+            var label = GetVersionValue(lines, "Label");
+            var customLabel = Environment.GetEnvironmentVariable("MONODEVELOP_UPDATEINFO_LABEL");
+            if (!string.IsNullOrEmpty(customLabel))
+                label = customLabel;
+
+            var templatePath = Path.Combine(targetDir, "BuildVariables.cs.in");
+            if (!File.Exists(templatePath))
+                throw new UserException("BuildVariables template not found at " + templatePath);
+
+            var template = File.ReadAllText(templatePath);
+            var buildInfoVersion = GetVersionValue(lines, "Version");
+            template = template.Replace("@PACKAGE_VERSION@", buildInfoVersion);
+            template = template.Replace("@FULL_VERSION@", GetFullVersion(buildInfoVersion));
+            template = template.Replace("@PACKAGE_VERSION_LABEL@", label);
+            template = template.Replace("@COMPAT_ADDIN_VERSION@", GetVersionValue(lines, "CompatVersion"));
+            template = template.Replace("@BUILD_LANE@", Environment.GetEnvironmentVariable("BUILD_LANE"));
+            File.WriteAllText(Path.Combine(targetDir, "BuildVariables.cs"), template);
+		}
+
+		static string GetVersionValue(string[] lines, string key)
+		{
+            var val = lines.First(li => li.StartsWith(key + "="));
+            return val.Substring(key.Length + 1);
+		}
+
+		static string GetFullVersion(string buildInfoVersion)
+		{
+            var version = new Version(buildInfoVersion);
+            var relId = GetReleaseId();
+            if (relId != null && relId.Length >= 9)
+            {
+                int rev;
+                int.TryParse(relId.Substring(relId.Length - 4), out rev);
+                version = new Version(Math.Max(version.Major, 0), Math.Max(version.Minor, 0), Math.Max(version.Build, 0), Math.Max(rev, 0));
+            }
+            return version.ToString();
+		}
+
+		static string GetReleaseId()
+		{
+            var biFile = Path.Combine(System.IO.Path.GetDirectoryName(System.Reflection.Assembly.GetEntryAssembly().Location), "fullbuildinfo", "buildinfo");
+            if (File.Exists(biFile))
+            {
+                var line = File.ReadAllLines(biFile).Select(l => l.Split(':')).FirstOrDefault(a => a.Length > 1 && a[0].Trim() == "Release ID");
+                if (line != null)
+                    return line[1].Trim();
+            }
+            return null;
+		}
+ 
+		static int GetVersionCommitDistance (string path)		{
             var blame = new StringReader(SystemUtil.RunProcess(SystemUtil.GitExe, "blame version.config", path));
 			string line;
 			while ((line = blame.ReadLine ()) != null && line.IndexOf ("Version=") == -1)

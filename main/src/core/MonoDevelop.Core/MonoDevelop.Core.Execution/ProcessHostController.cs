@@ -33,7 +33,6 @@ using System.Diagnostics;
 using System.Runtime.Remoting;
 using System.Runtime.Remoting.Messaging;
 using System.Runtime.Remoting.Channels;
-using System.Runtime.Serialization.Formatters.Binary;
 using System.Threading;
 using System.Reflection;
 using Timer = System.Timers.Timer;
@@ -98,11 +97,11 @@ namespace MonoDevelop.Core.Execution
 
 				RemotingService.RegisterRemotingChannel ();
 
-				BinaryFormatter bf = new BinaryFormatter ();
+				// Publish this controller over the registered remoting channels and hand the child a
+				// textually-encoded URL to it, instead of serializing a binary ObjRef (a BinaryFormatter
+				// deserialization surface). The child reconstructs the proxy with Activator.GetObject.
 				ObjRef oref = RemotingServices.Marshal (this);
-				MemoryStream ms = new MemoryStream ();
-				bf.Serialize (ms, oref);
-				string sref = Convert.ToBase64String (ms.ToArray ());
+				string controllerUrl = RemotingService.GetMarshaledUrl (oref.URI);
 				string tmpFile = null;
 
 				if (executionHandlerFactory == null)
@@ -114,7 +113,7 @@ namespace MonoDevelop.Core.Execution
 
 					tmpFile = Path.GetTempFileName ();
 					StreamWriter sw = new StreamWriter (tmpFile);
-					sw.WriteLine (sref);
+					sw.WriteLine (controllerUrl);
 					sw.WriteLine (Process.GetCurrentProcess ().Id);
 					sw.WriteLine (Runtime.SystemAssemblyService.CurrentRuntime.RuntimeId);
 

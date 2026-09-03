@@ -12,7 +12,6 @@
     <PackageReference Include="Microsoft.VisualStudio.Imaging" Version="16.0.27828" PrivateAssets="$(ReferencesVSEditorPrivateAssets)" ExcludeAssets="$(ReferencesVSEditorExcludeAssets)" />
     <PackageReference Include="Microsoft.VisualStudio.Language.NavigateTo.Interfaces" Version="$(NuGetVersionVSEditor)" PrivateAssets="$(ReferencesVSEditorPrivateAssets)" ExcludeAssets="$(ReferencesVSEditorExcludeAssets)" />
     <PackageReference Include="Microsoft.VisualStudio.Platform.VSEditor" Version="$(NuGetVersionVSEditor)" PrivateAssets="$(ReferencesVSEditorPrivateAssets)" ExcludeAssets="$(ReferencesVSEditorExcludeAssets)" />
-    <PackageReference Include="Microsoft.CodeAnalysis.EditorFeatures.Wpf" Version="$(NuGetVersionRoslyn)" PrivateAssets="$(ReferencesVSEditorPrivateAssets)" ExcludeAssets="$(ReferencesVSEditorExcludeAssets)" />
     <PackageReference Include="Microsoft.VisualStudio.Text.UI.Wpf" Version="$(NuGetVersionVSEditor)" PrivateAssets="$(ReferencesVSEditorPrivateAssets)" ExcludeAssets="$(ReferencesVSEditorExcludeAssets)" />
     <PackageReference Include="Microsoft.VisualStudio.InteractiveWindow" Version="2.8.0" PrivateAssets="$(ReferencesVSEditorPrivateAssets)" ExcludeAssets="$(ReferencesVSEditorExcludeAssets)" />
     <PackageReference Include="Microsoft.CodeAnalysis.InteractiveHost" Version="$(NuGetVersionRoslyn)" PrivateAssets="$(ReferencesVSEditorPrivateAssets)" ExcludeAssets="$(ReferencesVSEditorExcludeAssets)" />

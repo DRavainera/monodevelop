@@ -27,7 +27,6 @@
 using System;
 using System.Diagnostics;
 using System.Runtime.Remoting;
-using System.Runtime.Serialization.Formatters.Binary;
 using System.IO;
 using System.Threading;
 using System.Collections.Generic;
@@ -84,14 +83,18 @@ namespace MonoDevelop.Components.AutoTest
 
 			MonoDevelop.Core.Execution.RemotingService.RegisterRemotingChannel ();
 
-			BinaryFormatter bf = new BinaryFormatter ();
-			ObjRef oref = RemotingServices.Marshal (this);
-			MemoryStream ms = new MemoryStream ();
-			bf.Serialize (ms, oref);
-			string sref = Convert.ToBase64String (ms.ToArray ());
+			// Pass a textual URL to this client object instead of a base64-serialized ObjRef
+			// (a BinaryFormatter deserialization surface). The app connects with
+			// Activator.GetObject offline of the URL.
+			ObjRef oref = RemotingServices.Marshal (this, AutoTestService.AutoTestClientObjectUri);
+			var sref = MonoDevelop.Core.Execution.RemotingService.GetMarshaledUrl (oref.URI);
 
 			var pi = new ProcessStartInfo (file, args) { UseShellExecute = false };
+			// Opt the app into the autotest remoting channel. MONO_AUTOTEST_CLIENT carries the
+			// URL to this client; MONO_AUTOTEST_ENABLE=1 is the explicit opt-in the app-side
+			// service requires so that a stray MONO_AUTOTEST_CLIENT alone cannot enable the channel.
 			pi.EnvironmentVariables ["MONO_AUTOTEST_CLIENT"] = sref;
+			pi.EnvironmentVariables ["MONO_AUTOTEST_ENABLE"] = "1";
 			if (environment != null)
 				foreach (var e in environment)
 					pi.EnvironmentVariables [e.Key] = e.Value;
@@ -113,10 +116,9 @@ namespace MonoDevelop.Components.AutoTest
 			MonoDevelop.Core.Execution.RemotingService.RegisterRemotingChannel ();
 
 			string sref = File.ReadAllText (AutoTestService.SessionReferenceFile);
-			byte[] data = Convert.FromBase64String (sref);
-			MemoryStream ms = new MemoryStream (data);
-			BinaryFormatter bf = new BinaryFormatter ();
-			service = (IAutoTestService) bf.Deserialize (ms);
+			// The reference file now contains a textual URL rather than a base64-serialized
+			// ObjRef (a BinaryFormatter deserialization surface). Connect with Activator.GetObject.
+			service = (IAutoTestService) Activator.GetObject (typeof (IAutoTestService), sref);
 			session = service.AttachClient (this);
 			if (DebugObject != null) {
 				session.DebugObject = DebugObject;

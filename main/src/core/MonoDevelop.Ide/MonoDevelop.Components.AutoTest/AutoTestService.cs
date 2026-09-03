@@ -28,7 +28,6 @@ using System;
 using MonoDevelop.Components.Commands;
 using MonoDevelop.Core;
 using System.IO;
-using System.Runtime.Serialization.Formatters.Binary;
 using System.Runtime.Remoting;
 using System.Diagnostics;
 using System.Collections.Generic;
@@ -56,14 +55,24 @@ namespace MonoDevelop.Components.AutoTest
 		{
 			AutoTestService.commandManager = commandManager;
 			
+			// The autotest remoting channel must be enabled explicitly. By default the service
+			// ignores MONO_AUTOTEST_CLIENT so that a stray/stale environment variable set by a
+			// local process cannot silently activate the connection (see Fase 1, priority #8:
+			// "Instrumentación/autotest expuesta"). The test harness must opt in with
+			// MONO_AUTOTEST_ENABLE=1 in addition to MONO_AUTOTEST_CLIENT.
+			if (!IsAutoTestEnabled ()) {
+				if (!string.IsNullOrEmpty (Environment.GetEnvironmentVariable ("MONO_AUTOTEST_CLIENT")))
+					Console.WriteLine ("AutoTest service NOT started: MONO_AUTOTEST_CLIENT set but automated testing is not enabled (set MONO_AUTOTEST_ENABLE=1 to opt in).");
+				return;
+			}
+
 			string sref = Environment.GetEnvironmentVariable ("MONO_AUTOTEST_CLIENT");
 			if (!string.IsNullOrEmpty (sref)) {
 				Console.WriteLine ("AutoTest service starting");
 				MonoDevelop.Core.Execution.RemotingService.RegisterRemotingChannel ();
-				byte[] data = Convert.FromBase64String (sref);
-				MemoryStream ms = new MemoryStream (data);
-				BinaryFormatter bf = new BinaryFormatter ();
-				IAutoTestClient client = (IAutoTestClient) bf.Deserialize (ms);
+				// MONO_AUTOTEST_CLIENT now carries a textual URL to the remote client object
+				// instead of a base64-serialized ObjRef (a BinaryFormatter deserialization surface).
+				IAutoTestClient client = (IAutoTestClient) Activator.GetObject (typeof (IAutoTestClient), sref);
 
 				// Initialize as much as we can before connecting back to the client
 				Ide.IdeApp.Workbench.EnsureLayout ();
@@ -73,15 +82,23 @@ namespace MonoDevelop.Components.AutoTest
 			}
 			if (publishServer && !manager.IsClientConnected) {
 				MonoDevelop.Core.Execution.RemotingService.RegisterRemotingChannel ();
-				BinaryFormatter bf = new BinaryFormatter ();
-				ObjRef oref = RemotingServices.Marshal (manager);
-				MemoryStream ms = new MemoryStream ();
-				bf.Serialize (ms, oref);
-				sref = Convert.ToBase64String (ms.ToArray ());
+				// Publish the manager and expose it via a textual URL. The reference file
+				// used to contain a base64-serialized ObjRef (a BinaryFormatter deserialization
+				// surface); it now contains the marshaled URL so the peer can connect with
+				// Activator.GetObject instead of deserializing an ObjRef.
+				ObjRef oref = RemotingServices.Marshal (manager, AutoTestServiceObjectUri);
+				sref = MonoDevelop.Core.Execution.RemotingService.GetMarshaledUrl (oref.URI);
 				File.WriteAllText (SessionReferenceFile, sref);
 				Runtime.Preferences.EnableUpdaterForCurrentSession = false;
 			}
 		}
+
+		// Automated testing is only enabled when the test harness explicitly opts in via
+		// MONO_AUTOTEST_ENABLE (value "1"), so that a passively-set MONO_AUTOTEST_CLIENT alone
+		// cannot activate the remoting channel. publishServer (the EnableAutomatedTesting
+		// preference) still gates server publishing as before.
+		internal static bool IsAutoTestEnabled ()
+			=> Environment.GetEnvironmentVariable ("MONO_AUTOTEST_ENABLE") == "1" || Runtime.Preferences.EnableAutomatedTesting;
 
 		public static void ReplaySessionFromFile (string filename)
 		{
@@ -116,6 +133,9 @@ namespace MonoDevelop.Components.AutoTest
 				return Path.Combine (Path.GetTempPath (), "monodevelop-autotest-objref");
 			}
 		}
+
+		internal const string AutoTestServiceObjectUri = "autotest-service";
+		internal const string AutoTestClientObjectUri = "autotest-client";
 		
 		internal static CommandManager CommandManager {
 			get { return commandManager; }

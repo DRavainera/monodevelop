@@ -50,6 +50,17 @@ namespace MonoDevelop.Core.Instrumentation
 		{
 		}
 
+		// Restores persisted snapshot state when loading instrumentation timer data
+		// (MonoDevelop.Core.Instrumentation.InstrumentationDataCodec).
+		internal void RestoreTimerState (double minSeconds, TimeSpan totalTime, int totalCountWithTime, TimeSpan minTime, TimeSpan maxTime)
+		{
+			this.minSeconds = minSeconds;
+			this.totalTime = totalTime;
+			this.totalCountWithTime = totalCountWithTime;
+			this.minTime = minTime;
+			this.maxTime = maxTime;
+		}
+
 		public override CounterDisplayMode DisplayMode => CounterDisplayMode.Line;
 
 		public override string ToString ()
