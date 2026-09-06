@@ -44,6 +44,7 @@ using Gtk;
 
 namespace MonoDevelop.DesignerSupport
 {
+	#if MAC
 	class PropertyMacHostWidget : IPropertyGrid
 	{
 		public event EventHandler PropertyGridChanged;
@@ -124,6 +125,7 @@ namespace MonoDevelop.DesignerSupport
 			}
 		}
 	}
+#endif
 
 	public interface IPropertyGrid : IPropertyPad
 	{
@@ -141,6 +143,75 @@ namespace MonoDevelop.DesignerSupport
 
 		void SetToolbarProvider (object toolbarProvider);
 		void CommitPendingChanges ();
+	}
+
+	public class GtkPropertyGridAdapter : IPropertyGrid
+	{
+		readonly MonoDevelop.Components.PropertyGrid.PropertyGrid grid;
+
+		public event EventHandler PropertyGridChanged;
+
+		public GtkPropertyGridAdapter ()
+		{
+			grid = new MonoDevelop.Components.PropertyGrid.PropertyGrid ();
+			grid.Changed += (s, e) => PropertyGridChanged?.Invoke (this, e);
+		}
+
+		public string Name {
+			get => grid.Name;
+			set => grid.Name = value;
+		}
+
+		public bool ShowToolbar {
+			get => grid.ShowToolbar;
+			set => grid.ShowToolbar = value;
+		}
+
+		public bool ShowHelp {
+			get => grid.ShowHelp;
+			set => grid.ShowHelp = value;
+		}
+
+		public bool Sensitive {
+			get => grid.Sensitive;
+			set => grid.Sensitive = value;
+		}
+
+		public bool IsGridEditing => grid.IsEditing;
+
+		public object CurrentObject {
+			get => grid.CurrentObject;
+			set => grid.CurrentObject = value;
+		}
+
+		public Gtk.Widget Widget => grid;
+
+		public ShadowType ShadowType {
+			get => grid.ShadowType;
+			set => grid.ShadowType = value;
+		}
+
+		public void BlankPad () => grid.BlankPad ();
+
+		public void PopulateGrid (bool saveEditSession) => grid.Populate (saveEditSession);
+
+		public void SetCurrentObject (object lastComponent, object [] propertyProviders)
+			=> grid.SetCurrentObject (lastComponent, propertyProviders);
+
+		public void Show () => grid.Show ();
+		public void Hide () => grid.Hide ();
+
+		public void Dispose () => grid.Dispose ();
+
+		public void SetToolbarProvider (object toolbarProvider)
+		{
+		}
+
+		public void OnPadContentShown ()
+		{
+		}
+
+		public void CommitPendingChanges () => grid.CommitPendingChanges ();
 	}
 
 	public class PropertyGridWrapper : IPropertyGrid
@@ -188,7 +259,7 @@ namespace MonoDevelop.DesignerSupport
 #if MAC
 			nativeWidget = new PropertyMacHostWidget ();
 #else
-			nativeWidget = new pg.PropertyGrid ();
+			nativeWidget = new GtkPropertyGridAdapter ();
 #endif
 			nativeWidget.PropertyGridChanged += NativeWidget_PropertyGridChanged;
 		}
