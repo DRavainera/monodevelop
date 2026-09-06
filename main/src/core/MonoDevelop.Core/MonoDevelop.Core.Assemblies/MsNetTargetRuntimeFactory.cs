@@ -34,11 +34,13 @@ namespace MonoDevelop.Core.Assemblies
 	{
 		public System.Collections.Generic.IEnumerable<TargetRuntime> CreateRuntimes ()
 		{
-			if (!Platform.IsWindows)
-				yield break;
-			if (Type.GetType ("Mono.Runtime") == null) {
-				yield return new MsNetTargetRuntime (true);
-			} else {
+			// The runtime MonoDevelop is actually running on. On .NET 8 neither the Mono
+			// runtime nor a Windows-only .NET Framework registration apply, so the current
+			// .NET runtime is always the running one (any platform).
+			yield return new DotNetTargetRuntime ();
+
+			// Windows .NET Framework installations are still modeled for targeting purposes.
+			if (Platform.IsWindows) {
 				string msnetDir = Environment.SystemDirectory + "\\..\\Microsoft.NET\\Framework";
 				if (Directory.Exists (msnetDir))
 					yield return new MsNetTargetRuntime (false);

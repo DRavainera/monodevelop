@@ -35,7 +35,6 @@ using System.Diagnostics;
 using Mono.Addins;
 using MonoDevelop.Core.LogReporting;
 using MonoDevelop.Core.Logging;
-using Mono.Unix.Native;
 using System.Text;
 using System.Collections.Immutable;
 
@@ -315,12 +314,11 @@ namespace MonoDevelop.Core
 		{
 			const int STDOUT_FILENO = 1;
 			const int STDERR_FILENO = 2;
-			
-			const OpenFlags flags = OpenFlags.O_WRONLY | OpenFlags.O_CREAT | OpenFlags.O_TRUNC;
 
-			const FilePermissions mode =
-				FilePermissions.S_IFREG | FilePermissions.S_IRUSR | FilePermissions.S_IWUSR |
-				FilePermissions.S_IRGRP | FilePermissions.S_IWGRP;
+			const int flags = Posix.O_WRONLY | Posix.O_CREAT | Posix.O_TRUNC;
+
+			const int mode = Posix.S_IFREG | Posix.S_IRUSR | Posix.S_IWUSR |
+				Posix.S_IRGRP | Posix.S_IWGRP;
 
 			FilePath logDir = UserProfile.Current.LogDir;
 
@@ -331,12 +329,12 @@ namespace MonoDevelop.Core
 				logFile = logDir.Combine (GetSessionLogFileName ("Ide"));
 
 				// if the file already exists, retry with a suffix, up to 10 times
-				fd = Syscall.open (logFile, flags, mode);
+				fd = Posix.Open (logFile, flags, mode);
 				if (fd >= 0)
 					break;
 
-				var err = Stdlib.GetLastError ();
-				if (logFileSuffix >= oldIdx + 10 || err != Errno.EEXIST) {
+				var err = Posix.GetLastError ();
+				if (logFileSuffix >= oldIdx + 10 || err != Posix.EEXIST) {
 					logFileSuffix++;
 					continue;
 				}
@@ -344,26 +342,26 @@ namespace MonoDevelop.Core
 			}
 
 			try {
-				int res = Syscall.dup2 (fd, STDOUT_FILENO);
+				int res = Posix.Dup2 (fd, STDOUT_FILENO);
 				if (res < 0)
-					throw new IOException ("Unable to redirect stdout: " + Stdlib.GetLastError ());
+					throw new IOException ("Unable to redirect stdout: " + Posix.GetLastError ());
 				
-				res = Syscall.dup2 (fd, STDERR_FILENO);
+				res = Posix.Dup2 (fd, STDERR_FILENO);
 				if (res < 0)
-					throw new IOException ("Unable to redirect stderr: " + Stdlib.GetLastError ());
+					throw new IOException ("Unable to redirect stderr: " + Posix.GetLastError ());
 
 				//try to symlink timestamped file to generic one. NBD if it fails.
 				SymlinkWithRetry (logFile, logDir.Combine ("Ide.log"), 10);
 			} finally {
-				Syscall.close (fd);
+				Posix.Close (fd);
 			}
 		}
 
 		static bool SymlinkWithRetry (string from, string to, int retries)
 		{
 			for (int i = 0; i < retries; i++) {
-				Syscall.unlink (to);
-				if (Syscall.symlink (from, to) >= 0)
+				Posix.Unlink (to);
+				if (Posix.Symlink (from, to) >= 0)
 					return true;
 			}
 			return false;

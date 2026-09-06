@@ -30,11 +30,9 @@ using System;
 using System.IO;
 using System.Collections.Generic;
 using MonoDevelop.Core.ProgressMonitoring;
-using System.Runtime.Remoting;
-using System.Runtime.Remoting.Channels;
-using System.Runtime.Remoting.Channels.Tcp;
 using System.Net;
 using System.Net.Sockets;
+using System.Text;
 using System.Reflection;
 using System.Diagnostics;
 using System.Collections;
@@ -114,15 +112,72 @@ namespace MonoDevelop.Core.Instrumentation
 
 		public static int PublishService ()
 		{
-			RemotingService.RegisterRemotingChannel ();
-			TcpChannel ch = (TcpChannel) ChannelServices.GetChannel ("tcp");
-			Uri u = new Uri (ch.GetUrlsForUri ("test")[0]);
-			publicPort = u.Port;
-			
-			InstrumentationServiceBackend backend = new InstrumentationServiceBackend ();
-			System.Runtime.Remoting.RemotingServices.Marshal (backend, "InstrumentationService");
-			
+			var listener = new TcpListener (IPAddress.Loopback, 0);
+			listener.Start ();
+			publicPort = ((IPEndPoint)listener.LocalEndpoint).Port;
+
+			Thread t = new Thread (() => AcceptLoop (listener)) {
+				IsBackground = true,
+				Name = "InstrumentationService listener",
+			};
+			t.Start ();
+
 			return publicPort;
+		}
+
+		static void AcceptLoop (TcpListener listener)
+		{
+			try {
+				while (true) {
+					TcpClient client = listener.AcceptTcpClient ();
+					Thread t = new Thread (() => HandleClient (client)) {
+						IsBackground = true,
+					};
+					t.Start ();
+				}
+			} catch (ObjectDisposedException) {
+			} catch (SocketException) {
+			}
+		}
+
+		static void HandleClient (TcpClient client)
+		{
+			try {
+				using (client)
+				using (var stream = client.GetStream ()) {
+					var reader = new BinaryReader (stream, Encoding.UTF8, true);
+					var writer = new BinaryWriter (stream, Encoding.UTF8, true);
+					while (true) {
+						// Length-prefixed request frame: "GET" returns a full snapshot.
+						int requestLen = reader.ReadInt32 ();
+						if (requestLen < 0 || requestLen > 64)
+							break;
+						var request = Encoding.UTF8.GetString (reader.ReadBytes (requestLen));
+						if (request != "GET")
+							break;
+
+						var serializer = JsonSerializer.Create (new JsonSerializerSettings {
+							ReferenceLoopHandling = ReferenceLoopHandling.Ignore,
+							DefaultValueHandling = DefaultValueHandling.Ignore,
+							NullValueHandling = NullValueHandling.Ignore,
+							Formatting = Formatting.None,
+						});
+						var snapshot = InstrumentationDataCodec.FromService ((IInstrumentationService)GetServiceData ());
+						byte[] payload;
+						using (var ms = new MemoryStream ())
+						using (var sw = new StreamWriter (ms)) {
+							serializer.Serialize (sw, snapshot);
+							sw.Flush ();
+							payload = ms.ToArray ();
+						}
+						writer.Write (payload.Length);
+						writer.Write (payload);
+						writer.Flush ();
+					}
+				}
+			} catch (IOException) {
+			} catch (SocketException) {
+			}
 		}
 		
 		public static void StartMonitor ()
@@ -204,7 +259,7 @@ namespace MonoDevelop.Core.Instrumentation
 		
 		public static IInstrumentationService GetRemoteService (string hostAndPort)
 		{
-			return (IInstrumentationService) Activator.GetObject (typeof(IInstrumentationService), "tcp://" + hostAndPort + "/InstrumentationService");
+			return new InstrumentationServiceRemote (hostAndPort);
 		}
 
 		public static IInstrumentationService GetServiceData ()
@@ -492,43 +547,69 @@ namespace MonoDevelop.Core.Instrumentation
 		IEnumerable<CounterCategory> GetCategories ();
 	}
 	
-	class InstrumentationServiceBackend: MarshalByRefObject, IInstrumentationService
+	/// <summary>
+	/// Client-side view of the instrumentation service published by another process.
+	/// Every call fetches a fresh JSON snapshot over a loopback TCP connection and serves
+	/// the data from it, replacing the former remoting (MarshalByRefObject) proxy.
+	/// </summary>
+	class InstrumentationServiceRemote: IInstrumentationService
 	{
-		public DateTime StartTime {
-			get {
-				return InstrumentationService.StartTime;
-			}
+		readonly string hostAndPort;
+
+		public InstrumentationServiceRemote (string hostAndPort)
+		{
+			this.hostAndPort = hostAndPort;
 		}
-		
-		public DateTime EndTime {
-			get {
-				return DateTime.Now;
+
+		IInstrumentationService FetchSnapshot ()
+		{
+			string[] parts = hostAndPort.Split (new [] { ':' }, 2);
+			var client = new TcpClient (parts[0], int.Parse (parts[1]));
+			using (client)
+			using (var stream = client.GetStream ()) {
+				var reader = new BinaryReader (stream, Encoding.UTF8, true);
+				var writer = new BinaryWriter (stream, Encoding.UTF8, true);
+
+				byte[] request = Encoding.UTF8.GetBytes ("GET");
+				writer.Write (request.Length);
+				writer.Write (request);
+				writer.Flush ();
+
+				int len = reader.ReadInt32 ();
+				byte[] payload = reader.ReadBytes (len);
+
+				using (var ms = new MemoryStream (payload))
+				using (var sr = new StreamReader (ms)) {
+					var serializer = JsonSerializer.CreateDefault ();
+					var dto = serializer.Deserialize<InstrumentationSnapshotDto> (new JsonTextReader (sr));
+					if (dto == null)
+						throw new InvalidOperationException ("Invalid instrumentation service data");
+					return InstrumentationDataCodec.ToService (dto);
+				}
 			}
 		}
 
+		public DateTime StartTime => FetchSnapshot ().StartTime;
+		public DateTime EndTime => FetchSnapshot ().EndTime;
+
 		public IEnumerable<Counter> GetCounters ()
 		{
-			return InstrumentationService.GetCounters ();
+			return FetchSnapshot ().GetCounters ();
 		}
-		
+
 		public Counter GetCounter (string name)
 		{
-			return InstrumentationService.GetCounter (name);
+			return FetchSnapshot ().GetCounter (name);
 		}
-		
+
 		public CounterCategory? GetCategory (string name)
 		{
-			return InstrumentationService.GetCategory (name);
+			return FetchSnapshot ().GetCategory (name);
 		}
-		
+
 		public IEnumerable<CounterCategory> GetCategories ()
 		{
-			return InstrumentationService.GetCategories ();
-		}
-		
-		public override object? InitializeLifetimeService ()
-		{
-			return null;
+			return FetchSnapshot ().GetCategories ();
 		}
 	}
 	

@@ -33,7 +33,6 @@ using System.IO;
 using System.Text;
 
 using Mono.Addins;
-using Mono.Unix.Native;
 using MonoDevelop.Core.FileSystem;
 using MonoDevelop.Core.Web;
 using System.Collections.Generic;
@@ -709,23 +708,23 @@ namespace MonoDevelop.Core
 
 		static void UnixRename (string sourceFile, string destFile)
 		{
-			if (Stdlib.rename (sourceFile, destFile) != 0) {
-				switch (Stdlib.GetLastError ()) {
-				case Errno.EACCES:
-				case Errno.EPERM:
+			if (Posix.Rename (sourceFile, destFile) != 0) {
+				switch (Posix.GetLastError ()) {
+				case Posix.EACCES:
+				case Posix.EPERM:
 					throw new UnauthorizedAccessException ();
-				case Errno.EINVAL:
+				case Posix.EINVAL:
 					throw new InvalidOperationException ();
-				case Errno.ENOTDIR:
+				case Posix.ENOTDIR:
 					throw new DirectoryNotFoundException ();
-				case Errno.ENOENT:
+				case Posix.ENOENT:
 					throw new FileNotFoundException ();
-				case Errno.ENAMETOOLONG:
+				case Posix.ENAMETOOLONG:
 					throw new PathTooLongException ();
-				case Errno.EXDEV:
+				case Posix.EXDEV:
 					throw new IOException (GettextCatalog.GetString("Invalid file move accross filesystem boundaries."));
 				default:
-					throw new IOException ("Error:" + Stdlib.GetLastError ());
+					throw new IOException ("Error:" + Posix.GetLastError ());
 				}
 			}
 		}

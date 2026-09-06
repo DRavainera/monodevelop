@@ -26,12 +26,7 @@
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>
-    <Reference Include="System.Runtime.Remoting" />
     <Reference Include="System" />
-    <Reference Include="Mono.Posix">
-      <HintPath>/usr/lib/mono/4.5/Mono.Posix.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
   </ItemGroup>
   <ItemGroup>
     <Compile Include="src\AssemblyInfo.cs" />

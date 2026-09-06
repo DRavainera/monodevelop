@@ -49,7 +49,8 @@ namespace MonoDevelop.Projects.MSBuild
 			if (Platform.IsWindows) {
 				command = msbuildBinPath;
 			} else {
-				command = GetMonoPath ();
+				// The `mono` runtime is no longer used; run the .NET MSBuild through `dotnet`.
+				command = "dotnet";
 				var argumentsBuilder = new ProcessArgumentBuilder ();
 				argumentsBuilder.AddQuoted (msbuildBinPath);
 				argumentsBuilder.Add (arguments);
@@ -89,12 +90,6 @@ namespace MonoDevelop.Projects.MSBuild
 			}
 
 			return binDirectory.Combine ("MSBuild.exe");
-		}
-
-		static string GetMonoPath ()
-		{
-			var monoRuntime = Runtime.SystemAssemblyService.DefaultRuntime as MonoTargetRuntime;
-			return Path.Combine (monoRuntime.MonoRuntimeInfo.Prefix, "bin", "mono64");
 		}
 	}
 }

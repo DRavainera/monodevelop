@@ -33,7 +33,6 @@ using MonoDevelop.Projects.MSBuild;
 using MonoDevelop.Core;
 using System.Threading.Tasks;
 using MonoDevelop.Core.ProgressMonitoring;
-using System.Runtime.Remoting.Messaging;
 
 namespace MonoDevelop.Projects.Extensions
 {

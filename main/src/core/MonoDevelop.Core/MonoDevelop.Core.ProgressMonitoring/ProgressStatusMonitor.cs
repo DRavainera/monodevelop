@@ -31,7 +31,7 @@ using Mono.Addins;
 
 namespace MonoDevelop.Core.ProgressMonitoring
 {
-	public class ProgressStatusMonitor: MarshalByRefObject, IProgressStatus, IDisposable
+	public class ProgressStatusMonitor: IProgressStatus, IDisposable
 	{
 		ProgressMonitor monitor;
 		int step;

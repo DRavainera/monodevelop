@@ -33,126 +33,66 @@ using MonoDevelop.Core;
 using MonoDevelop.Core.Logging;
 using MonoDevelop.Core.Execution;
 using System.IO;
-using System.Runtime.Remoting;
-using System.Runtime.Remoting.Channels;
-using System.Runtime.Remoting.Channels.Ipc;
-using System.Runtime.Remoting.Lifetime;
 using System.Reflection;
-using System.Collections;
-using Mono.Remoting.Channels.Unix;
+using System.Collections.Generic;
 using Mono.Addins;
-using System.Runtime.Remoting.Channels.Tcp;
 
 public class MonoDevelopProcessHost
 {
 	static string ParentRuntime;
-	
+	static string configFileEnvVarName = "MONODEVELOP_MDHOST_CONFIG";
+
 	public static int Main (string[] args)
 	{
-		string tmpFile = null;
-		TextReader input = null;
+		// args[0] is the loopback port and args[1] the debug flag, both provided by the
+		// RemoteProcessServer.Connect contract. The startup configuration (id, parent pid,
+		// runtime, assembly paths) is forwarded through a temp file whose path comes in an
+		// environment variable set by ProcessHostController.
+		var configPath = Environment.GetEnvironmentVariable (configFileEnvVarName);
+
 		try {
-			// The first parameter is the task id
-			// The second parameter is the temp file that contains the data
-			// If not provided, data is read from the standard input
-			
-			if (args.Length > 1) {
-				tmpFile = args [1];
-				input = new StreamReader (tmpFile);
-			} else
-				input = Console.In;
-			
-			string sref = input.ReadLine ();
-			string pidToWatch = input.ReadLine ();
-			ParentRuntime = input.ReadLine ();
-			int numAsm = int.Parse (input.ReadLine ());
-			while (numAsm-- > 0) {
-				Assembly.LoadFrom (input.ReadLine ());
-			}
-			
-			if (tmpFile != null) {
+			string id = "?";
+			int pidToWatch = 0;
+			if (configPath != null && File.Exists (configPath)) {
+				using (var input = new StreamReader (configPath)) {
+					id = input.ReadLine ();
+					pidToWatch = int.Parse (input.ReadLine ());
+					ParentRuntime = input.ReadLine ();
+					int numAsm = int.Parse (input.ReadLine ());
+					while (numAsm-- > 0) {
+						Assembly.LoadFrom (input.ReadLine ());
+					}
+				}
 				try {
-					input.Close ();
-					File.Delete (tmpFile);
+					File.Delete (configPath);
 				} catch {
 				}
 			}
 
-			WatchParentProcess (int.Parse (pidToWatch));
-			
-			string unixPath = RegisterRemotingChannel ();
+			if (pidToWatch > 0)
+				WatchParentProcess (pidToWatch);
 
-			// The first line is a textually-encoded URL to the parent's marshaled controller.
-			// Reconstruct the proxy with Activator.GetObject instead of deserializing a binary
-			// ObjRef (a BinaryFormatter deserialization surface).
-			IProcessHostController pc = (IProcessHostController) Activator.GetObject (typeof (IProcessHostController), sref);
-			
-			LoggingService.AddLogger (new LocalLogger (pc.GetLogger (), args[0]));
-			
-			ProcessHost rp = new ProcessHost (pc);
-			pc.RegisterHost (rp);
-			try {
-				pc.WaitForExit ();
-			} catch {
-			}
-			
-			try {
-				rp.Dispose ();
-			} catch {
-			}
-			
-			if (unixPath != null)
-				File.Delete (unixPath);
-			
+			RemoteProcessServer server = new RemoteProcessServer ();
+			LoggingService.AddLogger (new LocalLogger (server, id));
+			server.AddListener (new ProcessHost (server));
+
+			// Connect to the parent. On success advertise our ProcessHost over the message bus so
+			// the parent marks the host as running.
+			server.Connect (args, new ProcessListener ());
+			server.AddListener (new ProcessHost (server));
+			server.SendMessage (new BinaryMessage (ProcessHostController.RegisterHostMessage));
+
+			// Keep the process alive servicing messages. The connection is torn down by the
+			// parent (Dispose/Shutdown) or when the watched parent process dies.
+			var done = new ManualResetEvent (false);
+			done.WaitOne ();
 		} catch (Exception ex) {
 			Console.WriteLine (ex);
 		}
-		
+
 		return 0;
 	}
-		
-	static string RegisterRemotingChannel ()
-	{
-		IDictionary formatterProps = new Hashtable ();
-		formatterProps ["includeVersions"] = false;
-		formatterProps ["strictBinding"] = false;
-		
-		IDictionary dict = new Hashtable ();
-		BinaryClientFormatterSinkProvider clientProvider = new BinaryClientFormatterSinkProvider(formatterProps, null);
-		BinaryServerFormatterSinkProvider serverProvider = new BinaryServerFormatterSinkProvider(formatterProps, null);
-		serverProvider.TypeFilterLevel = System.Runtime.Serialization.Formatters.TypeFilterLevel.Full;
-		
-		// Mono's and .NET's IPC channels have interoperability issues, so use TCP in this case
-		if (CurrentRuntime != ParentRuntime) {
-			// Running Mono on Windows
-			dict ["port"] = 0;
-			dict ["rejectRemoteRequests"] = true;
-			ChannelServices.RegisterChannel (new TcpChannel (dict, clientProvider, serverProvider), false);
-			return null;
-		}
-		else {
-			string unixRemotingFile = Path.GetTempFileName ();
-			dict ["portName"] = Path.GetFileName (unixRemotingFile);
-			ChannelServices.RegisterChannel (new IpcChannel (dict, clientProvider, serverProvider), false);
-			// Restrict the IPC unix socket to the current user (defaults to world-accessible).
-			try {
-				Mono.Unix.Native.Syscall.chmod (unixRemotingFile, Mono.Unix.Native.FilePermissions.S_IRUSR | Mono.Unix.Native.FilePermissions.S_IWUSR);
-			} catch (Exception ex) {
-				Console.WriteLine ("Could not restrict permissions of the remoting IPC socket: " + ex.Message);
-			}
-			return unixRemotingFile;
-		}
-	}
-	
-	static string CurrentRuntime {
-		get {
-			if (Type.GetType ("Mono.Runtime") != null)
-				return "Mono";
-			else
-				return ".NET";
-		}
-	}
-	
+
 	static void WatchParentProcess (int pid)
 	{
 		Thread t = new Thread (delegate () {
@@ -177,29 +117,41 @@ public class MonoDevelopProcessHost
 	}
 }
 
+class ProcessListener: MessageListener
+{
+}
+
 class LocalLogger: ILogger
 {
-	ILogger wrapped;
+	RemoteProcessServer server;
 	string id;
-	
-	public LocalLogger (ILogger wrapped, string id)
+
+	public LocalLogger (RemoteProcessServer server, string id)
 	{
-		this.wrapped = wrapped;
+		this.server = server;
 		this.id = id;
 	}
-	
+
 	#region ILogger implementation
 	public void Log (LogLevel level, string message)
 	{
-		wrapped.Log (level, "[" + id + "] " + message);
+		try {
+			var msg = new BinaryMessage (ProcessHostController.LogMessage)
+				.AddArgument ("Level", level)
+				.AddArgument ("Message", "[" + id + "] " + message);
+			msg.OneWay = true;
+			server.SendMessage (msg);
+		} catch {
+			// Ignore
+		}
 	}
-	
+
 	public EnabledLoggingLevel EnabledLevel {
 		get {
 			return EnabledLoggingLevel.All;
 		}
 	}
-	
+
 	public string Name {
 		get {
 			return "Local Logger";
@@ -208,69 +160,72 @@ class LocalLogger: ILogger
 	#endregion
 }
 
-public class ProcessHost: MarshalByRefObject, IProcessHost, ISponsor
+public class ProcessHost: MessageListener, IDisposable
 {
-	IProcessHostController controller;
-	
-	public ProcessHost (IProcessHostController controller)
-	{
-		this.controller = controller;
-		MarshalByRefObject mbr = (MarshalByRefObject) controller;
-		ILease lease = mbr.GetLifetimeService () as ILease;
-		lease.Register (this);
-	}
-	
-	public IDisposable CreateInstance (Type type)
-	{
-		return (IDisposable) Activator.CreateInstance (type);
-	}
-	
-	public void LoadAddins (string[] addinIds)
-	{
-		Runtime.Initialize (false);
-		foreach (string ad in addinIds)
-			AddinManager.LoadAddin (null, ad);
-	}
-	
-	public IDisposable CreateInstance (string fullTypeName)
-	{
-		try {
-			Type t = Type.GetType (fullTypeName);
-			if (t == null) throw new InvalidOperationException ("Type not found: " + fullTypeName);
-			return CreateInstance (t);
-		} catch {
-			throw new InvalidOperationException ("Type not found: " + fullTypeName);
+	RemoteProcessServer server;
+	readonly object objectsLock = new object ();
+	Dictionary<int, IDisposable> instances = new Dictionary<int, IDisposable> ();
+	int nextId;
+
+	public override string TargetId {
+		get {
+			return ProcessHostController.ProcessHostTargetId;
 		}
 	}
-	
-	public IDisposable CreateInstance (string assemblyPath, string typeName)
+
+	public ProcessHost (RemoteProcessServer server)
 	{
-		Assembly asm = Assembly.LoadFrom (assemblyPath);
-		Type t = asm.GetType (typeName);
-		if (t == null) throw new InvalidOperationException ("Type not found: " + typeName);
-		return CreateInstance (t);
-	}
-	
-	public void DisposeObject (IDisposable obj)
-	{
-		obj.Dispose ();
+		this.server = server;
 	}
 
-		
-	public TimeSpan Renewal (ILease lease)
+	[MessageHandler (ProcessHostController.CreateInstanceMessage)]
+	BinaryMessage CreateInstance (BinaryMessage msg)
 	{
-		return TimeSpan.FromSeconds (7);
+		string assemblyPath = msg.GetArgument<string> ("AssemblyPath");
+		string typeName = msg.GetArgument<string> ("TypeName");
+
+		Assembly asm = Assembly.LoadFrom (assemblyPath);
+		Type t = asm.GetType (typeName);
+		if (t == null)
+			throw new InvalidOperationException ("Type not found: " + typeName);
+
+		var instance = (IDisposable)Activator.CreateInstance (t);
+		int id = Interlocked.Increment (ref nextId);
+		lock (objectsLock) {
+			instances [id] = instance;
+		}
+		return msg.CreateResponse ().AddArgument ("InstanceId", id);
 	}
-	
+
+	[MessageHandler (ProcessHostController.LoadAddinsMessage)]
+	void LoadAddins (BinaryMessage msg)
+	{
+		Runtime.Initialize (false);
+		var addins = msg.GetArgument<string[]> ("Addins");
+		if (addins == null)
+			return;
+		foreach (string ad in addins)
+			AddinManager.LoadAddin (null, ad);
+	}
+
+	[MessageHandler (ProcessHostController.DisposeObjectMessage)]
+	void DisposeObject (BinaryMessage msg)
+	{
+		int instanceId = msg.GetArgument<int> ("InstanceId");
+		IDisposable inst;
+		lock (objectsLock) {
+			if (!instances.TryGetValue (instanceId, out inst))
+				return;
+			instances.Remove (instanceId);
+		}
+		try {
+			inst.Dispose ();
+		} catch {
+			// Ignore
+		}
+	}
+
 	public void Dispose ()
 	{
-		MarshalByRefObject mbr = (MarshalByRefObject) controller;
-		ILease lease = mbr.GetLifetimeService () as ILease;
-		lease.Unregister (this);
-	}
-	
-	public override object InitializeLifetimeService ()
-	{
-		return null;
 	}
 }

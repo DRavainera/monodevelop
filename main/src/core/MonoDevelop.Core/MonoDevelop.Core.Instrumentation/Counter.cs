@@ -36,7 +36,7 @@ using System.Runtime.Serialization;
 namespace MonoDevelop.Core.Instrumentation
 {
 	[Serializable]
-	public class Counter: MarshalByRefObject
+	public class Counter
 	{
 		internal int count;
 		internal int totalCount;
@@ -376,11 +376,6 @@ namespace MonoDevelop.Core.Instrumentation
 			}
 			if (logMessages && message != null)
 				InstrumentationService.LogMessage (message);
-		}
-		
-		public override object? InitializeLifetimeService ()
-		{
-			return null;
 		}
 	}
 

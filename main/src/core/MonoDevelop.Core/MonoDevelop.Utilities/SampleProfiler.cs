@@ -56,7 +56,7 @@ namespace MonoDevelop.Utilities
 		public void ToggleProfiling (bool spinDump)
 		{
 			if (sampleProcessPid != -1) {
-				Mono.Unix.Native.Syscall.kill (sampleProcessPid, Mono.Unix.Native.Signum.SIGINT);
+				Posix.Kill (sampleProcessPid, Posix.SIGINT);
 				sampleProcessPid = -1;
 				return;
 			}

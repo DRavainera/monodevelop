@@ -32,8 +32,6 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Runtime.InteropServices;
-using Mono.Unix;
-using Mono.Unix.Native;
 using MonoDevelop.Core;
 using MonoDevelop.Projects.Utility;
 

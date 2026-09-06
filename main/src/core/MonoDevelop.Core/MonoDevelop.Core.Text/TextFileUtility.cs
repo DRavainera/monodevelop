@@ -301,7 +301,7 @@ namespace MonoDevelop.Core.Text
 		static Stream CreateStream (FilePath tmpPath)
 		{
 			if (!Platform.IsWindows)
-				return new Mono.Unix.StdioFileStream (tmpPath, FileMode.CreateNew, FileAccess.Write);
+				return new FileStream (tmpPath, FileMode.CreateNew, FileAccess.Write);
 			return new FileStream (tmpPath, FileMode.OpenOrCreate, FileAccess.Write, FileShare.Write);
 		}
 

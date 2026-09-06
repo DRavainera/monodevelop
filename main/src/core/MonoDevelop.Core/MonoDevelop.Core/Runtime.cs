@@ -472,7 +472,7 @@ static bool IsInstrumentationServiceEnabled ()
 			}
 		}
 		
-		[DllImport ("libc")] // Linux
+		[DllImport ("libc", SetLastError = true)] // Linux
 		private static extern int prctl (int option, byte [] arg2, IntPtr arg3, IntPtr arg4, IntPtr arg5);
 		
 		[DllImport ("libc")] // BSD
@@ -481,9 +481,9 @@ static bool IsInstrumentationServiceEnabled ()
 		//this is from http://abock.org/2006/02/09/changing-process-name-in-mono/
 		static void unixSetProcessName (string name)
 		{
-			try {
-				if (prctl (15 /* PR_SET_NAME */, Encoding.ASCII.GetBytes (name + "\0"), IntPtr.Zero, IntPtr.Zero, IntPtr.Zero) != 0) {
-					throw new ApplicationException ("Error setting process name: " + Mono.Unix.Native.Stdlib.GetLastError ());
+		try {
+			if (prctl (15 /* PR_SET_NAME */, Encoding.ASCII.GetBytes (name + "\0"), IntPtr.Zero, IntPtr.Zero, IntPtr.Zero) != 0) {
+				throw new ApplicationException ("Error setting process name: " + Posix.GetLastError ());
 				}
 			} catch (EntryPointNotFoundException) {
 				// Not every BSD has setproctitle

@@ -452,17 +452,17 @@ namespace MonoDevelop.Projects.MSBuild
 		/// the object before it is initialized. However, by default initialization
 		/// is automatically made by the constructor, so to support this scenario
 		/// the initialization has to be delayed. This is done by setting the
-		/// MonoDevelop.DelayItemInitialization logical context property.
+		/// MonoDevelop.DelayItemInitialization logical context flag (AsyncLocal).
 		/// When this property is set, the object is not initialized, and it has
 		/// to be manually initialized by calling EnsureInitialized.
 		/// </remarks>
 		internal static SolutionItem CreateUninitializedInstance (Type type)
 		{
 			try {
-				System.Runtime.Remoting.Messaging.CallContext.LogicalSetData ("MonoDevelop.DelayItemInitialization", true);
+				WorkspaceObject.DelayItemInitialization.Value = true;
 				return (SolutionItem)Activator.CreateInstance (type, true);
 			} finally {
-				System.Runtime.Remoting.Messaging.CallContext.LogicalSetData ("MonoDevelop.DelayItemInitialization", false);
+				WorkspaceObject.DelayItemInitialization.Value = false;
 			}
 		}
 

@@ -25,175 +25,45 @@
 // THE SOFTWARE.
 
 using System;
-using System.IO;
-using System.Collections;
-using System.Collections.Generic;
-using System.Runtime.Remoting;
-using System.Runtime.Remoting.Channels;
-using System.Runtime.Remoting.Channels.Ipc;
-using System.Runtime.Remoting.Messaging;
-using System.Runtime.Remoting.Channels.Tcp;
-using System.Reflection;
-using Mono.Unix.Native;
 
 namespace MonoDevelop.Core.Execution
 {
+	/// <summary>
+	/// The execution host no longer uses the .NET remoting channels, ObjRef marshaling or the
+	/// binary formatter sink that this class once set up. Cross-process communication is served by
+	/// the loopback message transport (RemoteProcessConnection/RemoteProcessServer/BinaryMessage).
+	/// This class keeps two inert entry points for the still-deferred automated testing (AutoTest,
+	/// reworked over the message bus in the "Interfaz" phase) and a no-op Dispose for ProcessService.
+	/// </summary>
 	public static class RemotingService
 	{
-		static string unixRemotingFile;
-		static Dictionary<string,CallbackData> callbacks = new Dictionary<string, CallbackData> ();
-		static bool channelRegistered;
-		static HashSet<string> simpleResolveAssemblies = new HashSet<string> ();
-		
-		internal class CallbackData
-		{
-			public object Target;
-			public int Timeout;
-			public string Method;
-			public CallingMethodCallback Calling;
-			public CalledMethodCallback Called;
-		}
-		
+		/// <summary>
+		/// Historically registered the remoting IPC/TCP channels. The message transport creates its
+		/// own loopback listener per connection, so there is no shared remoting channel to register
+		/// anymore. Kept as a no-op for the deferred AutoTest call sites.
+		/// </summary>
 		public static void RegisterRemotingChannel ()
 		{
-			if (!channelRegistered) {
-				channelRegistered = true;
-				
-				IDictionary formatterProps = new Hashtable ();
-				formatterProps ["includeVersions"] = false;
-				formatterProps ["strictBinding"] = false;
-				
-				// Don't reuse ipc channels registered by add-ins. That's not supported.
-				IChannel ch = ChannelServices.GetChannel ("ipc");
-				if (ch != null) {
-					LoggingService.LogFatalError ("IPC channel already registered. An add-in may have registered it");
-					throw new InvalidOperationException ("IPC channel already registered. An add-in may have registered it.");
-				}
-				
-				BinaryServerFormatterSinkProvider serverProvider = new BinaryServerFormatterSinkProvider(formatterProps, null);
-				serverProvider.TypeFilterLevel = System.Runtime.Serialization.Formatters.TypeFilterLevel.Full;
-				DisposerFormatterSinkProvider clientProvider = new DisposerFormatterSinkProvider();
-				clientProvider.Next = new BinaryClientFormatterSinkProvider(formatterProps, null);
-				
-				unixRemotingFile = Path.GetTempFileName ();
-				IDictionary dict = new Hashtable ();
-				dict ["portName"] = Path.GetFileName (unixRemotingFile);
-				ChannelServices.RegisterChannel (new IpcChannel (dict, clientProvider, serverProvider), false);
+			// No-op. The message transport (RemoteProcessConnection/RemoteProcessServer) sets up
+			// its own loopback TCP listener; no remoting channel is registered.
+		}
 
-				// Restrict the IPC unix socket to the current user. Without this, the socket is
-				// created with world-readable/writable permissions, allowing any local user to
-				// connect to the remoting channel (which is a deserialization attack surface).
-				if (!Platform.IsWindows) {
-					try {
-						Mono.Unix.Native.Syscall.chmod (unixRemotingFile, FilePermissions.S_IRUSR | FilePermissions.S_IWUSR);
-					} catch (Exception ex) {
-						LoggingService.LogWarning ("Could not restrict permissions of the remoting IPC socket", ex);
-					}
-				}
-				
-				// Register the TCP channel too. It is used for communication of Mono -> .NET. The IPC channel
-				// has interoperabilitu issues.
-				
-				// Don't reuse tcp channels registered by add-ins. That's not supported.
-				ch = ChannelServices.GetChannel ("tcp");
-				if (ch != null) {
-					LoggingService.LogFatalError ("TCP channel already registered. An add-in may have registered it");
-					throw new InvalidOperationException ("TCP channel already registered. An add-in may have registered it.");
-				}
-				
-				serverProvider = new BinaryServerFormatterSinkProvider(formatterProps, null);
-				serverProvider.TypeFilterLevel = System.Runtime.Serialization.Formatters.TypeFilterLevel.Full;
-				clientProvider = new DisposerFormatterSinkProvider();
-				clientProvider.Next = new BinaryClientFormatterSinkProvider(formatterProps, null);
-				
-				dict = new Hashtable ();
-				dict ["port"] = 0;
-				dict ["rejectRemoteRequests"] = true;
-				
-				ChannelServices.RegisterChannel (new TcpChannel (dict, clientProvider, serverProvider), false);
-
-				// This is a workaround to a serialization interoperability issue between Mono and .NET
-				// For some reason, .NET is unable to resolve add-in assemblies referenced in
-				// serialized objects, when the assemblies are not in the main bin directory
-				if (Platform.IsWindows) {
-					AppDomain.CurrentDomain.AssemblyResolve += delegate (object s, ResolveEventArgs args) {
-						if (!simpleResolveAssemblies.Contains (args.Name))
-							return null;
-						foreach (Assembly am in AppDomain.CurrentDomain.GetAssemblies ()) {
-							if (am.GetName ().FullName == args.Name || args.Name == am.GetName ().Name) {
-								Console.WriteLine (Environment.StackTrace);
-								return am;
-							}
-						}
-						return null;
-					};
-				}
-			}
-		}
-		
-		public static void RegisterMethodCallback (object proxy, string method, CallingMethodCallback calling, CalledMethodCallback called)
-		{
-			RegisterMethodCallback (proxy, method, calling, called, -1);
-		}
-		
-		public static void RegisterMethodCallback (object proxy, string method, CallingMethodCallback calling, CalledMethodCallback called, int timeout)
-		{
-			string uri = RemotingServices.GetObjectUri ((MarshalByRefObject)proxy);
-			CallbackData data = new CallbackData ();
-			data.Target = proxy;
-			data.Calling = calling;
-			data.Called = called;
-			data.Timeout = timeout;
-			data.Method = method;
-			callbacks [uri + " " + method] = data;
-		}
-		
-		public static void UnregisterMethodCallback (object proxy, string method)
-		{
-			string uri = RemotingServices.GetObjectUri ((MarshalByRefObject)proxy);
-			callbacks.Remove (uri + " " + method);
-		}
-		
-		// This method is used in Windows to allow the provided assembly name to be loaded
-		// using the name only, discarding version info. This is a workaround to a serialization
-		// interoperability issue.
-		internal static void RegisterAssemblyForSimpleResolve (string name)
-		{
-			simpleResolveAssemblies.Add (name);
-		}
-		
 		/// <summary>
-		/// Returns a textually-encoded URL that can be used by a remote process to connect to an
-		/// object marshaled on one of the channels registered by this service. This avoids having
-		/// to serialize a binary <see cref="ObjRef"/> across process boundaries (a BinaryFormatter
-		/// deserialization surface). The object is expected to have been published via
-		/// <see cref="RemotingServices.Marshal"/>, so it is reachable on the registered channels.
+		/// Historically returned a textual URL for an object published over a remoting channel.
+		/// Remoting channels were removed; the AutoTest handshake will be reworked over the message
+		/// bus in the "Interfaz" phase. Anything still calling this has not been migrated yet.
 		/// </summary>
 		public static string GetMarshaledUrl (string objectUri)
 		{
-			// Prefer the loopback TCP channel: it is hardened with rejectRemoteRequests=true (binds
-			// to 127.0.0.1 only) and is interoperable across Mono and .NET runtimes.
-			foreach (IChannel ch in ChannelServices.RegisteredChannels) {
-				if (ch.ChannelName != "tcp")
-					continue;
-				ChannelDataStore store = ((IChannelReceiver)ch).ChannelData as ChannelDataStore;
-				if (store != null && store.ChannelUris.Length > 0)
-					return store.ChannelUris[0] + "/" + objectUri;
-			}
-			throw new InvalidOperationException ("No marshaled TCP channel is available.");
+			throw new NotSupportedException ("Remoting channels were removed. Migrate this call site to the message-based bus (currently deferred to the 'Interfaz' phase): " + objectUri);
 		}
-		
-		internal static CallbackData GetCallbackData (string uri, string method)
-		{
-			CallbackData data;
-			callbacks.TryGetValue (uri + " " + method, out data);
-			return data;
-		}
-		
+
+		/// <summary>
+		/// Historically cleaned up the remoting IPC socket file. No remoting channel file is created
+		/// anymore, so this is a no-op kept for ProcessService.Dispose.
+		/// </summary>
 		internal static void Dispose ()
 		{
-			if (unixRemotingFile != null)
-				File.Delete (unixRemotingFile);
 		}
 	}
 }

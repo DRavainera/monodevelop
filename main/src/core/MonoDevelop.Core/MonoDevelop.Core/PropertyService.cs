@@ -62,10 +62,7 @@ namespace MonoDevelop.Core
 		/// </summary>
 		public static FilePath DataPath {
 			get {
-				string result = System.Configuration.ConfigurationManager.AppSettings ["DataDirectory"];
-				if (String.IsNullOrEmpty (result)) 
-					result = Path.Combine (EntryAssemblyPath, Path.Combine ("..", "data"));
-				return result;
+				return Path.Combine (EntryAssemblyPath, Path.Combine ("..", "data"));
 			}
 		}
 		

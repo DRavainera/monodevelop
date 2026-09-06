@@ -40,7 +40,6 @@ using MonoDevelop.Core.Execution;
 using MonoDevelop.Core.Assemblies;
 using MonoDevelop.Core.Instrumentation;
 using MonoDevelop.Projects.Extensions;
-using Mono.Unix;
 using System.Linq;
 using MonoDevelop.Projects.MSBuild;
 using System.Threading.Tasks;
@@ -452,9 +451,9 @@ namespace MonoDevelop.Projects
 		{
 			if (!Platform.IsWindows) {
 				try {
-					UnixSymbolicLinkInfo fi = new UnixSymbolicLinkInfo (file);
-					if (fi.IsSymbolicLink)
-						return fi.ContentsPath;
+					var target = MonoDevelop.Core.Posix.ReadLink (file);
+					if (target != null)
+						return target;
 				} catch {
 				}
 			}

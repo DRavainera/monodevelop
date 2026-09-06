@@ -1,10 +1,10 @@
 // 
-// RemoteLogger.cs
-//  
-// Author:
-//       Lluis Sanchez Gual <lluis@novell.com>
+// Mono.Unix.Catalog.cs
 // 
-// Copyright (c) 2009 Novell, Inc (http://www.novell.com)
+// Author:
+//   MonoDevelop contributors
+//
+// Copyright (C) 2026
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -24,30 +24,19 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-using System;
-
-namespace MonoDevelop.Core.Logging
+namespace Mono.Unix
 {
-	public class RemoteLogger: ILogger
+	// Internal replacement for Mono.Posix' Mono.Unix.Catalog. Preserves the exact type and method
+	// surface so existing call sites (e.g. the generated Gui/* widgets that use
+	// global::Mono.Unix.Catalog.GetString) keep compiling without the legacy Mono.Posix assembly.
+	// The actual gettext .mo reading lives in MonoDevelop.Core.Catalog; this facade just forwards.
+	public static class Catalog
 	{
-		#region ILogger implementation
-		public void Log (LogLevel level, string message)
-		{
-			LoggingService.Log (level, message);
-		}
-		
-		public EnabledLoggingLevel EnabledLevel {
-			get {
-				return EnabledLoggingLevel.All;
-			}
-		}
-		
-		public string Name {
-			get {
-				return "Main Process Logger";
-			}
-		}
-		#endregion
+		public static void Init (string domain, string path) => MonoDevelop.Core.Catalog.Init (domain, path);
 
+		public static string GetString (string phrase) => MonoDevelop.Core.Catalog.GetString (phrase);
+
+		public static string GetPluralString (string singular, string plural, int number)
+			=> MonoDevelop.Core.Catalog.GetPluralString (singular, plural, number);
 	}
 }

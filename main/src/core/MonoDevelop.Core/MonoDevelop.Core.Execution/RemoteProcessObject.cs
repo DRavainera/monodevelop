@@ -30,14 +30,21 @@ using System;
 
 namespace MonoDevelop.Core.Execution
 {
-	public class RemoteProcessObject: MarshalByRefObject, IDisposable
+	/// <summary>
+	/// Base class for objects that may be hosted in an external process (mdhost) and reached
+	/// through the message-based execution host RPC. It is a plain class: the remoting
+	/// transparent proxy (MarshalByRefObject) was removed in favor of the loopback message
+	/// transport used by ProcessHostController/mdhost. Subclasses keep compiling unchanged.
+	/// </summary>
+	public class RemoteProcessObject: IDisposable
 	{
 		/// <summary>
 		/// Disposes the object, and kills the remote process if there are no more remote objects running on it
 		/// </summary>
 		public virtual void Dispose ()
 		{
-			System.Runtime.Remoting.RemotingServices.Disconnect (this);
+			// Disposal is now coordinated by the message-based host (the handler that receives
+			// ObjectDispose calls DisposeObject on the remote instance). No remoting disconnect here.
 		}
 		
 		/// <summary>
@@ -45,16 +52,11 @@ namespace MonoDevelop.Core.Execution
 		/// </summary>
 		/// <remarks>
 		/// This method can only be used if the remote process is not shared with other objects.
+		/// In the message-based host it is handled as an ObjectShutdown message.
 		/// </remarks>
 		public void Shutdown ()
 		{
 			// Do nothing. This method is intercepted and executed by MonoDevelop.
-		}
-		
-		public override object InitializeLifetimeService ()
-		{
-			// Keep the object in memory until explicitly released
-			return null;
 		}
 	}
 }

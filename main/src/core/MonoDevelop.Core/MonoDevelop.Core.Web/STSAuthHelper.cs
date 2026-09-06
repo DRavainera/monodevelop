@@ -18,8 +18,6 @@
 using System;
 using System.Net;
 using System.Globalization;
-using System.ServiceModel;
-using System.ServiceModel.Security;
 using System.Text;
 
 namespace MonoDevelop.Core.Web
@@ -103,36 +101,16 @@ namespace MonoDevelop.Core.Web
 				);
 			}
 
-			var binding = new WS2007HttpBinding(SecurityMode.Transport);
-			dynamic factory = Activator.CreateInstance(typeProvider.ChannelFactory, binding, endPoint);
-			factory.TrustVersion = TrustVersion.WSTrust13;
-
-			// Check if we can create 4.5 types.
-			dynamic rst = Activator.CreateInstance(typeProvider.RequestSecurityToken);
-			rst.RequestType = GetFieldValue<string>(typeProvider.RequestTypes, "Issue");
-			rst.KeyType = GetFieldValue<string>(typeProvider.KeyTypes, "Bearer");
-
-			// Dynamic verifies the type of the instance so we cannot use it to assign a value for this property.
-			var endPointAddress = Activator.CreateInstance(typeProvider.EndPoint, appliesTo);
-			SetProperty(rst, "AppliesTo", endPointAddress);
-
-			dynamic channel = factory.CreateChannel();
-			dynamic securityToken = channel.Issue(rst);
-			return securityToken.TokenXml.OuterXml;
-		}
-
-		private static void SetProperty(object instance, string propertyName, object value)
-		{
-			var type = instance.GetType();
-			var property = type.GetProperty(propertyName);
-
-			var propertySetter = property.GetSetMethod();
-			propertySetter.Invoke(instance, new[] { value });
-		}
-
-		private static TVal GetFieldValue<TVal>(Type type, string fieldName)
-		{
-			return (TVal)type.GetField(fieldName).GetValue(obj: null);
+			// WSTrust/WCF (System.ServiceModel) is not supported on .NET 8. If a WIF type provider is
+			// ever discovered at runtime, obtain the STS token through reflection instead of the
+			// former compile-time System.ServiceModel binding/factory/channel types.
+			throw new NotSupportedException (
+				String.Format (
+					CultureInfo.CurrentCulture,
+					"STS (WSTrust/WCF) authentication to feed '{0}' is not supported on .NET.",
+					requestUri
+			)
+			);
 		}
 
 		private static string GetSTSEndPoint(IHttpWebResponse response)

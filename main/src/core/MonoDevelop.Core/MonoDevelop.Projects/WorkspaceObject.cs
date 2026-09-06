@@ -34,7 +34,6 @@ using MonoDevelop.Projects.Extensions;
 using Mono.Addins;
 using System.Linq;
 using System.Threading.Tasks;
-using System.Runtime.Remoting.Messaging;
 using MonoDevelop.Core.StringParsing;
 using System.Threading;
 using MonoDevelop.Core.AddIns;
@@ -44,6 +43,8 @@ namespace MonoDevelop.Projects
 {
 	public abstract class WorkspaceObject: IExtendedDataItem, IFolderItem, IDisposable
 	{
+internal static readonly AsyncLocal<bool> DelayItemInitialization = new AsyncLocal<bool> ();
+
 		Hashtable extendedProperties;
 		bool initializeCalled;
 		bool isShared;
@@ -56,8 +57,7 @@ namespace MonoDevelop.Projects
 		{
 			if (instance.GetType () != typeof(T))
 				return;
-			var delayedInitialize = CallContext.LogicalGetData ("MonoDevelop.DelayItemInitialization");
-			if (delayedInitialize != null && (bool)delayedInitialize)
+if (DelayItemInitialization.Value)
 				return;
 			EnsureInitialized ();
 		}

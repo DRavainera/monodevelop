@@ -80,7 +80,8 @@ namespace MonoDevelop.Core.Web
 			{
 				get
 				{
-					return typeof(System.ServiceModel.EndpointAddress);
+					string typeName = QualifyTypeName("System.ServiceModel.EndpointAddress");
+					return Type.GetType(typeName);
 				}
 			}
 
