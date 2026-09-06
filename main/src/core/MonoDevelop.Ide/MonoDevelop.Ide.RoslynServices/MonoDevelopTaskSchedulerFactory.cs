@@ -45,12 +45,12 @@ namespace MonoDevelop.Ide.RoslynServices
 
 		[ImportingConstructor]
 		[Obsolete (MefConstruction.ImportingConstructorMessage, error: true)]
-		public MonoDevelopTaskSchedulerFactory (IThreadingContext threadingContext, IAsynchronousOperationListenerProvider listenerProvider) : base (listenerProvider)
+		public MonoDevelopTaskSchedulerFactory (IThreadingContext threadingContext, IAsynchronousOperationListenerProvider listenerProvider) : base ()
 		{
 			_threadingContext = threadingContext;
 		}
 
-		public override IWorkspaceTaskScheduler CreateEventingTaskQueue ()
+		public new IWorkspaceTaskScheduler CreateEventingTaskQueue ()
 		{
 			return new WorkspaceTaskQueue(this, new JoinableTaskFactoryTaskScheduler(_threadingContext.JoinableTaskFactory));
 		}

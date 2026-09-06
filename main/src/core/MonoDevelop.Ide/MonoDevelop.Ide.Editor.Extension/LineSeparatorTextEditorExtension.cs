@@ -30,7 +30,7 @@ using System.Threading.Tasks;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Host;
 using Microsoft.CodeAnalysis.Text;
-using Microsoft.CodeAnalysis.Editor;
+using Microsoft.CodeAnalysis.Editor.Shared.Extensions;
 using MonoDevelop.Core;
 
 namespace MonoDevelop.Ide.Editor.Extension

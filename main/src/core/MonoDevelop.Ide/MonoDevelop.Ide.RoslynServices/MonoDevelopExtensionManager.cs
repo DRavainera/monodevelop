@@ -63,11 +63,13 @@ namespace MonoDevelop.Ide.RoslynServices
 		{
 			readonly IErrorLoggerService errorLoggerService;
 
+			// TODO: RoslynFeatureLayer - the editor-layer ExtensionManager is a VS client;
+			// the host services are exercised through the compat assembly instead.
 			public ExtensionManager (
 				IOptionService optionsService,
 				IErrorReportingService errorReportingService,
 				IErrorLoggerService errorLoggerService,
-				List<IExtensionErrorHandler> errorHandlers) : base(optionsService, errorReportingService, errorLoggerService, errorHandlers)
+				List<IExtensionErrorHandler> errorHandlers) : base()
 			{
 				this.errorLoggerService = errorLoggerService;
 			}

@@ -212,7 +212,7 @@ namespace MonoDevelop.Ide.RoslynServices
 			// workspace. If a document is already open in a preview tab and it is opened again 
 			// in a permanent tab, this allows the document to transition to the new state.
 			if (workspace.CanOpenDocuments) {
-				if (options.GetOption (NavigationOptions.PreferProvisionalTab)) {
+				if (options.GetOption (new OptionKey (NavigationOptions.PreferProvisionalTab)) is bool preferProvisionalTab && preferProvisionalTab) {
 					// If we're just opening the provisional tab, then do not "activate" the document
 					// (i.e. don't give it focus).  This way if a user is just arrowing through a set 
 					// of FindAllReferences results, they don't have their cursor placed into the document.
