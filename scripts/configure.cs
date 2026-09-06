@@ -286,6 +286,9 @@ namespace MonoDevelop.Configuration
 				;
 			if (line != null) {
 				string hash = line.Substring (0, line.IndexOf (' ')).TrimStart ('^');
+				// Uncommitted lines blame with a zero hash that isn't a valid revision.
+				if (string.IsNullOrWhiteSpace (hash) || System.Text.RegularExpressions.Regex.IsMatch (hash, "^0+$"))
+					return 0;
                 string dist = SystemUtil.RunProcess(SystemUtil.GitExe, "rev-list --count " + hash + "..HEAD", path);
 				return int.Parse (dist.Trim ());
 			}
@@ -413,7 +416,10 @@ namespace MonoDevelop.Configuration
             p.BeginErrorReadLine();
             p.WaitForExit();
             if (p.ExitCode != 0)
+            {
+                Console.Error.WriteLine("configure: git command failed: " + file + " " + args + " (exit " + p.ExitCode + ")");
                 throw new UserException(file + " failed");
+            }
             return sb.ToString();
         }
     }

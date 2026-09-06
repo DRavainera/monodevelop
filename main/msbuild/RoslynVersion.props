@@ -1,7 +1,5 @@
 <Project>
   <PropertyGroup>
-    <!-- The legacy repo pins are older than the public Roslyn members still present in the VS SDK feed.
-         Use a supported VS SDK package version that is available from the repo's configured feeds. -->
-    <NuGetVersionRoslyn>4.8.0-7.25569.21</NuGetVersionRoslyn>
+    <NuGetVersionRoslyn>3.4.0-beta4-19568-04</NuGetVersionRoslyn>
   </PropertyGroup>
 </Project>

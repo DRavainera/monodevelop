@@ -15,7 +15,10 @@
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' " />
   <ItemGroup>
     <Reference Include="System" />
-    <PackageReference Include="NUnit" Version="$(NuGetVersionNUnit2)" />
+    <Reference Include="nunit.framework">
+      <HintPath>$(NuGetPackageRoot)nunit\$(NuGetVersionNUnit2)\lib\nunit.framework.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
     <IncludeCopyLocal Include="nunit.framework.dll" />
   </ItemGroup>
   <ItemGroup>

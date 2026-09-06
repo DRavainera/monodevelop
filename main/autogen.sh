@@ -13,7 +13,7 @@ test -z "$srcdir" && srcdir=.
   echo
   echo "**Error**: You must have \`autoconf' installed to compile MonoDevelop."
   echo "Download the appropriate package for your distribution, or get the "
-  echo "source at ftp://ftp.gnu.org/pub/gnu/autoconf/autoconf-2.61.tar.bz2 "
+  echo "source at https://ftp.gnu.org/pub/gnu/autoconf/autoconf-2.73.tar.xz "
   echo "(or a newer version if it is available)"
   DIE=1
 }
@@ -22,7 +22,7 @@ test -z "$srcdir" && srcdir=.
   echo
   echo "**Error**: You must have \`automake' installed to compile MonoDevelop."
   echo "Download the appropriate package for your distribution, or get the "
-  echo "source at ftp://ftp.gnu.org/pub/gnu/automake/automake-1.10.1.tar.bz2 "
+  echo "source at https://ftp.gnu.org/pub/gnu/automake/automake-1.18.1.tar.xz "
   echo "(or a newer version if it is available)"
   DIE=1
   NO_AUTOMAKE=yes

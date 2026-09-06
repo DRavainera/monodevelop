@@ -37,7 +37,10 @@
     <MonoGtkSharpDirectory Condition="'$(MonoGtkSharpDirectory)' == ''">$(MonoFrameworkDirectory)/gtk-sharp-2.0</MonoGtkSharpDirectory>
   </PropertyGroup>
 
-  <PropertyGroup Condition="'$(OS)' != 'Windows_NT' AND Exists('/usr/lib/mono') AND ('$(TargetFrameworkIdentifier)' == '.NETFramework' OR '$(TargetFramework)' == 'net40' OR '$(TargetFramework)' == 'net45' OR '$(TargetFramework)' == 'net451' OR '$(TargetFramework)' == 'net452' OR '$(TargetFrameworkVersion)' == 'v4.0' OR '$(TargetFrameworkVersion)' == '4.0' OR '$(TargetFrameworkVersion)' == 'v4.5' OR '$(TargetFrameworkVersion)' == '4.5' OR '$(TargetFrameworkVersion)' == 'v4.5.1' OR '$(TargetFrameworkVersion)' == '4.5.1' OR '$(TargetFrameworkVersion)' == 'v4.5.2' OR '$(TargetFrameworkVersion)' == '4.5.2' OR '$(TargetFrameworkVersion)' == 'v4.6.1' OR '$(TargetFrameworkVersion)' == '4.6.1' OR '$(TargetFrameworkVersion)' == 'v4.7.2' OR '$(TargetFrameworkVersion)' == '4.7.2')">
+  <PropertyGroup Condition="'$(OS)' != 'Windows_NT' AND Exists('/usr/lib/mono') AND ('$(TargetFrameworkIdentifier)' == '.NETFramework' OR '$(TargetFramework)' == 'net40' OR '$(TargetFramework)' == 'net45' OR '$(TargetFramework)' == 'net451' OR '$(TargetFramework)' == 'net452' OR '$(TargetFrameworkVersion)' == 'v4.0' OR '$(TargetFrameworkVersion)' == '4.0' OR '$(TargetFrameworkVersion)' == 'v4.5' OR '$(TargetFrameworkVersion)' == '4.5' OR '$(TargetFrameworkVersion)' == 'v4.5.1' OR '$(TargetFrameworkVersion)' == '4.5.1' OR '$(TargetFrameworkVersion)' == 'v4.5.2' OR '$(TargetFrameworkVersion)' == '4.5.2')">
+    <ReferencePath>$(ReferencePath);$(MonoFrameworkNet45Directory);$(MonoGtkSharpDirectory)</ReferencePath>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(OS)' != 'Windows_NT' AND Exists('/usr/lib/mono') AND ('$(TargetFrameworkVersion)' == 'v4.6.1' OR '$(TargetFrameworkVersion)' == '4.6.1' OR '$(TargetFrameworkVersion)' == 'v4.7.2' OR '$(TargetFrameworkVersion)' == '4.7.2') AND '$(MSBuildRuntimeType)' != 'Core'">
     <ReferencePath>$(ReferencePath);$(MonoFrameworkNet45Directory);$(MonoGtkSharpDirectory)</ReferencePath>
   </PropertyGroup>
 
@@ -58,6 +61,7 @@
   <PropertyGroup Condition="'$(MSBuildRuntimeType)' == 'Core' AND ('$(TargetFramework)' == 'net461' OR '$(TargetFramework)' == 'net472' OR '$(TargetFrameworkVersion)' == 'v4.6.1' OR '$(TargetFrameworkVersion)' == '4.6.1' OR '$(TargetFrameworkVersion)' == 'v4.7.2' OR '$(TargetFrameworkVersion)' == '4.7.2')">
     <TargetFrameworkRootPath>$(NuGetPackageRoot)microsoft.netframework.referenceassemblies.net472/1.0.3/build/.NETFramework/</TargetFrameworkRootPath>
     <FrameworkPathOverride>$(NuGetPackageRoot)microsoft.netframework.referenceassemblies.net472/1.0.3/build/.NETFramework/v4.7.2</FrameworkPathOverride>
+    <TargetFrameworkDirectory>$(FrameworkPathOverride)</TargetFrameworkDirectory>
     <EnableFrameworkPathOverride>false</EnableFrameworkPathOverride>
     <NoStdLib>true</NoStdLib>
   </PropertyGroup>

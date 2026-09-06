@@ -289,3 +289,8 @@ main/tests/StressTest/bin
 *.pfx
 *.pem
 *.key
+
+# compat build products
+/main/src/compat/**/bin
+/main/src/compat/**/obj
+/main/build/MonoRoslynCompat.dll

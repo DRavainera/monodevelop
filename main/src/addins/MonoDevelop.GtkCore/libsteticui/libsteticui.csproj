@@ -20,7 +20,9 @@
       <HintPath>/usr/lib/mono/4.5/Mono.Posix.dll</HintPath>
       <Private>False</Private>
     </Reference>
-    <PackageReference Include="Mono.Cecil" Version="0.10.1" />
+    <Reference Include="Mono.Cecil">
+      <HintPath>$(NuGetPackageRoot)mono.cecil/0.10.1/lib/net40/Mono.Cecil.dll</HintPath>
+    </Reference>
     <SuppressCopyLocal Include="Mono.Cecil.Mdb.dll" />
     <SuppressCopyLocal Include="Mono.Cecil.Pdb.dll" />
     <SuppressCopyLocal Include="Mono.Cecil.Rocks.dll" />

@@ -7,6 +7,13 @@ If you are interested in working on the project, even when archived you can stil
 
 <br/><br/><br/>
 
+**UPDATE**
+-------------
+
+**This project has been forked and is currently undergoing technology migration, it does not yet compile. Its branding and logo will be changed soon..**
+
+<br/><br/><br/>
+
 ---
 
 <br/><br/><br/>

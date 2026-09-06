@@ -14,7 +14,14 @@
   <ItemGroup>
     <Reference Include="System" />
     <Reference Include="System.Xml" />
-    <PackageReference Include="NUnit.Engine" Version="$(NuGetVersionNUnit3)" PrivateAssets="runtime" />
+    <Reference Include="nunit.engine.api">
+      <HintPath>$(NuGetPackageRoot)nunit.engine\$(NuGetVersionNUnit3)\lib\nunit.engine.api.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="nunit.engine">
+      <HintPath>$(NuGetPackageRoot)nunit.engine\$(NuGetVersionNUnit3)\lib\nunit.engine.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
     <IncludeCopyLocal Include="Mono.Cecil.dll" />
     <IncludeCopyLocal Include="nunit-agent-x86.exe" />
     <IncludeCopyLocal Include="nunit-agent.exe" />
