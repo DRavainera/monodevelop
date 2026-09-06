@@ -33,6 +33,7 @@ using CodingConventions = MonoDevelop.Ide.Editor.CodingConventions;
 using System.Collections.Generic;
 using MonoDevelop.Core;
 using MonoDevelop.Projects;
+using Microsoft.CodeAnalysis.Shared.Extensions;
 
 namespace MonoDevelop.Ide.Editor
 {
@@ -103,8 +104,8 @@ namespace MonoDevelop.Ide.Editor
 		{
 			HashSet<FilePath> watchedFiles = new HashSet<FilePath> ();
 
-			public event ConventionsFileChangedAsyncEventHandler ConventionFileChanged;
-			public event ContextFileMovedAsyncEventHandler ContextFileMoved;
+            public event Microsoft.CodeAnalysis.Shared.Extensions.ConventionsFileChangedAsyncEventHandler ConventionFileChanged;
+            public event Microsoft.CodeAnalysis.Shared.Extensions.ContextFileMovedAsyncEventHandler ContextFileMoved;
 
 			public ConventionsFileManager ()
 			{

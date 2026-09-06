@@ -26,11 +26,24 @@
 //
 
 using System;
+using MonoDevelop.Core;
 
 namespace MonoDevelop.Ide.Gui
 {
-	[SyncContext (typeof(GuiSyncContext))]
+	/// <summary>
+	/// Base class for objects that must run on the GUI thread. Public methods must be
+	/// marshaled to the main thread by calling <see cref="DispatchOnGuiThread"/>, replacing
+	/// the former remoting context-bound interception (ContextBoundObject + SyncContext).
+	/// </summary>
 	public class GuiSyncObject: SyncObject
 	{
+		protected static void DispatchOnGuiThread (Action action)
+		{
+			if (Runtime.IsMainThread) {
+				action ();
+				return;
+			}
+			Runtime.MainSynchronizationContext.Send (state => action (), null);
+		}
 	}
 }

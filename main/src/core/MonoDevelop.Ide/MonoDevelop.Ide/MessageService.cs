@@ -643,13 +643,27 @@ namespace MonoDevelop.Ide
 		{
 			public AlertButton GenericAlert (Window parent, MessageDescription message)
 			{
+				AlertButton result = null;
+				DispatchOnGuiThread (() => result = GenericAlertGui (parent, message));
+				return result;
+			}
+			
+			public string GetTextResponse (Window parent, string question, string caption, string initialValue, bool isPassword)
+			{
+				string result = null;
+				DispatchOnGuiThread (() => result = GetTextResponseGui (parent, question, caption, initialValue, isPassword));
+				return result;
+			}
+
+			AlertButton GenericAlertGui (Window parent, MessageDescription message)
+			{
 				var dialog = new AlertDialog (message) {
 					TransientFor = parent ?? IdeServices.DesktopService.GetFocusedTopLevelWindow ()
 				};
 				return dialog.Run ();
 			}
 			
-			public string GetTextResponse (Window parent, string question, string caption, string initialValue, bool isPassword)
+			string GetTextResponseGui (Window parent, string question, string caption, string initialValue, bool isPassword)
 			{
 				var dialog = new TextQuestionDialog {
 					Question = question,

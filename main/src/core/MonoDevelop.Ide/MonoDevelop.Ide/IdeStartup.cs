@@ -494,7 +494,7 @@ namespace MonoDevelop.Ide
 					Thread.Sleep (waitTimeout); 
 					if ((DateTime.Now - lastIdle).TotalMilliseconds > maxResponseTime) {
 						var pid = Process.GetCurrentProcess ().Id;
-						Mono.Unix.Native.Syscall.kill (pid, Mono.Unix.Native.Signum.SIGQUIT); 
+						Posix.Kill (pid, Posix.SIGQUIT); 
 						return;
 					}
 				}
@@ -691,10 +691,6 @@ namespace MonoDevelop.Ide
 			};
 			Xwt.Application.UnhandledException += (sender, e) => {
 				HandleException (e.ErrorException, false);
-			};
-			System.Windows.Threading.Dispatcher.CurrentDispatcher.UnhandledException += (sender, e) => {
-				HandleException (e.Exception, false);
-				e.Handled = true;
 			};
 		}
 

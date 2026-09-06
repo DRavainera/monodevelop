@@ -253,9 +253,12 @@ namespace MonoDevelop.Ide.Commands
 		protected override void Update (CommandArrayInfo info)
 		{
 			foreach (Components.Window window in IdeApp.CommandService.TopLevelWindowStack) {
-#if !WINDOWS
+#if MAC
 				//we don't want include hidden windows
 				if (!window.IsRealized || !window.IsVisible || Components.Mac.GtkMacInterop.IsGdkQuartzWindow (window))
+					continue;
+#else
+				if (!window.IsRealized || !window.IsVisible)
 					continue;
 #endif
 

@@ -31,8 +31,6 @@ using System.Collections;
 using System.Collections.Generic;
 using Mono.Addins;
 
-using Unix = Mono.Unix.Native;
-
 using MonoDevelop.Core;
 using MonoDevelop.Components.Commands.ExtensionNodes;
 

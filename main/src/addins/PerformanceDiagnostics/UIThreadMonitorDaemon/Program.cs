@@ -29,6 +29,7 @@ using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
+using System.Runtime.InteropServices;
 using System.Threading;
 
 namespace UIThreadMonitorDaemon
@@ -145,6 +146,11 @@ namespace UIThreadMonitorDaemon
 
 		static Process sampleProcess;
 		static string outputFilePath;
+
+		const int SIGINT = 2;
+		[DllImport ("libc", SetLastError = true)]
+		static extern int kill (int pid, int sig);
+
 		static void StartCollectingStacks ()
 		{
 			var startInfo = new ProcessStartInfo ("sample");
@@ -158,7 +164,7 @@ namespace UIThreadMonitorDaemon
 		static void StopCollectingStacks ()
 		{
 			if (!sampleProcess.HasExited)
-				Mono.Unix.Native.Syscall.kill (sampleProcess.Id, Mono.Unix.Native.Signum.SIGINT);
+				kill (sampleProcess.Id, SIGINT);
 			Console.Error.WriteLine ("Waiting for sample close.");
 			sampleProcess.WaitForExit ();
 			Console.Error.WriteLine ("Sample closed.");

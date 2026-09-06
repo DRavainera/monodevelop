@@ -29,7 +29,7 @@ using System;
 
 namespace MonoDevelop.Ide.Gui
 {
-	public class SyncObject: ContextBoundObject
+	public class SyncObject
 	{
 	}
 }

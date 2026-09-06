@@ -28,6 +28,7 @@ using System.Collections.Immutable;
 using System.Threading;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Editor;
+using Microsoft.CodeAnalysis.Editor.Implementation.TodoComments;
 using MonoDevelop.Core;
 using MonoDevelop.Ide.Composition;
 using MonoDevelop.Ide.TypeSystem;

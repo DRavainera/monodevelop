@@ -137,11 +137,11 @@ namespace MonoDevelop.Ide.Gui
 						return FilePath.Empty;
 					}
 					alreadyVisted.Add (fileName);
-					var linkInfo = new Mono.Unix.UnixSymbolicLinkInfo (fileName);
-					if (linkInfo.IsSymbolicLink && linkInfo.HasContents) {
-						FilePath contentsPath = linkInfo.ContentsPath;
+					var target = MonoDevelop.Core.Posix.ReadLink (fileName);
+					if (!string.IsNullOrEmpty (target)) {
+						FilePath contentsPath = target;
 						if (contentsPath.IsAbsolute) {
-							fileName = linkInfo.ContentsPath;
+							fileName = contentsPath;
 						} else {
 							fileName = fileName.ParentDirectory.Combine (contentsPath);
 						}

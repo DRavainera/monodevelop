@@ -32,7 +32,6 @@ using System.Collections.Generic;
 using System.Xml;
 using System.Text;
 using MonoDevelop.Core;
-using Unix = Mono.Unix.Native;
 using System.Linq;
 
 namespace MonoDevelop.Components.Commands

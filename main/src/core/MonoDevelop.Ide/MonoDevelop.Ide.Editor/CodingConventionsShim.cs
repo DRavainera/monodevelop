@@ -56,14 +56,6 @@ namespace MonoDevelop.Ide.Editor.CodingConventions
 		public string TargetFile { get; }
 	}
 
-	public interface IFileWatcher : IDisposable
-	{
-		event ConventionsFileChangedAsyncEventHandler ConventionFileChanged;
-		event ContextFileMovedAsyncEventHandler ContextFileMoved;
-		void StartWatching (string fileName, string directoryPath);
-		void StopWatching (string fileName, string directoryPath);
-	}
-
 	public interface IUniversalConventions
 	{
 		bool TryGetLineEnding (out string lineEnding);
@@ -95,7 +87,7 @@ namespace MonoDevelop.Ide.Editor.CodingConventions
 
 	public static class CodingConventionsManagerFactory
 	{
-		public static ICodingConventionsManager CreateCodingConventionsManager (IFileWatcher fileWatcher)
+		public static ICodingConventionsManager CreateCodingConventionsManager (Microsoft.CodeAnalysis.Shared.Extensions.IFileWatcher fileWatcher)
 		{
 			return new DefaultCodingConventionsManager (fileWatcher);
 		}
@@ -103,10 +95,10 @@ namespace MonoDevelop.Ide.Editor.CodingConventions
 
 	sealed class DefaultCodingConventionsManager : ICodingConventionsManager
 	{
-		readonly IFileWatcher fileWatcher;
+		readonly Microsoft.CodeAnalysis.Shared.Extensions.IFileWatcher fileWatcher;
 		readonly Dictionary<string, DefaultCodingConventionContext> contexts = new Dictionary<string, DefaultCodingConventionContext> (StringComparer.OrdinalIgnoreCase);
 
-		public DefaultCodingConventionsManager (IFileWatcher fileWatcher)
+		public DefaultCodingConventionsManager (Microsoft.CodeAnalysis.Shared.Extensions.IFileWatcher fileWatcher)
 		{
 			this.fileWatcher = fileWatcher;
 		}

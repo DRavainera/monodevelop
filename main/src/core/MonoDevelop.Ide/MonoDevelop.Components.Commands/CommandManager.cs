@@ -488,15 +488,14 @@ namespace MonoDevelop.Components.Commands
 			e.RetVal = ProcessKeyEvent (e.Event);
 		}
 
-		[GLib.ConnectBefore]
+[GLib.ConnectBefore]
 		void OnKeyReleased (object o, Gtk.KeyReleaseEventArgs e)
 		{
+			bool retVal = false;
 #if MAC
 			var currentEvent = AppKit.NSApplication.SharedApplication?.CurrentEvent;
 			var window = currentEvent?.Window;
 			var firstResponder = window?.FirstResponder;
-
-			bool retVal = false;
 
 			// GTK eats FlagsChanged events and this is just to inform
 			// modifier keys changed state, hence always send it to
@@ -512,6 +511,7 @@ namespace MonoDevelop.Components.Commands
 			// KeyboardShortcut[] accels = 
 			KeyBindingManager.AccelsFromKey (e.Event, out complete);
 
+#if MAC
 			if (currentEvent != null &&
 				currentEvent.Type == AppKit.NSEventType.KeyUp &&
 				firstResponder is AppKit.NSView view &&
@@ -521,6 +521,7 @@ namespace MonoDevelop.Components.Commands
 				SimulateViewKeyActionBehaviour (view, currentEvent);
 				retVal = true;
 			}
+#endif
 
 			if (!complete) {
 				// incomplete accel
@@ -2421,11 +2422,13 @@ namespace MonoDevelop.Components.Commands
 		}
 #endif
 
-		Gtk.Widget GetFocusedChild (Control widget)
+Gtk.Widget GetFocusedChild (Control widget)
 		{
 			Gtk.Container container;
+#if MAC
 			if (widget?.nativeWidget is AppKit.NSWindow window)
 				widget = Mac.GtkMacInterop.GetGtkWindow (window)?.Child;
+#endif
 			do {
 				container = widget?.nativeWidget is Gtk.Container ? widget.GetNativeWidget<Gtk.Container> () : null;
 				if (container != null) {
