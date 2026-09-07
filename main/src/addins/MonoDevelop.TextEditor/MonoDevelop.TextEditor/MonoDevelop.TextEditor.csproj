@@ -15,6 +15,8 @@
     <Reference Include="PresentationFramework" />
     <Reference Include="PresentationCore" />
     <ProjectReference Include="..\..\MonoDevelop.DesignerSupport\MonoDevelop.DesignerSupport.csproj" Private="false" />
+
+    <Compile Remove="CocoaSupport\CocoaExtras.cs" Condition="'$(HaveXamarinMac)' == 'true'" />
   </ItemGroup>
   <ItemGroup>
     <Compile Include="$(VSEditorApiDirectory)src\Editor\Text\Util\TextUIUtil\VacuousTextDataModel.cs" Link="Util\VacuousTextDataModel.cs" />

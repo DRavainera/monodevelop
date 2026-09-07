@@ -299,5 +299,23 @@
     <Folder Include="MonoDevelop.CSharp.CodeRefactorings\UsingRefactorings\" />
     <Folder Include="MonoDevelop.CSharp.Debugger\" />
   </ItemGroup>
-  <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />
+  <ItemGroup>
+    <Reference Include="System.Collections.Immutable">
+      <HintPath>$(NuGetPackageRoot)system.collections.immutable/1.5.0/lib/netstandard2.0/System.Collections.Immutable.dll</HintPath>
+    </Reference>
+    <Reference Include="Microsoft.CodeAnalysis">
+      <HintPath>$(NuGetPackageRoot)microsoft.codeanalysis.common/3.4.0-beta4-final/lib/netstandard2.0/Microsoft.CodeAnalysis.dll</HintPath>
+    </Reference>
+    <Reference Include="Microsoft.CodeAnalysis.CSharp">
+      <HintPath>$(NuGetPackageRoot)microsoft.codeanalysis.csharp/3.4.0-beta4-final/lib/netstandard2.0/Microsoft.CodeAnalysis.CSharp.dll</HintPath>
+    </Reference>
+    <Reference Include="Microsoft.CodeAnalysis.CSharp.Workspaces">
+      <HintPath>$(NuGetPackageRoot)microsoft.codeanalysis.csharp.workspaces/3.4.0-beta4-final/lib/netstandard2.0/Microsoft.CodeAnalysis.CSharp.Workspaces.dll</HintPath>
+    </Reference>
+    <Reference Include="Microsoft.CodeAnalysis.Workspaces">
+      <HintPath>$(NuGetPackageRoot)microsoft.codeanalysis.workspaces.common/3.4.0-beta4-final/lib/netstandard2.0/Microsoft.CodeAnalysis.Workspaces.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+
+<Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />
 </Project>

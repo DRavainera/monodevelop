@@ -55,7 +55,7 @@
 	and we no longer get it via a PackageReference
 	-->
 	<Target Name="DownloadNupkg"
-		Condition="'@(DownloadNupkg)' != ''"
+		Condition="'@(DownloadNupkg)' != '' and '$(DisableDownloadNupkg)' != 'true'"
 		BeforeTargets="ResolveAssemblyReferences"
 		DependsOnTargets="_DownloadNupkgPrepare;_DownloadNupkgIfNeeded" />
 
@@ -68,7 +68,7 @@
 		</PropertyGroup>
 	</Target>
 
-	<Target Name="_DownloadNupkgIfNeeded" Inputs="$(MSBuildAllProjects)" Outputs="@(DownloadedNupkg);$(_DownloadNupkgStamp)" >
+	<Target Name="_DownloadNupkgIfNeeded" Condition="'$(DisableDownloadNupkg)' != 'true'" Inputs="$(MSBuildAllProjects)" Outputs="@(DownloadedNupkg);$(_DownloadNupkgStamp)" >
 		<DownloadNupkg
 			ToolPath="$(MSBuildThisFileDirectory)\..\external\nuget-binary"
 			ToolExe="nuget.exe"

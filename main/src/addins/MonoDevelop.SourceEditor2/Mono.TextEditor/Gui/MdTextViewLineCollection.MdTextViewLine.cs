@@ -258,7 +258,6 @@ namespace Mono.TextEditor
 			{
 				return new Span (line.Offset, line.LengthIncludingDelimiter).IntersectsWith (bufferSpan);
 			}
-#if MAC
 			public void SetChange (TextViewLineChange change)
 			{
 				throw new NotImplementedException ();
@@ -288,7 +287,6 @@ namespace Mono.TextEditor
 			{
 				throw new NotImplementedException ();
 			}
-#endif
 		}
 	}
 }

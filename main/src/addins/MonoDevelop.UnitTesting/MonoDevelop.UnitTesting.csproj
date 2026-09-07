@@ -232,7 +232,7 @@
     <DownloadNupkg Include="Microsoft.TestPlatform" Version="$(NuGetVersionMicrosoftTestPlatform)" />
   </ItemGroup>
 
-  <Target Name="CopyTestAdapters" AfterTargets="DownloadNupkg">
+  <Target Name="CopyTestAdapters" AfterTargets="DownloadNupkg" Condition="'$(DisableDownloadNupkg)' != 'true'">
     <ItemGroup>
       <VsTestConsole Include="$(DownloadNupkgDirectory)Microsoft.TestPlatform.$(NuGetVersionMicrosoftTestPlatform)\tools\net451\Common7\IDE\Extensions\TestPlatform\**\*.*">
         <Visible>false</Visible>
