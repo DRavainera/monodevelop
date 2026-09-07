@@ -18,8 +18,12 @@
     <Reference Include="System.Xml" />
     <Reference Include="System.Core" />
     <Reference Include="System.Xml.Linq" />
-    <Reference Include="NUnit.Core" />
-    <Reference Include="NUnit.Framework" />
+    <Reference Include="NUnit.Core">
+      <HintPath>$(NuGetPackageRoot)nunitv2.core/2.7.0/lib/nunit.core.dll</HintPath>
+    </Reference>
+    <Reference Include="NUnit.Framework">
+      <HintPath>$(NuGetPackageRoot)nunit/2.7.0/lib/nunit.framework.dll</HintPath>
+    </Reference>
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\core\MonoDevelop.Core\MonoDevelop.Core.csproj">
@@ -32,12 +36,6 @@
       <Name>Mono.Addins</Name>
       <Private>False</Private>
     </ProjectReference>
-    <ProjectReference Include="..\..\external\guiunit\src\framework\GuiUnit_NET_4_5.csproj">
-      <Project>{D12F0F7B-8DE3-43EC-BA49-41052D065A9B}</Project>
-      <Name>GuiUnit_NET_4_5</Name>
-    </ProjectReference>
-    <IncludeCopyLocal Include="GuiUnit.exe" />
-    <IncludeCopyLocal Include="GuiUnit.dll" />
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Util.cs" />
@@ -49,8 +47,4 @@
     <Compile Include="CapturingLogger.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />
-  <Target Name="AfterBuild">
-     <Copy SourceFiles="$(OutputPath)\$(AssemblyName).dll" DestinationFolder="..\..\build\bin\testing" SkipUnchangedFiles="true" />
-     <Copy SourceFiles="$(OutputPath)\GuiUnit.exe" DestinationFolder="..\..\build\bin\testing" SkipUnchangedFiles="true" />
-   </Target>
 </Project>
