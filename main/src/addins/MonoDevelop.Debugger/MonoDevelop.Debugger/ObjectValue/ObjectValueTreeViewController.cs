@@ -35,7 +35,9 @@ using Mono.Debugging.Client;
 using MonoDevelop.Core;
 using MonoDevelop.Components;
 
+#if MAC
 using Microsoft.VisualStudio.Imaging;
+#endif
 using Microsoft.VisualStudio.Core.Imaging;
 
 namespace MonoDevelop.Debugger
@@ -207,6 +209,7 @@ namespace MonoDevelop.Debugger
 			return control;
 		}
 
+		#if MAC
 		public MacObjectValueTreeView GetMacControl (ObjectValueTreeViewFlags flags)
 		{
 			if (view != null)
@@ -218,11 +221,14 @@ namespace MonoDevelop.Debugger
 
 			return control;
 		}
+#endif
 
 		public Control GetControl (ObjectValueTreeViewFlags flags)
 		{
+#if MAC
 			if (Platform.IsMac)
 				return GetMacControl (flags);
+#endif
 
 			return GetGtkControl (flags);
 		}
@@ -1006,6 +1012,7 @@ namespace MonoDevelop.Debugger
 			}
 		}
 
+		#if MAC
 		static int GetKnownImageId (ObjectValueFlags flags)
 		{
 			var name = GetIcon (flags);
@@ -1053,12 +1060,17 @@ namespace MonoDevelop.Debugger
 				return -1;
 			}
 		}
+#endif
 
 		public static ImageId GetImageId (ObjectValueFlags flags)
 		{
+#if MAC
 			int id = GetKnownImageId (flags);
 
 			return id == -1 ? default : new ImageId (KnownImageIds.ImageCatalogGuid, id);
+#else
+			return default;
+#endif
 		}
 
 		public static string GetPreviewButtonIcon (PreviewButtonIcon icon)

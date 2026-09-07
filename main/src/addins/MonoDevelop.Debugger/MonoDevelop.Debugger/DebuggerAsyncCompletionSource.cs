@@ -218,9 +218,9 @@ namespace MonoDevelop.Debugger
 				if (span.Length == 0)
 					return new CommitResult (true, CommitBehavior.None);
 
-				var typedWord = text.AsSpan (span.Start, span.Length);
+				var typedWord = text.Substring (span.Start, span.Length);
 
-				if (!item.InsertText.AsSpan ().Contains (typedWord, StringComparison.Ordinal))
+				if (item.InsertText.IndexOf (typedWord, StringComparison.Ordinal) == -1)
 					return new CommitResult (true, CommitBehavior.None);
 			}
 

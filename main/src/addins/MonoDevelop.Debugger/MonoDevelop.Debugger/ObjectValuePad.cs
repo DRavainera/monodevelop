@@ -34,7 +34,9 @@ using Mono.Debugging.Client;
 using MonoDevelop.Core;
 using MonoDevelop.Ide.Gui;
 using MonoDevelop.Components;
+#if MAC
 using Foundation;
+#endif
 
 namespace MonoDevelop.Debugger
 {
@@ -45,7 +47,7 @@ namespace MonoDevelop.Debugger
 		protected ObjectValueTreeViewController controller;
 		protected ObjectValueTreeView tree;
 		// this is for the new treeview
-		protected MacObjectValueTreeView _treeview;
+		protected IObjectValueTreeView _treeview;
 
 		readonly Control control;
 		PadFontChanger fontChanger;
@@ -68,6 +70,7 @@ namespace MonoDevelop.Debugger
 				controller = new ObjectValueTreeViewController (allowWatchExpressions);
 				controller.AllowEditing = true;
 
+				#if MAC
 				if (Platform.IsMac) {
 					LoggingService.LogInfo ("Using MacObjectValueTreeView for {0}", allowWatchExpressions ? "Watch Pad" : "Locals Pad");
 					var treeView = controller.GetMacControl (ObjectValueTreeViewFlags.ObjectValuePadFlags);
@@ -101,7 +104,9 @@ namespace MonoDevelop.Debugger
 					host.ShowAll ();
 
 					control = host;
-				} else {
+				} else
+#endif
+				{
 					LoggingService.LogInfo ("Using GtkObjectValueTreeView for {0}", allowWatchExpressions ? "Watch Pad" : "Locals Pad");
 					var treeView = controller.GetGtkControl (ObjectValueTreeViewFlags.ObjectValuePadFlags);
 					treeView.Show ();

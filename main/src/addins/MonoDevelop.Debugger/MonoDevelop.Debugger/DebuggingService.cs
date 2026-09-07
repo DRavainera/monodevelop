@@ -1437,7 +1437,7 @@ namespace MonoDevelop.Debugger
 				return null;
 
 			var currentSnapshot = textBuffer.CurrentSnapshot;
-			var roslynDocument = currentSnapshot.GetOpenDocumentInCurrentContextWithChanges ();
+			var roslynDocument = document.DocumentContext?.AnalysisDocument;
 			if (roslynDocument == null)
 				return null;
 
