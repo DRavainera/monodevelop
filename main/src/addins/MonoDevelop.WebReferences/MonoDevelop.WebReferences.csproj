@@ -19,6 +19,9 @@
     <Reference Include="System.Core" />
     <Reference Include="System.Configuration" />
     <Reference Include="System.Runtime.Serialization" />
+    <Reference Include="System.Collections.Immutable">
+      <HintPath>$(NuGetPackageRoot)system.collections.immutable/1.5.0/lib/netstandard2.0/System.Collections.Immutable.dll</HintPath>
+    </Reference>
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\core\MonoDevelop.Core\MonoDevelop.Core.csproj">
