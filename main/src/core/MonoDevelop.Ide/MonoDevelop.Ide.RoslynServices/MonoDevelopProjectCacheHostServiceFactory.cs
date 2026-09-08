@@ -35,15 +35,25 @@ using MonoDevelop.Ide.TypeSystem;
 
 namespace MonoDevelop.Ide.RoslynServices
 {
-	[ExportWorkspaceServiceFactory (typeof (IProjectCacheHostService), ServiceLayer.Host)]
+[ExportWorkspaceServiceFactory (typeof (IProjectCacheHostService), ServiceLayer.Host)]
 	[Shared]
-	class MonoDevelopProjectCacheHostServiceFactory : IWorkspaceServiceFactory
+	class MonoDevelopProjectCacheHostServiceFactory : IWorkspaceServiceFactory, IProjectCacheHostService
 	{
 		// Same as VSWin.
 		const int ImplicitCacheTimeoutInMS = 10000;
 
+		IProjectCacheHostService cacheService {
+			get { return new NoOpProjectCacheHostService (); }
+		}
+
+		MonoDevelopProjectCacheService projectCacheService;
+
 		public IWorkspaceService CreateService (HostWorkspaceServices workspaceServices)
 		{
+			if (projectCacheService != null) {
+				projectCacheService.Dispose ();
+			}
+
 			// we support active document tracking only for visual studio workspace host.
 			if (workspaceServices.Workspace is MonoDevelopWorkspace monoDevelopWorkspace) {
 				// We will finish setting this up in VisualStudioWorkspaceImpl.DeferredInitializationState
@@ -64,11 +74,46 @@ namespace MonoDevelop.Ide.RoslynServices
 						manager.Clear ();
 					}
 				};
-				return projectCacheService;
+				this.projectCacheService = projectCacheService;
 			}
 
-			// TODO: Handle miscellaneous files workspace later on.
-			return new ProjectCacheService (workspaceServices.Workspace);
+			return this;
+		}
+
+		// TEST/porting shim: the compat ProjectCacheService stub does not implement the internal
+		// IProjectCacheHostService contract (EnableCaching is inert). Expose a null implementation so
+		// that factory-exported value stays castable to IProjectCacheHostService.
+		sealed class NoOpProjectCacheHostService : IProjectCacheHostService
+		{
+			public IDisposable EnableCaching (ProjectId key)
+			{
+				return null;
+			}
+
+			public T CacheObjectIfCachingEnabledForKey<T> (ProjectId key, object owner, T instance) where T : class
+			{
+				return instance;
+			}
+
+			public T CacheObjectIfCachingEnabledForKey<T> (ProjectId key, ICachedObjectOwner owner, T instance) where T : class
+			{
+				return instance;
+			}
+		}
+
+		public IDisposable EnableCaching (ProjectId key)
+		{
+			return projectCacheService?.EnableCaching (key) ?? cacheService.EnableCaching (key);
+		}
+
+		public T CacheObjectIfCachingEnabledForKey<T> (ProjectId key, object owner, T instance) where T : class
+		{
+			return instance;
+		}
+
+		public T CacheObjectIfCachingEnabledForKey<T> (ProjectId key, ICachedObjectOwner owner, T instance) where T : class
+		{
+			return instance;
 		}
 
 		class MonoDevelopProjectCacheService : ProjectCacheService, IDisposable

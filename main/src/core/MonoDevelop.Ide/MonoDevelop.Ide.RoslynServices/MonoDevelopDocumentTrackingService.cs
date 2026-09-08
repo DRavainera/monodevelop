@@ -36,13 +36,33 @@ using Roslyn.Utilities;
 namespace MonoDevelop.Ide.RoslynServices
 {
 	[ExportWorkspaceServiceFactory (typeof (IDocumentTrackingService), ServiceLayer.Host), Shared]
-	sealed class MonoDevelopDocumentTrackingServiceFactory : IWorkspaceServiceFactory
+	sealed class MonoDevelopDocumentTrackingServiceFactory : IWorkspaceServiceFactory, IDocumentTrackingService
 	{
-		IDocumentTrackingService service;
+		readonly MonoDevelopDocumentTrackingService service = new MonoDevelopDocumentTrackingService ();
 
 		public IWorkspaceService CreateService (HostWorkspaceServices workspaceServices)
 		{
-			return service ?? (service = new MonoDevelopDocumentTrackingService ());
+			return this;
+		}
+
+		public DocumentId TryGetActiveDocument ()
+		{
+			return service.TryGetActiveDocument ();
+		}
+
+		public ImmutableArray<DocumentId> GetVisibleDocuments ()
+		{
+			return service.GetVisibleDocuments ();
+		}
+
+		public event EventHandler<DocumentId> ActiveDocumentChanged {
+			add { service.ActiveDocumentChanged += value; }
+			remove { service.ActiveDocumentChanged -= value; }
+		}
+
+		public event EventHandler<EventArgs> NonRoslynBufferTextChanged {
+			add { service.NonRoslynBufferTextChanged += value; }
+			remove { service.NonRoslynBufferTextChanged -= value; }
 		}
 	}
 

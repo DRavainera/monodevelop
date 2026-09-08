@@ -35,62 +35,59 @@ namespace MonoDevelop.Ide.RoslynServices
 {
 	[ExportWorkspaceServiceFactory (typeof (INotificationService), ServiceLayer.Host)]
 	[Shared]
-	class MonoDevelopNotificationServiceFactory : IWorkspaceServiceFactory
+	class MonoDevelopNotificationServiceFactory : IWorkspaceServiceFactory, INotificationService, INotificationServiceCallback
 	{
-		public IWorkspaceService CreateService (HostWorkspaceServices workspaceServices) => new MonoDevelopNotificationService ();
+		/// <summary>
+		/// For testing purposes only.  If non-null, this callback will be invoked instead of showing a dialog.
+		/// </summary>
+		public Action<string, string, NotificationSeverity> NotificationCallback { get; set; }
 
-		internal class MonoDevelopNotificationService : INotificationService, INotificationServiceCallback
+		public IWorkspaceService CreateService (HostWorkspaceServices workspaceServices) => this;
+
+		public bool ConfirmMessageBox (string message, string title = null, NotificationSeverity severity = NotificationSeverity.Warning)
 		{
-			/// <summary>
-			/// For testing purposes only.  If non-null, this callback will be invoked instead of showing a dialog.
-			/// </summary>
-			public Action<string, string, NotificationSeverity> NotificationCallback { get; set; }
-
-			public bool ConfirmMessageBox (string message, string title = null, NotificationSeverity severity = NotificationSeverity.Warning)
-			{
-				if (NotificationCallback != null) {
-					NotificationCallback?.Invoke (message, title, severity);
-					return true;
-				}
-
-				return ShowAlert (message, title, severity, AlertButton.Yes, AlertButton.No) == AlertButton.Yes;
+			if (NotificationCallback != null) {
+				NotificationCallback?.Invoke (message, title, severity);
+				return true;
 			}
 
-			public void SendNotification (string message, string title = null, NotificationSeverity severity = NotificationSeverity.Warning)
-			{
-				if (NotificationCallback != null) {
-					// invoke the callback and assume 'Yes' was clicked.  Since this is a test-only scenario, assuming yes should be fine.
-					NotificationCallback?.Invoke (message, title, severity);
-					return;
-				}
+			return ShowAlert (message, title, severity, AlertButton.Yes, AlertButton.No) == AlertButton.Yes;
+		}
 
-				ShowAlert (message, title, severity, AlertButton.Ok);
+		public void SendNotification (string message, string title = null, NotificationSeverity severity = NotificationSeverity.Warning)
+		{
+			if (NotificationCallback != null) {
+				// invoke the callback and assume 'Yes' was clicked.  Since this is a test-only scenario, assuming yes should be fine.
+				NotificationCallback?.Invoke (message, title, severity);
+				return;
 			}
 
-			// Roslyn usually does not set a title, only a message.
-			AlertButton ShowAlert (string message, string title, NotificationSeverity severity, params AlertButton[] buttons)
-			{
-				string primary = title ?? message;
-				string secondary = title != null ? message : null;
-				string icon = GetSeverityIcon (severity);
+			ShowAlert (message, title, severity, AlertButton.Ok);
+		}
 
-				return MessageService.GenericAlert (icon, primary, secondary, buttons);
-			}
+		// Roslyn usually does not set a title, only a message.
+		AlertButton ShowAlert (string message, string title, NotificationSeverity severity, params AlertButton[] buttons)
+		{
+			string primary = title ?? message;
+			string secondary = title != null ? message : null;
+			string icon = GetSeverityIcon (severity);
 
-			static string GetSeverityIcon (NotificationSeverity severity)
+			return MessageService.GenericAlert (icon, primary, secondary, buttons);
+		}
+
+		static string GetSeverityIcon (NotificationSeverity severity)
+		{
+			switch (severity)
 			{
-				switch (severity)
-				{
-				case NotificationSeverity.Error:
-					return Gui.Stock.Error;
-				case NotificationSeverity.Information:
-					return Gui.Stock.Information;
-				case NotificationSeverity.Warning:
-					return Gui.Stock.Warning;
-				}
-				LoggingService.LogError ("Unknown NotificationSeverity value {0}", severity.ToString ());
+			case NotificationSeverity.Error:
+				return Gui.Stock.Error;
+			case NotificationSeverity.Information:
 				return Gui.Stock.Information;
+			case NotificationSeverity.Warning:
+				return Gui.Stock.Warning;
 			}
+			LoggingService.LogError ("Unknown NotificationSeverity value {0}", severity.ToString ());
+			return Gui.Stock.Information;
 		}
 	}
 }

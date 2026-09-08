@@ -39,7 +39,7 @@ using Microsoft.VisualStudio.Threading;
 namespace MonoDevelop.Ide.RoslynServices
 {
 	[ExportWorkspaceService(typeof(IWorkspaceTaskSchedulerFactory), ServiceLayer.Host), Shared]
-	class MonoDevelopTaskSchedulerFactory : EditorTaskSchedulerFactory
+	class MonoDevelopTaskSchedulerFactory : EditorTaskSchedulerFactory, IWorkspaceTaskSchedulerFactory
 	{
 		readonly IThreadingContext _threadingContext;
 
@@ -50,7 +50,12 @@ namespace MonoDevelop.Ide.RoslynServices
 			_threadingContext = threadingContext;
 		}
 
-		public new IWorkspaceTaskScheduler CreateEventingTaskQueue ()
+		public IWorkspaceTaskScheduler CreateBackgroundTaskScheduler ()
+		{
+			return CreateEventingTaskQueue ();
+		}
+
+		public IWorkspaceTaskScheduler CreateEventingTaskQueue ()
 		{
 			return new WorkspaceTaskQueue(this, new JoinableTaskFactoryTaskScheduler(_threadingContext.JoinableTaskFactory));
 		}

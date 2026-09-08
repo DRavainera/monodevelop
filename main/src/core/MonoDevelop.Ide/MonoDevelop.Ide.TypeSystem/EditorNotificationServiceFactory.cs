@@ -12,72 +12,58 @@ namespace MonoDevelop.Ide.TypeSystem
 {
 	[ExportWorkspaceServiceFactory (typeof (INotificationService), ServiceLayer.Editor)]
 	[Shared]
-	internal class EditorNotificationServiceFactory : IWorkspaceServiceFactory
+	internal class EditorNotificationServiceFactory : IWorkspaceServiceFactory, INotificationService, INotificationServiceCallback
 	{
-		private static object s_gate = new object ();
-
-		private static EditorDialogService s_singleton;
-
 		public IWorkspaceService CreateService (HostWorkspaceServices workspaceServices)
 		{
-			lock (s_gate) {
-				if (s_singleton == null) {
-					s_singleton = new EditorDialogService ();
-				}
-			}
-
-			return s_singleton;
+			return this;
 		}
 
-		private class EditorDialogService : INotificationService, INotificationServiceCallback
+		/// <summary>
+		/// For testing purposes only.  If non-null, this callback will be invoked instead of showing a dialog.
+		/// </summary>
+		public Action<string, string, NotificationSeverity> NotificationCallback { get; set; }
+
+		public void SendNotification (
+			string message,
+			string title = null,
+			NotificationSeverity severity = NotificationSeverity.Warning)
 		{
-
-            /// <summary>
-            /// For testing purposes only.  If non-null, this callback will be invoked instead of showing a dialog.
-            /// </summary>
-            public Action<string, string, NotificationSeverity> NotificationCallback { get; set; }
-
-			public void SendNotification (
-				string message,
-				string title = null,
-				NotificationSeverity severity = NotificationSeverity.Warning)
-			{
-				var callback = NotificationCallback;
-				if (callback != null) {
-					// invoke the callback
-					callback (message, title, severity);
-				} else {
-					var image = SeverityToImage (severity);
-					MessageService.GenericAlert (image, title, message, AlertButton.Ok);
-				}
+			var callback = NotificationCallback;
+			if (callback != null) {
+				// invoke the callback
+				callback (message, title, severity);
+			} else {
+				var image = SeverityToImage (severity);
+				MessageService.GenericAlert (image, title, message, AlertButton.Ok);
 			}
+		}
 
-			public bool ConfirmMessageBox (
-				string message,
-				string title = null,
-				NotificationSeverity severity = NotificationSeverity.Warning)
-			{
-				var callback = NotificationCallback;
-				if (callback != null) {
-					// invoke the callback and assume 'Yes' was clicked.  Since this is a test-only scenario, assuming yes should be fine.
-					callback (message, title, severity);
-					return true;
-				} else {
-					var image = SeverityToImage (severity);
-					return MessageService.GenericAlert (image, title, message, AlertButton.Yes, AlertButton.No) == AlertButton.Yes;
-				}
+		public bool ConfirmMessageBox (
+			string message,
+			string title = null,
+			NotificationSeverity severity = NotificationSeverity.Warning)
+		{
+			var callback = NotificationCallback;
+			if (callback != null) {
+				// invoke the callback and assume 'Yes' was clicked.  Since this is a test-only scenario, assuming yes should be fine.
+				callback (message, title, severity);
+				return true;
+			} else {
+				var image = SeverityToImage (severity);
+				return MessageService.GenericAlert (image, title, message, AlertButton.Yes, AlertButton.No) == AlertButton.Yes;
 			}
+		}
 
-			private static IconId SeverityToImage (NotificationSeverity severity)
-			{
-				switch (severity) {
-				case NotificationSeverity.Information:
-					return Gui.Stock.Information;
-				case NotificationSeverity.Warning:
-					return Gui.Stock.Warning;
-				default:
-					return Gui.Stock.Error;
-				}
+		private static IconId SeverityToImage (NotificationSeverity severity)
+		{
+			switch (severity) {
+			case NotificationSeverity.Information:
+				return Gui.Stock.Information;
+			case NotificationSeverity.Warning:
+				return Gui.Stock.Warning;
+			default:
+				return Gui.Stock.Error;
 			}
 		}
 	}

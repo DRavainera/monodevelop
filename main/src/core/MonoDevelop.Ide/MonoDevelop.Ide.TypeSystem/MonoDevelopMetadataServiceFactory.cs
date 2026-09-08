@@ -23,9 +23,7 @@
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
-using System;
 using System.Composition;
-using System.Threading;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Host;
 using Microsoft.CodeAnalysis.Host.Mef;
@@ -33,41 +31,36 @@ using Microsoft.CodeAnalysis.Host.Mef;
 namespace MonoDevelop.Ide.TypeSystem.MetadataReferences
 {
 	[ExportWorkspaceServiceFactory (typeof (IMetadataService), ServiceLayer.Host), Shared]
-	class MonoDevelopMetadataServiceFactory : IWorkspaceServiceFactory
+	class MonoDevelopMetadataServiceFactory : IWorkspaceServiceFactory, IMetadataService
 	{
+		HostWorkspaceServices workspaceServices;
+
 		public IWorkspaceService CreateService (HostWorkspaceServices workspaceServices)
 		{
-			return new Service (workspaceServices);
+			this.workspaceServices = workspaceServices;
+			return this;
 		}
 
-		sealed class Service : IMetadataService
+		public PortableExecutableReference GetReference (string resolvedPath, MetadataReferenceProperties properties)
 		{
-			readonly Lazy<MonoDevelopMetadataReferenceManager> _manager;
-
-			public Service (HostWorkspaceServices workspaceServices)
-			{
-				// We will defer creation of this reference manager until we have to to avoid it being constructed too
-				// early and potentially causing deadlocks.
-				_manager = new Lazy<MonoDevelopMetadataReferenceManager> (
-					() => workspaceServices.GetRequiredService<MonoDevelopMetadataReferenceManager> ());
-			}
-
-			public PortableExecutableReference GetReference (string resolvedPath, MetadataReferenceProperties properties)
-			{
-				return _manager.Value.GetOrCreateMetadataReferenceSnapshot (resolvedPath, properties);
-			}
+			// This manager is created lazily on first request to avoid it being constructed too early and
+			// potentially causing deadlocks.
+			var manager = workspaceServices.GetRequiredService<MonoDevelopMetadataReferenceManager> ();
+			return manager.GetOrCreateMetadataReferenceSnapshot (resolvedPath, properties);
 		}
 	}
 
-	// TODO: Remove this type. This factory is needed just to instantiate a singleton of VisualStudioMetadataReferenceProvider.
-	// We should be able to MEF-instantiate a singleton of VisualStudioMetadataReferenceProvider without creating this factory.
 	[ExportWorkspaceServiceFactory (typeof (MonoDevelopMetadataReferenceManager), ServiceLayer.Host), Shared]
-	class MonoDevelopMetadataReferenceManagerFactory : IWorkspaceServiceFactory
+	class MonoDevelopMetadataReferenceManagerFactory : MonoDevelopMetadataReferenceManager, IWorkspaceServiceFactory
 	{
+		public MonoDevelopMetadataReferenceManagerFactory ()
+			: base (null)
+		{
+		}
+
 		public IWorkspaceService CreateService (HostWorkspaceServices workspaceServices)
 		{
-			var temporaryStorage = workspaceServices.GetService<ITemporaryStorageService> ();
-			return new MonoDevelopMetadataReferenceManager (temporaryStorage);
+			return this;
 		}
 	}
 }

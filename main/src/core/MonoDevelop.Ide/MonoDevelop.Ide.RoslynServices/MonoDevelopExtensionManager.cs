@@ -40,9 +40,10 @@ using Microsoft.VisualStudio.Text;
 namespace MonoDevelop.Ide.RoslynServices
 {
 	[ExportWorkspaceServiceFactory (typeof (IExtensionManager), ServiceLayer.Host), Shared]
-	class MonoDevelopExtensionManager : IWorkspaceServiceFactory
+	class MonoDevelopExtensionManager : IWorkspaceServiceFactory, IExtensionManager
 	{
 		private readonly List<IExtensionErrorHandler> _errorHandlers;
+		IExtensionManager extensionManager;
 
 		[ImportingConstructor]
 		public MonoDevelopExtensionManager(
@@ -56,7 +57,23 @@ namespace MonoDevelop.Ide.RoslynServices
 			var optionService = workspaceServices.GetService<IOptionService> ();
 			var errorReportingService = workspaceServices.GetService<IErrorReportingService> ();
 			var errorLoggerService = workspaceServices.GetService<IErrorLoggerService> ();
-			return new ExtensionManager (optionService, errorReportingService, errorLoggerService, _errorHandlers);
+			extensionManager = (IExtensionManager)new ExtensionManager (optionService, errorReportingService, errorLoggerService, _errorHandlers);
+			return this;
+		}
+
+		public bool IsDisabled (object provider)
+		{
+			return extensionManager.IsDisabled (provider);
+		}
+
+		public bool CanHandleException (object provider, Exception exception)
+		{
+			return extensionManager.CanHandleException (provider, exception);
+		}
+
+		public void HandleException (object provider, Exception exception)
+		{
+			extensionManager.HandleException (provider, exception);
 		}
 
 		internal class ExtensionManager : Microsoft.CodeAnalysis.Editor.EditorLayerExtensionManager.ExtensionManager

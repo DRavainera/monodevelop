@@ -12,7 +12,7 @@ using MonoDevelop.Ide.TypeSystem;
 namespace MonoDevelop.Ide.RoslynServices
 {
 	[ExportWorkspaceServiceFactory (typeof (ISymbolNavigationService), ServiceLayer.Host), Shared]
-	internal class VisualStudioSymbolNavigationServiceFactory : IWorkspaceServiceFactory
+	internal class VisualStudioSymbolNavigationServiceFactory : IWorkspaceServiceFactory, ISymbolNavigationService
 	{
 		private readonly ISymbolNavigationService _singleton;
 
@@ -24,7 +24,22 @@ namespace MonoDevelop.Ide.RoslynServices
 
 		public IWorkspaceService CreateService (HostWorkspaceServices workspaceServices)
 		{
-			return _singleton;
+			return this;
+		}
+
+		public bool TryNavigateToSymbol (ISymbol symbol, Project project, OptionSet options = null, CancellationToken cancellationToken = default)
+		{
+			return _singleton.TryNavigateToSymbol (symbol, project, options, cancellationToken);
+		}
+
+		public bool TrySymbolNavigationNotify (ISymbol symbol, Project project, CancellationToken cancellationToken)
+		{
+			return _singleton.TrySymbolNavigationNotify (symbol, project, cancellationToken);
+		}
+
+		public bool WouldNavigateToSymbol (DefinitionItem definitionItem, Solution solution, CancellationToken cancellationToken, out string filePath, out int lineNumber, out int charOffset)
+		{
+			return _singleton.WouldNavigateToSymbol (definitionItem, solution, cancellationToken, out filePath, out lineNumber, out charOffset);
 		}
 	}
 

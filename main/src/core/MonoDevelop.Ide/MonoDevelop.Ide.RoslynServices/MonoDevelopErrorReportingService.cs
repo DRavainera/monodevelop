@@ -34,13 +34,8 @@ using MonoDevelop.Core;
 namespace MonoDevelop.Ide.RoslynServices
 {
 	[ExportWorkspaceServiceFactory (typeof (IErrorReportingService), ServiceLayer.Host), Shared]
-	sealed class MonoDevelopErrorReportingServiceFactory : IWorkspaceServiceFactory
+	sealed class MonoDevelopErrorReportingServiceFactory : IWorkspaceServiceFactory, IErrorReportingService
 	{
-		public IWorkspaceService CreateService (HostWorkspaceServices workspaceServices)
-		{
-			return new MonoDevelopErrorReportingService (workspaceServices.GetRequiredService<IInfoBarService> ());
-		}
-
 		sealed class MonoDevelopErrorReportingService : IErrorReportingService
 		{
 			readonly IInfoBarService _infoBarService;
@@ -68,5 +63,22 @@ namespace MonoDevelop.Ide.RoslynServices
 					IdeServices.DesktopService.OpenFile (logFile);
 			}
 		}
+
+		MonoDevelopErrorReportingService errorReportingService;
+
+		public IWorkspaceService CreateService (HostWorkspaceServices workspaceServices)
+		{
+			errorReportingService = new MonoDevelopErrorReportingService (workspaceServices.GetRequiredService<IInfoBarService> ());
+			return this;
+		}
+
+		public void ShowErrorInfoInActiveView (string message, params InfoBarUI [] items) =>
+			errorReportingService.ShowErrorInfoInActiveView (message, items);
+
+		public void ShowGlobalErrorInfo (string message, params InfoBarUI [] items) =>
+			errorReportingService.ShowGlobalErrorInfo (message, items);
+
+		public void ShowDetailedErrorInfo (Exception exception) =>
+			errorReportingService.ShowDetailedErrorInfo (exception);
 	}
 }
