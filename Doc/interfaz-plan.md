@@ -67,6 +67,7 @@ Validación con solución C# (run #11 = `Ide.2026-09-08__00-38-17.log`, `mono Mo
 ### In3 — Smoke tests de GUI (criterio de aceptación, para la fase MIGRACIÓN)
 Runsheet (net8): 1 arranque limpio; 2 menús; 3 About; 4 Preferences; 5 AddinManager; 6 crear/compilar C# Library; 7 abrir `.sln` y navegar. Cierre: 0 críticas nuevas.
 Pendiente (no se puede ejecutar hasta correr la GUI bajo runtime .NET 8).
+Ejecución detallada por hitos en `migration-phase-net8.md` (M0: baseline; M1: build total dotnet msbuild; M2: runtime net8 + MSBuild nativo; M3: Roslyn moderno y retiro de MonoRoslynCompat; M4: shell Avalonia 12; M5: vistas por módulos; M6: cutover + este runsheet como gate).
 
 ### In4 — Cierre y documentación
 Sync de `Doc/session_summary.md` + este plan con las decisiones (migración net8, Avalonia UI 12, mono fuera, evidencia de cada bloqueo).
