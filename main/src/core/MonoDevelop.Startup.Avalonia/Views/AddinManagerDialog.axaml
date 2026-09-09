@@ -1,0 +1,33 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="MonoDevelop.AvaloniaShell.Views.AddinManagerDialog"
+        Title="Add-in Manager"
+        Width="760" Height="520"
+        WindowStartupLocation="CenterOwner">
+  <DockPanel>
+    <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="12">
+      <Button x:Name="RefreshButton" Content="Refresh" Width="90" />
+      <Button x:Name="CloseButton" Content="Close" Width="90" />
+    </StackPanel>
+    <DockPanel>
+      <TextBlock DockPanel.Dock="Top" Padding="12,10" Text="Installed add-ins" FontWeight="Bold" />
+      <ListBox x:Name="AddinList" Margin="12,0">
+        <ListBoxItem>
+          <StackPanel>
+            <TextBlock Text="MonoDevelop.Core" FontWeight="Bold" />
+            <TextBlock Text="Core services — Version 8.8" Foreground="#909090" FontSize="11" /></StackPanel>
+        </ListBoxItem>
+        <ListBoxItem>
+          <StackPanel>
+            <TextBlock Text="MonoDevelop.Ide" FontWeight="Bold" />
+            <TextBlock Text="Integrated Development Environment — Version 8.8" Foreground="#909090" FontSize="11" /></StackPanel>
+        </ListBoxItem>
+        <ListBoxItem>
+          <StackPanel>
+            <TextBlock Text="MonoDevelop.AvaloniaShell" FontWeight="Bold" />
+            <TextBlock Text="Avalonia 12 shell (prototype)" Foreground="#909090" FontSize="11" /></StackPanel>
+        </ListBoxItem>
+      </ListBox>
+    </DockPanel>
+  </DockPanel>
+</Window>

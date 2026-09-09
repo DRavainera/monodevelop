@@ -182,15 +182,17 @@ namespace MonoDevelop.Core
 		
 		internal static string GetRepoUrl (string quality)
 		{
-			string platform;
-			if (Platform.IsWindows)
-				platform = "Win32";
-			else if (Platform.IsMac)
-				platform = "Mac";
-			else
-				platform = "Linux";
-			
-			return "https://addins.monodevelop.com/" + quality + "/" + platform + "/" + AddinManager.CurrentAddin.Version + "/main.mrep";
+			return "https://lastexitcode.com/monodevelop-addins/" + GetAddinRepoVersionDir () + "/main.mrep";
+		}
+
+		static string GetAddinRepoVersionDir ()
+		{
+			string version = AddinManager.CurrentAddin.Version;
+			int idx = version.IndexOf ('.');
+			if (idx == -1)
+				return version;
+			int idx2 = version.IndexOf ('.', idx + 1);
+			return idx2 == -1 ? version : version.Substring (0, idx2);
 		}
 		
 		static void SetupInstrumentation ()

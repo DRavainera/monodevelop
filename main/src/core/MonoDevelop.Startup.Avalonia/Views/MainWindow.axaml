@@ -1,0 +1,85 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="MonoDevelop.AvaloniaShell.Views.MainWindow"
+        Title="MonoDevelop — Avalonia Shell"
+        Width="1280" Height="800"
+        WindowStartupLocation="CenterScreen">
+
+  <DockPanel>
+    <!-- Top menu -->
+    <Menu DockPanel.Dock="Top">
+      <MenuItem Header="_File" />
+      <MenuItem Header="_Edit" />
+      <MenuItem Header="_View">
+        <MenuItem x:Name="ViewSolutionPad" Header="Solution Pad" IsChecked="True" Click="OnTogglePad" />
+        <MenuItem x:Name="ViewOutput" Header="Output" IsChecked="True" Click="OnTogglePad" />
+      </MenuItem>
+      <MenuItem Header="_Help">
+        <MenuItem Header="About…" Click="OnAbout" />
+        <MenuItem Header="Preferences" Click="OnPreferences" />
+        <MenuItem Header="Add-in Manager" Click="OnAddinManager" />
+      </MenuItem>
+    </Menu>
+
+    <!-- Status bar -->
+    <Border DockPanel.Dock="Bottom" Padding="6,3" Background="#1E1E1E">
+      <TextBlock x:Name="StatusText" Text="Ready" FontSize="12" Foreground="#E0E0E0" />
+    </Border>
+
+    <!-- Tool panes + document area -->
+    <Grid>
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="Auto" />
+        <ColumnDefinition Width="*" />
+        <ColumnDefinition Width="Auto" />
+      </Grid.ColumnDefinitions>
+      <Grid.RowDefinitions>
+        <RowDefinition Height="*" />
+        <RowDefinition Height="Auto" />
+      </Grid.RowDefinitions>
+
+      <!-- Left: Solution pad -->
+      <Border x:Name="SolutionPane" Grid.Row="0" Grid.Column="0" Width="260" BorderBrush="#333333" BorderThickness="0,0,1,0">
+        <DockPanel>
+          <TextBlock DockPanel.Dock="Top" Padding="8,6" Text="Solution" FontWeight="Bold" />
+          <ListBox x:Name="SolutionList">
+            <ListBoxItem Content="Solution 'TestProj' (1 project)" />
+            <ListBoxItem Content="└ TestProj" />
+            <ListBoxItem Content="  └ References" />
+            <ListBoxItem Content="  └ Program.cs" />
+          </ListBox>
+        </DockPanel>
+      </Border>
+
+      <!-- Documents area -->
+      <Border x:Name="DocumentPane" Grid.Row="0" Grid.Column="1" Background="#1E1E1E" BorderBrush="#333333" BorderThickness="0,0,1,0">
+        <TextBlock Text="Document area — migrate views here (M5)"
+                   VerticalAlignment="Center" HorizontalAlignment="Center"
+                   Foreground="#808080" FontSize="18" />
+      </Border>
+
+      <!-- Right: properties pad (placeholder) -->
+      <Border x:Name="PropertiesPane" Grid.Row="0" Grid.Column="2" Width="220" BorderBrush="#333333" BorderThickness="0">
+        <DockPanel>
+          <TextBlock DockPanel.Dock="Top" Padding="8,6" Text="Properties" FontWeight="Bold" />
+          <TextBlock Text="(placeholder)" Padding="8" Foreground="#808080" />
+        </DockPanel>
+      </Border>
+
+      <GridSplitter Grid.Row="0" Grid.Column="1" Width="3" HorizontalAlignment="Left"
+                    Background="Transparent" ResizeDirection="Columns" />
+      <GridSplitter Grid.Row="0" Grid.Column="2" Width="3" HorizontalAlignment="Left"
+                    Background="Transparent" ResizeDirection="Columns" />
+
+      <!-- Bottom: output pad -->
+      <Border x:Name="OutputPane" Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3" Height="160" BorderBrush="#333333" BorderThickness="0,1,0,0">
+        <DockPanel>
+          <TextBlock DockPanel.Dock="Top" Padding="8,4" Text="Output" FontWeight="Bold" />
+          <TextBox x:Name="OutputText" AcceptsReturn="True" IsReadOnly="True"
+                   Text="[shell] Avalonia 12.1.2 console ready." FontSize="12"
+                   Padding="8" Background="Transparent" />
+        </DockPanel>
+      </Border>
+    </Grid>
+  </DockPanel>
+</Window>

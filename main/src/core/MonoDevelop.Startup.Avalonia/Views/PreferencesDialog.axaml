@@ -1,0 +1,29 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="MonoDevelop.AvaloniaShell.Views.PreferencesDialog"
+        Title="Preferences"
+        Width="720" Height="520"
+        WindowStartupLocation="CenterOwner">
+  <DockPanel>
+    <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="12">
+      <Button x:Name="OkButton" Content="OK" Width="80" />
+      <Button x:Name="CancelButton" Content="Cancel" Width="80" />
+    </StackPanel>
+    <Grid ColumnDefinitions="Auto,*">
+      <ListBox x:Name="PanelList" Width="180" SelectedIndex="0">
+        <ListBoxItem Content="General" />
+        <ListBoxItem Content="Source Code" />
+        <ListBoxItem Content="Build" />
+        <ListBoxItem Content="Projects" />
+        <ListBoxItem Content="Version Control" />
+        <ListBoxItem Content="Add-ins" />
+      </ListBox>
+      <Border Grid.Column="1" BorderBrush="#333333" BorderThickness="1,0,0,0">
+        <StackPanel Margin="16" Spacing="8">
+          <TextBlock x:Name="PanelTitle" Text="General" FontWeight="Bold" />
+          <TextBlock Text="Preferences panel — deferred until M5 (port of MonoDevelop.Core preferences binding)." TextWrapping="Wrap" Foreground="#B0B0B0" />
+        </StackPanel>
+      </Border>
+    </Grid>
+  </DockPanel>
+</Window>

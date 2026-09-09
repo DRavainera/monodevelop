@@ -1,0 +1,19 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="MonoDevelop.AvaloniaShell.Views.AboutDialog"
+        Title="About MonoDevelop"
+        Width="480" Height="300"
+        WindowStartupLocation="CenterOwner"
+        CanResize="False">
+  <DockPanel Margin="20">
+    <StackPanel DockPanel.Dock="Bottom" HorizontalAlignment="Right" Spacing="8">
+      <Button x:Name="CloseButton" Content="Close" Width="80" HorizontalAlignment="Right" />
+    </StackPanel>
+    <StackPanel Spacing="10" VerticalAlignment="Center">
+      <TextBlock Text="MonoDevelop" FontSize="26" FontWeight="Bold" />
+      <TextBlock x:Name="VersionText" Text="undefined" Foreground="#B0B0B0" />
+      <TextBlock Text="Avalonia 12 shell prototype." TextWrapping="Wrap" Foreground="#D0D0D0" />
+      <TextBlock x:Name="RuntimeText" Text="undefined" Foreground="#808080" FontSize="11" />
+    </StackPanel>
+  </DockPanel>
+</Window>

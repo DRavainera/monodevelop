@@ -17,6 +17,10 @@
 		<TargetFramework Condition="'$(_IsSdkStyleProject)'=='true'">$(MDTargetFramework)</TargetFramework>
 	</PropertyGroup>
 
+	<PropertyGroup Condition="'$(MDFrameworkVersion)' == 'v4.7.2' and '$(TargetFrameworkRootPath)' == ''">
+		<TargetFrameworkRootPath>$(NuGetPackageRoot)microsoft.netframework.referenceassemblies.net472\1.0.3\build\</TargetFrameworkRootPath>
+	</PropertyGroup>
+
 	<!-- set some common AssemblyInfo values so SDK-style projects don't have to set them -->
 	<PropertyGroup>
 		<AssemblyVersion>2.6.0</AssemblyVersion>

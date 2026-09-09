@@ -13,6 +13,12 @@
   <ItemGroup>
     <Reference Include="System" />
     <Reference Include="System.Xml" />
+    <Reference Include="Mono.Cairo"><HintPath>$(MonoFrameworkNet45Directory)\Mono.Cairo.dll</HintPath><Private>False</Private></Reference>
+    <Reference Include="System.Collections.Immutable"><HintPath>$(NuGetPackageRoot)system.collections.immutable\1.5.0\lib\netstandard2.0\System.Collections.Immutable.dll</HintPath><Private>False</Private></Reference>
+    <Reference Include="Microsoft.CodeAnalysis"><HintPath>$(NuGetPackageRoot)microsoft.codeanalysis.common\3.4.0-beta4-final\lib\netstandard2.0\Microsoft.CodeAnalysis.dll</HintPath><Private>False</Private></Reference>
+    <Reference Include="Microsoft.CodeAnalysis.CSharp"><HintPath>$(NuGetPackageRoot)microsoft.codeanalysis.csharp\3.4.0-beta4-final\lib\netstandard2.0\Microsoft.CodeAnalysis.CSharp.dll</HintPath><Private>False</Private></Reference>
+    <Reference Include="Microsoft.CodeAnalysis.Workspaces"><HintPath>$(NuGetPackageRoot)microsoft.codeanalysis.workspaces.common\3.4.0-beta4-final\lib\netstandard2.0\Microsoft.CodeAnalysis.Workspaces.dll</HintPath><Private>False</Private></Reference>
+    <Reference Include="Newtonsoft.Json"><HintPath>$(NuGetPackageRoot)newtonsoft.json\13.0.3\lib\netstandard2.0\Newtonsoft.Json.dll</HintPath><Private>False</Private></Reference>
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\core\MonoDevelop.Core\MonoDevelop.Core.csproj">
