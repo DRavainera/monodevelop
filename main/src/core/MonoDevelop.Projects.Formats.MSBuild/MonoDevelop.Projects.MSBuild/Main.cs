@@ -31,7 +31,6 @@ using System.Threading;
 using System.Diagnostics;
 using MonoDevelop.Core.Execution;
 using System.Reflection;
-using System.Linq;
 using System.Runtime.CompilerServices;
 
 namespace MonoDevelop.Projects.MSBuild
@@ -71,24 +70,13 @@ namespace MonoDevelop.Projects.MSBuild
 
 			Assembly MSBuildAssemblyResolver (object sender, ResolveEventArgs args)
 			{
-				var msbuildAssemblies = new string [] {
-							"Microsoft.Build",
-							"Microsoft.Build.Engine",
-							"Microsoft.Build.Framework",
-							"Microsoft.Build.Tasks.Core",
-							"Microsoft.Build.Utilities.Core",
-							"System.Reflection.Metadata"};
-
-				var asmName = new AssemblyName (args.Name);
-				if (!msbuildAssemblies.Any (n => string.Compare (n, asmName.Name, StringComparison.OrdinalIgnoreCase) == 0))
-					return null;
-
 				// Temporary workaround: System.Reflection.Metadata.dll is required in msbuildBinDir, but it is present only
 				// in $msbuildBinDir/Roslyn .
 				//
 				// https://github.com/xamarin/bockbuild/commit/3609dac69598f10fbfc33281289c34772eef4350
 				//
 				// Adding this till we have a release out with the above fix!
+				var asmName = new AssemblyName (args.Name);
 				if (String.Compare (asmName.Name, "System.Reflection.Metadata") == 0) {
 					string fixedPath = Path.Combine (msbuildBinDir, "Roslyn", "System.Reflection.Metadata.dll");
 					if (File.Exists (fixedPath))
@@ -110,6 +98,10 @@ namespace MonoDevelop.Projects.MSBuild
 			public BinaryMessage Initialize (InitializeRequest msg)
 			{
 				msbuildBinDir = msg.BinDir;
+				// On .NET MSBuild derives MSBuildBinPath/MSBuildToolsPath from MSBUILD_EXE_PATH and
+				// locates the SDK via MSBuildSDKsPath, so point both at the SDK passed in BinDir.
+				Environment.SetEnvironmentVariable ("MSBUILD_EXE_PATH", Path.Combine (msg.BinDir, "MSBuild.dll"));
+				Environment.SetEnvironmentVariable ("MSBuildSDKsPath", Path.Combine (msg.BinDir, "Sdks"));
 				AppDomain.CurrentDomain.AssemblyResolve += MSBuildAssemblyResolver;
 				return CreateBuildEngineAndRespondToInitialize(msg);
 			}

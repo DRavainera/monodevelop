@@ -118,27 +118,50 @@ Cierre: **0 críticas nuevas** respecto a la línea base.
   `MonoDevelop.props`; patrón del shell Avalonia), refs a los MSBuild del propio SDK
   (`$(MSBuildBinPath)\Microsoft.Build*.dll`), apphost nativo copiado a `MonoDevelop.MSBuildBuilder.exe`
   (nombre que espera `RemoteBuildEngineManager`). Remoting eliminado: solo eran `using` muertos
-  (`System.Runtime.Remoting*`, `System.Net.Configuration`) — el transporte ya era pipes/`BinaryMessage`.
+  (`System.Runtime.Remoting*`, `System.Net.Configuration`) — el transporte es TCP + `BinaryMessage`
+  (NO pipes, ver protocolo abajo).
 - Evidencia B1: build standalone rc=0; `dotnet MonoDevelop.MSBuildBuilder.dll` y apphost bootean en
   CoreCLR (alcanzan `RemoteProcessServer.Connect`; error esperado = pipe inexistente, NO type-load);
   sln completo DebugLinux rc=0 con el builder net8 integrado (gate requiere `-restore`).
-- **Pendiente (bloque 2 — gate E2E)**: driver net8 que replique el protocolo del cliente IDE para
-  usar el engine real. Hallazgo del protocolo (de `RemoteProcessServer.cs`/`BinaryMessage.cs`):
-  el engine **NO usa pipes** — hace `TcpClient("127.0.0.1", args[0])` con `args[0]=puerto` y
-  `args[1]=debug(bool)`; la IDE abre un `TcpListener` efímero y pasa el puerto. Framing: por frame
-  1 byte de tipo (`MESSAGE_QUEUE_END=1`) + `BinaryMessage.Read(stream)`; el engine envía primero
-  `BinaryMessage("Connect")` (id 1) y espera `InitializeRequest{IdeProcessId, CultureName, BinDir,
-  GlobalProperties}` (BinDir = `$(MSBuildBinPath)` = raíz del SDK 8.0.424, de donde el resolver del
-  engine carga `Microsoft.Build*.dll`), luego `LoadProjectRequest/RunProjectRequest`. Pasos B2:
-  1) harness net8 en `/tmp/opencode/m2-e2e` que hosstee el listener, spawnee
-  `dotnet build/bin/MonoDevelop.MSBuildBuilder.dll <port> False` y envíe Initialize+Load+Build sobre
-  `docs/samples/TestProj.sln`; 2) si diverge el wire, replicar enlazando `BinaryMessage.cs` +
-  `RemoteBuildEngineMessages.cs` en el mismo ensamblado (idéntico registro de tipos); 3) cuando
-  evalúe/compile, cablear `RemoteBuildEngineManager` para spawnear vía apphost `.exe` net8 en vez de
-  mono y eliminar los `Microsoft.Build*.dll` de `build/bin`.
-- Gate : un proceso .NET8 (headless) hace `TypeSystemService` + evaluación + compilación de un
-  proyecto SDK-style sin mono — cierra el bloqueo de la fase defensiva.
-- Criterio: Core/Ide compilan net8; evaluación de `TestProj.sln` (de `/tmp/opencode/testproj`) exitosa.
+- **Hecho (bloque 2 — gate E2E)**: driver net8 en `/tmp/opencode/m2-e2e` que enlaza el
+  `BinaryMessage.cs` del producto (fidelidad de wire) y replica el protocolo del cliente IDE contra el
+  engine real. Protocolo confirmado (de `RemoteProcessServer.cs`/`BinaryMessage.cs`):
+  - El engine **NO usa pipes** — hace `TcpClient("127.0.0.1", args[0])` con `args[0]=puerto` y
+    `args[1]=debug(bool)`; la IDE abre un `TcpListener` efímero y pasa el puerto. Primera trama del
+    engine = `BinaryMessage("Connect")` (id 1).
+  - Framing: por frame 1 byte de tipo + `BinaryMessage.Write/Read` (int32 length + Id/Name/Target/args,
+    cada arg = nombre + `TypeCode` + valor; dicts → `TypeCode.Map`, objetos custom → dict vía
+    `WriteMessageData`). **El cliente escribe cada request con tipo `MESSAGE_QUEUE_END=1`** (el server
+    acumula y procesa solo al llegar ese frame); respuestas = tipo 0.
+  - **`Name` de los requests = `FullName` del tipo request** (`MonoDevelop.Projects.MSBuild.InitializeRequest`,
+    `.LoadProjectRequest`, `.RunProjectRequest`…): así los registra `MessageListener.RegisterHandlers`
+    (via `[MessageDataType]` sin nombre) y el server mapea args crudos → propiedades tipadas
+    (`LoadMessageData`→`CopyFrom`→`ReadMessageData`); `Target` quedó vacío (dispatch al único listener).
+  - Secuencia: `Initialize{IdeProcessId, CultureName, BinDir, GlobalProperties}` (BinDir = `$(MSBuildBinPath)`
+    = raíz del SDK 8.0.424) → `LoadProjectRequest{ProjectFile}` → respuesta `{ProjectId}` →
+    `RunProjectRequest{ProjectId, Configurations=[{ProjectFile,Configuration,Platform,Enabled}],
+    LogWriterId=-1, EnabledLogEvents, Verbosity, RunTargets=[Build], ...}` → `RunProjectResponse.Result`
+    (dict `errors`/`properties`/`items`).
+- **Bloqueadores del engine resueltos para correr en net8 sin mono** (cambios en la rama):
+  - `BuildEngine.Shared.cs` `RunSTA`: `Thread.SetApartmentState(STA)` lanza `PlatformNotSupportedException`
+    en .NET Core (no hay COM); se condiciona a Windows (`Environment.OSVersion.Platform`).
+  - `Main.cs` `Initialize` (handler del resolver): setea `MSBUILD_EXE_PATH` → `BinDir/MSBuild.dll` y
+    `MSBuildSDKsPath` → `BinDir/Sdks` (sin esto, `MSB4236` SDK no encontrado y `MSB4019`
+    `build/bin/Current/Microsoft.Common.props` no existe porque el engine apuntaba `MSBUILD_EXE_PATH`
+    a su propio ensamblado).
+  - `Main.cs` `MSBuildAssemblyResolver`: resolución genérica de cualquier `<nombre>.dll` desde
+    `msbuildBinDir` (eliminado el allow-list de 6; se conserva el workaround de
+    `Roslyn/System.Reflection.Metadata.dll`) — sin esto, las tasks del SDK fallan al cargar
+    `Newtonsoft.Json` (`MSB4018` en `ResolveAppHosts`).
+- Evidencia B2: harness con listener efímero + `dotnet build/bin/MonoDevelop.MSBuildBuilder.dll <port> False`
+  → LoadProject devuelve `ProjectId`; `RunProject` (Build) sobre `/tmp/opencode/testproj/TestProj/TestProj.csproj`
+  devuelve `RunProjectResponse` con **`errors: []`** y emite `bin/Debug/net8.0/TestProj.{dll,apphost}` —
+  evaluación + compilación SDK-style completas in-proc en .NET 8 sin mono. Sln completo DebugLinux
+  con `-restore` sigue verde (los mismos fuentes compilan en el ensamblado IDE net472).
+- **Pendiente (bloque 3/4)**: cablear `RemoteBuildEngineManager` para spawnear vía apphost `.exe` net8
+  (mismo protocolo que el harness) y eliminar los `Microsoft.Build*.dll` de `build/bin`; gate headless
+  con `TypeSystemService` sobre `TestProj.sln`; retarget del eje Core/Ide a net8 (resolutor de reference
+  assemblies: MSB3644/MSB4086/MSB3642 en old-style, bloques "engine-first" ya descartado el retarget old-style).
 
 ### M3 — Roslyn moderno y retiro de MonoRoslynCompat
 - `main/msbuild/RoslynVersion.props`: 3.4.0-beta4-19568-04 → **4.8.x** (o la versión publicada en

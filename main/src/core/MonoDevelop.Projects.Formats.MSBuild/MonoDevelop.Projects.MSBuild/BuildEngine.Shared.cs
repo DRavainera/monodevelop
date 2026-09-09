@@ -284,7 +284,10 @@ namespace MonoDevelop.Projects.MSBuild
 
 					if (workThread == null) {
 						workThread = new Thread (STARunner);
-						workThread.SetApartmentState (ApartmentState.STA);
+						var platform = Environment.OSVersion.Platform;
+						var isWindows = platform == PlatformID.Win32NT || platform == PlatformID.Win32S || platform == PlatformID.Win32Windows || platform == PlatformID.WinCE || platform == PlatformID.Xbox;
+						if (isWindows)
+							workThread.SetApartmentState (ApartmentState.STA);
 						workThread.IsBackground = true;
 						workThread.CurrentUICulture = uiCulture;
 						workThread.Start ();
