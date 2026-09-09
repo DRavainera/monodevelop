@@ -122,6 +122,20 @@ Cierre: **0 críticas nuevas** respecto a la línea base.
 - Evidencia B1: build standalone rc=0; `dotnet MonoDevelop.MSBuildBuilder.dll` y apphost bootean en
   CoreCLR (alcanzan `RemoteProcessServer.Connect`; error esperado = pipe inexistente, NO type-load);
   sln completo DebugLinux rc=0 con el builder net8 integrado (gate requiere `-restore`).
+- **Pendiente (bloque 2 — gate E2E)**: driver net8 que replique el protocolo del cliente IDE para
+  usar el engine real. Hallazgo del protocolo (de `RemoteProcessServer.cs`/`BinaryMessage.cs`):
+  el engine **NO usa pipes** — hace `TcpClient("127.0.0.1", args[0])` con `args[0]=puerto` y
+  `args[1]=debug(bool)`; la IDE abre un `TcpListener` efímero y pasa el puerto. Framing: por frame
+  1 byte de tipo (`MESSAGE_QUEUE_END=1`) + `BinaryMessage.Read(stream)`; el engine envía primero
+  `BinaryMessage("Connect")` (id 1) y espera `InitializeRequest{IdeProcessId, CultureName, BinDir,
+  GlobalProperties}` (BinDir = `$(MSBuildBinPath)` = raíz del SDK 8.0.424, de donde el resolver del
+  engine carga `Microsoft.Build*.dll`), luego `LoadProjectRequest/RunProjectRequest`. Pasos B2:
+  1) harness net8 en `/tmp/opencode/m2-e2e` que hosstee el listener, spawnee
+  `dotnet build/bin/MonoDevelop.MSBuildBuilder.dll <port> False` y envíe Initialize+Load+Build sobre
+  `docs/samples/TestProj.sln`; 2) si diverge el wire, replicar enlazando `BinaryMessage.cs` +
+  `RemoteBuildEngineMessages.cs` en el mismo ensamblado (idéntico registro de tipos); 3) cuando
+  evalúe/compile, cablear `RemoteBuildEngineManager` para spawnear vía apphost `.exe` net8 en vez de
+  mono y eliminar los `Microsoft.Build*.dll` de `build/bin`.
 - Gate : un proceso .NET8 (headless) hace `TypeSystemService` + evaluación + compilación de un
   proyecto SDK-style sin mono — cierra el bloqueo de la fase defensiva.
 - Criterio: Core/Ide compilan net8; evaluación de `TestProj.sln` (de `/tmp/opencode/testproj`) exitosa.
