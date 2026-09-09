@@ -175,10 +175,26 @@ Cierre: **0 críticas nuevas** respecto a la línea base.
   - Nota: el manager compila net472 (assembly IDE); la **verificación ejecutable** queda pendiente del
     retarget del eje Core/Ide (o un runner que cargue MonoDevelop.Core) porque `GetRemoteProjectBuilder`
     se invoca desde el proceso IDE.
-- **Pendiente (bloque 4)**: gate headless de `TypeSystemService` sobre `TestProj.sln` (requiere correr la
-  assembly IDE net472 bajo mono o el retarget del eje); retarget del eje Core/Ide a net8 (resolutor de
-  reference assemblies: MSB3644/MSB4086/MSB3642 en old-style, "engine-first" ya descartado el retarget
-  old-style).
+- **Hecho (bloque 4 — gate headless del manager)**: runner `M2Gate` (`/tmp/opencode/m2-gate/`) que carga
+  `MonoDevelop.Core` net472 headless bajo mono y ejercita el camino real del IDE:
+  `RemoteBuildEngineManager.GetRemoteProjectBuilder` → `RemoteProjectBuilderProxy` → engine net8 spawnado.
+  - Claves del runner: (a) se llama al assembly `MonoDevelop.Core.Tests` (amigo `InternalsVisibleTo` de
+    Core) para poder usar los tipos/internal del manager; (b) `Runtime.Initialize(false)` arranca headless
+    bajo mono (la advertencia de `PackageManagement` es inofensiva — no se toca el registro de add-ins);
+    (c) **hay que forzar `SystemAssemblyService.DefaultRuntime` al runtime .NET** (`RuntimeId == ".NET"`,
+    no `Id` = `.NET 4.0.30319.42000` en mono) porque `Initialize` deja por defecto el mono (último con
+    `IsRunning`); con eso `GetMSBuildBinPath` devuelve `/home/daniel/.dotnet/sdk/8.0.424`. Se descartó el
+    camino `Services.ProjectService.ReadWorkspaceItem`: el registro de add-ins exige
+    `MonoDevelop.PackageManagement,9.0` y sus deps NuGet no existen en `build/bin` (addin inflado).
+  - Evidencia B4: `mono bin/MonoDevelop.Core.Tests.exe` (desde `main/build/bin`) →
+    `DEFAULT-RUNTIME: .NET` / `MSBUILD-BIN: /home/daniel/.dotnet/sdk/8.0.424` /
+    `BUILDER-OK: RemoteProjectBuilderProxy` / `BUILD-END Errors=0` / **`GATE-PASS`** — build de
+    `TestProj.csproj` (SDK-style net8.0) mediante el manager del IDE, sin tocar el registro de add-ins.
+    (Los `ERROR Error reading framework definition /usr/lib/mono/...` son de dirs de framework ausentes
+    en el mono instalado — inofensivos.)
+- **Pendiente (bloque 5)**: retarget del eje Core/Ide a net8 para correr la IDE completa (resolutor de
+  reference assemblies en old-style: MSB3644/MSB4086/MSB3642 — "engine-first", retarget old-style
+  descartado); luego M3.
 
 ### M3 — Roslyn moderno y retiro de MonoRoslynCompat
 - `main/msbuild/RoslynVersion.props`: 3.4.0-beta4-19568-04 → **4.8.x** (o la versión publicada en
