@@ -158,10 +158,27 @@ Cierre: **0 críticas nuevas** respecto a la línea base.
   devuelve `RunProjectResponse` con **`errors: []`** y emite `bin/Debug/net8.0/TestProj.{dll,apphost}` —
   evaluación + compilación SDK-style completas in-proc en .NET 8 sin mono. Sln completo DebugLinux
   con `-restore` sigue verde (los mismos fuentes compilan en el ensamblado IDE net472).
-- **Pendiente (bloque 3/4)**: cablear `RemoteBuildEngineManager` para spawnear vía apphost `.exe` net8
-  (mismo protocolo que el harness) y eliminar los `Microsoft.Build*.dll` de `build/bin`; gate headless
-  con `TypeSystemService` sobre `TestProj.sln`; retarget del eje Core/Ide a net8 (resolutor de reference
-  assemblies: MSB3644/MSB4086/MSB3642 en old-style, bloques "engine-first" ya descartado el retarget old-style).
+- **Hecho (bloque 3 — manager spawn net8)**: `RemoteBuildEngineManager` cableado para el runtime
+  `.NET (Core)`:
+  - `GetExeLocation`: para `DotNetTargetRuntime` devuelve el **apphost del bundle**
+    (`MonoDevelop.MSBuildBuilder.exe` en `build/bin`) directamente, sin la copia local mono-era
+    (`GetLocalMSBuildExeLocation` copiaba el apphost + TODO el binDir del SDK al caché y parcheaba
+    `exe.config` con search paths de add-ins — innecesario en net8: el engine self-hosts y carga
+    MSBuild desde `BinDir` = raíz del SDK). El branch mono se conserva intacto.
+  - Spawn: `DotNetTargetRuntime.GetExecutionHandler()` = `NativePlatformExecutionHandler` → el apphost
+    ELF se ejecuta directo (sin envoltorio mono); se omite `MONO_GC_PARAMS` para el runtime net8
+    (solo aplica a mono). Args `port DebugMode` + `InitializeRequest{BinDir=raíz SDK, ...}` ya eran
+    correctos (ver protocolo B2) y coinciden con el harness.
+  - Evidencia B3: sln completo DebugLinux con `-restore` verde (rc=0) tras cablear; `build/bin`
+    `Microsoft.Build*.dll` son artefacto copy-local de `MonoDevelop.Core.csproj` (refs
+    `$(MSBuildToolsPath)`) y se regeneran en cada build — no se eliminan (el engine net8 ya no los usa).
+  - Nota: el manager compila net472 (assembly IDE); la **verificación ejecutable** queda pendiente del
+    retarget del eje Core/Ide (o un runner que cargue MonoDevelop.Core) porque `GetRemoteProjectBuilder`
+    se invoca desde el proceso IDE.
+- **Pendiente (bloque 4)**: gate headless de `TypeSystemService` sobre `TestProj.sln` (requiere correr la
+  assembly IDE net472 bajo mono o el retarget del eje); retarget del eje Core/Ide a net8 (resolutor de
+  reference assemblies: MSB3644/MSB4086/MSB3642 en old-style, "engine-first" ya descartado el retarget
+  old-style).
 
 ### M3 — Roslyn moderno y retiro de MonoRoslynCompat
 - `main/msbuild/RoslynVersion.props`: 3.4.0-beta4-19568-04 → **4.8.x** (o la versión publicada en

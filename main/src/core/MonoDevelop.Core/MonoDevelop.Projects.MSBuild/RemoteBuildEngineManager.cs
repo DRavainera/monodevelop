@@ -234,7 +234,11 @@ namespace MonoDevelop.Projects.MSBuild
 				RemoteProcessConnection connection = null;
 
 				try {
-					var envVariables = new Dictionary<string, string> {
+					// The net8 apphost is spawned directly by the native execution handler, so the
+					// mono GC tuning env var only applies to the mono runtimes.
+					var envVariables = runtime is DotNetTargetRuntime
+						? null
+						: new Dictionary<string, string> {
 						{ "MONO_GC_PARAMS", "nursery-size=64m" },
 					};
 
@@ -442,6 +446,12 @@ namespace MonoDevelop.Projects.MSBuild
 		/// </summary>
 		static string GetExeLocation (TargetRuntime runtime)
 		{
+			// For the .NET (Core) runtime the engine is the net8 apphost in the IDE bundle,
+			// which self-hosts and loads MSBuild from the SDK (BinDir). It does not need the
+			// mono-era local copy, which only exists to inject add-in search paths via config.
+			if (runtime is DotNetTargetRuntime)
+				return GetExeLocationInBundle (MSBuildProjectService.ToolsVersion);
+
 			// Return a local copy of the builder executable.
 			// That local copy is configured to add additional msbuild search paths defined by add-ins.
 			return GetLocalMSBuildExeLocation (runtime);
