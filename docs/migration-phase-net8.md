@@ -114,6 +114,14 @@ Cierre: **0 críticas nuevas** respecto a la línea base.
 - MSBuildBuilder bajo `dotnet`: `RemoteBuildEngineManager` apuntando al builder net8; `GetMSBuildBinPath`
   devuelve el directorio del SDK; **eliminar** las copias del SDK en `build/bin/Microsoft.Build*.dll`
   (el engine real viene del runtime net8).
+- **Hecho (bloque 1)**: `MonoDevelop.MSBuildBuilder` convertido a SDK-style `net8.0` (sin import de
+  `MonoDevelop.props`; patrón del shell Avalonia), refs a los MSBuild del propio SDK
+  (`$(MSBuildBinPath)\Microsoft.Build*.dll`), apphost nativo copiado a `MonoDevelop.MSBuildBuilder.exe`
+  (nombre que espera `RemoteBuildEngineManager`). Remoting eliminado: solo eran `using` muertos
+  (`System.Runtime.Remoting*`, `System.Net.Configuration`) — el transporte ya era pipes/`BinaryMessage`.
+- Evidencia B1: build standalone rc=0; `dotnet MonoDevelop.MSBuildBuilder.dll` y apphost bootean en
+  CoreCLR (alcanzan `RemoteProcessServer.Connect`; error esperado = pipe inexistente, NO type-load);
+  sln completo DebugLinux rc=0 con el builder net8 integrado (gate requiere `-restore`).
 - Gate : un proceso .NET8 (headless) hace `TypeSystemService` + evaluación + compilación de un
   proyecto SDK-style sin mono — cierra el bloqueo de la fase defensiva.
 - Criterio: Core/Ide compilan net8; evaluación de `TestProj.sln` (de `/tmp/opencode/testproj`) exitosa.

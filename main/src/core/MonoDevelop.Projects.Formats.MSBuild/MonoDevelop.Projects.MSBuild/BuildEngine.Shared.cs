@@ -26,14 +26,12 @@
 
 using System;
 using System.Threading;
-using System.Runtime.Remoting;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 
 //this is the builder for the deprecated build engine API
 using MonoDevelop.Core.Execution;
-using System.Net.Configuration;
 using System.Diagnostics;
 using System.Reflection;
 using System.Linq;
