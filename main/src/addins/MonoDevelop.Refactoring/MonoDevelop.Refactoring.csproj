@@ -21,6 +21,10 @@
     <Reference Include="System.Core" />
     <Reference Include="System.Xml" />
     <Reference Include="System.ComponentModel.Composition" />
+    <Reference Include="Mono.Cairo">
+      <HintPath>$(MonoFrameworkNet45Directory)\Mono.Cairo.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
     <Reference Include="Xamarin.Mac" Condition=" '$(Configuration)' == 'DebugMac' Or '$(Configuration)' == 'ReleaseMac' ">
       <HintPath>..\..\..\external\Xamarin.Mac.dll</HintPath>
       <Private>False</Private>
@@ -106,6 +110,8 @@
     <Compile Include="MonoDevelop.Refactoring\StreamingFindUsagesPresenter.cs" />
     <Compile Include="MonoDevelop.Refactoring\CommandArgsFactories.cs" />
     <Compile Include="MonoDevelop.Refactoring\RoslynInformationProvider.cs" />
+    <Compile Include="MonoDevelop.Refactoring\RoslynCompatExtensions.cs" />
+    <Compile Include="RoslynCompatStubs.cs" />
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="MonoDevelop.Refactoring.addin.xml" />
@@ -258,6 +264,18 @@
     </Reference>
     <Reference Include="Microsoft.CodeAnalysis.CSharp.Workspaces">
       <HintPath>$(NuGetPackageRoot)microsoft.codeanalysis.csharp.workspaces/3.4.0-beta4-final/lib/netstandard2.0/Microsoft.CodeAnalysis.CSharp.Workspaces.dll</HintPath>
+    </Reference>
+    <Reference Include="Microsoft.VisualStudio.Threading">
+      <HintPath>$(NuGetPackageRoot)microsoft.visualstudio.threading/16.10.56/lib/net472/Microsoft.VisualStudio.Threading.dll</HintPath>
+    </Reference>
+    <Reference Include="MonoRoslynCompat">
+      <HintPath>..\..\..\build\bin\MonoRoslynCompat.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Composition.AttributedModel">
+      <HintPath>$(NuGetPackageRoot)system.composition.attributedmodel\1.0.31\lib\portable-net45+win8+wp8+wpa81\System.Composition.AttributedModel.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Composition.Hosting">
+      <HintPath>$(NuGetPackageRoot)system.composition.hosting\1.0.31\lib\portable-net45+win8+wp8+wpa81\System.Composition.Hosting.dll</HintPath>
     </Reference>
   </ItemGroup>
   <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />

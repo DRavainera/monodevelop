@@ -28,6 +28,24 @@
     <Reference Include="WindowsBase" />
     <PackageReference Include="NuGet.PackageManagement" Version="$(NuGetVersionNuGet)" PrivateAssets="runtime" />
     <PackageReference Include="NuGet.Indexing" Version="$(NuGetVersionNuGet)" PrivateAssets="runtime" />
+    <Reference Include="NuGet.Commands"><HintPath>$(NuGetPackageRoot)nuget.commands\$(NuGetVersionNuGet)\lib\net472\NuGet.Commands.dll</HintPath><Private>False</Private></Reference>
+    <Reference Include="NuGet.Common"><HintPath>$(NuGetPackageRoot)nuget.common\$(NuGetVersionNuGet)\lib\net472\NuGet.Common.dll</HintPath><Private>False</Private></Reference>
+    <Reference Include="NuGet.Configuration"><HintPath>$(NuGetPackageRoot)nuget.configuration\$(NuGetVersionNuGet)\lib\net472\NuGet.Configuration.dll</HintPath><Private>False</Private></Reference>
+    <Reference Include="NuGet.Credentials"><HintPath>$(NuGetPackageRoot)nuget.credentials\$(NuGetVersionNuGet)\lib\net472\NuGet.Credentials.dll</HintPath><Private>False</Private></Reference>
+    <Reference Include="NuGet.DependencyResolver.Core"><HintPath>$(NuGetPackageRoot)nuget.dependencyresolver.core\$(NuGetVersionNuGet)\lib\net472\NuGet.DependencyResolver.Core.dll</HintPath><Private>False</Private></Reference>
+    <Reference Include="NuGet.Frameworks"><HintPath>$(NuGetPackageRoot)nuget.frameworks\$(NuGetVersionNuGet)\lib\net472\NuGet.Frameworks.dll</HintPath><Private>False</Private></Reference>
+    <Reference Include="NuGet.Indexing"><HintPath>$(NuGetPackageRoot)nuget.indexing\$(NuGetVersionNuGet)\lib\net472\NuGet.Indexing.dll</HintPath><Private>False</Private></Reference>
+    <Reference Include="NuGet.LibraryModel"><HintPath>$(NuGetPackageRoot)nuget.librarymodel\$(NuGetVersionNuGet)\lib\net472\NuGet.LibraryModel.dll</HintPath><Private>False</Private></Reference>
+    <Reference Include="NuGet.Packaging"><HintPath>$(NuGetPackageRoot)nuget.packaging\$(NuGetVersionNuGet)\lib\net472\NuGet.Packaging.dll</HintPath><Private>False</Private></Reference>
+    <Reference Include="NuGet.ProjectModel"><HintPath>$(NuGetPackageRoot)nuget.projectmodel\$(NuGetVersionNuGet)\lib\net472\NuGet.ProjectModel.dll</HintPath><Private>False</Private></Reference>
+    <Reference Include="NuGet.Protocol"><HintPath>$(NuGetPackageRoot)nuget.protocol\$(NuGetVersionNuGet)\lib\net472\NuGet.Protocol.dll</HintPath><Private>False</Private></Reference>
+    <Reference Include="NuGet.Resolver"><HintPath>$(NuGetPackageRoot)nuget.resolver\$(NuGetVersionNuGet)\lib\net472\NuGet.Resolver.dll</HintPath><Private>False</Private></Reference>
+    <Reference Include="NuGet.Versioning"><HintPath>$(NuGetPackageRoot)nuget.versioning\$(NuGetVersionNuGet)\lib\net472\NuGet.Versioning.dll</HintPath><Private>False</Private></Reference>
+    <Reference Include="NuGet.PackageManagement"><HintPath>$(NuGetPackageRoot)nuget.packagemanagement\$(NuGetVersionNuGet)\lib\net472\NuGet.PackageManagement.dll</HintPath><Private>False</Private></Reference>
+    <Reference Include="System.Collections.Immutable"><HintPath>$(NuGetPackageRoot)system.collections.immutable\1.5.0\lib\netstandard2.0\System.Collections.Immutable.dll</HintPath><Private>False</Private></Reference>
+    <Reference Include="Newtonsoft.Json"><HintPath>$(NuGetPackageRoot)newtonsoft.json\13.0.3\lib\netstandard2.0\Newtonsoft.Json.dll</HintPath><Private>False</Private></Reference>
+    <Reference Include="Mono.Cairo"><HintPath>$(MonoFrameworkNet45Directory)\Mono.Cairo.dll</HintPath><Private>False</Private></Reference>
+    <Reference Include="System.IO.Compression"><HintPath>$(NuGetPackageRoot)microsoft.netframework.referenceassemblies.net472\1.0.3\build\.NETFramework\v4.7.2\System.IO.Compression.dll</HintPath><Private>False</Private></Reference>
     <!-- Ensure .NET 4.7.2's System.Net.Http is used not the one from this NuGet package -->
     <PackageReference Include="System.Net.Http" Version="4.3.3" ExcludeAssets="all" />
     <!-- Ensure .NET 4.7.2's System.IO.Compression is used not the one from this NuGet package -->

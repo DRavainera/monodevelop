@@ -34,6 +34,10 @@ namespace MonoDevelop.Components.AtkCocoaHelper
 {
 	public static class AtkCocoaNoopExtensions
 	{
+		public static void SetCurrentFocus (this Atk.Object o)
+		{
+		}
+
 		public static void SetLabel (this Atk.Object o, string label)
 		{
 		}
@@ -74,6 +78,10 @@ namespace MonoDevelop.Components.AtkCocoaHelper
 		{
 		}
 
+		public static void SetValue (this Atk.Object o, bool boolValue)
+		{
+		}
+
 		public static void SetUrl (this Atk.Object o, string url)
 		{
 		}
@@ -87,6 +95,10 @@ namespace MonoDevelop.Components.AtkCocoaHelper
 		}
 
 		public static void SetSubRole (this Atk.Object o, string subrole)
+		{
+		}
+
+		public static void SetSubRole (this Atk.Object o, AtkCocoa.SubRoles subrole)
 		{
 		}
 

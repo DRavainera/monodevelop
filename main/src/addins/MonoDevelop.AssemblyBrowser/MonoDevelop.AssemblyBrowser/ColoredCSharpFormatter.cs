@@ -166,6 +166,29 @@ namespace MonoDevelop.AssemblyBrowser
 			sb.Append (opCode.Name);
 		}
 
+		public void WriteReference (OpCodeInfo opCode, bool isOperand)
+		{
+			WriteReference (opCode);
+		}
+
+		public string IndentationString {
+			get {
+				return "\t";
+			}
+			set {
+			}
+		}
+
+		public void WriteReference (PEFile module, Handle handle, string text, string documentation, bool isDefinition = false)
+		{
+			WriteIndent ();
+			if (isDefinition && (handle.Kind == HandleKind.TypeDefinition || handle.Kind == HandleKind.MethodDefinition || handle.Kind == HandleKind.FieldDefinition || handle.Kind == HandleKind.EventDefinition || handle.Kind == HandleKind.PropertyDefinition))
+				this.DefinitionLookup.AddDefinition ((module, (EntityHandle)handle), sb.Length);
+
+			ReferencedSegments.Add (new ReferenceSegment (sb.Length, text.Length, (module, handle)));
+			sb.Append (text);
+		}
+
 		public void WriteReference (PEFile module, EntityHandle handle, string text, bool isDefinition = false)
 		{
 			WriteIndent ();

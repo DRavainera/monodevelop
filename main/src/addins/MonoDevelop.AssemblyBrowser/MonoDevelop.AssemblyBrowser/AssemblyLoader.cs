@@ -154,6 +154,11 @@ namespace MonoDevelop.AssemblyBrowser
 			{
 				return widget.AddReferenceByFileName (mainModule.FileName)?.Assembly;
 			}
+
+			public bool IsGacAssembly (IAssemblyReference reference)
+			{
+				return false;
+			}
 		}
 
 		class FastNonInterningProvider : InterningProvider

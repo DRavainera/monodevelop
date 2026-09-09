@@ -7,6 +7,11 @@
 	<Choose>
 		<When Condition="'$(Configuration)'==''">
 			<Choose>
+				<When Condition="'$(OS)'=='Unix'">
+					<PropertyGroup>
+						<Configuration>DebugLinux</Configuration>
+					</PropertyGroup>
+				</When>
 				<When Condition="'$(OS)'!='Unix'">
 					<PropertyGroup>
 						<Configuration>DebugWin32</Configuration>

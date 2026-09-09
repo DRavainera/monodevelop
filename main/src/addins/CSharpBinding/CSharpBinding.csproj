@@ -73,11 +73,6 @@
       <Name>MonoDevelop.TextEditor</Name>
       <Private>False</Private>
     </ProjectReference>
-    <ProjectReference Include="..\MonoDevelop.UnitTesting\MonoDevelop.UnitTesting.csproj">
-      <Project>{A7A4246D-CEC4-42DF-A3C1-C31B9F51C4EC}</Project>
-      <Name>MonoDevelop.UnitTesting</Name>
-      <Private>False</Private>
-    </ProjectReference>
     <ProjectReference Include="..\..\..\external\nrefactory\ICSharpCode.NRefactory.Cecil\ICSharpCode.NRefactory.Cecil.csproj">
       <Project>{2B8F4F83-C2B3-4E84-A27B-8DEE1BE0E006}</Project>
       <Name>ICSharpCode.NRefactory.Cecil</Name>
@@ -166,7 +161,7 @@
     <Compile Include="MonoDevelop.CSharp.Highlighting\CSharpSelectionSurroundingProvider.cs" />
     <Compile Include="MonoDevelop.CSharp\SignatureMarkupCreator.cs" />
     <Compile Include="MonoDevelop.CSharp.CodeGeneration\ImplementInterfaceMembersGenerator.cs" />
-    <Compile Include="MonoDevelop.CSharp.UnitTests\UnitTestTextEditorExtension.cs" />
+    <!-- deferred: depends on MonoDevelop.UnitTesting (builds NuGet chain); NUnit integration excluded for offline GUI stabilization -->
     <Compile Include="MonoDevelop.CSharp.CodeGeneration\PartialGenerator.cs" />
     <Compile Include="AddinInfo.cs" />
     <Compile Include="MonoDevelop.CSharp.Project\CSharpProjectExtension.cs" />
@@ -225,7 +220,7 @@
     <Compile Include="MonoDevelop.CSharp\CSharpNavigationTextEditorExtension.cs" />
     <Compile Include="MonoDevelop.CSharp.Refactoring\CSharpFindReferencesProvider.cs" />
     <Compile Include="MonoDevelop.CSharp.Refactoring\CSharpJumpToDeclarationHandler.cs" />
-    <Compile Include="MonoDevelop.CSharp.UnitTests\CSharpNUnitSourceCodeLocationFinder.cs" />
+    <!-- deferred: CSharpNUnitSourceCodeLocationFinder.cs depends on MonoDevelop.UnitTesting (NuGet chain); NUnit integration excluded for offline GUI stabilization -->
     <Compile Include="MonoDevelop.CSharp.Navigation\FindMemberOverloadsHandler.cs" />
     <Compile Include="MonoDevelop.CSharp.Navigation\FindExtensionMethodsHandler.cs" />
     <Compile Include="MonoDevelop.CSharp.Navigation\FindDerivedSymbolsHandler.cs" />
@@ -243,6 +238,7 @@
     <Compile Include="MonoDevelop.CSharp.Completion\CompletionProvider\EnumMemberCompletionProvider.cs" />
     <Compile Include="MonoDevelop.CSharp.Completion\CompletionProvider\EventSenderCompletionProvider.cs" />
     <Compile Include="MonoDevelop.CSharp.Completion\CSharpCompletionData.cs" />
+    <Compile Include="MonoDevelop.CSharp.Completion\CSharpCompletionService.cs" />
     <Compile Include="MonoDevelop.CSharp.Completion\CompletionProvider\ProtocolMemberCompletionProvider.cs" />
     <Compile Include="MonoDevelop.CSharp.Tooltips\QuickInfoProvider.cs" />
     <Compile Include="MonoDevelop.CSharp.Highlighting\HighlightUsagesExtension.cs" />
@@ -314,6 +310,24 @@
     </Reference>
     <Reference Include="Microsoft.CodeAnalysis.Workspaces">
       <HintPath>$(NuGetPackageRoot)microsoft.codeanalysis.workspaces.common/3.4.0-beta4-final/lib/netstandard2.0/Microsoft.CodeAnalysis.Workspaces.dll</HintPath>
+    </Reference>
+    <Reference Include="Microsoft.VisualStudio.Threading">
+      <HintPath>$(NuGetPackageRoot)microsoft.visualstudio.threading/16.10.56/lib/net472/Microsoft.VisualStudio.Threading.dll</HintPath>
+    </Reference>
+    <Reference Include="MonoRoslynCompat">
+      <HintPath>..\..\..\build\bin\MonoRoslynCompat.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Composition.AttributedModel">
+      <HintPath>$(NuGetPackageRoot)system.composition.attributedmodel\1.0.31\lib\portable-net45+win8+wp8+wpa81\System.Composition.AttributedModel.dll</HintPath>
+    </Reference>
+    <Reference Include="Mono.Cairo">
+      <HintPath>/usr/lib/mono/4.5/Mono.Cairo.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Composition.Hosting">
+      <HintPath>$(NuGetPackageRoot)system.composition.hosting\1.0.31\lib\portable-net45+win8+wp8+wpa81\System.Composition.Hosting.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Composition.Runtime">
+      <HintPath>$(NuGetPackageRoot)system.composition.runtime\1.0.31\lib\portable-net45+win8+wp8+wpa81\System.Composition.Runtime.dll</HintPath>
     </Reference>
   </ItemGroup>
 

@@ -85,8 +85,8 @@ namespace MonoDevelop.Refactoring.SignatureChange
 				if (parameters.ThisParameter != null)
 					idx--;
 				if (idx <= 0 ||
-					idx == parameters.RemainingEditableParameters.Count ||
-					idx >= parameters.RemainingEditableParameters.Count + parameters.ParametersWithoutDefaultValues.Count)
+					idx == parameters.RemainingEditableParameters.Length ||
+					idx >= parameters.RemainingEditableParameters.Length + parameters.ParametersWithoutDefaultValues.Length)
 					return false;
 				return true;
 			}
@@ -103,8 +103,8 @@ namespace MonoDevelop.Refactoring.SignatureChange
 				if (parameters.ThisParameter != null)
 					idx--;
 				if (idx < 0 ||
-					idx == parameters.RemainingEditableParameters.Count - 1 ||
-					idx >= parameters.RemainingEditableParameters.Count + parameters.ParametersWithoutDefaultValues.Count - 1)
+					idx == parameters.RemainingEditableParameters.Length - 1 ||
+					idx >= parameters.RemainingEditableParameters.Length + parameters.ParametersWithoutDefaultValues.Length - 1)
 					return false;
 				return true;
 			}
@@ -114,7 +114,7 @@ namespace MonoDevelop.Refactoring.SignatureChange
 			get {
 				var l1 = ParameterList;
 				var l2 = parameters.ToListOfParameters ();
-				if (l1.Count != l2.Count)
+				if (l1.Count != l2.Length)
 					return true;
 				for (int i = 0; i < l1.Count; i++) {
 					if (l1 [i] != l2 [i])

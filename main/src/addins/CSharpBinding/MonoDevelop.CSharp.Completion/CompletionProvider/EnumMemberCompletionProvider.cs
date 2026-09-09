@@ -48,7 +48,7 @@ namespace MonoDevelop.CSharp.Completion.Provider
 			return trigger.Character == '.';
 		}
 
-		internal override bool IsInsertionTrigger (SourceText text, int insertedCharacterPosition, Microsoft.CodeAnalysis.Options.OptionSet options)
+		public override bool IsInsertionTrigger (SourceText text, int insertedCharacterPosition, Microsoft.CodeAnalysis.Options.OptionSet options)
 		{
 			
 			// Bring up on space or at the start of a word, or after a ( or [.

@@ -789,7 +789,7 @@ namespace MonoDevelop.VersionControl
 			if (configuration != null) {
 				XmlDataSerializer ser = new XmlDataSerializer (dataContext);
 				using (var tw = new XmlTextWriter (File.CreateText (ConfigFile))) {
-					tw.Formatting = Formatting.Indented;
+					tw.Formatting = System.Xml.Formatting.Indented;
 					ser.Serialize (tw, configuration, typeof (VersionControlConfiguration));
 				}
 			}

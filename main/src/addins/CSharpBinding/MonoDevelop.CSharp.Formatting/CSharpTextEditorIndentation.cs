@@ -44,6 +44,7 @@ using System.Threading;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Editor;
+using Microsoft.CodeAnalysis.Formatting;
 using Microsoft.CodeAnalysis.Options;
 using MonoDevelop.Refactoring;
 using Microsoft.CodeAnalysis.Shared.Extensions;

@@ -30,6 +30,7 @@ using MonoDevelop.Ide.Editor.Extension;
 using System.Collections.Generic;
 using Microsoft.CodeAnalysis.Text;
 using Microsoft.CodeAnalysis.Editor;
+using Microsoft.CodeAnalysis.Formatting;
 using Microsoft.CodeAnalysis.Shared.Extensions;
 using System.Threading;
 using MonoDevelop.Ide;

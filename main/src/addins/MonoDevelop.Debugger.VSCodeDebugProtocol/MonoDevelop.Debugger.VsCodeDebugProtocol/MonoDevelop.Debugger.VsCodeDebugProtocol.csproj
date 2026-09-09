@@ -11,8 +11,14 @@
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' " />
   <ItemGroup>
     <Reference Include="System" />
-    <PackageReference Include="Microsoft.VisualStudio.Shared.VsCodeDebugProtocol" Version="$(NuGetVersionVSCodeDebugProtocol)" PrivateAssets="runtime" />
-    <PackageReference Include="Newtonsoft.Json" Version="$(NuGetVersionNewtonsoftJson)" />
+    <Reference Include="Microsoft.VisualStudio.Shared.VSCodeDebugProtocol">
+      <HintPath>$(NuGetPackageRoot)microsoft.visualstudio.shared.vscodedebugprotocol\$(NuGetVersionVSCodeDebugProtocol)\lib\net45\Microsoft.VisualStudio.Shared.VSCodeDebugProtocol.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="Newtonsoft.Json">
+      <HintPath>$(NuGetPackageRoot)newtonsoft.json\$(NuGetVersionNewtonsoftJson)\lib\net45\Newtonsoft.Json.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\..\..\external\mono-addins\Mono.Addins\Mono.Addins.csproj">

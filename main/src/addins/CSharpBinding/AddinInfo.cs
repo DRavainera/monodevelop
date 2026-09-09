@@ -15,9 +15,10 @@ using Mono.Addins.Description;
 [assembly:AddinDependency ("Ide", MonoDevelop.BuildInfo.Version)]
 [assembly:AddinDependency ("Refactoring", MonoDevelop.BuildInfo.Version)]
 [assembly:AddinDependency ("SourceEditor2", MonoDevelop.BuildInfo.Version)]
-[assembly:AddinDependency ("UnitTesting", MonoDevelop.BuildInfo.Version)]
+// [assembly:AddinDependency ("UnitTesting", MonoDevelop.BuildInfo.Version)] // deferred: el addin necesita NuGet chain, no se compila
 [assembly:AddinDependency ("TextEditor", MonoDevelop.BuildInfo.Version)]
 
-// Submodules
-[assembly:AddinModule ("MonoDevelop.CSharpBinding.Autotools.dll")]
-[assembly:AddinModule ("MonoDevelop.CSharpBinding.AspNet.dll")]
+// Submodules — desactivados en este worktree de estabilización: sus proyectos
+// (Autotools → MonoDevelop.Deployment, AspNet) no se compilan.
+// [assembly:AddinModule ("MonoDevelop.CSharpBinding.Autotools.dll")]
+// [assembly:AddinModule ("MonoDevelop.CSharpBinding.AspNet.dll")]

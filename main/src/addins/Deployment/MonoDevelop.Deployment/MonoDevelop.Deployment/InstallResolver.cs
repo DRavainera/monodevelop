@@ -27,6 +27,8 @@
 //
 
 
+extern alias MonoPosix;
+
 using System;
 using System.IO;
 using MonoDevelop.Core.Serialization;
@@ -82,13 +84,13 @@ namespace MonoDevelop.Deployment
 				Directory.CreateDirectory (targetDir);
 			FileService.CopyFile (src, dest);
 			
-			Mono.Unix.Native.FilePermissions perms = Mono.Unix.Native.FilePermissions.DEFFILEMODE;
+			MonoPosix::Mono.Unix.Native.FilePermissions perms = MonoPosix::Mono.Unix.Native.FilePermissions.DEFFILEMODE;
 			if ((atts & DeployFileAttributes.Executable) != 0)
-				perms |= Mono.Unix.Native.FilePermissions.S_IXGRP | Mono.Unix.Native.FilePermissions.S_IXUSR | Mono.Unix.Native.FilePermissions.S_IXOTH;
+				perms |= MonoPosix::Mono.Unix.Native.FilePermissions.S_IXGRP | MonoPosix::Mono.Unix.Native.FilePermissions.S_IXUSR | MonoPosix::Mono.Unix.Native.FilePermissions.S_IXOTH;
 			if ((atts & DeployFileAttributes.ReadOnly) != 0)
-				perms &= ~(Mono.Unix.Native.FilePermissions.S_IWGRP | Mono.Unix.Native.FilePermissions.S_IWOTH | Mono.Unix.Native.FilePermissions.S_IWUSR);
-			if (perms != Mono.Unix.Native.FilePermissions.DEFFILEMODE)
-				Mono.Unix.Native.Syscall.chmod (dest, perms);
+				perms &= ~(MonoPosix::Mono.Unix.Native.FilePermissions.S_IWGRP | MonoPosix::Mono.Unix.Native.FilePermissions.S_IWOTH | MonoPosix::Mono.Unix.Native.FilePermissions.S_IWUSR);
+			if (perms != MonoPosix::Mono.Unix.Native.FilePermissions.DEFFILEMODE)
+				MonoPosix::Mono.Unix.Native.Syscall.chmod (dest, perms);
 		}
 		
 		public string GetDirectory (DeployContext ctx, string folderId)

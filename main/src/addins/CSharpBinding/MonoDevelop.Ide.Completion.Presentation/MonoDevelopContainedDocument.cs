@@ -13,6 +13,7 @@ using Microsoft.CodeAnalysis.Formatting.Rules;
 using Microsoft.CodeAnalysis.LanguageServices;
 using Microsoft.CodeAnalysis.Options;
 using Microsoft.CodeAnalysis.Shared.Extensions;
+using Microsoft.CodeAnalysis.Shared.Utilities;
 using Microsoft.CodeAnalysis.Text;
 using Microsoft.VisualStudio.Text;
 using Microsoft.VisualStudio.Text.Differencing;
@@ -599,7 +600,7 @@ namespace MonoDevelop.Ide.Completion.Presentation
 
 				var currentVisibleSpanIndex = 0;
 				foreach (var change in changes) {
-					// Find the next visible span that either overlaps or intersects with 
+					// Find the next visible span that either overlaps or intersects with
 					while (currentVisibleSpanIndex < visibleSpansInOriginal.Count &&
 						   visibleSpansInOriginal[currentVisibleSpanIndex].End < change.Span.Start) {
 						currentVisibleSpanIndex++;

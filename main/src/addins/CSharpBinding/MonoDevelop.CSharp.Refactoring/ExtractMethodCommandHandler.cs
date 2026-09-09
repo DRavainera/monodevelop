@@ -30,6 +30,7 @@ using System.Threading.Tasks;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Text;
 using Microsoft.CodeAnalysis.CSharp.ExtractMethod;
+using SemanticDocument = Microsoft.CodeAnalysis.CSharp.ExtractMethod.SemanticDocument;
 using MonoDevelop.Components.Commands;
 using MonoDevelop.Core;
 using MonoDevelop.Ide;

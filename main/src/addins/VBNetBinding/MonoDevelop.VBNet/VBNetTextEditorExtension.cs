@@ -35,9 +35,6 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.CSharp.Extensions;
-using Microsoft.CodeAnalysis.Editor.Implementation.Highlighting;
-using Microsoft.CodeAnalysis.FindSymbols;
-using Roslyn.Utilities;
 
 using MonoDevelop.Core;
 using MonoDevelop.Ide;
@@ -45,7 +42,6 @@ using MonoDevelop.Ide.Editor.Extension;
 using MonoDevelop.Ide.FindInFiles;
 using MonoDevelop.Ide.TypeSystem;
 using MonoDevelop.Ide.Editor.Highlighting;
-using Microsoft.CodeAnalysis.DocumentHighlighting;
 using Microsoft.VisualStudio.Platform;
 using MonoDevelop.Ide.Composition;
 

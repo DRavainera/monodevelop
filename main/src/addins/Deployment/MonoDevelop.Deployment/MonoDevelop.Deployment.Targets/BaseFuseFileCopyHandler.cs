@@ -24,9 +24,11 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+extern alias MonoPosix;
+
 using System;
 using System.IO;
-using mun = Mono.Unix.Native;
+using mun = MonoPosix::Mono.Unix.Native;
 
 using MonoDevelop.Core;
 using MonoDevelop.Core.ProgressMonitoring;

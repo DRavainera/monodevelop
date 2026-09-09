@@ -20,6 +20,7 @@
     <Reference Include="System" />
     <Reference Include="System.Core" />
     <Reference Include="System.Net.Http" />
+    <Reference Include="Microsoft.TemplateEngine.Core"><HintPath>$(NuGetPackageRoot)microsoft.templateengine.core\5.0.0-rc.1.20431.3\lib\netstandard2.0\Microsoft.TemplateEngine.Core.dll</HintPath><Private>False</Private></Reference>
   </ItemGroup>
   <ItemGroup>
     <Compile Include="AssemblyInfo.cs" />

@@ -13,7 +13,7 @@ test -z "$srcdir" && srcdir=.
   echo
   echo "**Error**: You must have \`autoconf' installed to compile MonoDevelop."
   echo "Download the appropriate package for your distribution, or get the "
-  echo "source at https://ftp.gnu.org/pub/gnu/autoconf/autoconf-2.73.tar.xz "
+  echo "source at https://ftp.gnu.org/pub/gnu/autoconf/autoconf-2.72.tar.xz "
   echo "(or a newer version if it is available)"
   DIE=1
 }

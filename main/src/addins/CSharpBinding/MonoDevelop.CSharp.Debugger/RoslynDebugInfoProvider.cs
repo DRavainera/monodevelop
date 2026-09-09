@@ -11,8 +11,9 @@ using Microsoft.CodeAnalysis.Shared.Extensions;
 using Microsoft.CodeAnalysis.Text;
 using Microsoft.VisualStudio.Text;
 using Microsoft.VisualStudio.Text.Projection;
+using Microsoft.CodeAnalysis.Editor.Implementation.Debugging;
+using DebugDataTipInfo = Microsoft.CodeAnalysis.Editor.Implementation.Debugging.DebugDataTipInfo;
 using MonoDevelop.Debugger;
-using MonoDevelop.Debugger.VSTextView.QuickInfo;
 using MonoDevelop.Ide.TypeSystem;
 
 namespace MonoDevelop.CSharp.Debugger

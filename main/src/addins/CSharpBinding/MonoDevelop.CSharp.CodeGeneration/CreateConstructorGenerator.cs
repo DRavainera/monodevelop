@@ -119,7 +119,7 @@ namespace MonoDevelop.CodeGeneration
 						if (r == null)
 							continue;
 						var node = r.SyntaxTree.GetRoot ().FindNode (r.Span) as AccessorDeclarationSyntax;
-						if (node == null || node.GetBlockBody () != null)
+						if (node == null || node.Body != null)
 							continue;
 					}
 					yield return property;

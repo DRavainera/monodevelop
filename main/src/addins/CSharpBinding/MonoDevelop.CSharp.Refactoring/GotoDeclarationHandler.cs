@@ -37,7 +37,7 @@ using System.Threading;
 using System;
 using Microsoft.CodeAnalysis.CSharp;
 using ICSharpCode.NRefactory6.CSharp.Features.GotoDefinition;
-using Mono.Posix;
+// deferring Mono.Posix import (legacy Gtk#/Mono dependency removed for .NET 8 build)
 using MonoDevelop.Ide.TypeSystem;
 using System.Collections.Generic;
 

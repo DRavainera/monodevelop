@@ -13,6 +13,15 @@
   <ItemGroup>
     <Reference Include="System" />
     <Reference Include="System.Xml" />
+    <Reference Include="nunit.framework">
+      <HintPath>$(NuGetPackageRoot)nunit/2.7.0/lib/nunit.framework.dll</HintPath>
+    </Reference>
+    <Reference Include="nunit.core">
+      <HintPath>$(DownloadNupkgDirectory)NUnit.Runners.$(NuGetVersionNUnit2)\tools\lib\nunit.core.dll</HintPath>
+    </Reference>
+    <Reference Include="nunit.core.interfaces">
+      <HintPath>$(DownloadNupkgDirectory)NUnit.Runners.$(NuGetVersionNUnit2)\tools\lib\nunit.core.interfaces.dll</HintPath>
+    </Reference>
     <PackageReference Include="NUnit" Version="$(NuGetVersionNUnit2)" PrivateAssets="runtime" />
     <PackageReference Include="NUnitV2.Core" Version="$(NuGetVersionNUnit2)" PrivateAssets="runtime" />
     <!-- this is hacky but there is no package that exposes nunit.util.dll as a lib assembly -->

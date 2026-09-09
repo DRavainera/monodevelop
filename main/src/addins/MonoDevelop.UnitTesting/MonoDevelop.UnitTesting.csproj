@@ -19,6 +19,15 @@
     <Reference Include="System.Configuration" />
     <Reference Include="System.Runtime" />
     <Reference Include="System.Runtime.Serialization" />
+    <Reference Include="Mono.Cairo"><HintPath>$(MonoFrameworkNet45Directory)\Mono.Cairo.dll</HintPath><Private>False</Private></Reference>
+    <Reference Include="Microsoft.CodeAnalysis"><HintPath>$(NuGetPackageRoot)microsoft.codeanalysis.common\3.4.0-beta4-final\lib\netstandard2.0\Microsoft.CodeAnalysis.dll</HintPath><Private>False</Private></Reference>
+    <Reference Include="Newtonsoft.Json"><HintPath>$(NuGetPackageRoot)newtonsoft.json\13.0.3\lib\netstandard2.0\Newtonsoft.Json.dll</HintPath><Private>False</Private></Reference>
+    <Reference Include="System.Collections.Immutable"><HintPath>$(NuGetPackageRoot)system.collections.immutable\1.5.0\lib\netstandard2.0\System.Collections.Immutable.dll</HintPath><Private>False</Private></Reference>
+    <Reference Include="Microsoft.VisualStudio.TestPlatform.ObjectModel"><HintPath>$(NuGetPackageRoot)microsoft.testplatform.objectmodel\$(NuGetVersionMicrosoftTestPlatform)\lib\net451\Microsoft.VisualStudio.TestPlatform.ObjectModel.dll</HintPath><Private>False</Private></Reference>
+    <Reference Include="Microsoft.TestPlatform.CoreUtilities"><HintPath>$(NuGetPackageRoot)microsoft.testplatform.objectmodel\$(NuGetVersionMicrosoftTestPlatform)\lib\net451\Microsoft.TestPlatform.CoreUtilities.dll</HintPath><Private>False</Private></Reference>
+    <Reference Include="Microsoft.TestPlatform.CommunicationUtilities"><HintPath>$(NuGetPackageRoot)microsoft.testplatform.translationlayer\$(NuGetVersionMicrosoftTestPlatform)\lib\netstandard1.5\Microsoft.TestPlatform.CommunicationUtilities.dll</HintPath><Private>False</Private></Reference>
+    <Reference Include="Microsoft.TestPlatform.VsTestConsole.TranslationLayer"><HintPath>$(NuGetPackageRoot)microsoft.testplatform.translationlayer\$(NuGetVersionMicrosoftTestPlatform)\lib\netstandard1.5\Microsoft.TestPlatform.VsTestConsole.TranslationLayer.dll</HintPath><Private>False</Private></Reference>
+    <Reference Include="Microsoft.VisualStudio.TestPlatform.Common"><HintPath>$(NuGetPackageRoot)microsoft.testplatform.translationlayer\$(NuGetVersionMicrosoftTestPlatform)\lib\netstandard1.5\Microsoft.VisualStudio.TestPlatform.Common.dll</HintPath><Private>False</Private></Reference>
     <PackageReference Include="Microsoft.TestPlatform.TranslationLayer" Version="$(NuGetVersionMicrosoftTestPlatform)" />
     <IncludeCopyLocal Include="Microsoft.TestPlatform.CoreUtilities.dll" />
     <IncludeCopyLocal Include="Microsoft.TestPlatform.PlatformAbstractions.dll" />
