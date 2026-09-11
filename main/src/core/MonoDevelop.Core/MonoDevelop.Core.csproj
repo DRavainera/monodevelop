@@ -1,5 +1,19 @@
-<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003" ToolsVersion="4.0">
+<Project DefaultTargets="Build" Sdk="Microsoft.NET.Sdk" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <Import Project="..\..\..\MonoDevelop.props" />
+  <PropertyGroup>
+    <MDFrameworkVersion>v8.0</MDFrameworkVersion>
+    <MDTargetFramework>net8.0</MDTargetFramework>
+    <TargetFrameworkVersion>v8.0</TargetFrameworkVersion>
+    <TargetFramework>net8.0</TargetFramework>
+    <Configurations>Debug;Release;DebugWin32</Configurations>
+    <Platforms>AnyCPU</Platforms>
+    <EnableDefaultItems>false</EnableDefaultItems>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <AssemblyTitle>MonoDevelop Runtime</AssemblyTitle>
+    <AssemblyVersion>2.6</AssemblyVersion>
+    <Version>2.6.0</Version>
+    <NoWarn>$(NoWarn);SYSLIB0011</NoWarn>
+  </PropertyGroup>
   <Import Project="$(ReferencesGtk)" />
   <PropertyGroup>
     <ReferencesVSEditorCopyToOutput>true</ReferencesVSEditorCopyToOutput>
@@ -51,15 +65,10 @@
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' " />
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'DebugWin32|AnyCPU' " />
   <ItemGroup>
-    <Reference Include="System.Xml" />
-    <Reference Include="System.Core" />
-    <Reference Include="System.Net.Http" />
     <Reference Include="System.Collections.Immutable">
       <HintPath>$(NuGetPackageRoot)system.collections.immutable/7.0.0/lib/netstandard2.0/System.Collections.Immutable.dll</HintPath>
       <Private>False</Private>
     </Reference>
-    <Reference Include="System.Runtime.InteropServices.RuntimeInformation" />
-    <Reference Include="System.Xml.Linq" />
     <Reference Include="Mono.Security">
       <HintPath>/usr/lib/mono/4.5/Mono.Security.dll</HintPath>
       <Private>False</Private>
@@ -128,10 +137,7 @@
       <HintPath>$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll</HintPath>
       <Private>False</Private>
     </Reference>
-    <Reference Include="System" />
-    <Reference Include="System.IO.FileSystem" />
-    <Reference Include="System.IO.FileSystem.Primitives" />
-    <Reference Include="System.Runtime.Serialization" />
+    <PackageReference Include="System.CodeDom" Version="5.0.0" PrivateAssets="runtime" />
     <!-- disable this for now, it's absurdly noisy
     <PackageReference Include="ClrHeapAllocationAnalyzer" Version="1.0.0.9" />
     -->
@@ -144,7 +150,7 @@
     </Reference>
     <PackageReference Include="MonoDevelopDev.Analyzers" Version="$(NuGetVersionMonoDevelopAnalyzers)" />
     <PackageReference Include="Newtonsoft.Json" Version="$(NuGetVersionNewtonsoftJson)" PrivateAssets="runtime" />
-    <PackageReference Include="SharpZipLib" Version="1.2.0" PrivateAssets="runtime" />
+    <PackageReference Include="SharpZipLib" Version="1.4.2" PrivateAssets="runtime" />
     <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="1.1.12" PrivateAssets="runtime,build" />
     <PackageReference Include="StreamJsonRpc" Version="1.5.43" PrivateAssets="runtime" />
     <PackageReference Include="System.ValueTuple" Version="4.5.0" PrivateAssets="runtime" />
@@ -258,7 +264,6 @@
     <Compile Include="MonoDevelop.Core\FileEventArgs.cs" />
     <Compile Include="MonoDevelop.Core.FileSystem\FileSystemExtension.cs" />
     <Compile Include="MonoDevelop.Core.FileSystem\DefaultFileSystemExtension.cs" />
-    <Compile Include="AssemblyInfo.cs" />
     <Compile Include="MonoDevelop.Core.AddIns\AssemblyExtensionNode.cs" />
     <Compile Include="MonoDevelop.Core.AddIns\PackageExtensionNode.cs" />
     <Compile Include="MonoDevelop.Core.AddIns\ApplicationExtensionNode.cs" />
@@ -832,7 +837,6 @@
     <InternalsVisibleTo Include="DynamicProxyGenAssembly2" />
     <InternalsVisibleTo Include="mdhost" />
   </ItemGroup>
-  <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />
   <Target Name="BeforeBuild" Inputs="BuildVariables.cs.in; $(MSBuildProjectDirectory)\..\..\..\..\version.config" Outputs="BuildVariables.cs" Condition="Exists('$(MSBuildProjectDirectory)\..\..\..\..\version.config')">
     <PropertyGroup>
       <ConfigureNet8Project>$(MSBuildProjectDirectory)\..\..\..\..\scripts\configure.net8.csproj</ConfigureNet8Project>

@@ -492,8 +492,8 @@ namespace Microsoft.Build.Evaluation
                     basekey = RegistryKey.OpenBaseKey(RegistryHive.CurrentConfig, view);
                     break;
                 case "HKEY_DYN_DATA":
-                    basekey = RegistryKey.OpenBaseKey(RegistryHive.DynData, view);
-                    break;
+                    // HKEY_DYN_DATA is not supported on .NET Core
+                    throw new ArgumentException (keyName);
                 default:
 					throw new ArgumentException (keyName);
             }
