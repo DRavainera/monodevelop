@@ -196,6 +196,29 @@ Cierre: **0 críticas nuevas** respecto a la línea base.
   reference assemblies en old-style: MSB3644/MSB4086/MSB3642 — "engine-first", retarget old-style
   descartado); luego M3.
 
+- **Hecho (bloque 5a — core net8, commit `b7418c960b`)**: `MonoDevelop.Core.csproj` convertido a
+  SDK-style `net8.0` (override de `MDFrameworkVersion`/`MDTargetFramework` tras el import de
+  `MonoDevelop.props`). Resolución de reference-assemblies resuelta por el propio
+  `Microsoft.NETCore.App.Ref` 8.0.30 del SDK (sin tocar los resolver v4.x de
+  `Directory.Build.props`). Fixes de deps/API:
+  - `SharpZipLib` 1.2.0 → 1.4.2 (Mono.Addins.Setup, target net8, exige ≥ 1.4.2 → NU1605).
+  - `System.CodeDom` 5.0.0 (netstandard2.0 cacheado): los tipos `System.CodeDom.Compiler`
+    (CS1069 reenviados) NO están en el ref pack net8.
+  - Quitadas las `<Reference>` muertas de `System`/`System.Core`/`System.Xml`/`System.Xml.Linq`/
+    `System.Runtime.InteropServices.RuntimeInformation`/`System.IO.FileSystem(Primitives)`/
+    `System.Runtime.Serialization`/`System.Net.Http` (los provee el shared framework net8; MSB3245).
+  - `AssemblyInfo.cs` fuera de Compile → `GenerateAssemblyInfo` del SDK (AssemblyTitle/AssemblyVersion
+    como props; los `InternalsVisibleTo` se conservan vía items).
+  - `NoWarn SYSLIB0011` (BinaryFormatter heredado de `InstrumentationService` para datos legacy).
+  - API eliminadas en net8: `Debug.Listeners` → `Trace.Listeners` (LoggingService); `RegistryHive
+    .DynData`/`HKEY_DYN_DATA` → `ArgumentException` (IntrinsicFunctions).
+  - Gate: `dotnet build MonoDevelop.Core.csproj -t:Build` **EXIT=0** (0 errores, 185 avisos benignos).
+    Load-smoke net8: `MonoDevelop.Core, 2.6.0.0, PublicKeyToken=3ead7498f347467b`, **567 tipos
+    exportados cargan sin fallos**, probes de `MonoDevelop.Projects.ProjectService`,
+    `MonoDevelop.Projects.MSBuild.RemoteBuildEngineManager` y `MonoDevelop.Core.LoggingService` OK.
+  - Pendiente: `main/MonoDevelop.Ide` (+ addins clave) repitiendo el patrón; luego el gate E2E de
+    evaluación C# con el Core net8 (M2 "IDE completa").
+
 ### M3 — Roslyn moderno y retiro de MonoRoslynCompat
 - `main/msbuild/RoslynVersion.props`: 3.4.0-beta4-19568-04 → **4.8.x** (o la versión publicada en
   nuget.org que incluya la familia Features/EditorFeatures).
