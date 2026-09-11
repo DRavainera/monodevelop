@@ -15,6 +15,10 @@
     <Reference Include="System.Xml" />
     <Reference Include="Mono.Cairo"><HintPath>$(MonoFrameworkNet45Directory)\Mono.Cairo.dll</HintPath><Private>False</Private></Reference>
     <Reference Include="System.Collections.Immutable"><HintPath>$(NuGetPackageRoot)system.collections.immutable/7.0.0\lib\netstandard2.0\System.Collections.Immutable.dll</HintPath><Private>False</Private></Reference>
+    <Reference Include="System.Memory">
+      <HintPath>$(NuGetPackageRoot)system.memory/4.5.5/lib/netstandard2.0/System.Memory.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
     <Reference Include="Microsoft.CodeAnalysis"><HintPath>$(NuGetPackageRoot)microsoft.codeanalysis.common\$(NuGetVersionRoslyn)\lib\netstandard2.0\Microsoft.CodeAnalysis.dll</HintPath><Private>False</Private></Reference>
     <Reference Include="Microsoft.CodeAnalysis.CSharp"><HintPath>$(NuGetPackageRoot)microsoft.codeanalysis.csharp\$(NuGetVersionRoslyn)\lib\netstandard2.0\Microsoft.CodeAnalysis.CSharp.dll</HintPath><Private>False</Private></Reference>
     <Reference Include="Microsoft.CodeAnalysis.Workspaces"><HintPath>$(NuGetPackageRoot)microsoft.codeanalysis.workspaces.common\$(NuGetVersionRoslyn)\lib\netstandard2.0\Microsoft.CodeAnalysis.Workspaces.dll</HintPath><Private>False</Private></Reference>

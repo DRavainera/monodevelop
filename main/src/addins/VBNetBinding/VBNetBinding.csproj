@@ -52,7 +52,7 @@
       <HintPath>$(NuGetPackageRoot)microsoft.codeanalysis.csharp.workspaces/$(NuGetVersionRoslyn)/lib/netstandard2.0/Microsoft.CodeAnalysis.CSharp.Workspaces.dll</HintPath>
     </Reference>
     <Reference Include="Microsoft.CodeAnalysis.VisualBasic">
-      <HintPath>$(NuGetPackageRoot)microsoft.codeanalysis.visualbasic/$(NuGetVersionRoslyn)/lib/netstandard2.0/Microsoft.CodeAnalysis.VisualBasic.dll</HintPath>
+      <HintPath>$(NuGetPackageRoot)microsoft.codeanalysis.visualbasic/$(NuGetVersionRoslynVB)/lib/netstandard2.0/Microsoft.CodeAnalysis.VisualBasic.dll</HintPath>
     </Reference>
     <Reference Include="Microsoft.CodeAnalysis.Workspaces">
       <HintPath>$(NuGetPackageRoot)microsoft.codeanalysis.workspaces.common/$(NuGetVersionRoslyn)/lib/netstandard2.0/Microsoft.CodeAnalysis.Workspaces.dll</HintPath>
