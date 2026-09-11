@@ -18,7 +18,7 @@
     <Reference Include="Microsoft.CSharp" />
     <Reference Include="System.Runtime.Serialization" />
     <Reference Include="Mono.Cairo"><HintPath>$(MonoFrameworkNet45Directory)\Mono.Cairo.dll</HintPath><Private>False</Private></Reference>
-    <Reference Include="System.Collections.Immutable"><HintPath>$(NuGetPackageRoot)system.collections.immutable\1.5.0\lib\netstandard2.0\System.Collections.Immutable.dll</HintPath><Private>False</Private></Reference>
+    <Reference Include="System.Collections.Immutable"><HintPath>$(NuGetPackageRoot)system.collections.immutable/7.0.0\lib\netstandard2.0\System.Collections.Immutable.dll</HintPath><Private>False</Private></Reference>
     <Reference Include="Newtonsoft.Json"><HintPath>$(NuGetPackageRoot)newtonsoft.json\13.0.3\lib\netstandard2.0\Newtonsoft.Json.dll</HintPath><Private>False</Private></Reference>
     <Reference Include="NuGet.Frameworks"><HintPath>$(NuGetPackageRoot)nuget.frameworks\$(NuGetVersionNuGet)\lib\net472\NuGet.Frameworks.dll</HintPath><Private>False</Private></Reference>
     <Reference Include="NuGet.Packaging"><HintPath>$(NuGetPackageRoot)nuget.packaging\$(NuGetVersionNuGet)\lib\net472\NuGet.Packaging.dll</HintPath><Private>False</Private></Reference>

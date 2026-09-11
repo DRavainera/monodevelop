@@ -42,6 +42,7 @@ using Microsoft.CodeAnalysis.Text;
 using MonoDevelop.Core;
 using MonoDevelop.Ide.TypeSystem;
 using Microsoft.CodeAnalysis.Completion.Providers;
+using CSharpSyntaxContext = MonoDevelop.CSharp.RoslynCompat.CSharpSyntaxContext;
 
 namespace MonoDevelop.CSharp.Completion.Provider
 {

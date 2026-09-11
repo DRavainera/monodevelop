@@ -56,15 +56,16 @@ namespace MonoDevelop.CSharp
 				var doc = IdeApp.Workbench.ActiveDocument;
 				if (doc == null || doc.DocumentContext.AnalysisDocument == null)
 					return new List<InsertionPoint> ();
-				var semanticModel = await doc.DocumentContext.AnalysisDocument.GetSemanticModelAsync ();
-				var declaringType = semanticModel.GetEnclosingSymbol<INamedTypeSymbol> (offset, default(CancellationToken));
+var semanticModel = await doc.DocumentContext.AnalysisDocument.GetSemanticModelAsync ();
+				var declaringType = semanticModel.GetEnclosingSymbol (offset, default(CancellationToken)) as INamedTypeSymbol;
 				if (declaringType == null)
 					return new List<InsertionPoint> ();
 				return MonoDevelop.Refactoring.InsertionPointService.GetInsertionPoints (
 					editor,
 					semanticModel,
 					declaringType,
-					offset
+					offset,
+					default(CancellationToken)
 				);
 			};
 			MonoDevelopWorkspace.StartRenameSession = async (Ide.Editor.TextEditor editor, DocumentContext ctx, Core.Text.ITextSourceVersion version, SyntaxToken? token) => {

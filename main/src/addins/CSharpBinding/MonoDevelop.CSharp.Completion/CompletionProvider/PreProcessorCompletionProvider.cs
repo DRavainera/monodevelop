@@ -31,6 +31,7 @@ using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Extensions.ContextQuery;
 using Microsoft.CodeAnalysis.Shared.Extensions;
 using Microsoft.CodeAnalysis.Text;
+using CSharpSyntaxContext = MonoDevelop.CSharp.RoslynCompat.CSharpSyntaxContext;
 
 namespace MonoDevelop.CSharp.Completion.Provider
 {

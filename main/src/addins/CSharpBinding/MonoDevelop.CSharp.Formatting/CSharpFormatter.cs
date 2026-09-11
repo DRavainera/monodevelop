@@ -90,16 +90,12 @@ namespace MonoDevelop.CSharp.Formatting
 				if (formattingService == null || !formattingService.SupportsFormatSelection)
 					return;
 
-				var formattingRules = new List<AbstractFormattingRule> ();
-				formattingRules.Add (ContainedDocumentPreserveFormattingRule.Instance);
-				formattingRules.AddRange (Formatter.GetDefaultFormattingRules (document));
-
 				var workspace = document.Project.Solution.Workspace;
 				var root = await document.GetSyntaxRootAsync (cancellationToken).ConfigureAwait (false);
 				var options = await document.GetOptionsAsync (cancellationToken).ConfigureAwait (false);
 				var changes = Formatter.GetFormattedTextChanges (
 					root, new TextSpan [] { new TextSpan (startSegment.Offset, endSegment.EndOffset - startSegment.Offset) },
-					workspace, options, formattingRules, cancellationToken);
+					workspace, options, cancellationToken);
 
 				if (changes == null)
 					return;
@@ -142,16 +138,6 @@ namespace MonoDevelop.CSharp.Formatting
 			var policy = policyParent.Get<CSharpFormattingPolicy> (chain);
 			var textPolicy = policyParent.Get<TextStylePolicy> (chain);
 			var optionSet = policy.CreateOptions (textPolicy);
-
-			if (input is IReadonlyTextDocument doc) {
-				try {
-					var conventions = EditorConfigService.GetEditorConfigContext (doc.FileName).WaitAndGetResult ();
-					if (conventions != null)
-						optionSet = new FormattingDocumentOptionSet (optionSet, new DocumentOptions (optionSet, conventions.CurrentConventions));
-				} catch (Exception e) {
-					LoggingService.LogError ("Error while loading coding conventions.", e);
-				}
-			}
 
 			return new StringTextSource (FormatText (optionSet, input.Text, startOffset, startOffset + length));
 		}
@@ -199,29 +185,6 @@ namespace MonoDevelop.CSharp.Formatting
 				value = result;
 				return true;
 			}
-		}
-
-		sealed class FormattingDocumentOptionSet : OptionSet
-		{
-			readonly OptionSet fallbackOptionSet;
-			readonly IDocumentOptions optionsProvider;
-
-			internal FormattingDocumentOptionSet (OptionSet fallbackOptionSet, IDocumentOptions optionsProvider)
-			{
-				this.fallbackOptionSet = fallbackOptionSet;
-				this.optionsProvider = optionsProvider;
-			}
-
-			public override object GetOption (OptionKey optionKey)
-			{
-				if (optionsProvider.TryGetDocumentOption (optionKey, out object value))
-					return value;
-				return fallbackOptionSet.GetOption (optionKey);
-			}
-
-			public override OptionSet WithChangedOption (OptionKey optionAndLanguage, object value) => throw new InvalidOperationException ();
-
-			internal override IEnumerable<OptionKey> GetChangedOptions (OptionSet optionSet) => throw new InvalidOperationException ();
 		}
 
 	}

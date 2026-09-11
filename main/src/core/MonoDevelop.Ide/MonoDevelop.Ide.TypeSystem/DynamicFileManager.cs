@@ -99,7 +99,8 @@ namespace MonoDevelop.Ide.TypeSystem
 					return;
 				}
 
-				workspace.OnDocumentReloaded (document);
+				if (workspace is MonoDevelopWorkspace monoDevelopWorkspace)
+					monoDevelopWorkspace.NotifyWorkspaceDocumentReloaded (document);
 			}
 		}
 

@@ -90,7 +90,7 @@ namespace MonoDevelop.Ide.TypeSystem
 				LanguageNames.CSharp,
 				compilationOptions: compilationOptions,
 				parseOptions: CSharpParseOptions.Default.WithLanguageVersion (LanguageVersion.Latest),
-				metadataReferences: defaultReferences).WithHasAllInformation (false);
+				metadataReferences: defaultReferences);
 			OnProjectAdded (projectInfo);
 		}
 

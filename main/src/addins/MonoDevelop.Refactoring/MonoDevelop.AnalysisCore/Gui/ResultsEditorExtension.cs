@@ -518,7 +518,9 @@ namespace MonoDevelop.AnalysisCore.Gui
 					}
 					var builder = ArrayBuilder<QuickTask>.GetInstance (capacity);
 					foreach (var task in tasks) {
-						builder.AddRange (task.Value);
+						foreach (var item in task.Value) {
+							builder.Add (item);
+						}
 					}
 					return builder.ToImmutableAndFree ();
 				}

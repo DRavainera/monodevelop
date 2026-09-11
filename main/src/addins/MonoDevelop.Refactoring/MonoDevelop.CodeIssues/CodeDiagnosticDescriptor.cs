@@ -126,8 +126,10 @@ namespace MonoDevelop.CodeIssues
 				}
 			}
 
-			foreach (var nested in action.NestedCodeActions) {
-				await RunAction (context, nested, cancellationToken).ConfigureAwait (false);
+			if (action.TryGetNestedActions (out var nestedActions, out _)) {
+				foreach (var nested in nestedActions) {
+					await RunAction (context, nested, cancellationToken).ConfigureAwait (false);
+				}
 			}
 		}
 	}

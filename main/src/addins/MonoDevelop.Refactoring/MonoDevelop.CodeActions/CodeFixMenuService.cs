@@ -214,13 +214,13 @@ namespace MonoDevelop.CodeActions
 			return item;
 		}
 
-		static void AddFixMenuItem (Ide.Editor.TextEditor editor, CodeFixMenu menu, CodeFixMenu fixAllMenu, ref int mnemonic, CodeAction fix, FixAllState fixState, CancellationToken token)
+static void AddFixMenuItem (Ide.Editor.TextEditor editor, CodeFixMenu menu, CodeFixMenu fixAllMenu, ref int mnemonic, CodeAction fix, FixAllState fixState, CancellationToken token)
 		{
-			if (fix is CodeAction.CodeActionWithNestedActions nested) {
+			if (fix.TryGetNestedActions (out var nestedActions, out var isInlinable)) {
 				// Inline code actions if they are, otherwise add a nested fix menu
-				if (nested.IsInlinable) {
-					int actionCount = nested.NestedCodeActions.Length;
-					foreach (var nestedFix in nested.NestedCodeActions) {
+				if (isInlinable) {
+					int actionCount = nestedActions.Length;
+					foreach (var nestedFix in nestedActions) {
 						var nestedFixState = actionCount > 1 && nestedFix.EquivalenceKey == null ? null : fixState;
 
 						AddFixMenuItem (editor, menu, fixAllMenu, ref mnemonic, nestedFix, nestedFixState, token);
@@ -228,8 +228,8 @@ namespace MonoDevelop.CodeActions
 					return;
 				}
 
-				if (nested.NestedCodeActions.Length > 0)
-					AddNestedFixMenu (editor, menu, fixAllMenu, nested, fixState, token);
+				if (nestedActions.Length > 0)
+					AddNestedFixMenu (editor, menu, fixAllMenu, fix, nestedActions, fixState, token);
 				return;
 			}
 
@@ -239,16 +239,16 @@ namespace MonoDevelop.CodeActions
 			fixState = fixState?.WithScopeAndEquivalenceKey (FixAllScope.Document, fix.EquivalenceKey);
 			var fixAllMenuEntry = CreateFixAllMenuEntry (editor, fixState, ref mnemonic, token);
 			if (fixAllMenuEntry != null) {
-				fixAllMenu.Add (new CodeFixMenuEntry (fix.Message, null));
+				fixAllMenu.Add (new CodeFixMenuEntry (fix.Title, null));
 				fixAllMenu.Add (fixAllMenuEntry);
 			}
 		}
 
-		static void AddNestedFixMenu (Ide.Editor.TextEditor editor, CodeFixMenu menu, CodeFixMenu fixAllMenu, CodeAction.CodeActionWithNestedActions fixes, FixAllState fixState, CancellationToken token)
+		static void AddNestedFixMenu (Ide.Editor.TextEditor editor, CodeFixMenu menu, CodeFixMenu fixAllMenu, CodeAction fixes, ImmutableArray<CodeAction> nestedActions, FixAllState fixState, CancellationToken token)
 		{
 			int subMnemonic = 0;
 			var subMenu = new CodeFixMenu (fixes.Title);
-			foreach (var fix in fixes.NestedCodeActions) {
+			foreach (var fix in nestedActions) {
 				AddFixMenuItem (editor, subMenu, fixAllMenu, ref subMnemonic, fix, fixState, token);
 			}
 			menu.Add (subMenu);
@@ -285,15 +285,15 @@ namespace MonoDevelop.CodeActions
 				var updatedSolution = oldSolution;
 				using (var undo = editor.OpenUndoGroup ()) {
 					foreach (var operation in await act.GetOperationsAsync (token)) {
-						var applyChanges = operation as ApplyChangesOperation;
+var applyChanges = operation as ApplyChangesOperation;
 						if (applyChanges == null) {
-							operation.TryApply (documentContext.RoslynWorkspace, new RoslynProgressTracker (), token);
+							operation.Apply (documentContext.RoslynWorkspace, token);
 							continue;
 						}
 						if (updatedSolution == oldSolution) {
 							updatedSolution = applyChanges.ChangedSolution;
 						}
-						operation.TryApply (documentContext.RoslynWorkspace, new RoslynProgressTracker (), token);
+						operation.Apply (documentContext.RoslynWorkspace, token);
 					}
 				}
 				await TryStartRenameSession (documentContext.RoslynWorkspace, oldSolution, updatedSolution, token);

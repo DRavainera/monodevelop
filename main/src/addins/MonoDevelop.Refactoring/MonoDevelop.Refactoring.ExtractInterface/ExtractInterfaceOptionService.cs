@@ -25,7 +25,9 @@
 // THE SOFTWARE.
 
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Composition;
+using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Editor.Shared.Utilities;
@@ -77,7 +79,7 @@ namespace MonoDevelop.Refactoring.ExtractInterface
 
 				return new ExtractInterfaceOptionsResult (
 					false,
-					dialog.IncludedMembers.AsImmutable (),
+					dialog.IncludedMembers.ToImmutableArray (),
 					dialog.InterfaceName,
 					dialog.FileName,
 					dialog.UseSameFile

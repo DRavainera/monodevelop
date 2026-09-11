@@ -230,12 +230,7 @@ namespace MonoDevelop.CodeActions
 
 		static bool IsApplicable (Microsoft.CodeAnalysis.CodeActions.CodeAction action, Workspace workspace)
 		{
-			if (!action.PerformFinalApplicabilityCheck) {
-				return true;
-			}
-
-			Runtime.AssertMainThread ();
-			return action.IsApplicable (workspace);
+			return true;
 		}
 
 		internal async void PopupQuickFixMenu (Gdk.EventButton evt, Action<CodeFixMenu> menuAction, Xwt.Point? point = null)

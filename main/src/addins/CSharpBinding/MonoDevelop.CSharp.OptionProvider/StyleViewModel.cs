@@ -1235,21 +1235,21 @@ class C
 
 			// Code block
 			AddBracesOptions (optionSet, codeBlockPreferencesGroupTitle);
-			CodeStyleItems.Add (new BooleanCodeStyleOptionViewModel (CodeStyleOptions.PreferAutoProperties, GettextCatalog.GetString("Prefer auto properties"), s_preferAutoProperties, s_preferAutoProperties, this, optionSet, codeBlockPreferencesGroupTitle));
+			CodeStyleItems.Add (new BooleanCodeStyleOptionViewModel (CSharpCodeStyleOptions.PreferAutoProperties, GettextCatalog.GetString("Prefer auto properties"), s_preferAutoProperties, s_preferAutoProperties, this, optionSet, codeBlockPreferencesGroupTitle));
 
 			AddParenthesesOptions (Options);
 
 			// Expression preferences
-			CodeStyleItems.Add (new BooleanCodeStyleOptionViewModel (CodeStyleOptions.PreferObjectInitializer, GettextCatalog.GetString("Prefer object initializer"), s_preferObjectInitializer, s_preferObjectInitializer, this, optionSet, expressionPreferencesGroupTitle));
-			CodeStyleItems.Add (new BooleanCodeStyleOptionViewModel (CodeStyleOptions.PreferCollectionInitializer, GettextCatalog.GetString("Prefer collection initializer"), s_preferCollectionInitializer, s_preferCollectionInitializer, this, optionSet, expressionPreferencesGroupTitle));
+CodeStyleItems.Add (new BooleanCodeStyleOptionViewModel (CSharpCodeStyleOptions.PreferObjectInitializer, GettextCatalog.GetString("Prefer object initializer"), s_preferObjectInitializer, s_preferObjectInitializer, this, optionSet, expressionPreferencesGroupTitle));
+			CodeStyleItems.Add (new BooleanCodeStyleOptionViewModel (CSharpCodeStyleOptions.PreferCollectionInitializer, GettextCatalog.GetString("Prefer collection initializer"), s_preferCollectionInitializer, s_preferCollectionInitializer, this, optionSet, expressionPreferencesGroupTitle));
 			CodeStyleItems.Add (new BooleanCodeStyleOptionViewModel (CSharpCodeStyleOptions.PreferPatternMatchingOverIsWithCastCheck, GettextCatalog.GetString ("Prefer pattern matching over 'is' with 'cast' check"), s_preferPatternMatchingOverIsWithCastCheck, s_preferPatternMatchingOverIsWithCastCheck, this, optionSet, expressionPreferencesGroupTitle));
 			CodeStyleItems.Add (new BooleanCodeStyleOptionViewModel (CSharpCodeStyleOptions.PreferPatternMatchingOverAsWithNullCheck, GettextCatalog.GetString("Prefer pattern matching over 'as' with 'null' check"), s_preferPatternMatchingOverAsWithNullCheck, s_preferPatternMatchingOverAsWithNullCheck, this, optionSet, expressionPreferencesGroupTitle));
 			//CodeStyleItems.Add (new BooleanCodeStyleOptionViewModel (CodeStyleOptions.PreferConditionalExpressionOverAssignment, GettextCatalog.GetString("Prefer conditional expression over 'if' with assignments"), s_preferConditionalExpressionOverIfWithAssignments, s_preferConditionalExpressionOverIfWithAssignments, this, optionSet, expressionPreferencesGroupTitle));
 			//CodeStyleItems.Add (new BooleanCodeStyleOptionViewModel (CodeStyleOptions.PreferConditionalExpressionOverReturn, GettextCatalog.GetString("Prefer conditional expression over 'if' with returns"), s_preferConditionalExpressionOverIfWithReturns, s_preferConditionalExpressionOverIfWithReturns, this, optionSet, expressionPreferencesGroupTitle));
-			CodeStyleItems.Add (new BooleanCodeStyleOptionViewModel (CodeStyleOptions.PreferExplicitTupleNames, GettextCatalog.GetString("Prefer explicit tuple name"), s_preferExplicitTupleName, s_preferExplicitTupleName, this, optionSet, expressionPreferencesGroupTitle));
+			CodeStyleItems.Add (new BooleanCodeStyleOptionViewModel (CSharpCodeStyleOptions.PreferExplicitTupleNames, GettextCatalog.GetString("Prefer explicit tuple name"), s_preferExplicitTupleName, s_preferExplicitTupleName, this, optionSet, expressionPreferencesGroupTitle));
 			CodeStyleItems.Add (new BooleanCodeStyleOptionViewModel (CSharpCodeStyleOptions.PreferSimpleDefaultExpression, GettextCatalog.GetString("Prefer simple 'default' expression"), s_preferSimpleDefaultExpression, s_preferSimpleDefaultExpression, this, optionSet, expressionPreferencesGroupTitle));
-			CodeStyleItems.Add (new BooleanCodeStyleOptionViewModel (CodeStyleOptions.PreferInferredTupleNames, GettextCatalog.GetString("Prefer inferred tuple element names"), s_preferInferredTupleName, s_preferInferredTupleName, this, optionSet, expressionPreferencesGroupTitle));
-			CodeStyleItems.Add (new BooleanCodeStyleOptionViewModel (CodeStyleOptions.PreferInferredAnonymousTypeMemberNames, GettextCatalog.GetString("Prefer inferred anonymous type member names"), s_preferInferredAnonymousTypeMemberName, s_preferInferredAnonymousTypeMemberName, this, optionSet, expressionPreferencesGroupTitle));
+CodeStyleItems.Add (new BooleanCodeStyleOptionViewModel (CSharpCodeStyleOptions.PreferInferredTupleNames, GettextCatalog.GetString("Prefer inferred tuple element names"), s_preferInferredTupleName, s_preferInferredTupleName, this, optionSet, expressionPreferencesGroupTitle));
+			CodeStyleItems.Add (new BooleanCodeStyleOptionViewModel (CSharpCodeStyleOptions.PreferInferredAnonymousTypeMemberNames, GettextCatalog.GetString("Prefer inferred anonymous type member names"), s_preferInferredAnonymousTypeMemberName, s_preferInferredAnonymousTypeMemberName, this, optionSet, expressionPreferencesGroupTitle));
 			CodeStyleItems.Add (new BooleanCodeStyleOptionViewModel (CSharpCodeStyleOptions.PreferLocalOverAnonymousFunction, GettextCatalog.GetString("Prefer local function over anonymous function"), s_preferLocalFunctionOverAnonymousFunction, s_preferLocalFunctionOverAnonymousFunction, this, optionSet, expressionPreferencesGroupTitle));
 
 			AddExpressionBodyOptions (optionSet, expressionPreferencesGroupTitle);
@@ -1261,12 +1261,12 @@ class C
 			// Null preferences.
 			CodeStyleItems.Add (new BooleanCodeStyleOptionViewModel (CSharpCodeStyleOptions.PreferThrowExpression, GettextCatalog.GetString("Prefer throw-expression"), s_preferThrowExpression, s_preferThrowExpression, this, optionSet, nullCheckingGroupTitle));
 			CodeStyleItems.Add (new BooleanCodeStyleOptionViewModel (CSharpCodeStyleOptions.PreferConditionalDelegateCall, GettextCatalog.GetString("Prefer conditional delegate call"), s_preferConditionalDelegateCall, s_preferConditionalDelegateCall, this, optionSet, nullCheckingGroupTitle));
-			CodeStyleItems.Add (new BooleanCodeStyleOptionViewModel (CodeStyleOptions.PreferCoalesceExpression, GettextCatalog.GetString("Prefer coalesce expression"), s_preferCoalesceExpression, s_preferCoalesceExpression, this, optionSet, nullCheckingGroupTitle));
-			CodeStyleItems.Add (new BooleanCodeStyleOptionViewModel (CodeStyleOptions.PreferNullPropagation, GettextCatalog.GetString("Prefer null propagation"), s_preferNullPropagation, s_preferNullPropagation, this, optionSet, nullCheckingGroupTitle));
-			CodeStyleItems.Add (new BooleanCodeStyleOptionViewModel (CodeStyleOptions.PreferIsNullCheckOverReferenceEqualityMethod, GettextCatalog.GetString("Prefer 'is null' for reference equality checks"), s_preferIsNullOverReferenceEquals, s_preferIsNullOverReferenceEquals, this, optionSet, nullCheckingGroupTitle));
+CodeStyleItems.Add (new BooleanCodeStyleOptionViewModel (CSharpCodeStyleOptions.PreferCoalesceExpression, GettextCatalog.GetString("Prefer coalesce expression"), s_preferCoalesceExpression, s_preferCoalesceExpression, this, optionSet, nullCheckingGroupTitle));
+			CodeStyleItems.Add (new BooleanCodeStyleOptionViewModel (CSharpCodeStyleOptions.PreferNullPropagation, GettextCatalog.GetString("Prefer null propagation"), s_preferNullPropagation, s_preferNullPropagation, this, optionSet, nullCheckingGroupTitle));
+			CodeStyleItems.Add (new BooleanCodeStyleOptionViewModel (CSharpCodeStyleOptions.PreferIsNullCheckOverReferenceEqualityMethod, GettextCatalog.GetString("Prefer 'is null' for reference equality checks"), s_preferIsNullOverReferenceEquals, s_preferIsNullOverReferenceEquals, this, optionSet, nullCheckingGroupTitle));
 
 			// Field preferences.
-			CodeStyleItems.Add (new BooleanCodeStyleOptionViewModel (CodeStyleOptions.PreferReadonly, GettextCatalog.GetString("Prefer readonly"), s_preferReadonly, s_preferReadonly, this, optionSet, fieldGroupTitle));
+			CodeStyleItems.Add (new BooleanCodeStyleOptionViewModel (CSharpCodeStyleOptions.PreferReadonly, GettextCatalog.GetString("Prefer readonly"), s_preferReadonly, s_preferReadonly, this, optionSet, fieldGroupTitle));
 		}
 
 

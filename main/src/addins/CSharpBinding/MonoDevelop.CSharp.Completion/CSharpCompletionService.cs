@@ -1,11 +1,12 @@
 //
 // CSharpCompletionService.cs
 //
-// Compatibility stub for the CSharpBinding addin. The Roslyn 3.4.0-beta4-final
-// fork used by this repository does not ship the editor completion services
-// (Microsoft.CodeAnalysis.CSharp.Completion.*), so MonoDevelop's own
-// completion machinery needs a small concrete completion service to map back
-// from a Roslyn CompletionItem to a MonoDevelop completion provider.
+// Compatibility stub for the CSharpBinding addin. The Roslyn version used by
+// this repository (see $(NuGetVersionRoslyn)) is consumed without the editor
+// completion services (Microsoft.CodeAnalysis.CSharp.Completion.*) bound, so
+// MonoDevelop's own completion machinery needs a small concrete completion
+// service to map back from a Roslyn CompletionItem to a MonoDevelop
+// completion provider.
 //
 // Deferred/legacy: this mirrors the old MonoDevelop type that lived in the
 // missing Roslyn features assemblies. Kept minimal for offline stabilization.

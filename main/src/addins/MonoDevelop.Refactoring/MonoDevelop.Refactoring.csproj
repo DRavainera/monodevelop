@@ -110,7 +110,6 @@
     <Compile Include="MonoDevelop.Refactoring\StreamingFindUsagesPresenter.cs" />
     <Compile Include="MonoDevelop.Refactoring\CommandArgsFactories.cs" />
     <Compile Include="MonoDevelop.Refactoring\RoslynInformationProvider.cs" />
-    <Compile Include="MonoDevelop.Refactoring\RoslynCompatExtensions.cs" />
     <Compile Include="RoslynCompatStubs.cs" />
   </ItemGroup>
   <ItemGroup>
@@ -201,6 +200,10 @@
       <Name>MonoDevelop.TextEditor</Name>
       <Private>False</Private>
     </ProjectReference>
+    <ProjectReference Include="..\..\..\src\compat\MonoRoslynCompat\MonoRoslynCompat.csproj">
+      <Name>MonoRoslynCompat</Name>
+      <Private>False</Private>
+    </ProjectReference>
   </ItemGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="FSharpBinding" />
@@ -251,31 +254,43 @@
   </ItemGroup>
   <ItemGroup>
     <Reference Include="System.Collections.Immutable">
-      <HintPath>$(NuGetPackageRoot)system.collections.immutable/1.5.0/lib/netstandard2.0/System.Collections.Immutable.dll</HintPath>
+      <HintPath>$(NuGetPackageRoot)system.collections.immutable/7.0.0/lib/netstandard2.0/System.Collections.Immutable.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Memory">
+      <HintPath>$(NuGetPackageRoot)system.memory/4.5.5/lib/netstandard2.0/System.Memory.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Runtime.CompilerServices.Unsafe">
+      <HintPath>$(NuGetPackageRoot)system.runtime.compilerservices.unsafe/6.0.0/lib/netstandard2.0/System.Runtime.CompilerServices.Unsafe.dll</HintPath>
     </Reference>
     <Reference Include="Microsoft.CodeAnalysis.Workspaces">
-      <HintPath>$(NuGetPackageRoot)microsoft.codeanalysis.workspaces.common/3.4.0-beta4-final/lib/netstandard2.0/Microsoft.CodeAnalysis.Workspaces.dll</HintPath>
+      <HintPath>$(NuGetPackageRoot)microsoft.codeanalysis.workspaces.common/$(NuGetVersionRoslyn)/lib/netstandard2.0/Microsoft.CodeAnalysis.Workspaces.dll</HintPath>
     </Reference>
     <Reference Include="Microsoft.CodeAnalysis">
-      <HintPath>$(NuGetPackageRoot)microsoft.codeanalysis.common/3.4.0-beta4-final/lib/netstandard2.0/Microsoft.CodeAnalysis.dll</HintPath>
+      <HintPath>$(NuGetPackageRoot)microsoft.codeanalysis.common/$(NuGetVersionRoslyn)/lib/netstandard2.0/Microsoft.CodeAnalysis.dll</HintPath>
     </Reference>
     <Reference Include="Microsoft.CodeAnalysis.CSharp">
-      <HintPath>$(NuGetPackageRoot)microsoft.codeanalysis.csharp/3.4.0-beta4-final/lib/netstandard2.0/Microsoft.CodeAnalysis.CSharp.dll</HintPath>
+      <HintPath>$(NuGetPackageRoot)microsoft.codeanalysis.csharp/$(NuGetVersionRoslyn)/lib/netstandard2.0/Microsoft.CodeAnalysis.CSharp.dll</HintPath>
     </Reference>
     <Reference Include="Microsoft.CodeAnalysis.CSharp.Workspaces">
-      <HintPath>$(NuGetPackageRoot)microsoft.codeanalysis.csharp.workspaces/3.4.0-beta4-final/lib/netstandard2.0/Microsoft.CodeAnalysis.CSharp.Workspaces.dll</HintPath>
+      <HintPath>$(NuGetPackageRoot)microsoft.codeanalysis.csharp.workspaces/$(NuGetVersionRoslyn)/lib/netstandard2.0/Microsoft.CodeAnalysis.CSharp.Workspaces.dll</HintPath>
     </Reference>
     <Reference Include="Microsoft.VisualStudio.Threading">
       <HintPath>$(NuGetPackageRoot)microsoft.visualstudio.threading/16.10.56/lib/net472/Microsoft.VisualStudio.Threading.dll</HintPath>
     </Reference>
-    <Reference Include="MonoRoslynCompat">
-      <HintPath>..\..\..\build\bin\MonoRoslynCompat.dll</HintPath>
-    </Reference>
     <Reference Include="System.Composition.AttributedModel">
-      <HintPath>$(NuGetPackageRoot)system.composition.attributedmodel\1.0.31\lib\portable-net45+win8+wp8+wpa81\System.Composition.AttributedModel.dll</HintPath>
+      <HintPath>$(NuGetPackageRoot)system.composition.attributedmodel/7.0.0/lib/netstandard2.0/System.Composition.AttributedModel.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Composition.Convention">
+      <HintPath>$(NuGetPackageRoot)system.composition.convention/7.0.0/lib/netstandard2.0/System.Composition.Convention.dll</HintPath>
     </Reference>
     <Reference Include="System.Composition.Hosting">
-      <HintPath>$(NuGetPackageRoot)system.composition.hosting\1.0.31\lib\portable-net45+win8+wp8+wpa81\System.Composition.Hosting.dll</HintPath>
+      <HintPath>$(NuGetPackageRoot)system.composition.hosting/7.0.0/lib/netstandard2.0/System.Composition.Hosting.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Composition.Runtime">
+      <HintPath>$(NuGetPackageRoot)system.composition.runtime/7.0.0/lib/netstandard2.0/System.Composition.Runtime.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Composition.TypedParts">
+      <HintPath>$(NuGetPackageRoot)system.composition.typedparts/7.0.0/lib/netstandard2.0/System.Composition.TypedParts.dll</HintPath>
     </Reference>
   </ItemGroup>
   <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />

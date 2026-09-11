@@ -35,6 +35,7 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Diagnostics;
 using Microsoft.CodeAnalysis.Host;
 using Microsoft.CodeAnalysis.Text;
+using Microsoft.CodeAnalysis.Storage;
 using MonoDevelop.Core;
 using MonoDevelop.Ide.Editor.Projection;
 using MonoDevelop.Projects;
@@ -180,25 +181,22 @@ namespace MonoDevelop.Ide.TypeSystem
 					GetProjectInfoName (p.Name, framework),
 					fileName.FileNameWithoutExtension,
 					(p as MonoDevelop.Projects.DotNetProject)?.RoslynLanguageName ?? LanguageNames.CSharp,
-					p.FileName,
-					fileName,
-					null, // outputRefPath
-					null, // defaultNamespace
-					cp?.CreateCompilationOptions (),
-					cp?.CreateParseOptions (config),
-					documents,
-					cacheInfo.ProjectReferences,
-					cacheInfo.References.Select (x => x.CurrentSnapshot),
+					filePath: p.FileName,
+					outputFilePath: fileName,
+					outputRefFilePath: null,
+					compilationOptions: cp?.CreateCompilationOptions (),
+					parseOptions: cp?.CreateParseOptions (config),
+					documents: documents,
+					projectReferences: cacheInfo.ProjectReferences,
+					metadataReferences: cacheInfo.References.Select (x => x.CurrentSnapshot),
 					analyzerReferences: cacheInfo.AnalyzerFiles.SelectAsArray (x => {
 						var analyzer = new MonoDevelopAnalyzer (x, hostDiagnosticUpdateSource.Value, projectId, workspace, loader, LanguageNames.CSharp);
 						analyzersToDispose.Add (analyzer);
 						return analyzer.GetReference ();
 					}),
-					analyzerConfigDocuments: projectDocuments.EditorConfigDocuments,
 					additionalDocuments: projectDocuments.AdditionalDocuments,
 					isSubmission: false,
-					hostObjectType: null,
-					hasAllInformation: true
+					hostObjectType: null
 				);
 
 				info = workspace.WithDynamicDocuments (p, info);

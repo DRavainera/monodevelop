@@ -101,7 +101,7 @@ namespace MonoDevelop.Ide.RoslynServices.Options
 				);
 
 				AutoFormattingOnReturn = preferences.Wrap<bool> (
-					new OptionKey (FormattingOptions.AutoFormattingOnReturn, language),
+					new OptionKey (new Option<bool> ("FormattingOptions", "AutoFormattingOnReturn", false), language),
 					language + ".AutoFormattingOnReturn"
 				);
 

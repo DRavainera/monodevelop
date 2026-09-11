@@ -20,7 +20,7 @@
     <Reference Include="NuGet.Protocol"><HintPath>$(NuGetPackageRoot)nuget.protocol\$(NuGetVersionNuGet)\lib\net472\NuGet.Protocol.dll</HintPath><Private>False</Private></Reference>
     <Reference Include="NuGet.Versioning"><HintPath>$(NuGetPackageRoot)nuget.versioning\$(NuGetVersionNuGet)\lib\net472\NuGet.Versioning.dll</HintPath><Private>False</Private></Reference>
     <Reference Include="Mono.Cairo"><HintPath>$(MonoFrameworkNet45Directory)\Mono.Cairo.dll</HintPath><Private>False</Private></Reference>
-    <Reference Include="System.Collections.Immutable"><HintPath>$(NuGetPackageRoot)system.collections.immutable\1.5.0\lib\netstandard2.0\System.Collections.Immutable.dll</HintPath><Private>False</Private></Reference>
+    <Reference Include="System.Collections.Immutable"><HintPath>$(NuGetPackageRoot)system.collections.immutable/7.0.0\lib\netstandard2.0\System.Collections.Immutable.dll</HintPath><Private>False</Private></Reference>
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Properties\AssemblyInfo.cs" />

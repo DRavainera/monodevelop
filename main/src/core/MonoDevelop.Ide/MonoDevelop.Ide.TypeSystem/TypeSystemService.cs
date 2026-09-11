@@ -202,7 +202,7 @@ namespace MonoDevelop.Ide.TypeSystem
 						if (docId != null) {
 							projects.Add (mdProject);
 							try {
-								mdWorkspace.OnAnalyzerConfigDocumentRemoved (docId);
+								mdWorkspace.NotifyWorkspaceAnalyzerConfigDocumentRemoved (docId);
 							} catch (Exception ex) {
 								// Ignore error so other projects can be updated.
 								LoggingService.LogError ("OnAnalyzerConfigDocumentRemoved error", ex);

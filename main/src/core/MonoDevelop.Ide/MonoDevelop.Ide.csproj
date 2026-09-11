@@ -37,6 +37,14 @@
     <Reference Include="System.Design" />
     <Reference Include="System.Drawing" />
     <Reference Include="System.Net.Http" />
+    <Reference Include="System.Memory">
+      <HintPath>$(NuGetPackageRoot)system.memory/4.5.5/lib/netstandard2.0/System.Memory.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="System.Runtime.CompilerServices.Unsafe">
+      <HintPath>$(NuGetPackageRoot)system.runtime.compilerservices.unsafe/6.0.0/lib/netstandard2.0/System.Runtime.CompilerServices.Unsafe.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
     <Reference Include="System.Runtime.Remoting" />
     <Reference Include="System.Runtime.Serialization" />
     <Reference Include="System.Web" />
@@ -73,7 +81,7 @@
   </ItemGroup>
   <ItemGroup>
     <Reference Include="System.Collections.Immutable">
-      <HintPath>$(NuGetPackageRoot)system.collections.immutable/1.5.0/lib/netstandard2.0/System.Collections.Immutable.dll</HintPath>
+      <HintPath>$(NuGetPackageRoot)system.collections.immutable/7.0.0/lib/netstandard2.0/System.Collections.Immutable.dll</HintPath>
     </Reference>
     <Reference Include="Microsoft.TemplateEngine.Abstractions">
       <HintPath>$(NuGetPackageRoot)microsoft.templateengine.abstractions/5.0.0-rc.1.20431.3/lib/netstandard2.0/Microsoft.TemplateEngine.Abstractions.dll</HintPath>
@@ -94,19 +102,19 @@
       <HintPath>$(NuGetPackageRoot)microsoft.templateengine.utils/5.0.0-rc.1.20431.3/lib/netstandard2.0/Microsoft.TemplateEngine.Utils.dll</HintPath>
     </Reference>
     <Reference Include="Microsoft.CodeAnalysis">
-      <HintPath>$(NuGetPackageRoot)microsoft.codeanalysis.common/3.4.0-beta4-final/lib/netstandard2.0/Microsoft.CodeAnalysis.dll</HintPath>
+      <HintPath>$(NuGetPackageRoot)microsoft.codeanalysis.common/$(NuGetVersionRoslyn)/lib/netstandard2.0/Microsoft.CodeAnalysis.dll</HintPath>
     </Reference>
     <Reference Include="Microsoft.CodeAnalysis.Workspaces">
-      <HintPath>$(NuGetPackageRoot)microsoft.codeanalysis.workspaces.common/3.4.0-beta4-final/lib/netstandard2.0/Microsoft.CodeAnalysis.Workspaces.dll</HintPath>
+      <HintPath>$(NuGetPackageRoot)microsoft.codeanalysis.workspaces.common/$(NuGetVersionRoslyn)/lib/netstandard2.0/Microsoft.CodeAnalysis.Workspaces.dll</HintPath>
     </Reference>
     <Reference Include="Microsoft.CodeAnalysis.CSharp">
-      <HintPath>$(NuGetPackageRoot)microsoft.codeanalysis.csharp/3.4.0-beta4-final/lib/netstandard2.0/Microsoft.CodeAnalysis.CSharp.dll</HintPath>
+      <HintPath>$(NuGetPackageRoot)microsoft.codeanalysis.csharp/$(NuGetVersionRoslyn)/lib/netstandard2.0/Microsoft.CodeAnalysis.CSharp.dll</HintPath>
     </Reference>
     <Reference Include="Microsoft.CodeAnalysis.CSharp.Workspaces">
-      <HintPath>$(NuGetPackageRoot)microsoft.codeanalysis.csharp.workspaces/3.4.0-beta4-final/lib/netstandard2.0/Microsoft.CodeAnalysis.CSharp.Workspaces.dll</HintPath>
+      <HintPath>$(NuGetPackageRoot)microsoft.codeanalysis.csharp.workspaces/$(NuGetVersionRoslyn)/lib/netstandard2.0/Microsoft.CodeAnalysis.CSharp.Workspaces.dll</HintPath>
     </Reference>
     <Reference Include="Microsoft.CodeAnalysis.VisualBasic.Workspaces">
-      <HintPath>$(NuGetPackageRoot)microsoft.codeanalysis.visualbasic.workspaces/3.4.0-beta4-final/lib/netstandard2.0/Microsoft.CodeAnalysis.VisualBasic.Workspaces.dll</HintPath>
+      <HintPath>$(NuGetPackageRoot)microsoft.codeanalysis.visualbasic.workspaces/$(NuGetVersionRoslyn)/lib/netstandard2.0/Microsoft.CodeAnalysis.VisualBasic.Workspaces.dll</HintPath>
     </Reference>
     <Reference Include="Microsoft.VisualStudio.Threading">
       <HintPath>$(NuGetPackageRoot)microsoft.visualstudio.threading/16.10.56/lib/net472/Microsoft.VisualStudio.Threading.dll</HintPath>
@@ -119,25 +127,25 @@
       <HintPath>$(NuGetPackageRoot)yamldotnet.signed/5.2.1/lib/net45/YamlDotNet.dll</HintPath>
     </Reference>
     <Reference Include="System.Reflection.Metadata">
-      <HintPath>$(NuGetPackageRoot)system.reflection.metadata/1.6.0/lib/netstandard2.0/System.Reflection.Metadata.dll</HintPath>
+      <HintPath>$(NuGetPackageRoot)system.reflection.metadata/7.0.0/lib/netstandard2.0/System.Reflection.Metadata.dll</HintPath>
     </Reference>
     <Reference Include="Newtonsoft.Json">
       <HintPath>$(NuGetPackageRoot)newtonsoft.json/13.0.3/lib/netstandard2.0/Newtonsoft.Json.dll</HintPath>
     </Reference>
     <Reference Include="System.Composition.AttributedModel">
-      <HintPath>$(NuGetPackageRoot)system.composition.attributedmodel/1.0.31/lib/netstandard1.0/System.Composition.AttributedModel.dll</HintPath>
+      <HintPath>$(NuGetPackageRoot)system.composition.attributedmodel/7.0.0/lib/netstandard2.0/System.Composition.AttributedModel.dll</HintPath>
     </Reference>
     <Reference Include="System.Composition.Convention">
-      <HintPath>$(NuGetPackageRoot)system.composition.convention/1.0.31/lib/netstandard1.0/System.Composition.Convention.dll</HintPath>
+      <HintPath>$(NuGetPackageRoot)system.composition.convention/7.0.0/lib/netstandard2.0/System.Composition.Convention.dll</HintPath>
     </Reference>
     <Reference Include="System.Composition.Hosting">
-      <HintPath>$(NuGetPackageRoot)system.composition.hosting/1.0.31/lib/netstandard1.0/System.Composition.Hosting.dll</HintPath>
+      <HintPath>$(NuGetPackageRoot)system.composition.hosting/7.0.0/lib/netstandard2.0/System.Composition.Hosting.dll</HintPath>
     </Reference>
     <Reference Include="System.Composition.Runtime">
-      <HintPath>$(NuGetPackageRoot)system.composition.runtime/1.0.31/lib/netstandard1.0/System.Composition.Runtime.dll</HintPath>
+      <HintPath>$(NuGetPackageRoot)system.composition.runtime/7.0.0/lib/netstandard2.0/System.Composition.Runtime.dll</HintPath>
     </Reference>
     <Reference Include="System.Composition.TypedParts">
-      <HintPath>$(NuGetPackageRoot)system.composition.typedparts/1.0.31/lib/netstandard1.0/System.Composition.TypedParts.dll</HintPath>
+      <HintPath>$(NuGetPackageRoot)system.composition.typedparts/7.0.0/lib/netstandard2.0/System.Composition.TypedParts.dll</HintPath>
     </Reference>
     <IncludeCopyLocal Include="ICSharpCode.NRefactory.Cecil.dll" />
     <IncludeCopyLocal Include="ICSharpCode.NRefactory.CSharp.dll" />
@@ -156,6 +164,8 @@
     <IncludeCopyLocal Include="Xwt.Gtk.dll" />
     <IncludeCopyLocal Include="Xwt.XamMac.dll" />
     <IncludeCopyLocal Include="YamlDotNet.dll" />
+    <IncludeCopyLocal Include="System.Memory.dll" />
+    <IncludeCopyLocal Include="System.Runtime.CompilerServices.Unsafe.dll" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\MonoDevelop.Core\MonoDevelop.Core.csproj">

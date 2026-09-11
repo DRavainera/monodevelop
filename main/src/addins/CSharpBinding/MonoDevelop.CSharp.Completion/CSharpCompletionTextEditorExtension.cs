@@ -64,6 +64,7 @@ using Counters = MonoDevelop.Ide.Counters;
 using Microsoft.CodeAnalysis.CSharp.Completion.Providers;
 using MonoDevelop.CSharp.Completion.Provider;
 using System.Collections.Immutable;
+using CSharpSyntaxContext = MonoDevelop.CSharp.RoslynCompat.CSharpSyntaxContext;
 
 namespace MonoDevelop.CSharp.Completion
 {

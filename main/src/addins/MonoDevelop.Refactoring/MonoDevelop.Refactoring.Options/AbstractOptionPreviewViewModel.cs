@@ -28,6 +28,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
+using System.Reflection;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -70,6 +71,11 @@ namespace MonoDevelop.Refactoring.Options
 			_textViewHost.Options = DefaultSourceEditorOptions.PlainEditor;
 		}
 
+		static void SetCodeStyleOptionValue<T> (CodeStyleOption<T> opt, T value)
+		{
+			typeof (CodeStyleOption<T>).GetProperty ("Value")?.SetValue (opt, value);
+		}
+
 		internal OptionSet ApplyChangedOptions (OptionSet optionSet)
 		{
 			foreach (var optionKey in this.Options.GetChangedOptions (_originalOptions)) {
@@ -84,13 +90,13 @@ namespace MonoDevelop.Refactoring.Options
 
 		public void SetOptionAndUpdatePreview<T> (T value, IOption option, string preview)
 		{
-			if (option is Option<CodeStyleOption<T>>) {
+if (option is Option<CodeStyleOption<T>>) {
 				var opt = (CodeStyleOption<T>)BooleanCodeStyleOptionViewModel.GetOptionOrDefault (Options, option, Language);
-				opt.Value = value;
+				SetCodeStyleOptionValue (opt, value);
 				Options = Options.WithChangedOption ((Option<CodeStyleOption<T>>)option, opt);
 			} else if (option is PerLanguageOption<CodeStyleOption<T>>) {
 				var opt = (CodeStyleOption<T>)BooleanCodeStyleOptionViewModel.GetOptionOrDefault (Options, option, Language); // PerLanguageOption in unwrapped.
-				opt.Value = value;
+				SetCodeStyleOptionValue (opt, value);
 				Options = Options.WithChangedOption ((PerLanguageOption<CodeStyleOption<T>>)option, Language, opt);
 			} else if (option is Option<T>) {
 				Options = Options.WithChangedOption ((Option<T>)option, value);

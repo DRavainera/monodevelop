@@ -44,7 +44,7 @@ namespace MonoDevelop.CSharp.Completion
 	class ImportSymbolCompletionData : CompletionData
 	{
 		CSharpCompletionTextEditorExtension completionExt;
-		readonly Microsoft.CodeAnalysis.CSharp.Extensions.ContextQuery.CSharpSyntaxContext ctx;
+		readonly MonoDevelop.CSharp.RoslynCompat.CSharpSyntaxContext ctx;
 		ISymbol type;
 		string displayText;//This is just for caching, because Sorting completion list can call DisplayText many times
 		bool useFullName;
@@ -72,7 +72,7 @@ namespace MonoDevelop.CSharp.Completion
 
         public override int PriorityGroup { get { return int.MinValue; } }
 
-		public ImportSymbolCompletionData (CSharpCompletionTextEditorExtension ext, Microsoft.CodeAnalysis.CSharp.Extensions.ContextQuery.CSharpSyntaxContext ctx, ISymbol type, bool useFullName)
+		public ImportSymbolCompletionData (CSharpCompletionTextEditorExtension ext, MonoDevelop.CSharp.RoslynCompat.CSharpSyntaxContext ctx, ISymbol type, bool useFullName)
 		{
 			this.completionExt = ext;
 			this.ctx = ctx;

@@ -100,10 +100,10 @@ namespace MonoDevelop.AnalysisCore
 				}
 			}
 			optionsCompletionSource.SetResult (options);
-			builder.Add (new HostDiagnosticAnalyzerPackage ("MonoDevelop", assemblies.AsImmutable ()));
+			builder.Add (new HostDiagnosticAnalyzerPackage ("MonoDevelop", assemblies.ToImmutable ()));
 
 			// Go through all providers
-			return builder.AsImmutable ();
+			return builder.ToImmutable ();
 		}
 	}
 }

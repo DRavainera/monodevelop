@@ -670,20 +670,13 @@ namespace MonoDevelop.Ide.Completion.Presentation
 		{
 			var root = document.GetSyntaxRootSynchronously (CancellationToken.None);
 
-			using (var rulePool = SharedPools.Default<List<AbstractFormattingRule>> ().GetPooledObject ())
 			using (var spanPool = SharedPools.Default<List<TextSpan>> ().GetPooledObject ()) {
-				var venusFormattingRules = rulePool.Object;
 				var visibleSpans = spanPool.Object;
-
-				venusFormattingRules.Add (baseIndentationRule);
-				venusFormattingRules.Add (ContainedDocumentPreserveFormattingRule.Instance);
-
-				var formattingRules = venusFormattingRules.Concat (Formatter.GetDefaultFormattingRules (document));
 
 				var workspace = document.Project.Solution.Workspace;
 				var changes = Formatter.GetFormattedTextChanges (
 					root, new TextSpan [] { CommonFormattingHelpers.GetFormattingSpan (root, visibleSpan) },
-					workspace, options, formattingRules, CancellationToken.None);
+					workspace, options, CancellationToken.None);
 
 				visibleSpans.Add (visibleSpan);
 				var newChanges = FilterTextChanges (document.GetTextAsync (CancellationToken.None).WaitAndGetResult (CancellationToken.None), visibleSpans, new ReadOnlyCollection<TextChange>(changes)).Where (t => visibleSpan.Contains (t.Span));

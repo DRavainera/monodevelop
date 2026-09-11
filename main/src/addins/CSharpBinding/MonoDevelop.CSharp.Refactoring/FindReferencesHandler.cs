@@ -45,7 +45,7 @@ namespace MonoDevelop.CSharp.Refactoring
 {
 	class FindReferencesHandler
 	{
-		class StreamingFindReferencesProgress : IStreamingFindReferencesProgress
+		class StreamingFindReferencesProgress : IFindReferencesProgress
 		{
 			ConcurrentSet<SearchResult> antiDuplicatesSet = new ConcurrentSet<SearchResult> (new SearchResultComparer ());
 			private SearchProgressMonitor monitor;
@@ -59,16 +59,15 @@ namespace MonoDevelop.CSharp.Refactoring
 				this.workspace = workspace;
 			}
 
-			public Task OnCompletedAsync ()
+			public void OnCompleted ()
 			{
 				if (!monitor.CancellationToken.IsCancellationRequested)
 					monitor.ReportResults (antiDuplicatesSet);
-				return Task.CompletedTask;
 			}
 
-			public Task OnDefinitionFoundAsync (SymbolAndProjectId symbolAndProjectId)
+			public void OnDefinitionFound (ISymbol symbol)
 			{
-				foreach (var loc in symbolAndProjectId.Symbol.Locations) {
+				foreach (var loc in symbol.Locations) {
 					if (!loc.IsInSource)
 						continue;
 					var fileName = loc.SourceTree.FilePath;
@@ -79,24 +78,21 @@ namespace MonoDevelop.CSharp.Refactoring
 						fileName = projectedName;
 						offset = projectedOffset;
 					}
-					var sr = new MemberReference (symbolAndProjectId.Symbol, fileName, offset, loc.SourceSpan.Length);
+					var sr = new MemberReference (symbol, fileName, offset, loc.SourceSpan.Length);
 					sr.ReferenceUsageType = ReferenceUsageType.Declaration;
 					antiDuplicatesSet.Add (sr);
 				}
-				return Task.CompletedTask;
 			}
 
-			public Task OnFindInDocumentCompletedAsync (Document document)
+			public void OnFindInDocumentCompleted (Document document)
 			{
-				return Task.CompletedTask;
 			}
 
-			public Task OnFindInDocumentStartedAsync (Document document)
+			public void OnFindInDocumentStarted (Document document)
 			{
-				return Task.CompletedTask;
 			}
 
-			public Task OnReferenceFoundAsync (SymbolAndProjectId symbolAndProjectId, ReferenceLocation loc)
+			public void OnReferenceFound (ISymbol symbol, ReferenceLocation loc)
 			{
 				var fileName = loc.Document.FilePath;
 				var offset = loc.Location.SourceSpan.Start;
@@ -106,29 +102,26 @@ namespace MonoDevelop.CSharp.Refactoring
 					fileName = projectedName;
 					offset = projectedOffset;
 				}
-				var sr = new MemberReference (symbolAndProjectId.Symbol, fileName, offset, loc.Location.SourceSpan.Length);
+				var sr = new MemberReference (symbol, fileName, offset, loc.Location.SourceSpan.Length);
 				if (antiDuplicatesSet.Add (sr)) {
 					var root = loc.Location.SourceTree.GetRoot ();
 					var node = root.FindNode (loc.Location.SourceSpan);
 					var trivia = root.FindTrivia (loc.Location.SourceSpan.Start);
 					sr.ReferenceUsageType = HighlightUsagesExtension.GetUsage (node);
 				}
-				return Task.CompletedTask;
 			}
 
-			public Task OnStartedAsync ()
+			public void OnStarted ()
 			{
-				return Task.CompletedTask;
 			}
 
 			internal double Progress;
 			internal Action ProgressUpdated;
 
-			public Task ReportProgressAsync (int current, int maximum)
+			public void ReportProgress (int current, int maximum)
 			{
 				Progress = (double)current / maximum;
 				ProgressUpdated?.Invoke ();
-				return Task.CompletedTask;
 			}
 		}
 
@@ -174,11 +167,10 @@ namespace MonoDevelop.CSharp.Refactoring
 					}
 					for (int i = 0; i < tasks.Length; i++) {
 						tasks [i] = SymbolFinder.FindReferencesAsync (
-							symbolAndProjectIds [i],
+							symbolAndProjectIds [i].Symbol,
 							solution,
 							streamingProgresses [i],
 							null,
-							FindReferencesSearchOptions.GetFeatureOptionsForStartingSymbol (symbolAndProjectIds [i].Symbol),
 							monitor.CancellationToken
 						);
 					}

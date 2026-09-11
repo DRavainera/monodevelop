@@ -91,7 +91,7 @@ namespace MonoDevelop.Ide.Editor.Highlighting
 				exprStack.Push (CreateMatchExpression (sb));
 			StringBuilderCache.Free (sb);
 			ShrinkStack (exprStack);
-			if (exprStack.IsEmpty ())
+			if (exprStack.Count == 0)
 				return new StringMatchExpression ("");
 			return exprStack.Peek ();
 		}

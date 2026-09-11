@@ -45,7 +45,8 @@ using MonoDevelop.Core.Text;
 using MonoDevelop.Components.PropertyGrid.PropertyEditors;
 using MonoDevelop.Ide.Editor;
 using Microsoft.CodeAnalysis.Options;
-using Roslyn.Utilities;
+ using Microsoft.CodeAnalysis;
+ using Roslyn.Utilities;
 using System.Threading;
 
 namespace MonoDevelop.CSharp

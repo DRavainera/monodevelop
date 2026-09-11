@@ -42,7 +42,11 @@
     <Reference Include="NuGet.Resolver"><HintPath>$(NuGetPackageRoot)nuget.resolver\$(NuGetVersionNuGet)\lib\net472\NuGet.Resolver.dll</HintPath><Private>False</Private></Reference>
     <Reference Include="NuGet.Versioning"><HintPath>$(NuGetPackageRoot)nuget.versioning\$(NuGetVersionNuGet)\lib\net472\NuGet.Versioning.dll</HintPath><Private>False</Private></Reference>
     <Reference Include="NuGet.PackageManagement"><HintPath>$(NuGetPackageRoot)nuget.packagemanagement\$(NuGetVersionNuGet)\lib\net472\NuGet.PackageManagement.dll</HintPath><Private>False</Private></Reference>
-    <Reference Include="System.Collections.Immutable"><HintPath>$(NuGetPackageRoot)system.collections.immutable\1.5.0\lib\netstandard2.0\System.Collections.Immutable.dll</HintPath><Private>False</Private></Reference>
+    <Reference Include="System.Collections.Immutable"><HintPath>$(NuGetPackageRoot)system.collections.immutable/7.0.0\lib\netstandard2.0\System.Collections.Immutable.dll</HintPath><Private>False</Private></Reference>
+    <Reference Include="System.Memory">
+      <HintPath>$(NuGetPackageRoot)system.memory/4.5.5/lib/netstandard2.0/System.Memory.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
     <Reference Include="Newtonsoft.Json"><HintPath>$(NuGetPackageRoot)newtonsoft.json\13.0.3\lib\netstandard2.0\Newtonsoft.Json.dll</HintPath><Private>False</Private></Reference>
     <Reference Include="Mono.Cairo"><HintPath>$(MonoFrameworkNet45Directory)\Mono.Cairo.dll</HintPath><Private>False</Private></Reference>
     <Reference Include="System.IO.Compression"><HintPath>$(NuGetPackageRoot)microsoft.netframework.referenceassemblies.net472\1.0.3\build\.NETFramework\v4.7.2\System.IO.Compression.dll</HintPath><Private>False</Private></Reference>

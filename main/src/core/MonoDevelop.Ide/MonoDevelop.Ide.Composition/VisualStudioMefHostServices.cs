@@ -35,7 +35,7 @@ namespace Microsoft.VisualStudio.LanguageServices
         /// <summary>
         /// Creates a new <see cref="HostWorkspaceServices"/> associated with the specified workspace.
         /// </summary>
-        protected internal override HostWorkspaceServices CreateWorkspaceServices(Workspace workspace)
+        protected override HostWorkspaceServices CreateWorkspaceServices(Workspace workspace)
             => new MefWorkspaceServices(this, workspace);
 
         /// <summary>

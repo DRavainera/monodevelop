@@ -105,7 +105,8 @@ namespace ICSharpCode.NRefactory6.CSharp
 			}
 			else
 			{
-				var newNamespace = firstOuterNamespaceWithUsings.AddUsingDirectives(usingDirectives, placeSystemNamespaceFirst, annotations);
+				var addedUsings = firstOuterNamespaceWithUsings.Usings.AddRange(usingDirectives);
+				var newNamespace = firstOuterNamespaceWithUsings.WithUsings(addedUsings);
 				return root.ReplaceNode(firstOuterNamespaceWithUsings, newNamespace);
 			}
 		}

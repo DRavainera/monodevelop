@@ -46,6 +46,7 @@ using MonoDevelop.Ide;
 using MonoDevelop.Ide.Editor;
 using MonoDevelop.Refactoring;
 using MonoDevelop.Ide.CodeCompletion;
+using CSharpSyntaxContext = MonoDevelop.CSharp.RoslynCompat.CSharpSyntaxContext;
 
 namespace MonoDevelop.CSharp.Completion.Provider
 {
@@ -106,7 +107,7 @@ namespace MonoDevelop.CSharp.Completion.Provider
 				string delegateName = null;
 
 				if (ctx.TargetToken.IsKind (SyntaxKind.PlusEqualsToken)) {
-					delegateName = GuessEventHandlerBaseName (ctx.TargetToken.Parent, ctx.ContainingTypeDeclaration);
+					delegateName = GuessEventHandlerBaseName (ctx.TargetToken.Parent, ctx.TargetToken.Parent.AncestorsAndSelf ().OfType<TypeDeclarationSyntax> ().FirstOrDefault ());
 				}
 
 				AddDelegateHandlers (context, ctx.TargetToken.Parent, model, type, position, delegateName, cancellationToken);
@@ -315,7 +316,7 @@ namespace MonoDevelop.CSharp.Completion.Provider
 			var sb = StringBuilderCache.Allocate ();
 			string varName = optDelegateName ?? "Handle" + delegateType.Name;
 
-			var curType = semanticModel.GetEnclosingSymbol<INamedTypeSymbol> (position, cancellationToken);
+			var curType = semanticModel.GetEnclosingSymbol (position, cancellationToken) as INamedTypeSymbol;
 			var uniqueName = new UniqueNameGenerator (semanticModel).CreateUniqueMethodName (parent, varName);
 			var pDict = ImmutableDictionary<string, string>.Empty;
 			pDict = pDict.Add ("RightSideMarkup", "<span size='small'>" + GettextCatalog.GetString ("Creates new method") + "</span>");

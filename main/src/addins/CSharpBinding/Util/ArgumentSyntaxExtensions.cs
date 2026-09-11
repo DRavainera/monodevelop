@@ -113,7 +113,7 @@ namespace ICSharpCode.NRefactory6.CSharp
 				return semanticModel.Compilation.ObjectType;
 			}
 
-			return semanticModel.GetType(argument.Expression, cancellationToken);
+			return semanticModel.GetTypeInfo(argument.Expression, cancellationToken).Type;
 		}
 	}
 }

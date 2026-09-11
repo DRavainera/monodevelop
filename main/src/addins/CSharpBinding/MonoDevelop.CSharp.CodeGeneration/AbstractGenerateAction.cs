@@ -167,7 +167,7 @@ namespace MonoDevelop.CodeGeneration
 				data.InsertAtCaret (text);				
 				var formattingService = options.DocumentContext?.AnalysisDocument?.GetLanguageService<IEditorFormattingService> ();
 				if (formattingService != null) {
-					var changes = formattingService.GetFormattingChangesAsync (options.DocumentContext.AnalysisDocument, new TextSpan (offset, text.Length), CancellationToken.None).WaitAndGetResult (CancellationToken.None);
+					var changes = formattingService.GetFormattingChangesAsync (options.DocumentContext.AnalysisDocument, new TextSpan (offset, text.Length), CancellationToken.None).GetAwaiter ().GetResult ();
 					data.ApplyTextChanges (changes);
 				}
 			}

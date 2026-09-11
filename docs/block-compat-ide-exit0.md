@@ -4,7 +4,7 @@ Fecha: 2026-09-06
 Estado: COMPLETADO (verificado con `idebuild10.log`, EXIT=0)
 
 ## Objetivo
-- Llevar `src/core/MonoDevelop.Ide/MonoDevelop.Ide.csproj` (config `DebugGnome`) a EXIT=0
+- Llevar `src/core/MonoDevelop.Ide/MonoDevelop.Ide.csproj` (config `DebugLinux`) a EXIT=0
   derivando la solucion de compatibilidad de Roslyn en `MonoRoslynCompat`.
 - Prohibicion: no usar `/usr/lib/mono/*` como HintPath/referencias.
 
@@ -46,9 +46,10 @@ Estado: COMPLETADO (verificado con `idebuild10.log`, EXIT=0)
 - `WorkspaceTaskQueue.cs`, `DiagnosticsCompat.cs`: integrados (companero de la superficie compat en el contribuyente).
 
 ## Verificacion
-- Compat `DebugGnome`: EXIT=0.
+- Compat `DebugLinux`: EXIT=0.
 - Loop Ide (`-p:BuildProjectReferences=false`): `idebuild8.log` 41 errores -> `idebuild9.log` 13 errores -> `idebuild10.log` **0 errores, EXIT=0**.
 
 ## Pendiente
-- Build completo via `Main.sln` (config `DebugGnome`) hasta EXIT=0.
+- Bloque `CSharpBinding.csproj` a 0 errores: COMPLETADO (ver `docs/block-csharbinding-exit0.md`).
+- Build completo via `Main.sln` (config `DebugLinux`) hasta EXIT=0.
 - Documentar y comitear bloques subsiguientes.

@@ -1,5 +1,5 @@
 <Project>
   <PropertyGroup>
-    <NuGetVersionRoslyn>3.4.0-beta4-19568-04</NuGetVersionRoslyn>
+    <NuGetVersionRoslyn>4.8.0</NuGetVersionRoslyn>
   </PropertyGroup>
 </Project>

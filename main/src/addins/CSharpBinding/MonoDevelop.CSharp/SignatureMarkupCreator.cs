@@ -112,7 +112,7 @@ namespace MonoDevelop.CSharp
 			}
 			if (type.TypeKind == TypeKind.Pointer)
 				return GetTypeReferenceString (((IPointerTypeSymbol)type).PointedAtType, highlight) + "*";
-			if (type.IsTupleType ()) {
+			if (type.IsTupleType) {
 				var sb = StringBuilderCache.Allocate ();
 				sb.Append ("(");
 				foreach (var member in type.GetMembers ().OfType<IFieldSymbol> ()) {

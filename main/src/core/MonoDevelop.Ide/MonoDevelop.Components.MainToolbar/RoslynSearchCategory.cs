@@ -159,7 +159,7 @@ namespace MonoDevelop.Components.MainToolbar
 										.Select (ws => ws.CurrentSolution)
 										.SelectMany (sol => sol.Projects)
 										.Select (async proj => {
-											using (proj.Solution.Services.CacheService?.EnableCaching (proj.Id)) {
+											using (proj.Solution.Services.CacheService ()?.EnableCaching (proj.Id)) {
 												var searchService = TryGetNavigateToSearchService (proj);
 												if (searchService == null)
 													return ImmutableArray<INavigateToSearchResult>.Empty;

@@ -32,7 +32,9 @@ using Microsoft.CodeAnalysis.Shared.Extensions;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.LanguageServices;
 using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.CSharp.Extensions.ContextQuery;
 using System.Threading;
+using CSharpTypeInferenceService = MonoDevelop.CSharp.RoslynCompat.CSharpTypeInferenceService;
 
 namespace ICSharpCode.NRefactory6.CSharp
 {

@@ -562,20 +562,20 @@ namespace MonoDevelop.Ide.TypeSystem
 
 					foreach (string framework in MonoDevelopWorkspace.GetFrameworks (project)) {
 						var projectInfo = await ws.LoadProject (project, CancellationToken.None, oldProject, framework);
-						if (oldProject != null) {
+if (oldProject != null) {
 							if (oldProjectIds.Remove (projectInfo.Id)) {
-								ws.OnProjectReloaded (projectInfo);
+								ws.NotifyWorkspaceProjectReloaded (projectInfo);
 							} else {
-								ws.OnProjectAdded (projectInfo);
+								ws.NotifyWorkspaceProjectAdded (projectInfo);
 							}
 						} else {
-							ws.OnProjectAdded (projectInfo);
+							ws.NotifyWorkspaceProjectAdded (projectInfo);
 						}
 					}
 
 					if (oldProjectIds != null) {
 						foreach (var removedProjectId in oldProjectIds) {
-							ws.OnProjectRemoved (removedProjectId);
+							ws.NotifyWorkspaceProjectRemoved (removedProjectId);
 						}
 					}
 

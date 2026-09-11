@@ -268,7 +268,7 @@ namespace MonoDevelop.Ide.TypeSystem
 			}
 		}
 
-		protected internal override bool PartialSemanticsEnabled => backgroundCompiler != null;
+		protected override bool PartialSemanticsEnabled => backgroundCompiler != null;
 
 		// This is called by OnSolutionRemoved and on Dispose.
 		protected override void ClearSolutionData ()
@@ -1027,7 +1027,7 @@ namespace MonoDevelop.Ide.TypeSystem
 		/// <value>The task that can be awaited to validate saving has finished.</value>
 		internal Task ProjectSaveTask { get; private set; } = Task.CompletedTask;
 
-		internal override bool TryApplyChanges (Solution newSolution, IProgressTracker progressTracker)
+		public override bool TryApplyChanges (Solution newSolution)
 		{
 			// this is supported on the main thread only
 			// see https://github.com/dotnet/roslyn/pull/18043
@@ -1037,7 +1037,7 @@ namespace MonoDevelop.Ide.TypeSystem
 				FileService.FreezeEvents ();
 				freezeProjectModify = true;
 				try {
-					var ret = base.TryApplyChanges (newSolution, progressTracker);
+					var ret = base.TryApplyChanges (newSolution);
 
 					if (tryApplyState_documentTextChangedTasks.Count > 0) {
 						Task.WhenAll (tryApplyState_documentTextChangedTasks).ContinueWith (t => {
@@ -1519,10 +1519,35 @@ namespace MonoDevelop.Ide.TypeSystem
 					$"This Workspace does not support changing a document's {nameof (document.Folders)}.");
 			}
 
-			if (document.State.Attributes.IsGenerated != updatedInfo.IsGenerated) {
+if (updatedInfo.IsGenerated) {
 				throw new InvalidOperationException (
-					$"This Workspace does not support changing a document's {nameof (document.State.Attributes.IsGenerated)} state.");
+					$"This Workspace does not support generated documents.");
 			}
+		}
+
+		public void NotifyWorkspaceProjectAdded (ProjectInfo projectInfo)
+		{
+			OnProjectAdded (projectInfo);
+		}
+
+		public void NotifyWorkspaceProjectReloaded (ProjectInfo projectInfo)
+		{
+			OnProjectReloaded (projectInfo);
+		}
+
+		public void NotifyWorkspaceProjectRemoved (ProjectId projectId)
+		{
+			OnProjectRemoved (projectId);
+		}
+
+		public void NotifyWorkspaceDocumentReloaded (DocumentInfo document)
+		{
+			OnDocumentReloaded (document);
+		}
+
+public void NotifyWorkspaceAnalyzerConfigDocumentRemoved (DocumentId documentId)
+		{
+			OnAnalyzerConfigDocumentRemoved (documentId);
 		}
 
 
@@ -1681,9 +1706,12 @@ namespace MonoDevelop.Ide.TypeSystem
 			}
 		}
 
-		internal override void SetDocumentContext (DocumentId documentId)
+// In Roslyn 4.8 Workspace.SetDocumentContext is no longer overridable;
+		// the host triggers context updates through the protected
+		// OnDocumentContextUpdated hook instead.
+		public void SetDocumentContext (DocumentId documentId)
 		{
-			base.OnDocumentContextUpdated (documentId);
+			OnDocumentContextUpdated (documentId);
 		}
 
 		#endregion
