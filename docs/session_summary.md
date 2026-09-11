@@ -12,8 +12,9 @@ Dejar en verde el build del núcleo de MonoDevelop en Linux usando `dotnet msbui
   `dotnet msbuild main/Main.sln -p:Configuration=Debug -m:1 -t:Rebuild -p:DisableDownloadNupkg=true`
 - Decisión de usuario: "Verde núcleo + diferir cluster". Límite de red de agentes previo vigente.
 
-## Estado ACTUAL (build26)
-- **Main.sln VERDE: EXIT=0, 0 errores** (2119 warnings). 218 proyectos en sln; 145 activos en `Build.0`; **73 diferidos** (cluster de deuda técnica).
+## Estado ACTUAL (build31)
+- **Main.sln VERDE: EXIT=0, 0 errores** (5351 warnings; MSB3277/CS8012/CS8002/MSB3245 benignos). 87 proyectos activos en `Build.0` (config Debug|Any CPU); el resto diferido (cluster deuda).
+- Cableados al `Build.0` del sln: CSharpBinding `{07CC7654-...}`, MonoDevelop.Refactoring `{100568FC-...}`, AssemblyBrowser `{0EA3AD14-...}`, RegexToolkit `{1F29B0A7-...}`, DocFood `{875D389F-...}`, TextTemplating `{8CCA39DD-...}`, mdmonitor `{D0B5AF2B-...}`, NUnitRunner `{0AF16AF1-...}`, VsCodeDebugProtocol `{10F5BBD5-...}`, AspNet `{1CF94D07-...}`, AspNetCore `{B3E73DE7-...}`, Autotools `{CFC02FEC-...}`, Deployment `{9BC670A8-...}`, PackageManagement `{F218643D-...}`, DotNetCore `{6868153E-...}`.
 - Núcleo compilando: Core, Ide, TextEditor, SourceEditor2, vs-editor-api y todos los addins que compilan limpio.
 
 ## Deferred / Cluster (deuda) — 73 proyectos
@@ -102,6 +103,18 @@ Dejar en verde el build del núcleo de MonoDevelop en Linux usando `dotnet msbui
 - **Addin facilitador offline**: `MonoDevelop.Debugger.VsCodeDebugProtocol.csproj` — `PackageReference` no resolvía para csc (legacy) → sustituido por `Reference`+`HintPath` al caché (`microsoft.visualstudio.shared.vscodedebugprotocol/15.8.20719.1`, `newtonsoft.json/13.0.3`). Compila → `build/AddIns/MonoDevelop.Debugger.VsCodeDebugProtocol/*.dll`.
 - **Verificación final**: `MonoDevelop.{Core,Ide}` re-compilan verdes offline con `.NET 8 SDK`; el `LoadMSBuildLibraries` argnull (`path1`) es ruido capturado de hosts mono sin `/usr/lib/mono/msbuild/15.0/bin` y no bloquea (irrelevante en destino net8).
 - **Pendientes para el reporte**: apertura+compilación de proyecto C# queda a la migración (CSharpBinding→Refactoring→Features); `interfaz-plan.md` y este summary actualizados con el alcance net8.
+
+### Sesión 2026-09-11 — bloque wiring + deuda System.Collections.Immutable (commit 602f9788db)
+- **Contexto**: tras el commit `d519de06a` el sln seguía verde (build27), pero al cablear addins al `Build.0` (build28) fallaron `MonoDevelop.Autotools` (26 errs, depende de `MonoDevelop.Deployment`) y `MonoDevelop.AspNetCore` (20 errs, depende de `MonoDevelop.DotNetCore`/`PackageManagement`), con CS0234 `'DotNetCore' no existe en 'MonoDevelop'` y CS0246 `DotNetCoreVersion`. Error standalone de esos dependientes = CS1705 (`System.Collections.Immutable`).
+- **Causa raíz CS1705/CS0012**: tras subir Roslyn a 4.8.0, Core/Refactoring referencian `System.Collections.Immutable 7.0.0`, pero 10 addins antiguos apuntaban a la 1.2.3.0 (`build\bin\System.Collections.Immutable.dll` o `system.collections.immutable\1.5.0`). Bonus: `PackageManagement` requería además `System.Memory 4.5.5` (CS0012 `Span<>`/`ReadOnlySpan<>`).
+- **Fixes**:
+  - Bump a `$(NuGetPackageRoot)system.collections.immutable/7.0.0/...` en 10 csproj (AspNetCore, Gettext, UnitTesting, UnitTesting.NUnit, PackageManagement, VersionControl, Deployment, Packaging, ConnectedServices, DotNetCore — patrón por regex python, tanto `\` como `/`).
+  - `Deployment.csproj`: corregido HintPath `..\..\..\..\$(NuGetPackageRoot)...` → `$(NuGetPackageRoot)...` (mi regex dejó el prefijo relativo residual).
+  - `PackageManagement.csproj`: añadido `<Reference Include="System.Memory">` 4.5.5 (patrón de CSharpBinding).
+- **Cableado de 3 dependencias** en `Main.sln` (tras los 12 previos): Deployment, PackageManagement, DotNetCore (Insert de `{GUID}.Debug|Any CPU.Build.0` con python, BOM preservado).
+- **Incidente BOM**: mi script de escritura duplicó el BOM y metió el literal `ï»¿` → `MSB5010: No se encuentra ningún encabezado de formato de archivo`. Normalizado a BOM único (`EF BB BF` + texto, verificado por bytes).
+- **Resultado**: build29 MSB5010 → build30 CS0012 → build31 **EXIT=0**. Autotools y AspNetCore compilan verdes dentro del sln.
+- Commit `602f9788db` (97 archivos, +3836/−1313) pusheado a `origin/agents/sub-agent-senior-dev-role-report`: incluye TODO el bloque Roslyn-4.8/compat (CSharpBinding, MonoRoslynCompat, Refactoring — commitablе junto al wiring por solape en csproj) + wiring. Logs: `/tmp/opencode/sln_build{27,28,29,30,31}.log`; backups `Main.sln.bak`/`.bak2`.
 
 ### Sesión 2026-09-08 — sellado de la cadena host-services Roslyn (runs 9-11)
 - **Causa raíz del FATAL "Can't create roslyn workspace"**: `MefWorkspaceServices.GetService[T]` (Workspaces 3.4) hace castclass al valor exportado; el `SolutionServices..ctor` pide 3 servicios (`ITemporaryStorageService`, `IMetadataService`, `IProjectCacheHostService`). Los factories de MonoDevelop.Ide exportaban solo `IWorkspaceServiceFactory`, y su unwrap MEF (`b__1` → `CreateService`) producía valores (manager de metadata / cache host) no casteables al contrato interno.
