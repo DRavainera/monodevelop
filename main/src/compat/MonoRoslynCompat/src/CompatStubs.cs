@@ -2417,25 +2417,30 @@ namespace Microsoft.CodeAnalysis.Host.Mef
     {
         private readonly Microsoft.CodeAnalysis.Host.HostServices _hostServices;
         private readonly Microsoft.CodeAnalysis.Workspace _workspace;
-        private readonly System.Collections.Generic.Dictionary<string, Microsoft.CodeAnalysis.Host.IWorkspaceService> _services;
+        private readonly System.Collections.Generic.Dictionary<string, System.Lazy<Microsoft.CodeAnalysis.Host.IWorkspaceService>> _services;
 
         public MefWorkspaceServices(Microsoft.CodeAnalysis.Host.HostServices hostServices, Microsoft.CodeAnalysis.Workspace workspace)
         {
             _hostServices = hostServices;
             _workspace = workspace;
-            _services = new System.Collections.Generic.Dictionary<string, Microsoft.CodeAnalysis.Host.IWorkspaceService>(StringComparer.Ordinal);
+            _services = new System.Collections.Generic.Dictionary<string, System.Lazy<Microsoft.CodeAnalysis.Host.IWorkspaceService>>(StringComparer.Ordinal);
 
             if (hostServices is IMefHostExportProvider provider)
             {
+                var self = this;
+
                 foreach (var export in provider.GetExports<Microsoft.CodeAnalysis.Host.Mef.IWorkspaceServiceFactory, WorkspaceServiceMetadata>())
                 {
                     var serviceType = export.Metadata?.ServiceType;
                     if (string.IsNullOrEmpty(serviceType))
                         continue;
 
-                    var factory = export.Value;
-                    if (factory != null)
-                        _services[serviceType] = factory.CreateService(this);
+                    var captured = export;
+                    _services[serviceType] = new System.Lazy<Microsoft.CodeAnalysis.Host.IWorkspaceService>(() =>
+                    {
+                        var factory = captured.Value;
+                        return factory != null ? factory.CreateService(self) : null;
+                    });
                 }
 
                 foreach (var export in provider.GetExports<Microsoft.CodeAnalysis.Host.IWorkspaceService, WorkspaceServiceMetadata>())
@@ -2444,9 +2449,8 @@ namespace Microsoft.CodeAnalysis.Host.Mef
                     if (string.IsNullOrEmpty(serviceType))
                         continue;
 
-                    var service = export.Value;
-                    if (service != null)
-                        _services[serviceType] = service;
+                    var captured = export;
+                    _services[serviceType] = new System.Lazy<Microsoft.CodeAnalysis.Host.IWorkspaceService>(() => captured.Value);
                 }
             }
         }
@@ -2464,7 +2468,7 @@ namespace Microsoft.CodeAnalysis.Host.Mef
         public override TWorkspaceService GetService<TWorkspaceService>()
         {
             if (_services.TryGetValue(typeof(TWorkspaceService).AssemblyQualifiedName, out var service))
-                return (TWorkspaceService)service;
+                return (TWorkspaceService)service.Value;
 
             return default(TWorkspaceService);
         }
