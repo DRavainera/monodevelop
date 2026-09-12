@@ -101,6 +101,25 @@ namespace Microsoft.VisualStudio.LanguageServices
                 return list;
             }
 
+            // Translate raw VS MEF exports back into Lazy<TExtension, TMetadata> with a
+            // normalized metadata dictionary so consumers (MonoRoslynCompat's
+            // MefWorkspaceServices / Roslyn's WorkspaceServiceMetadata) can read
+            // "ServiceType" as the assembly-qualified type name.
+            if (typeof(TExtension) == typeof(IWorkspaceService))
+            {
+                var list = new List<Lazy<TExtension, TMetadata>>();
+
+                foreach (var service in _exportProvider.GetExports<IWorkspaceService, IReadOnlyDictionary<string, object>>())
+                {
+                    var captured = service;
+                    list.Add(CreateLazyExport<TExtension, TMetadata>(
+                        () => (TExtension)(object)captured.Value,
+                        captured.Metadata));
+                }
+
+                return list;
+            }
+
             return _exportProvider.GetExports<TExtension, TMetadata>().ToImmutableArray();
         }
 
@@ -109,13 +128,13 @@ namespace Microsoft.VisualStudio.LanguageServices
 
         private static TMetadata CreateMetadata<TMetadata>(IReadOnlyDictionary<string, object> metadata)
         {
-            if (metadata is IDictionary<string, object> dictionary)
+            if (metadata != null)
             {
                 foreach (var constructor in typeof(TMetadata).GetConstructors())
                 {
                     var parameters = constructor.GetParameters();
                     if (parameters.Length == 1 && parameters[0].ParameterType.IsAssignableFrom(typeof(IDictionary<string, object>)))
-                        return (TMetadata)constructor.Invoke(new object[] { NormalizeServiceMetadata(dictionary) });
+                        return (TMetadata)constructor.Invoke(new object[] { NormalizeServiceMetadata(new Dictionary<string, object>(metadata)) });
                 }
             }
 

@@ -2381,15 +2381,74 @@ namespace Microsoft.CodeAnalysis.SymbolSearch
 
 namespace Microsoft.CodeAnalysis.Host.Mef
 {
+    /// <summary>
+    /// Metadata view used to read workspace-service exports coming back from the
+    /// <see cref="IMefHostExportProvider"/> bridged into the VS MEF composition.
+    /// Roslyn's own <c>WorkspaceServiceMetadata</c> is internal to
+    /// Microsoft.CodeAnalysis.Workspaces.dll, so this compat assembly exposes the
+    /// same shape publicly (ServiceType must be the assembly-qualified type name).
+    /// </summary>
+    public class WorkspaceServiceMetadata
+    {
+        public string ServiceType { get; }
+        public string Layer { get; }
+
+        public WorkspaceServiceMetadata(System.Collections.Generic.IDictionary<string, object> data)
+        {
+            if (data != null)
+            {
+                if (data.TryGetValue("ServiceType", out var serviceType))
+                    ServiceType = serviceType as string;
+                if (data.TryGetValue("Layer", out var layer))
+                    Layer = layer as string;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Functional replacement for the internal <c>MefWorkspaceServices</c> of
+    /// Microsoft.CodeAnalysis.Workspaces.dll (4.8). Workspace services are resolved
+    /// from the bridged host exports keyed by <c>ServiceType</c> metadata, which is
+    /// compared against <c>typeof(T).AssemblyQualifiedName</c>. The original stub
+    /// returned <c>default</c> for every service, which made Roslyn's
+    /// <c>Workspace..ctor</c> throw "Service of type ... is required".
+    /// </summary>
     public class MefWorkspaceServices : Microsoft.CodeAnalysis.Host.HostWorkspaceServices
     {
         private readonly Microsoft.CodeAnalysis.Host.HostServices _hostServices;
         private readonly Microsoft.CodeAnalysis.Workspace _workspace;
+        private readonly System.Collections.Generic.Dictionary<string, Microsoft.CodeAnalysis.Host.IWorkspaceService> _services;
 
         public MefWorkspaceServices(Microsoft.CodeAnalysis.Host.HostServices hostServices, Microsoft.CodeAnalysis.Workspace workspace)
         {
             _hostServices = hostServices;
             _workspace = workspace;
+            _services = new System.Collections.Generic.Dictionary<string, Microsoft.CodeAnalysis.Host.IWorkspaceService>(StringComparer.Ordinal);
+
+            if (hostServices is IMefHostExportProvider provider)
+            {
+                foreach (var export in provider.GetExports<Microsoft.CodeAnalysis.Host.Mef.IWorkspaceServiceFactory, WorkspaceServiceMetadata>())
+                {
+                    var serviceType = export.Metadata?.ServiceType;
+                    if (string.IsNullOrEmpty(serviceType))
+                        continue;
+
+                    var factory = export.Value;
+                    if (factory != null)
+                        _services[serviceType] = factory.CreateService(this);
+                }
+
+                foreach (var export in provider.GetExports<Microsoft.CodeAnalysis.Host.IWorkspaceService, WorkspaceServiceMetadata>())
+                {
+                    var serviceType = export.Metadata?.ServiceType;
+                    if (string.IsNullOrEmpty(serviceType))
+                        continue;
+
+                    var service = export.Value;
+                    if (service != null)
+                        _services[serviceType] = service;
+                }
+            }
         }
 
         public override Microsoft.CodeAnalysis.Host.HostServices HostServices
@@ -2404,6 +2463,9 @@ namespace Microsoft.CodeAnalysis.Host.Mef
 
         public override TWorkspaceService GetService<TWorkspaceService>()
         {
+            if (_services.TryGetValue(typeof(TWorkspaceService).AssemblyQualifiedName, out var service))
+                return (TWorkspaceService)service;
+
             return default(TWorkspaceService);
         }
 
