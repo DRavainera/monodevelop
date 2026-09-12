@@ -295,3 +295,5 @@ main/tests/StressTest/bin
 /main/src/compat/**/bin
 /main/src/compat/**/obj
 /main/build/MonoRoslynCompat.dll
+**/bin/Debug/
+**/obj/Debug/
