@@ -165,12 +165,13 @@ static readonly Resolver StandardResolver = Resolver.DefaultInstance;
 				if (existing == "1") {
 					try {
 						LoggingService.LogInfo ("MEFHOST hostType=" + (HostServices == null ? "null" : HostServices.GetType ().AssemblyQualifiedName));
-						LoggingService.LogInfo ("MEFHOST ilaopAQN=" + typeof(Microsoft.CodeAnalysis.Options.ILegacyWorkspaceOptionService).AssemblyQualifiedName);
+						var ilaopType = typeof(Microsoft.CodeAnalysis.Workspace).Assembly.GetType ("Microsoft.CodeAnalysis.Options.ILegacyWorkspaceOptionService");
+						LoggingService.LogInfo ("MEFHOST ilaopAQN=" + (ilaopType?.AssemblyQualifiedName ?? "not-found"));
 						var ep = HostServices as Microsoft.CodeAnalysis.Host.Mef.IMefHostExportProvider;
 						foreach (var lz in ep.GetExports<Microsoft.CodeAnalysis.Host.Mef.IWorkspaceServiceFactory, Microsoft.CodeAnalysis.Host.Mef.WorkspaceServiceMetadata> ()) {
 							LoggingService.LogInfo ("MEFHOST factory ServiceType=[" + lz.Metadata.ServiceType + "] Layer=[" + lz.Metadata.Layer + "]");
 						}
-						foreach (var lz in host.GetExports<Microsoft.CodeAnalysis.Host.IWorkspaceService, Microsoft.CodeAnalysis.Host.Mef.WorkspaceServiceMetadata> ()) {
+						foreach (var lz in ep.GetExports<Microsoft.CodeAnalysis.Host.IWorkspaceService, Microsoft.CodeAnalysis.Host.Mef.WorkspaceServiceMetadata> ()) {
 							LoggingService.LogInfo ("MEFHOST ws ServiceType=[" + lz.Metadata.ServiceType + "] Layer=[" + lz.Metadata.Layer + "]");
 						}
 					} catch (Exception ex) {
