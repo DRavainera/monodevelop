@@ -37,8 +37,8 @@ namespace MonoDevelop.AssemblyBrowser
 {
 	interface IAssemblyBrowserNodeBuilder
 	{
-		Task<List<ReferenceSegment>> DisassembleAsync (TextEditor data, ITreeNavigator navigator);
-		Task<List<ReferenceSegment>> DecompileAsync (TextEditor data, ITreeNavigator navigator, DecompileFlags flags);
+		Task<List<ReferenceSegment>> DisassembleAsync (MonoDevelop.Ide.Editor.TextEditor data, ITreeNavigator navigator);
+		Task<List<ReferenceSegment>> DecompileAsync (MonoDevelop.Ide.Editor.TextEditor data, ITreeNavigator navigator, DecompileFlags flags);
 	}
 
 	class DecompileFlags

@@ -29,7 +29,6 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Reflection;
 using System.Linq;
-using System.Runtime.Remoting;
 
 namespace MonoDevelop.Components.AutoTest
 {
@@ -71,7 +70,7 @@ namespace MonoDevelop.Components.AutoTest
 
 		public void Dispose ()
 		{
-			RemotingServices.Disconnect (this);
+			RemotingCompat.Disconnect (this);
 
 			if (propertyMap != null) {
 				foreach (var prop in propertyMap)

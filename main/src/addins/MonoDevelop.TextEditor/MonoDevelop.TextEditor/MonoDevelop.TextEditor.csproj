@@ -3,6 +3,10 @@
   <Import Project="$(ReferencesVSEditor)" />
   <Import Project="$(ReferencesGtk)" />
   <PropertyGroup>
+    <MDFrameworkVersion>v10.0</MDFrameworkVersion>
+    <MDTargetFramework>net10.0</MDTargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
+    <TargetFrameworkVersion>v10.0</TargetFrameworkVersion>
     <AssemblyTitle>MonoDevelop Text Editor</AssemblyTitle>
     <AssemblyDescription>Integrates the Visual Studio Editor into MonoDevelop</AssemblyDescription>
     <AddinBuildDir>DisplayBindings\TextEditor</AddinBuildDir>
@@ -12,8 +16,18 @@
   <ItemGroup>
     <InternalsVisibleTo Include="MonoDevelop.TextEditor.Cocoa" />
     <InternalsVisibleTo Include="MonoDevelop.TextEditor.Wpf" />
-    <Reference Include="PresentationFramework" />
-    <Reference Include="PresentationCore" />
+    <Reference Include="System.ComponentModel.Composition">
+      <HintPath>$(NuGetPackageRoot)system.componentmodel.composition/7.0.0/lib/net7.0/System.ComponentModel.Composition.dll</HintPath>
+    </Reference>
+    <Reference Include="WindowsBase">
+      <HintPath>$(NuGetPackageRoot)microsoft.netframework.referenceassemblies.net472/1.0.3/build/.NETFramework/v4.7.2/WindowsBase.dll</HintPath>
+    </Reference>
+    <Reference Include="PresentationFramework">
+      <HintPath>$(NuGetPackageRoot)microsoft.netframework.referenceassemblies.net472/1.0.3/build/.NETFramework/v4.7.2/PresentationFramework.dll</HintPath>
+    </Reference>
+    <Reference Include="PresentationCore">
+      <HintPath>$(NuGetPackageRoot)microsoft.netframework.referenceassemblies.net472/1.0.3/build/.NETFramework/v4.7.2/PresentationCore.dll</HintPath>
+    </Reference>
     <ProjectReference Include="..\..\MonoDevelop.DesignerSupport\MonoDevelop.DesignerSupport.csproj" Private="false" />
 
     <Compile Remove="CocoaSupport\CocoaExtras.cs" Condition="'$(HaveXamarinMac)' == 'true'" />

@@ -1,6 +1,18 @@
-<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003" ToolsVersion="4.0">
+<Project DefaultTargets="Build" Sdk="Microsoft.NET.Sdk" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <Import Project="..\..\..\MonoDevelop.props" />
   <Import Project="$(ReferencesGtk)" />
+  <PropertyGroup>
+    <MDFrameworkVersion>v10.0</MDFrameworkVersion>
+    <MDTargetFramework>net10.0</MDTargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
+    <TargetFrameworkVersion>v10.0</TargetFrameworkVersion>
+    <EnableDefaultItems>false</EnableDefaultItems>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <Configurations>Debug;Release;DebugMac;ReleaseMac;DebugWin32;ReleaseWin32</Configurations>
+    <Platforms>AnyCPU</Platforms>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+  </PropertyGroup>
+
   <PropertyGroup>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
@@ -72,5 +84,4 @@
     <EmbeddedResource Include="ChangeLogAddIn.addin.xml" />
     <EmbeddedResource Include="Policies.xml" />
   </ItemGroup>
-  <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />
 </Project>

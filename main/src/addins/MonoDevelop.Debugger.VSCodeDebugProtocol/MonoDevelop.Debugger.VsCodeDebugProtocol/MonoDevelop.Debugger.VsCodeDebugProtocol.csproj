@@ -1,10 +1,16 @@
-<Project DefaultTargets="Build" ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+<Project DefaultTargets="Build" Sdk="Microsoft.NET.Sdk" ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <Import Project="..\..\..\..\MonoDevelop.props" />
   <PropertyGroup>
+    <MDFrameworkVersion>v10.0</MDFrameworkVersion>
+    <MDTargetFramework>net10.0</MDTargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
+    <TargetFrameworkVersion>v10.0</TargetFrameworkVersion>
+    <EnableDefaultItems>false</EnableDefaultItems>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
     <ProjectGuid>{10F5BBD5-8A1D-4563-BCE4-DE681DFD82FD}</ProjectGuid>
-    <TargetFrameworkVersion>$(MDFrameworkVersion)</TargetFrameworkVersion>
     <OutputPath>..\..\..\..\build\AddIns\MonoDevelop.Debugger.VsCodeDebugProtocol</OutputPath>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' " />
@@ -57,5 +63,4 @@
     <Compile Include="VSCodeVariableSource.cs" />
     <Compile Include="VSCodeEvaluationSource.cs" />
   </ItemGroup>
-  <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />
 </Project>

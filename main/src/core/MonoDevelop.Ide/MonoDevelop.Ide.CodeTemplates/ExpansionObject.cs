@@ -37,7 +37,6 @@ using System.Threading.Tasks;
 using System.Linq;
 using MonoDevelop.Ide.Editor;
 using MonoDevelop.Ide.Editor.Extension;
-using System.Web.SessionState;
 using System.Threading;
 
 namespace MonoDevelop.Ide.CodeTemplates

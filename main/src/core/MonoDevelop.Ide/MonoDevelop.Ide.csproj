@@ -1,5 +1,20 @@
-<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003" ToolsVersion="4.0">
+<Project DefaultTargets="Build" Sdk="Microsoft.NET.Sdk" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <Import Project="..\..\..\MonoDevelop.props" />
+  <PropertyGroup>
+    <MDFrameworkVersion>v10.0</MDFrameworkVersion>
+    <MDTargetFramework>net10.0</MDTargetFramework>
+    <TargetFrameworkVersion>v10.0</TargetFrameworkVersion>
+    <TargetFramework>net10.0</TargetFramework>
+    <Configurations>Debug;Release;DebugMac;ReleaseMac;DebugWin32;ReleaseWin32</Configurations>
+    <Platforms>AnyCPU</Platforms>
+    <EnableDefaultItems>false</EnableDefaultItems>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <AssemblyTitle>MonoDevelop Ide</AssemblyTitle>
+    <AssemblyVersion>2.6</AssemblyVersion>
+    <Version>2.6.0</Version>
+    <NoWarn>$(NoWarn);SYSLIB0011</NoWarn>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+  </PropertyGroup>
   <Import Project="$(ReferencesGtk)" />
   <Import Project="$(ReferencesVSEditor)" />
   <PropertyGroup>
@@ -11,10 +26,10 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
-    <DefineConstants>LINUX</DefineConstants>
+    <DefineConstants>LINUX;FULL_AOT_RUNTIME</DefineConstants>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
-    <DefineConstants>LINUX</DefineConstants>
+    <DefineConstants>LINUX;FULL_AOT_RUNTIME</DefineConstants>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'DebugMac|AnyCPU' " />
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'ReleaseMac|AnyCPU' " />
@@ -26,17 +41,22 @@
     </Reference>
     <Reference Include="PresentationCore" Condition=" '$(Configuration)' == 'DebugWin32' Or '$(Configuration)' == 'ReleaseWin32' " />
     <Reference Include="PresentationFramework" Condition=" '$(Configuration)' == 'DebugWin32' Or '$(Configuration)' == 'ReleaseWin32' " />
-    <Reference Include="System" />
-    <Reference Include="System.ComponentModel.Composition" />
-    <Reference Include="System.Core" />
     <Reference Include="Mono.Cairo">
       <HintPath>/usr/lib/mono/4.5/Mono.Cairo.dll</HintPath>
       <Private>False</Private>
     </Reference>
-    <Reference Include="System.Data" />
-    <Reference Include="System.Design" />
-    <Reference Include="System.Drawing" />
-    <Reference Include="System.Net.Http" />
+    <Reference Include="System.ComponentModel.Composition">
+      <HintPath>$(NuGetPackageRoot)system.componentmodel.composition/7.0.0/lib/net6.0/System.ComponentModel.Composition.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="System.Design">
+      <HintPath>/usr/lib/mono/4.5/System.Design.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="System.Web">
+      <HintPath>/usr/lib/mono/4.5/System.Web.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
     <Reference Include="System.Memory">
       <HintPath>$(NuGetPackageRoot)system.memory/4.5.5/lib/netstandard2.0/System.Memory.dll</HintPath>
       <Private>False</Private>
@@ -45,15 +65,12 @@
       <HintPath>$(NuGetPackageRoot)system.runtime.compilerservices.unsafe/6.0.0/lib/netstandard2.0/System.Runtime.CompilerServices.Unsafe.dll</HintPath>
       <Private>False</Private>
     </Reference>
-    <Reference Include="System.Runtime.Remoting" />
-    <Reference Include="System.Runtime.Serialization" />
-    <Reference Include="System.Web" />
     <Reference Include="System.Web.Services" />
     <Reference Include="System.Windows" Condition=" '$(Configuration)' == 'DebugWin32' Or '$(Configuration)' == 'ReleaseWin32' " />
-    <Reference Include="System.Windows.Forms" />
+    <Reference Include="System.Windows.Forms">
+      <HintPath>/usr/lib/mono/4.5/System.Windows.Forms.dll</HintPath>
+    </Reference>
     <Reference Include="System.Xaml" />
-    <Reference Include="System.Xml" />
-    <Reference Include="System.Xml.Linq" />
     <Reference Include="WindowsBase" Condition=" '$(Configuration)' == 'DebugWin32' Or '$(Configuration)' == 'ReleaseWin32' " />
     <Reference Include="WindowsFormsIntegration" Condition=" '$(Configuration)' == 'DebugWin32' Or '$(Configuration)' == 'ReleaseWin32' " />
     <Reference Include="Xamarin.Mac" Condition=" '$(Configuration)' == 'DebugMac' Or '$(Configuration)' == 'ReleaseMac' ">
@@ -77,7 +94,9 @@
     </Reference>
     <PackageReference Include="Microsoft.TemplateEngine.Edge" Version="$(NuGetVersionMicrosoftTemplateEngine)" PrivateAssets="runtime" />
     <PackageReference Include="Microsoft.TemplateEngine.Orchestrator.RunnableProjects" Version="$(NuGetVersionMicrosoftTemplateEngine)" PrivateAssets="runtime" />
+    <PackageReference Include="Microsoft.VisualStudio.Threading" Version="16.10.56" />
     <PackageReference Include="YamlDotNet.Signed" Version="5.2.1" />
+    <PackageReference Include="System.Security.Permissions" Version="7.0.0" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="System.Collections.Immutable">
@@ -6792,7 +6811,6 @@
   <ItemGroup>
 <ProjectReference Include="../../../src/compat/MonoRoslynCompat/MonoRoslynCompat.csproj" />
   </ItemGroup>
-  <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />
   <Target Name="AfterBuild">
     <Copy SourceFiles="@(Data)" DestinationFolder="..\..\..\build\data\%(Data.RelativeDir)" SkipUnchangedFiles="true" />
   </Target>

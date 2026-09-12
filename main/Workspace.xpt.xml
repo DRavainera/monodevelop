@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<Template >
+
+	<!-- Template Header -->
+	<TemplateConfiguration>
+		<_Name>Workspace</_Name>
+		<Category>other/misc/generic</Category>
+		<Icon>md-workspace</Icon>
+		<Image id="md-workspace" />
+		<LanguageName/>
+		<_Description>Creates a blank workspace.</_Description>
+	</TemplateConfiguration>
+	
+	<!-- Template Content -->
+	<Combine name = "${ProjectName}" directory = "." type = "MonoDevelop.Projects.Workspace, MonoDevelop.Core" />
+	
+</Template>

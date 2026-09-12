@@ -32,7 +32,6 @@ using MonoDevelop.Components.AutoTest.Results;
 using System.Linq;
 using System.Xml;
 using MonoDevelop.Core;
-using System.Runtime.Remoting;
 
 
 namespace MonoDevelop.Components.AutoTest
@@ -181,7 +180,7 @@ namespace MonoDevelop.Components.AutoTest
 
 		public void Dispose ()
 		{
-			RemotingServices.Disconnect (this);
+			RemotingCompat.Disconnect (this);
 
 			foreach (var node in toDispose) {
 				node.Dispose ();

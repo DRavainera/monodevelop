@@ -1,6 +1,18 @@
-<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003" ToolsVersion="4.0">
+<Project DefaultTargets="Build" Sdk="Microsoft.NET.Sdk" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <Import Project="..\..\..\MonoDevelop.props" />
   <Import Project="$(ReferencesGtk)" />
+  <PropertyGroup>
+    <MDFrameworkVersion>v10.0</MDFrameworkVersion>
+    <MDTargetFramework>net10.0</MDTargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
+    <TargetFrameworkVersion>v10.0</TargetFrameworkVersion>
+    <EnableDefaultItems>false</EnableDefaultItems>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <Configurations>Debug;Release;DebugMac;ReleaseMac;DebugWin32;ReleaseWin32</Configurations>
+    <Platforms>AnyCPU</Platforms>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+  </PropertyGroup>
+
   <PropertyGroup>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
@@ -77,8 +89,12 @@
     <Reference Include="System" />
     <Reference Include="System.Xml" />
     <Reference Include="System.Web" />
-    <Reference Include="System.Drawing.Design" />
-    <Reference Include="System.Design" />
+    <Reference Include="System.Drawing.Design">
+      <HintPath>/usr/lib/mono/4.5/System.Drawing.Design.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Design">
+      <HintPath>/usr/lib/mono/4.5/System.Design.dll</HintPath>
+    </Reference>
     <Reference Include="System.Drawing" />
     <Reference Include="System.Configuration" />
     <Reference Include="System.Core" />
@@ -297,5 +313,4 @@
     <InternalsVisibleTo Include="MonoDevelop.AspNet.Tests" />
     <InternalsVisibleTo Include="MonoDevelop.CSharpBinding.AspNet" />
   </ItemGroup>
-  <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />
 </Project>

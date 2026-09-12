@@ -55,12 +55,12 @@ namespace MonoDevelop.AssemblyBrowser
 			}
 		}
 
-		public Task<List<ReferenceSegment>> DecompileAsync (TextEditor data, ITreeNavigator navigator, DecompileFlags flags)
+		public Task<List<ReferenceSegment>> DecompileAsync (MonoDevelop.Ide.Editor.TextEditor data, ITreeNavigator navigator, DecompileFlags flags)
 		{
 			return DisassembleAsync (data, navigator);
 		}
 
-		public async Task<List<ReferenceSegment>> DisassembleAsync (TextEditor data, ITreeNavigator navigator)
+		public async Task<List<ReferenceSegment>> DisassembleAsync (MonoDevelop.Ide.Editor.TextEditor data, ITreeNavigator navigator)
 		{
 			var symbol = navigator.DataItem as ISymbol;
 			if (symbol == null) {

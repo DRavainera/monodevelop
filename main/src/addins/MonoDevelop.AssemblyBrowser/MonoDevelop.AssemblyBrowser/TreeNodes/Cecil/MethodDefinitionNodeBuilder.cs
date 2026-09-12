@@ -114,7 +114,7 @@ namespace MonoDevelop.AssemblyBrowser
 			return (AssemblyLoader)nav.DataItem;
 		}
 
-		public static DecompilerSettings GetDecompilerSettings (TextEditor data, bool publicOnly = false)
+		public static DecompilerSettings GetDecompilerSettings (MonoDevelop.Ide.Editor.TextEditor data, bool publicOnly = false)
 		{
 			var types = IdeServices.DesktopService.GetMimeTypeInheritanceChain (data.MimeType);
 			var codePolicy = MonoDevelop.Projects.Policies.PolicyService.GetDefaultPolicy<MonoDevelop.CSharp.Formatting.CSharpFormattingPolicy> (types);
@@ -124,7 +124,7 @@ namespace MonoDevelop.AssemblyBrowser
 		}
 
 
-		public static Task<List<ReferenceSegment>> DecompileAsync (TextEditor data, AssemblyLoader assemblyLoader, Func<CSharpDecompiler, SyntaxTree> decompile, DecompilerSettings settings = null, DecompileFlags flags = null)
+		public static Task<List<ReferenceSegment>> DecompileAsync (MonoDevelop.Ide.Editor.TextEditor data, AssemblyLoader assemblyLoader, Func<CSharpDecompiler, SyntaxTree> decompile, DecompilerSettings settings = null, DecompileFlags flags = null)
 		{
 			if (data == null) 
 				throw new ArgumentNullException (nameof (data));
@@ -173,7 +173,7 @@ namespace MonoDevelop.AssemblyBrowser
 			return result.ToString ();
 		}
 		
-		public Task<List<ReferenceSegment>> DecompileAsync (TextEditor data, ITreeNavigator navigator, DecompileFlags flags)
+		public Task<List<ReferenceSegment>> DecompileAsync (MonoDevelop.Ide.Editor.TextEditor data, ITreeNavigator navigator, DecompileFlags flags)
 		{
 			if (HandleSourceCodeEntity (navigator, data)) 
 				return null;
@@ -192,7 +192,7 @@ namespace MonoDevelop.AssemblyBrowser
 			sb.Append ("</a></u></span>");
 		}
 		
-		public static Task<List<ReferenceSegment>> DisassembleAsync (TextEditor data, Action<ReflectionDisassembler> setData)
+		public static Task<List<ReferenceSegment>> DisassembleAsync (MonoDevelop.Ide.Editor.TextEditor data, Action<ReflectionDisassembler> setData)
 		{
 			var source = new CancellationTokenSource ();
 			var output = new ColoredCSharpFormatter (data);
@@ -202,7 +202,7 @@ namespace MonoDevelop.AssemblyBrowser
 			return Task.FromResult (output.ReferencedSegments);
 		}
 		
-		internal static bool HandleSourceCodeEntity (ITreeNavigator navigator, TextEditor data)
+		internal static bool HandleSourceCodeEntity (ITreeNavigator navigator, MonoDevelop.Ide.Editor.TextEditor data)
 		{
 			/*			if (IsFromAssembly (navigator))
 							return false;
@@ -215,7 +215,7 @@ namespace MonoDevelop.AssemblyBrowser
 			return false;
 		}
 
-		Task<List<ReferenceSegment>> IAssemblyBrowserNodeBuilder.DisassembleAsync (TextEditor data, ITreeNavigator navigator)
+		Task<List<ReferenceSegment>> IAssemblyBrowserNodeBuilder.DisassembleAsync (MonoDevelop.Ide.Editor.TextEditor data, ITreeNavigator navigator)
 		{
 			if (HandleSourceCodeEntity (navigator, data)) 
 				return EmptyReferenceSegmentTask;

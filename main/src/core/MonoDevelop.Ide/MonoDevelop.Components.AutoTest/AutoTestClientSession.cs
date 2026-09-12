@@ -26,7 +26,6 @@
 
 using System;
 using System.Diagnostics;
-using System.Runtime.Remoting;
 using System.IO;
 using System.Threading;
 using System.Collections.Generic;
@@ -86,8 +85,7 @@ namespace MonoDevelop.Components.AutoTest
 			// Pass a textual URL to this client object instead of a base64-serialized ObjRef
 			// (a BinaryFormatter deserialization surface). The app connects with
 			// Activator.GetObject offline of the URL.
-			ObjRef oref = RemotingServices.Marshal (this, AutoTestService.AutoTestClientObjectUri);
-			var sref = MonoDevelop.Core.Execution.RemotingService.GetMarshaledUrl (oref.URI);
+			var sref = MonoDevelop.Core.Execution.RemotingService.GetMarshaledUrl (AutoTestService.AutoTestClientObjectUri);
 
 			var pi = new ProcessStartInfo (file, args) { UseShellExecute = false };
 			// Opt the app into the autotest remoting channel. MONO_AUTOTEST_CLIENT carries the
@@ -118,7 +116,7 @@ namespace MonoDevelop.Components.AutoTest
 			string sref = File.ReadAllText (AutoTestService.SessionReferenceFile);
 			// The reference file now contains a textual URL rather than a base64-serialized
 			// ObjRef (a BinaryFormatter deserialization surface). Connect with Activator.GetObject.
-			service = (IAutoTestService) Activator.GetObject (typeof (IAutoTestService), sref);
+			service = (IAutoTestService) RemotingCompat.GetObject (typeof (IAutoTestService), sref);
 			session = service.AttachClient (this);
 			if (DebugObject != null) {
 				session.DebugObject = DebugObject;

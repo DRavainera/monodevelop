@@ -105,14 +105,14 @@ namespace MonoDevelop.AssemblyBrowser
 	class ColoredCSharpFormatter : ICSharpCode.Decompiler.ITextOutput
 	{
 		public StringBuilder sb = new StringBuilder();
-		TextEditor doc;
+		MonoDevelop.Ide.Editor.TextEditor doc;
 		bool write_indent;
 		int indent;
 		public List<IFoldSegment>     FoldSegments       = new List<IFoldSegment>();
 		public List<ReferenceSegment> ReferencedSegments = new List<ReferenceSegment>();
 		internal readonly DefinitionLookup DefinitionLookup = new DefinitionLookup ();
 
-		public ColoredCSharpFormatter (TextEditor doc)
+		public ColoredCSharpFormatter (MonoDevelop.Ide.Editor.TextEditor doc)
 		{
 			this.doc = doc;
 		}

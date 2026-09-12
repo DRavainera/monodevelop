@@ -90,72 +90,83 @@ namespace MonoDevelop.Ide.RoslynServices.Options
 			readonly Lazy<ConfigurationProperty<bool>> triggerOnTypingLetters;
 			public ConfigurationProperty<bool> TriggerOnTypingLetters => triggerOnTypingLetters.Value;
 
+			static OptionKey RoslynKey (IOption option, string language)
+			{
+				// Roslyn 4.8 rejects a language name for options that are no longer per-language;
+				// older Roslyn accepted it. Fall back to the language-agnostic key when rejected.
+				try {
+					return new OptionKey (option, language);
+				} catch (ArgumentException) {
+					return new OptionKey (option);
+				}
+			}
+
 			internal PerLanguagePreferences (string language, RoslynPreferences preferences)
 			{
 				this.language = language;
 				roslynPreferences = preferences;
 
 				AutoFormattingOnCloseBrace = preferences.Wrap<bool> (
-					new OptionKey (FeatureOnOffOptions.AutoFormattingOnCloseBrace, language),
+					RoslynKey (FeatureOnOffOptions.AutoFormattingOnCloseBrace, language),
 					language + ".AutoFormattingOnCloseBrace"
 				);
 
 				AutoFormattingOnReturn = preferences.Wrap<bool> (
-					new OptionKey (new Option<bool> ("FormattingOptions", "AutoFormattingOnReturn", false), language),
+					RoslynKey (new Option<bool> ("FormattingOptions", "AutoFormattingOnReturn", false), language),
 					language + ".AutoFormattingOnReturn"
 				);
 
 				AutoFormattingOnSemicolon = preferences.Wrap<bool> (
-					new OptionKey (FeatureOnOffOptions.AutoFormattingOnSemicolon, language),
+					RoslynKey (FeatureOnOffOptions.AutoFormattingOnSemicolon, language),
 					language + ".AutoFormattingOnSemicolon"
 				);
 				AutoFormattingOnTyping = preferences.Wrap<bool> (
-					new OptionKey (FeatureOnOffOptions.AutoFormattingOnTyping, language),
+					RoslynKey (FeatureOnOffOptions.AutoFormattingOnTyping, language),
 					language + ".AutoFormattingOnTyping"
 				);
 
 				FormatOnPaste = preferences.Wrap<bool> (
-					new OptionKey (FeatureOnOffOptions.FormatOnPaste, language),
+					RoslynKey (FeatureOnOffOptions.FormatOnPaste, language),
 					language + ".FormatOnPaste"
 				);
 
 				PlaceSystemNamespaceFirst = preferences.Wrap<bool> (
-					new OptionKey (Microsoft.CodeAnalysis.Editing.GenerationOptions.PlaceSystemNamespaceFirst, language),
+					RoslynKey (Microsoft.CodeAnalysis.Editing.GenerationOptions.PlaceSystemNamespaceFirst, language),
 					language + ".PlaceSystemNamespaceFirst"
 				);
 
 				SeparateImportDirectiveGroups = preferences.Wrap<bool> (
-					new OptionKey (Microsoft.CodeAnalysis.Editing.GenerationOptions.SeparateImportDirectiveGroups, language),
+					RoslynKey (Microsoft.CodeAnalysis.Editing.GenerationOptions.SeparateImportDirectiveGroups, language),
 					language + ".SeparateImportDirectiveGroups"
 				);
 
 				ShowCompletionItemFilters = preferences.Wrap<bool> (
-					new OptionKey (CompletionOptions.ShowCompletionItemFilters, language),
+					RoslynKey (CompletionOptions.ShowCompletionItemFilters, language),
 					language + ".ShowCompletionItemFilters"
 				);
 
 				ShowItemsFromUnimportedNamespaces = preferences.Wrap<bool?> (
-					new OptionKey (CompletionOptions.ShowItemsFromUnimportedNamespaces, language),
+					RoslynKey (CompletionOptions.ShowItemsFromUnimportedNamespaces, language),
 					IdeApp.Preferences.AddImportedItemsToCompletionList.Value,
 					language + ".ShowItemsFromUnimportedNamespaces"
 				);
 
 				SuggestForTypesInNuGetPackages = preferences.Wrap (
-					new OptionKey (Microsoft.CodeAnalysis.SymbolSearch.SymbolSearchOptions.SuggestForTypesInNuGetPackages, language),
+					RoslynKey (Microsoft.CodeAnalysis.SymbolSearch.SymbolSearchOptions.SuggestForTypesInNuGetPackages, language),
 					true
 				);
 
 				SolutionCrawlerClosedFileDiagnostic = new ClosedFileDiagnosticProperty (preferences.Wrap<bool?> (
-					new OptionKey (ServiceFeatureOnOffOptions.ClosedFileDiagnostic, language)
+					RoslynKey (ServiceFeatureOnOffOptions.ClosedFileDiagnostic, language)
 				), language, roslynPreferences);
 
 				TriggerOnDeletion = preferences.Wrap<bool?> (
-					new OptionKey (CompletionOptions.TriggerOnDeletion, language),
+					RoslynKey (CompletionOptions.TriggerOnDeletion, language),
 					language + ".TriggerOnDeletion"
 				);
 
 				triggerOnTypingLetters = new Lazy<ConfigurationProperty<bool>> (() => preferences.Wrap<bool> (
-					new OptionKey (CompletionOptions.TriggerOnTypingLetters, language),
+					RoslynKey (CompletionOptions.TriggerOnTypingLetters, language),
 					MonoDevelop.Ide.Editor.DefaultSourceEditorOptions.Instance.EnableAutoCodeCompletion,
 					language + ".TriggerOnTypingLetters"
 				));

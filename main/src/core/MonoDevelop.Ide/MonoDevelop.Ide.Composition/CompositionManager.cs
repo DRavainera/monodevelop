@@ -51,10 +51,21 @@ namespace MonoDevelop.Ide.Composition
 	{
 		static CompositionManager instance;
 
-		static readonly Resolver StandardResolver = Resolver.DefaultInstance;
+static readonly Resolver StandardResolver = Resolver.DefaultInstance;
 		static readonly PartDiscovery Discovery = PartDiscovery.Combine (
 			new AttributedPartDiscoveryV1 (StandardResolver),
 			new AttributedPartDiscovery (StandardResolver, true));
+
+		static readonly string [] RoslynHostServiceAssemblies = {
+			"Microsoft.CodeAnalysis.dll",
+			"Microsoft.CodeAnalysis.Workspaces.dll",
+			"Microsoft.CodeAnalysis.Features.dll",
+			"Microsoft.CodeAnalysis.CSharp.dll",
+			"Microsoft.CodeAnalysis.CSharp.Workspaces.dll",
+			"Microsoft.CodeAnalysis.CSharp.Features.dll",
+			"Microsoft.CodeAnalysis.VisualBasic.dll",
+			"Microsoft.CodeAnalysis.VisualBasic.Workspaces.dll",
+		};
 
 		public static CompositionManager Instance {
 			get {
@@ -150,6 +161,23 @@ namespace MonoDevelop.Ide.Composition
 				ExportProvider = ExportProviderFactory.CreateExportProvider ();
 				HostServices = Microsoft.VisualStudio.LanguageServices.VisualStudioMefHostServices.Create (ExportProvider);
 
+				var existing = Environment.GetEnvironmentVariable ("MD_LOG_MEF_HOST");
+				if (existing == "1") {
+					try {
+						LoggingService.LogInfo ("MEFHOST hostType=" + (HostServices == null ? "null" : HostServices.GetType ().AssemblyQualifiedName));
+						LoggingService.LogInfo ("MEFHOST ilaopAQN=" + typeof(Microsoft.CodeAnalysis.Options.ILegacyWorkspaceOptionService).AssemblyQualifiedName);
+						var ep = HostServices as Microsoft.CodeAnalysis.Host.Mef.IMefHostExportProvider;
+						foreach (var lz in ep.GetExports<Microsoft.CodeAnalysis.Host.Mef.IWorkspaceServiceFactory, Microsoft.CodeAnalysis.Host.Mef.WorkspaceServiceMetadata> ()) {
+							LoggingService.LogInfo ("MEFHOST factory ServiceType=[" + lz.Metadata.ServiceType + "] Layer=[" + lz.Metadata.Layer + "]");
+						}
+						foreach (var lz in host.GetExports<Microsoft.CodeAnalysis.Host.IWorkspaceService, Microsoft.CodeAnalysis.Host.Mef.WorkspaceServiceMetadata> ()) {
+							LoggingService.LogInfo ("MEFHOST ws ServiceType=[" + lz.Metadata.ServiceType + "] Layer=[" + lz.Metadata.Layer + "]");
+						}
+					} catch (Exception ex) {
+						LoggingService.LogInfo ("MEFHOST diagnostic error: " + ex);
+					}
+				}
+
 				metadata.Timings ["CreateServices"] = stepTimer.ElapsedMilliseconds;
 				metadata.Duration = fullTimer.ElapsedMilliseconds;
 			}
@@ -173,6 +201,11 @@ namespace MonoDevelop.Ide.Composition
 		internal static async Task<(RuntimeComposition, ComposableCatalog)> CreateRuntimeCompositionFromDiscovery (Caching caching, ITimeTracker timer = null)
 		{
 			var parts = await Discovery.CreatePartsAsync (caching.MefAssemblies);
+			if (Environment.GetEnvironmentVariable ("MD_LOG_MEF_HOST") == "1") {
+				foreach (var part in parts.Parts) {
+					LoggingService.LogInfo ("MEFPART " + part.Type.FullName + " | " + part.Type.Assembly.GetName ().Name);
+				}
+			}
 			timer?.Trace ("Composition parts discovered");
 
 			ComposableCatalog catalog = ComposableCatalog.Create (StandardResolver)
@@ -217,6 +250,18 @@ namespace MonoDevelop.Ide.Composition
 			ReadAssemblies (readAssemblies, "/MonoDevelop/Ide/TypeService/PlatformMefHostServices");
 			ReadAssemblies (readAssemblies, "/MonoDevelop/Ide/TypeService/MefHostServices");
 			ReadAssemblies (readAssemblies, "/MonoDevelop/Ide/Composition");
+			// Roslyn host services (workspace option service and friends) are not part of any
+			// add-in extension point; stage the well-known Roslyn assemblies that export them.
+			foreach (string assemblyName in RoslynHostServiceAssemblies) {
+				string assemblyPath = Path.Combine (AppContext.BaseDirectory, assemblyName);
+				if (!File.Exists (assemblyPath))
+					continue;
+				try {
+					readAssemblies.Add (Assembly.LoadFrom (assemblyPath));
+				} catch (Exception e) {
+					LoggingService.LogError ("Composition can't load Roslyn host assembly: " + assemblyName, e);
+				}
+			}
 			timer?.Trace ("Start: end reading assemblies");
 
 			return readAssemblies;

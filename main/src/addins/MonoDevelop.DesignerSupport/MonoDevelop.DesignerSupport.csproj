@@ -1,7 +1,20 @@
-<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003" ToolsVersion="4.0">
+<Project DefaultTargets="Build" Sdk="Microsoft.NET.Sdk" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <Import Project="..\..\..\MonoDevelop.props" />
   <Import Project="$(ReferencesVSEditor)" />
   <Import Project="$(ReferencesGtk)" />
+  <PropertyGroup>
+    <MDFrameworkVersion>v10.0</MDFrameworkVersion>
+    <MDTargetFramework>net10.0</MDTargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
+    <TargetFrameworkVersion>v10.0</TargetFrameworkVersion>
+    <EnableDefaultItems>false</EnableDefaultItems>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <Configurations>Debug;Release;DebugMac;ReleaseMac;DebugWin32;ReleaseWin32</Configurations>
+    <Platforms>AnyCPU</Platforms>
+    <NoWarn>$(NoWarn);SYSLIB0011</NoWarn>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+  </PropertyGroup>
+
   <PropertyGroup>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
@@ -36,11 +49,17 @@
   </ItemGroup>
    <ItemGroup>
     <Reference Include="System" />
-    <Reference Include="System.Drawing.Design" />
-    <Reference Include="System.Design" />
+    <Reference Include="System.Drawing.Design">
+      <HintPath>/usr/lib/mono/4.5/System.Drawing.Design.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Design">
+      <HintPath>/usr/lib/mono/4.5/System.Design.dll</HintPath>
+    </Reference>
     <Reference Include="System.Xml" />
     <Reference Include="System.Web" />
-    <Reference Include="System.Drawing" />
+    <Reference Include="System.Drawing">
+      <HintPath>/usr/lib/mono/4.5/System.Drawing.dll</HintPath>
+    </Reference>
     <Reference Include="System.Core" />
     <Reference Include="Mono.Cairo">
       <HintPath>$(MonoFrameworkNet45Directory)\Mono.Cairo.dll</HintPath>
@@ -106,6 +125,7 @@
     <Compile Include="MonoDevelop.DesignerSupport.Toolbox\ItemToolboxNode.cs" />
     <Compile Include="MonoDevelop.DesignerSupport.Toolbox\TextToolboxNode.cs" />
     <Compile Include="MonoDevelop.DesignerSupport.Toolbox\MacToolbox.cs" />
+    <Compile Include="MonoDevelop.DesignerSupport.Toolbox\ToolboxItemCompat.cs" />
     <Compile Include="MonoDevelop.DesignerSupport.Toolbox\ToolboxItemToolboxNode.cs" />
     <Compile Include="MonoDevelop.DesignerSupport\PropertyPad.cs" />
     <Compile Include="MonoDevelop.DesignerSupport\DesignerSupportService.cs" />
@@ -238,5 +258,4 @@
     <EmbeddedResource Include="icons\pad-toolbox-16~sel.png" />
     <EmbeddedResource Include="icons\pad-toolbox-16~sel%402x.png" />
   </ItemGroup>
-  <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />
 </Project>

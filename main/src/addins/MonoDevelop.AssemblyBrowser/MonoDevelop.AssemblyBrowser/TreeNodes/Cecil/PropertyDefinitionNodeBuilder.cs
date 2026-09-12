@@ -92,7 +92,7 @@ namespace MonoDevelop.AssemblyBrowser
 
 		#region IAssemblyBrowserNodeBuilder
 
-		Task<List<ReferenceSegment>> IAssemblyBrowserNodeBuilder.DisassembleAsync (TextEditor data, ITreeNavigator navigator)
+		Task<List<ReferenceSegment>> IAssemblyBrowserNodeBuilder.DisassembleAsync (MonoDevelop.Ide.Editor.TextEditor data, ITreeNavigator navigator)
 		{
 			if (MethodDefinitionNodeBuilder.HandleSourceCodeEntity (navigator, data)) 
 				return EmptyReferenceSegmentTask;
@@ -100,7 +100,7 @@ namespace MonoDevelop.AssemblyBrowser
 			return MethodDefinitionNodeBuilder.DisassembleAsync (data, rd => rd.DisassembleProperty (property.ParentModule.PEFile, (System.Reflection.Metadata.PropertyDefinitionHandle)property.MetadataToken));
 		}
 
-		Task<List<ReferenceSegment>> IAssemblyBrowserNodeBuilder.DecompileAsync (TextEditor data, ITreeNavigator navigator, DecompileFlags flags)
+		Task<List<ReferenceSegment>> IAssemblyBrowserNodeBuilder.DecompileAsync (MonoDevelop.Ide.Editor.TextEditor data, ITreeNavigator navigator, DecompileFlags flags)
 		{
 			if (MethodDefinitionNodeBuilder.HandleSourceCodeEntity (navigator, data)) 
 				return EmptyReferenceSegmentTask;

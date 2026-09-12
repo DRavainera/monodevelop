@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+<Template originator   = "Mike Krueger"
+          created      = "07/06/2001"
+          lastModified = "07/01/2004">
+	
+	<!-- Template Header -->
+	<TemplateConfiguration>
+		<_Name>Blank Solution</_Name>
+		<Category>other/misc/generic</Category>
+		<Icon>md-solution</Icon>
+		<Image id="md-solution" />
+		<LanguageName/>
+		<_Description>Creates a blank solution.</_Description>
+	</TemplateConfiguration>
+	
+	<!-- Template Content -->
+	<Combine name = "${ProjectName}" directory = "."/>
+	
+</Template>

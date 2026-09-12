@@ -160,7 +160,7 @@ namespace MonoDevelop.AssemblyBrowser
 			result.AppendLine ();
 		}
 		
-		public Task<List<ReferenceSegment>> DisassembleAsync (TextEditor data, ITreeNavigator navigator)
+		public Task<List<ReferenceSegment>> DisassembleAsync (MonoDevelop.Ide.Editor.TextEditor data, ITreeNavigator navigator)
 		{
 			var assemblyLoader = (AssemblyLoader)navigator.DataItem;
 			var compilationUnit = assemblyLoader.Assembly;
@@ -172,7 +172,7 @@ namespace MonoDevelop.AssemblyBrowser
 		}
 		
 		
-		public Task<List<ReferenceSegment>> DecompileAsync (TextEditor data, ITreeNavigator navigator, DecompileFlags flags)
+		public Task<List<ReferenceSegment>> DecompileAsync (MonoDevelop.Ide.Editor.TextEditor data, ITreeNavigator navigator, DecompileFlags flags)
 		{
 			var assemblyLoader = (AssemblyLoader)navigator.DataItem;
 			return MethodDefinitionNodeBuilder.DecompileAsync (data, MethodDefinitionNodeBuilder.GetAssemblyLoader (navigator), b => 

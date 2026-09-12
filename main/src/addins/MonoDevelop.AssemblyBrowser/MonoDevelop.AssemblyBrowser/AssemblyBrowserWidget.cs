@@ -88,7 +88,7 @@ namespace MonoDevelop.AssemblyBrowser
 		}
 		
 		DocumentationPanel? documentationPanel = new DocumentationPanel ();
-		readonly TextEditor inspectEditor;
+		readonly MonoDevelop.Ide.Editor.TextEditor inspectEditor;
 
 		static string? GetLink (ReferenceSegment referencedSegment, out bool? isNotPublic)
 		{
@@ -219,7 +219,7 @@ namespace MonoDevelop.AssemblyBrowser
 			//inspectEditor.ButtonPressEvent += HandleInspectEditorButtonPressEvent;
 			
 			this.inspectEditor.IsReadOnly = true;
-//			this.inspectEditor.Document.SyntaxMode = new Mono.TextEditor.Highlighting.MarkupSyntaxMode ();
+//			this.inspectEditor.Document.SyntaxMode = new Mono.MonoDevelop.Ide.Editor.TextEditor.Highlighting.MarkupSyntaxMode ();
 //			this.inspectEditor.LinkRequest += InspectEditorhandleLinkRequest;
 
 			documentationScrolledWindow.PackStart (inspectEditor, true, true, 0);

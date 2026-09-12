@@ -32,7 +32,6 @@ using System.Linq;
 using System.Collections.ObjectModel;
 using MonoDevelop.Components.AutoTest.Results;
 using MonoDevelop.Core;
-using System.Runtime.Remoting;
 
 namespace MonoDevelop.Components.AutoTest
 {
@@ -239,7 +238,7 @@ namespace MonoDevelop.Components.AutoTest
 
 		protected virtual void Dispose (bool disposing)
 		{
-			RemotingServices.Disconnect (this);
+			RemotingCompat.Disconnect (this);
 
 			FirstChild?.Dispose ();
 			NextSibling?.Dispose ();

@@ -107,11 +107,13 @@ namespace MonoDevelop.Ide.RoslynServices.Options
 			// It is unfortunate, but roslyn has a special serialization mechanism, so use that.
 			if (TryGetSerializationMethods<T> (optionKey.Option.Type, out var serializer, out var deserializer)) {
 				var prop = new WrappedConfigurationProperty<T> (name, monodevelopPropertyName, defaultValue, serializer, deserializer);
-				wrapMap.Add (name, value => prop.SetSerializedValue ((string)value));
+				if (!wrapMap.ContainsKey (name))
+					wrapMap.Add (name, value => prop.SetSerializedValue ((string)value));
 				result = prop;
 			} else {
 				result = ConfigurationProperty.Create (name, defaultValue, monodevelopPropertyName);
-				wrapMap.Add (name, value => result.Value = (T)value);
+				if (!wrapMap.ContainsKey (name))
+					wrapMap.Add (name, value => result.Value = (T)value);
 			}
 
 			return result;

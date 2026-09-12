@@ -69,4 +69,10 @@
   <ItemGroup Condition="'$(MSBuildRuntimeType)' == 'Core' AND ('$(TargetFramework)' == 'net461' OR '$(TargetFramework)' == 'net472' OR '$(TargetFrameworkVersion)' == 'v4.6.1' OR '$(TargetFrameworkVersion)' == '4.6.1' OR '$(TargetFrameworkVersion)' == 'v4.7.2' OR '$(TargetFrameworkVersion)' == '4.7.2')">
     <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
   </ItemGroup>
+
+  <ItemGroup Condition="'$(TargetFrameworkIdentifier)' == '.NETCoreApp'">
+    <Reference Include="System.ComponentModel.Composition">
+      <HintPath>$(NuGetPackageRoot)system.componentmodel.composition/7.0.0/lib/net7.0/System.ComponentModel.Composition.dll</HintPath>
+    </Reference>
+  </ItemGroup>
 </Project>

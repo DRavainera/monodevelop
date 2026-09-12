@@ -149,7 +149,7 @@ namespace MonoDevelop.AssemblyBrowser
 			return "";
 		}
 		
-		public Task<List<ReferenceSegment>> DisassembleAsync (TextEditor data, ITreeNavigator navigator)
+		public Task<List<ReferenceSegment>> DisassembleAsync (MonoDevelop.Ide.Editor.TextEditor data, ITreeNavigator navigator)
 		{
 			if (MethodDefinitionNodeBuilder.HandleSourceCodeEntity (navigator, data)) 
 				return EmptyReferenceSegmentTask;
@@ -176,7 +176,7 @@ namespace MonoDevelop.AssemblyBrowser
 			};
 		}
 
-		public Task<List<ReferenceSegment>> DecompileAsync (TextEditor data, ITreeNavigator navigator, DecompileFlags flags)
+		public Task<List<ReferenceSegment>> DecompileAsync (MonoDevelop.Ide.Editor.TextEditor data, ITreeNavigator navigator, DecompileFlags flags)
 		{
 			if (MethodDefinitionNodeBuilder.HandleSourceCodeEntity (navigator, data)) 
 				return EmptyReferenceSegmentTask;

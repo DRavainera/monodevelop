@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net8.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <RootNamespace>MonoDevelop.AvaloniaShell</RootNamespace>
     <AssemblyName>MonoDevelop.AvaloniaShell</AssemblyName>
     <NoWarn>$(NoWarn);CS1591</NoWarn>

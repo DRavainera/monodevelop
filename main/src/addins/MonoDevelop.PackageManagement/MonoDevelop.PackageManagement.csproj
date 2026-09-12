@@ -1,6 +1,18 @@
-<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003" DefaultTargets="Build">
+<Project Sdk="Microsoft.NET.Sdk" ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003" DefaultTargets="Build">
   <Import Project="..\..\..\MonoDevelop.props" />
   <Import Project="$(ReferencesGtk)" />
+  <PropertyGroup>
+    <MDFrameworkVersion>v10.0</MDFrameworkVersion>
+    <MDTargetFramework>net10.0</MDTargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
+    <TargetFrameworkVersion>v10.0</TargetFrameworkVersion>
+    <EnableDefaultItems>false</EnableDefaultItems>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <Configurations>Debug;Release;DebugMac;ReleaseMac;DebugWin32;ReleaseWin32</Configurations>
+    <Platforms>AnyCPU</Platforms>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+  </PropertyGroup>
+
   <PropertyGroup>
     <ProjectGuid>{F218643D-2E74-4309-820E-206A54B7133F}</ProjectGuid>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
@@ -28,10 +40,12 @@
     <Reference Include="WindowsBase" />
     <PackageReference Include="NuGet.PackageManagement" Version="$(NuGetVersionNuGet)" PrivateAssets="runtime" />
     <PackageReference Include="NuGet.Indexing" Version="$(NuGetVersionNuGet)" PrivateAssets="runtime" />
+    <PackageReference Include="NuGet.Protocol" Version="$(NuGetVersionNuGet)" ExcludeAssets="all" />
     <Reference Include="NuGet.Commands"><HintPath>$(NuGetPackageRoot)nuget.commands\$(NuGetVersionNuGet)\lib\net472\NuGet.Commands.dll</HintPath><Private>False</Private></Reference>
     <Reference Include="NuGet.Common"><HintPath>$(NuGetPackageRoot)nuget.common\$(NuGetVersionNuGet)\lib\net472\NuGet.Common.dll</HintPath><Private>False</Private></Reference>
     <Reference Include="NuGet.Configuration"><HintPath>$(NuGetPackageRoot)nuget.configuration\$(NuGetVersionNuGet)\lib\net472\NuGet.Configuration.dll</HintPath><Private>False</Private></Reference>
     <Reference Include="NuGet.Credentials"><HintPath>$(NuGetPackageRoot)nuget.credentials\$(NuGetVersionNuGet)\lib\net472\NuGet.Credentials.dll</HintPath><Private>False</Private></Reference>
+    <Reference Include="NuGet.Protocol"><HintPath>$(NuGetPackageRoot)nuget.protocol\$(NuGetVersionNuGet)\lib\net472\NuGet.Protocol.dll</HintPath><Private>False</Private></Reference>
     <Reference Include="NuGet.DependencyResolver.Core"><HintPath>$(NuGetPackageRoot)nuget.dependencyresolver.core\$(NuGetVersionNuGet)\lib\net472\NuGet.DependencyResolver.Core.dll</HintPath><Private>False</Private></Reference>
     <Reference Include="NuGet.Frameworks"><HintPath>$(NuGetPackageRoot)nuget.frameworks\$(NuGetVersionNuGet)\lib\net472\NuGet.Frameworks.dll</HintPath><Private>False</Private></Reference>
     <Reference Include="NuGet.Indexing"><HintPath>$(NuGetPackageRoot)nuget.indexing\$(NuGetVersionNuGet)\lib\net472\NuGet.Indexing.dll</HintPath><Private>False</Private></Reference>
@@ -544,5 +558,4 @@
     <InternalsVisibleTo Include="Xamarin.Forms.Addin" />
     <InternalsVisibleTo Include="MonoDevelop.UnitTesting.NUnit" />
   </ItemGroup>
-  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

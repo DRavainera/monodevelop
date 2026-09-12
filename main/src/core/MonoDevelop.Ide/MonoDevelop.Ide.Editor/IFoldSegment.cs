@@ -25,7 +25,6 @@
 // THE SOFTWARE.
 using System;
 using MonoDevelop.Core.Text;
-using System.Web.UI.WebControls;
 
 namespace MonoDevelop.Ide.Editor
 {

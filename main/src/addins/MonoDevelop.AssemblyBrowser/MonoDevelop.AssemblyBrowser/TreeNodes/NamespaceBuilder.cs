@@ -102,7 +102,7 @@ namespace MonoDevelop.AssemblyBrowser
 		
 		#region IAssemblyBrowserNodeBuilder
 
-		public Task<List<ReferenceSegment>> DisassembleAsync (TextEditor data, ITreeNavigator navigator)
+		public Task<List<ReferenceSegment>> DisassembleAsync (MonoDevelop.Ide.Editor.TextEditor data, ITreeNavigator navigator)
 		{
 		//	bool publicOnly = Widget.PublicApiOnly;
 			NamespaceData ns = (NamespaceData)navigator.DataItem;
@@ -111,7 +111,7 @@ namespace MonoDevelop.AssemblyBrowser
 			return EmptyReferenceSegmentTask;
 		}
 		
-		public Task<List<ReferenceSegment>> DecompileAsync (TextEditor data, ITreeNavigator navigator, DecompileFlags flags)
+		public Task<List<ReferenceSegment>> DecompileAsync (MonoDevelop.Ide.Editor.TextEditor data, ITreeNavigator navigator, DecompileFlags flags)
 		{
 			return DisassembleAsync (data, navigator);
 		}

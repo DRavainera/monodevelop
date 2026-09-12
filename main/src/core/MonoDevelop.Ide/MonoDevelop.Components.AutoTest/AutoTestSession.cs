@@ -40,7 +40,6 @@ using MonoDevelop.Components.Commands;
 using MonoDevelop.Core;
 
 using System.Xml;
-using System.Runtime.Remoting;
 
 namespace MonoDevelop.Components.AutoTest
 {
@@ -97,7 +96,7 @@ namespace MonoDevelop.Components.AutoTest
 				return;
 
 			disposed = true;
-			RemotingServices.Disconnect (this);
+			RemotingCompat.Disconnect (this);
 
 			DisconnectQueries ();
 		}
@@ -233,26 +232,10 @@ namespace MonoDevelop.Components.AutoTest
 				}
 			});
 			#else
-			Sync (delegate {
-				try {
-					using (var bmp = new System.Drawing.Bitmap (System.Windows.Forms.Screen.PrimaryScreen.Bounds.Width,
-						System.Windows.Forms.Screen.PrimaryScreen.Bounds.Height)) {
-						using (var g = System.Drawing.Graphics.FromImage(bmp))
-						{
-							g.CopyFromScreen(System.Windows.Forms.Screen.PrimaryScreen.Bounds.X,
-								System.Windows.Forms.Screen.PrimaryScreen.Bounds.Y,
-								0, 0,
-								bmp.Size,
-								System.Drawing.CopyPixelOperation.SourceCopy);
-						}
-						bmp.Save(screenshotPath);
-					}
-					return null;
-				} catch (Exception e) {
-					Console.WriteLine (e);
-					throw;
-				}
-			});
+			// The WinForms Screen/CopyFromScreen path does not exist on .NET (Core); the Linux
+			// screenshot capture is reworked alongside the AutoTest transport over the message bus
+			// ('Interfaz' phase), mirroring the deferred state of Core's remoting removal.
+			throw new NotSupportedException ("Linux screenshot capture is deferred to the message-bus AutoTest transport ('Interfaz' phase).");
 			#endif
 		}
 		

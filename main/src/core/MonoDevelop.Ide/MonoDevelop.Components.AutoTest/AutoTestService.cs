@@ -28,7 +28,6 @@ using System;
 using MonoDevelop.Components.Commands;
 using MonoDevelop.Core;
 using System.IO;
-using System.Runtime.Remoting;
 using System.Diagnostics;
 using System.Collections.Generic;
 using System.Linq;
@@ -38,6 +37,33 @@ using System.Text;
 
 namespace MonoDevelop.Components.AutoTest
 {
+	/// <summary>
+	/// .NET Remoting was removed from .NET (Core); MonoDevelop.Core.Execution.RemotingService is a
+	/// no-op stub since the cross-process transport lives on the loopback message bus. These helpers
+	/// keep the deferred AutoTest call sites compiling on net8 until the transport is migrated over
+	/// that message bus ('Interfaz' phase), mirroring the approach taken in MonoDevelop.Core.
+	/// </summary>
+	internal static class RemotingCompat
+	{
+		/// <summary>
+		/// Historical: disconnected a MarshalByRefObject published over a remoting channel.
+		/// Remoting is gone; the marshaled references have no runtime to unsubscribe from.
+		/// </summary>
+		public static void Disconnect (object o)
+		{
+		}
+
+		/// <summary>
+		/// Historical: created a transparent proxy to an object published over a remoting channel.
+		/// The AutoTest handshake is being reworked over the message bus; there is no proxy to
+		/// create in the meantime.
+		/// </summary>
+		public static object GetObject (Type type, string url)
+		{
+			throw new NotSupportedException ("Remoting channels were removed. Migrate this call site to the message-based bus (currently deferred to the 'Interfaz' phase): " + url);
+		}
+	}
+
 	public static class AutoTestService
 	{
 		static CommandManager commandManager;
@@ -72,7 +98,7 @@ namespace MonoDevelop.Components.AutoTest
 				MonoDevelop.Core.Execution.RemotingService.RegisterRemotingChannel ();
 				// MONO_AUTOTEST_CLIENT now carries a textual URL to the remote client object
 				// instead of a base64-serialized ObjRef (a BinaryFormatter deserialization surface).
-				IAutoTestClient client = (IAutoTestClient) Activator.GetObject (typeof (IAutoTestClient), sref);
+				IAutoTestClient client = (IAutoTestClient) RemotingCompat.GetObject (typeof (IAutoTestClient), sref);
 
 				// Initialize as much as we can before connecting back to the client
 				Ide.IdeApp.Workbench.EnsureLayout ();
@@ -86,8 +112,7 @@ namespace MonoDevelop.Components.AutoTest
 				// used to contain a base64-serialized ObjRef (a BinaryFormatter deserialization
 				// surface); it now contains the marshaled URL so the peer can connect with
 				// Activator.GetObject instead of deserializing an ObjRef.
-				ObjRef oref = RemotingServices.Marshal (manager, AutoTestServiceObjectUri);
-				sref = MonoDevelop.Core.Execution.RemotingService.GetMarshaledUrl (oref.URI);
+				sref = MonoDevelop.Core.Execution.RemotingService.GetMarshaledUrl (AutoTestServiceObjectUri);
 				File.WriteAllText (SessionReferenceFile, sref);
 				Runtime.Preferences.EnableUpdaterForCurrentSession = false;
 			}
