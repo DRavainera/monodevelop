@@ -67,6 +67,39 @@ static readonly Resolver StandardResolver = Resolver.DefaultInstance;
 			"Microsoft.CodeAnalysis.VisualBasic.Workspaces.dll",
 		};
 
+		// The vs-editor-api utility and implementation assemblies export the editor composition
+		// parts (ITextBufferFactoryService, IClassifierAggregatorService, IContentTypeRegistryService,
+		// IViewClassifierAggregatorService, ...). On the Linux (Gnome) composition they are not part of
+		// any add-in extension point - only the Cocoa and WPF add-ins list them - so stage them the same
+		// way as the Roslyn host services above.
+		static readonly string [] VisualStudioEditorAssemblies = {
+			"Microsoft.VisualStudio.CoreUtilityImplementation.dll",
+			"Microsoft.VisualStudio.Language.Implementation.dll",
+			"Microsoft.VisualStudio.Logic.Text.BufferUndoManager.Implementation.dll",
+			"Microsoft.VisualStudio.Logic.Text.Classification.Aggregator.Implementation.dll",
+			"Microsoft.VisualStudio.Logic.Text.Classification.LookUp.Implementation.dll",
+			"Microsoft.VisualStudio.Logic.Text.Find.Implementation.dll",
+			"Microsoft.VisualStudio.Logic.Text.Navigation.Implementation.dll",
+			"Microsoft.VisualStudio.Logic.Text.Tagging.Aggregator.Implementation.dll",
+			"Microsoft.VisualStudio.Text.Data.Utilities.dll",
+			"Microsoft.VisualStudio.Text.Internal.dll",
+			"Microsoft.VisualStudio.Text.Differencing.Implementation.dll",
+			"Microsoft.VisualStudio.Text.EditorOptions.Implementation.dll",
+			"Microsoft.VisualStudio.Text.Implementation.StandaloneUndo.dll",
+			"Microsoft.VisualStudio.Text.Logic.Utilities.dll",
+			"Microsoft.VisualStudio.Text.Model.Implementation.dll",
+			"Microsoft.VisualStudio.Text.MultiCaret.Implementation.dll",
+			"Microsoft.VisualStudio.Text.Logic.dll",
+			"Microsoft.VisualStudio.Text.Outlining.Implementation.dll",
+			"Microsoft.VisualStudio.Text.PatternMatching.Implementation.dll",
+			"Microsoft.VisualStudio.Text.UI.dll",
+			"Microsoft.VisualStudio.Text.UI.Utilities.dll",
+			"Microsoft.VisualStudio.Text.UI.Wpf.dll",
+			"Microsoft.VisualStudio.UI.Text.Commanding.Implementation.dll",
+			"Microsoft.VisualStudio.UI.Text.EditorOperations.Implementation.dll",
+			"Microsoft.VisualStudio.UI.Text.EditorPrimitives.Implementation.dll",
+		};
+
 		public static CompositionManager Instance {
 			get {
 				if (instance == null) {
@@ -253,19 +286,25 @@ static readonly Resolver StandardResolver = Resolver.DefaultInstance;
 			ReadAssemblies (readAssemblies, "/MonoDevelop/Ide/Composition");
 			// Roslyn host services (workspace option service and friends) are not part of any
 			// add-in extension point; stage the well-known Roslyn assemblies that export them.
-			foreach (string assemblyName in RoslynHostServiceAssemblies) {
-				string assemblyPath = Path.Combine (AppContext.BaseDirectory, assemblyName);
-				if (!File.Exists (assemblyPath))
-					continue;
-				try {
-					readAssemblies.Add (Assembly.LoadFrom (assemblyPath));
-				} catch (Exception e) {
-					LoggingService.LogError ("Composition can't load Roslyn host assembly: " + assemblyName, e);
-				}
-			}
+			foreach (string assemblyName in RoslynHostServiceAssemblies)
+				LoadStagedAssembly (assemblyName);
+			foreach (string assemblyName in VisualStudioEditorAssemblies)
+				LoadStagedAssembly (assemblyName);
 			timer?.Trace ("Start: end reading assemblies");
 
 			return readAssemblies;
+
+			void LoadStagedAssembly (string assemblyName)
+			{
+				string assemblyPath = Path.Combine (AppContext.BaseDirectory, assemblyName);
+				if (!File.Exists (assemblyPath))
+					return;
+				try {
+					readAssemblies.Add (Assembly.LoadFrom (assemblyPath));
+				} catch (Exception e) {
+					LoggingService.LogError ("Composition can't load staged assembly: " + assemblyName, e);
+				}
+			}
 
 			void ReadAssemblies (HashSet<Assembly> assemblies, string extensionPath)
 			{

@@ -2406,6 +2406,121 @@ namespace Microsoft.CodeAnalysis.Host.Mef
     }
 
     /// <summary>
+    /// Metadata view used to read language-service exports coming back from the
+    /// <see cref="IMefHostExportProvider"/> bridged into the VS MEF composition.
+    /// Roslyn's own <c>LanguageServiceMetadata</c> is internal to
+    /// Microsoft.CodeAnalysis.Workspaces.dll, so this compat assembly exposes the
+    /// same shape publicly (ServiceType must be the assembly-qualified type name,
+    /// Language the language id like "C#"). Mirrors the real internal class whose
+    /// public surface was verified by reflection: ServiceType, Layer, Data, Language.
+    /// </summary>
+    public class LanguageServiceMetadata
+    {
+        public string ServiceType { get; }
+        public string Layer { get; }
+        public string Language { get; }
+        public System.Collections.Generic.IReadOnlyDictionary<string, object> Data { get; }
+
+        public LanguageServiceMetadata(System.Collections.Generic.IDictionary<string, object> data)
+        {
+            if (data != null)
+            {
+                if (data.TryGetValue("ServiceType", out var serviceType))
+                    ServiceType = serviceType as string;
+                if (data.TryGetValue("Layer", out var layer))
+                    Layer = layer as string;
+                if (data.TryGetValue("Language", out var language))
+                    Language = language as string;
+                Data = (System.Collections.Generic.IReadOnlyDictionary<string, object>)data;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Functional replacement for the internal <c>MefLanguageServices</c> of
+    /// Microsoft.CodeAnalysis.Workspaces.dll (4.8). Resolves language services
+    /// from the bridged host exports keyed by the simple <c>ServiceType</c>
+    /// metadata (mirroring <see cref="MefWorkspaceServices.GetKey"/>), falling
+    /// back to <c>ILanguageServiceFactory</c> exports for services that need the
+    /// workspace services to be created.
+    /// </summary>
+    public class MefLanguageServices : Microsoft.CodeAnalysis.Host.HostLanguageServices
+    {
+        private readonly MefWorkspaceServices _workspaceServices;
+        private readonly string _languageName;
+        private readonly System.Collections.Generic.Dictionary<string, System.Lazy<Microsoft.CodeAnalysis.Host.ILanguageService>> _services;
+        private readonly System.Collections.Generic.Dictionary<string, System.Lazy<Microsoft.CodeAnalysis.Host.Mef.ILanguageServiceFactory>> _factories;
+
+        public MefLanguageServices(MefWorkspaceServices workspaceServices, string languageName)
+        {
+            _workspaceServices = workspaceServices;
+            _languageName = languageName;
+            _services = new System.Collections.Generic.Dictionary<string, System.Lazy<Microsoft.CodeAnalysis.Host.ILanguageService>>(StringComparer.Ordinal);
+            _factories = new System.Collections.Generic.Dictionary<string, System.Lazy<Microsoft.CodeAnalysis.Host.Mef.ILanguageServiceFactory>>(StringComparer.Ordinal);
+
+            if (workspaceServices.HostServices is IMefHostExportProvider provider)
+            {
+                foreach (var export in provider.GetExports<Microsoft.CodeAnalysis.Host.ILanguageService, LanguageServiceMetadata>())
+                {
+                    if (!string.Equals(export.Metadata?.Language, languageName, StringComparison.Ordinal))
+                        continue;
+
+                    var key = MefWorkspaceServices.GetKey(export.Metadata?.ServiceType);
+                    if (key == null)
+                        continue;
+
+                    var value = export;
+                    _services[key] = new System.Lazy<Microsoft.CodeAnalysis.Host.ILanguageService>(() => value.Value);
+                }
+
+                foreach (var export in provider.GetExports<Microsoft.CodeAnalysis.Host.Mef.ILanguageServiceFactory, LanguageServiceMetadata>())
+                {
+                    if (!string.Equals(export.Metadata?.Language, languageName, StringComparison.Ordinal))
+                        continue;
+
+                    var key = MefWorkspaceServices.GetKey(export.Metadata?.ServiceType);
+                    if (key == null)
+                        continue;
+
+                    var value = export;
+                    _factories[key] = new System.Lazy<Microsoft.CodeAnalysis.Host.Mef.ILanguageServiceFactory>(() => value.Value);
+                }
+            }
+        }
+
+        public override Microsoft.CodeAnalysis.Host.HostWorkspaceServices WorkspaceServices
+        {
+            get { return _workspaceServices; }
+        }
+
+        public override string Language
+        {
+            get { return _languageName; }
+        }
+
+        public override TLanguageService GetService<TLanguageService>()
+        {
+            var key = MefWorkspaceServices.GetKey(typeof(TLanguageService).AssemblyQualifiedName);
+
+            if (_services.TryGetValue(key, out var service))
+            {
+                var value = service.Value;
+                if (value is TLanguageService result)
+                    return result;
+            }
+
+            if (_factories.TryGetValue(key, out var factory))
+            {
+                var created = factory.Value.CreateLanguageService(this);
+                if (created is TLanguageService result)
+                    return result;
+            }
+
+            return default(TLanguageService);
+        }
+    }
+
+    /// <summary>
     /// Functional replacement for the internal <c>MefWorkspaceServices</c> of
     /// Microsoft.CodeAnalysis.Workspaces.dll (4.8). Workspace services are resolved
     /// from the bridged host exports keyed by <c>ServiceType</c> metadata, which is
@@ -2418,25 +2533,34 @@ namespace Microsoft.CodeAnalysis.Host.Mef
         private readonly Microsoft.CodeAnalysis.Host.HostServices _hostServices;
         private readonly Microsoft.CodeAnalysis.Workspace _workspace;
         private readonly System.Collections.Generic.Dictionary<string, System.Lazy<Microsoft.CodeAnalysis.Host.IWorkspaceService>> _services;
+        private readonly System.Lazy<System.Collections.Generic.IReadOnlyCollection<string>> _supportedLanguages;
+        private readonly System.Collections.Generic.Dictionary<string, MefLanguageServices> _languageServices;
+        private readonly Microsoft.CodeAnalysis.Options.CompatOptionService _compatOptionService = new Microsoft.CodeAnalysis.Options.CompatOptionService();
 
         public MefWorkspaceServices(Microsoft.CodeAnalysis.Host.HostServices hostServices, Microsoft.CodeAnalysis.Workspace workspace)
         {
             _hostServices = hostServices;
             _workspace = workspace;
             _services = new System.Collections.Generic.Dictionary<string, System.Lazy<Microsoft.CodeAnalysis.Host.IWorkspaceService>>(StringComparer.Ordinal);
+            _languageServices = new System.Collections.Generic.Dictionary<string, MefLanguageServices>(StringComparer.Ordinal);
+            _supportedLanguages = new System.Lazy<System.Collections.Generic.IReadOnlyCollection<string>>(() => ReadSupportedLanguages());
 
             if (hostServices is IMefHostExportProvider provider)
             {
                 var self = this;
+                var debug = System.Environment.GetEnvironmentVariable("MD_LOG_MEF_HOST") == "1";
 
                 foreach (var export in provider.GetExports<Microsoft.CodeAnalysis.Host.Mef.IWorkspaceServiceFactory, WorkspaceServiceMetadata>())
                 {
-                    var serviceType = export.Metadata?.ServiceType;
-                    if (string.IsNullOrEmpty(serviceType))
+                    var key = GetKey(export.Metadata?.ServiceType);
+                    if (key == null)
                         continue;
 
+                    if (debug)
+                        System.Console.Error.WriteLine("COMPAT factory key=[" + key + "]");
+
                     var captured = export;
-                    _services[serviceType] = new System.Lazy<Microsoft.CodeAnalysis.Host.IWorkspaceService>(() =>
+                    _services[key] = new System.Lazy<Microsoft.CodeAnalysis.Host.IWorkspaceService>(() =>
                     {
                         var factory = captured.Value;
                         return factory != null ? factory.CreateService(self) : null;
@@ -2445,14 +2569,64 @@ namespace Microsoft.CodeAnalysis.Host.Mef
 
                 foreach (var export in provider.GetExports<Microsoft.CodeAnalysis.Host.IWorkspaceService, WorkspaceServiceMetadata>())
                 {
-                    var serviceType = export.Metadata?.ServiceType;
-                    if (string.IsNullOrEmpty(serviceType))
+                    var key = GetKey(export.Metadata?.ServiceType);
+                    if (key == null)
                         continue;
 
+                    if (debug)
+                        System.Console.Error.WriteLine("COMPAT ws key=[" + key + "]");
+
                     var captured = export;
-                    _services[serviceType] = new System.Lazy<Microsoft.CodeAnalysis.Host.IWorkspaceService>(() => captured.Value);
+                    _services[key] = new System.Lazy<Microsoft.CodeAnalysis.Host.IWorkspaceService>(() => captured.Value);
                 }
             }
+        }
+
+        internal static string GetKey(string metadataValue)
+        {
+            if (string.IsNullOrEmpty(metadataValue))
+                return null;
+
+            var comma = metadataValue.IndexOf(',');
+            return comma >= 0 ? metadataValue.Substring(0, comma).Trim() : metadataValue.Trim();
+        }
+
+        private System.Collections.Generic.IReadOnlyCollection<string> ReadSupportedLanguages()
+        {
+            var languages = new System.Collections.Generic.HashSet<string>(StringComparer.Ordinal);
+
+            if (_hostServices is IMefHostExportProvider provider)
+            {
+                foreach (var export in provider.GetExports<Microsoft.CodeAnalysis.Host.ILanguageService, LanguageServiceMetadata>())
+                {
+                    var language = export.Metadata?.Language;
+                    if (!string.IsNullOrEmpty(language))
+                        languages.Add(language);
+                }
+            }
+
+            return languages;
+        }
+
+        public override System.Collections.Generic.IEnumerable<string> SupportedLanguages
+        {
+            get { return _supportedLanguages.Value; }
+        }
+
+        public override bool IsSupported(string languageName)
+        {
+            return _supportedLanguages.Value.Contains(languageName);
+        }
+
+        public override Microsoft.CodeAnalysis.Host.HostLanguageServices GetLanguageServices(string languageName)
+        {
+            if (!_languageServices.TryGetValue(languageName, out var languageServices))
+            {
+                languageServices = new MefLanguageServices(this, languageName);
+                _languageServices[languageName] = languageServices;
+            }
+
+            return languageServices;
         }
 
         public override Microsoft.CodeAnalysis.Host.HostServices HostServices
@@ -2467,15 +2641,68 @@ namespace Microsoft.CodeAnalysis.Host.Mef
 
         public override TWorkspaceService GetService<TWorkspaceService>()
         {
-            if (_services.TryGetValue(typeof(TWorkspaceService).AssemblyQualifiedName, out var service))
-                return (TWorkspaceService)service.Value;
+            var key = GetKey(typeof(TWorkspaceService).AssemblyQualifiedName);
+            var found = _services.TryGetValue(key, out var service);
+            if (System.Environment.GetEnvironmentVariable("MD_LOG_MEF_HOST") == "1")
+                System.Console.Error.WriteLine("COMPAT GetService<" + typeof(TWorkspaceService).FullName + "> key=[" + key + "] found=" + found + " count=" + _services.Count);
+
+            if (found)
+            {
+                var value = service.Value;
+                if (value == null)
+                    return default(TWorkspaceService);
+
+                if (value is TWorkspaceService)
+                    return (TWorkspaceService)value;
+
+                if (typeof(TWorkspaceService) == typeof(Microsoft.CodeAnalysis.SolutionCrawler.ISolutionCrawlerRegistrationService))
+                    return (TWorkspaceService)(object)new Microsoft.CodeAnalysis.SolutionCrawler.CompatSolutionCrawlerRegistrationService(value);
+            }
+
+            if (typeof(TWorkspaceService) == typeof(Microsoft.CodeAnalysis.Options.IOptionService))
+                return (TWorkspaceService)(object)_compatOptionService;
 
             return default(TWorkspaceService);
         }
 
         public override System.Collections.Generic.IEnumerable<TLanguageService> FindLanguageServices<TLanguageService>(Microsoft.CodeAnalysis.Host.HostWorkspaceServices.MetadataFilter filter)
         {
-            return System.Linq.Enumerable.Empty<TLanguageService>();
+            if (_hostServices is IMefHostExportProvider provider)
+            {
+                foreach (var export in provider.GetExports<Microsoft.CodeAnalysis.Host.ILanguageService, LanguageServiceMetadata>())
+                {
+                    if (filter(export.Metadata?.Data))
+                    {
+                        if (export.Value is TLanguageService result)
+                            yield return result;
+                    }
+                }
+            }
+        }
+    }
+}
+
+namespace Microsoft.CodeAnalysis.SolutionCrawler
+{
+    internal sealed class CompatSolutionCrawlerRegistrationService : ISolutionCrawlerRegistrationService
+    {
+        private readonly object _real;
+
+        internal CompatSolutionCrawlerRegistrationService(object real)
+        {
+            _real = real;
+        }
+
+        public void Register(Microsoft.CodeAnalysis.Workspace workspace)
+        {
+            var method = _real.GetType().GetMethod("Register", new[] { typeof(Microsoft.CodeAnalysis.Workspace) });
+            method.Invoke(_real, new object[] { workspace });
+        }
+
+        public void Unregister(Microsoft.CodeAnalysis.Workspace workspace)
+        {
+            var method = _real.GetType().GetMethod("Unregister", new[] { typeof(Microsoft.CodeAnalysis.Workspace) });
+            method.Invoke(_real, new object[] { workspace });
         }
     }
 }
@@ -3584,6 +3811,18 @@ namespace Microsoft.CodeAnalysis.Options
     public interface IOptionService : Microsoft.CodeAnalysis.Host.IWorkspaceService
     {
         void RegisterDocumentOptionsProvider(Microsoft.CodeAnalysis.Options.IDocumentOptionsProvider provider);
+    }
+
+    internal sealed class CompatOptionService : IOptionService, Microsoft.CodeAnalysis.Host.IWorkspaceService
+    {
+        private readonly System.Collections.Generic.List<IDocumentOptionsProvider> _providers
+            = new System.Collections.Generic.List<IDocumentOptionsProvider>();
+
+        public void RegisterDocumentOptionsProvider(IDocumentOptionsProvider provider)
+        {
+            if (provider != null && !_providers.Contains(provider))
+                _providers.Add(provider);
+        }
     }
 
     public abstract class EditorConfigStorageLocation : OptionStorageLocation

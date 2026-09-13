@@ -3,6 +3,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Collections.Immutable;
+using System.Linq;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Host;
 using Microsoft.CodeAnalysis.Host.Mef;
@@ -14,7 +15,7 @@ namespace Microsoft.VisualStudio.LanguageServices
     /// <summary>
     /// Provides host services imported via VS MEF.
     /// </summary>
-    internal sealed class VisualStudioMefHostServices : HostServices, IMefHostExportProvider
+    internal sealed class VisualStudioMefHostServices : MefHostServices, IMefHostExportProvider
     {
         // the export provider for the MEF composition
         private readonly ExportProvider _exportProvider;
@@ -24,6 +25,7 @@ namespace Microsoft.VisualStudio.LanguageServices
             = ImmutableDictionary<ExportKey, IEnumerable>.Empty;
 
         private VisualStudioMefHostServices(ExportProvider exportProvider)
+            : base(EmptyCompositionContext.Instance)
         {
             Contract.ThrowIfNull(exportProvider);
             _exportProvider = exportProvider;
@@ -240,6 +242,28 @@ namespace Microsoft.VisualStudio.LanguageServices
 
             public override int GetHashCode()
                 => Hash.Combine(MetadataTypeName.GetHashCode(), ExtensionTypeName.GetHashCode());
+        }
+
+        /// <summary>
+        /// An empty System.Composition context fed to the base <see cref="MefHostServices"/> so that
+        /// real Roslyn code casting this instance to <c>Microsoft.CodeAnalysis.Host.Mef.IMefHostExportProvider</c>
+        /// (internal in Roslyn 4.8) succeeds. All composition requests resolve to empty collections;
+        /// the VS MEF exports themselves are served through <see cref="IMefHostExportProvider"/> below.
+        /// </summary>
+        private sealed class EmptyCompositionContext : System.Composition.CompositionContext
+        {
+            internal static readonly EmptyCompositionContext Instance = new EmptyCompositionContext();
+
+            public override bool TryGetExport(System.Composition.Hosting.Core.CompositionContract contract, out object export)
+            {
+                var contractType = contract?.ContractType;
+                var elementType = contractType != null && contractType.IsArray
+                    ? contractType.GetElementType()
+                    : contractType;
+
+                export = elementType != null ? Array.CreateInstance(elementType, 0) : Array.Empty<object>();
+                return true;
+            }
         }
     }
 }

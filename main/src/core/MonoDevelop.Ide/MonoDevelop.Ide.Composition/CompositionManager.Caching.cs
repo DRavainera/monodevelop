@@ -235,7 +235,12 @@ namespace MonoDevelop.Ide.Composition
 				}
 
 				var additionalInputAssemblies = new List<MefControlCacheAssemblyInfo> ();
-				var loadedMap = loadedAssemblies.ToDictionary (x => x.FullName, x => x);
+				var loadedMap = new Dictionary<string, Assembly> ();
+				foreach (var loaded in AppDomain.CurrentDomain.GetAssemblies ()) {
+					if (loaded.IsDynamic)
+						continue;
+					loadedMap.TryAdd (loaded.FullName, loaded);
+				}
 
 				foreach (var asm in catalog.GetInputAssemblies ()) {
 					var assemblyName = asm.ToString ();

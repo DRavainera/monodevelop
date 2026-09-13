@@ -5472,6 +5472,7 @@
     <Compile Include="MonoDevelop.Ide.Composition\MonoDevelopOptionPersister.cs" />
     <Compile Include="MonoDevelop.Ide.Composition\MonoDevelopTodoListProvider.cs" />
     <Compile Include="MonoDevelop.Ide.Composition\ObscuringTipManager.cs" />
+    <Compile Include="MonoDevelop.Ide.Composition\VSEditorShellParts.cs" />
     <!--<Compile Include="MonoDevelop.Ide.Composition\PeekResultFactory.cs" />-->
     <Compile Include="MonoDevelop.Ide.Composition\PlatformCatalog.cs" />
     <Compile Include="MonoDevelop.Ide.Composition\PlatformExtensions.cs" />
@@ -6810,6 +6811,11 @@
   </ItemGroup>
   <ItemGroup>
 <ProjectReference Include="../../../src/compat/MonoRoslynCompat/MonoRoslynCompat.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <Reference Include="Microsoft.VisualStudio.Text.Internal">
+      <HintPath>$(VSEditorApiDirectory)bin\Editor\Text\Impl\Commanding\$(Configuration)\net472\Microsoft.VisualStudio.Text.Internal.dll</HintPath>
+    </Reference>
   </ItemGroup>
   <Target Name="AfterBuild">
     <Copy SourceFiles="@(Data)" DestinationFolder="..\..\..\build\data\%(Data.RelativeDir)" SkipUnchangedFiles="true" />
