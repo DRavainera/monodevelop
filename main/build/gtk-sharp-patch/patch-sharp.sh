@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-GLIB_SRC=${1:-/usr/lib/mono/gtk-sharp-2.0/glib-sharp.dll}
+DIR=${1:-/usr/lib/mono/gtk-sharp-2.0}
 OUT_DIR=${2:-$(dirname "$0")}
 HERE=$(dirname "$0")
 CS='/home/daniel/.dotnet/dotnet /home/daniel/.dotnet/sdk/10.0.401/Roslyn/bincore/csc.dll -nologo -target:exe'
@@ -12,10 +12,14 @@ cp "$HERE/sortfix2.runtimeconfig.json" "$HERE/sortfix2built.runtimeconfig.json"
 WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT
 
-monodis --output="$WORK/glib-sharp.il" "$GLIB_SRC"
-python3 "$HERE/patch.py" "$WORK/glib-sharp.il" "$WORK/glib-sharp-patched.il"
-ilasm -dll -output="$WORK/glib-raw.dll" "$WORK/glib-sharp-patched.il" >/dev/null
-/home/daniel/.dotnet/dotnet exec "$HERE/sortfix2built.dll" "$WORK/glib-raw.dll" >/dev/null
-cp "$WORK/glib-raw.dll.fix" "$OUT_DIR/glib-sharp-fv2.dll"
-
-echo "patched+fixed glib-sharp written to $OUT_DIR/glib-sharp-fv2.dll"
+for dll in gtk-sharp glade-sharp gdk-sharp; do
+    monodis --output="$WORK/$dll.il" "$DIR/$dll.dll"
+    if python3 "$HERE/patch-sharp.py" "$WORK/$dll.il" "$WORK/$dll-patched.il"; then
+        ilasm -dll -output="$WORK/$dll-raw.dll" "$WORK/$dll-patched.il" >/dev/null
+        /home/daniel/.dotnet/dotnet exec "$HERE/sortfix2built.dll" "$WORK/$dll-raw.dll" >/dev/null
+        cp "$WORK/$dll-raw.dll.fix" "$OUT_DIR/$dll-dll.dll"
+        echo "patched+fixed $dll -> $OUT_DIR/$dll-dll.dll"
+    else
+        echo "skipped $dll (no pattern)"
+    fi
+done

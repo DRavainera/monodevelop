@@ -33,5 +33,10 @@ new = ('GetConstructor(valuetype [mscorlib]System.Reflection.BindingFlags, '
 assert t.count(old) == 1
 t = t.replace(old, new); fixes += 1
 
+old = '.method private static hidebysig pinvokeimpl ("libglib-2.0-0.dll" as "g_object_unref" cdecl )'
+new = '.method private static hidebysig pinvokeimpl ("libgobject-2.0-0.dll" as "g_object_unref" cdecl )'
+assert t.count(old) == 1
+t = t.replace(old, new); fixes += 1
+
 open(dst, 'wb').write(t.encode('latin-1'))
 print('applied %d fixes -> %s' % (fixes, dst))
