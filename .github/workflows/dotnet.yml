@@ -5,21 +5,30 @@ name: .NET
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "agents/sub-agent-senior-dev-role-report" ]
   pull_request:
     branches: [ "main" ]
+  workflow_dispatch:
+    inputs:
+      chosen-os:
+      required: true
+      type: choice
+      options:
+      - Ubuntu-latest
+      - macOS-latest
+      - windows-latest
 
 jobs:
   build:
 
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, "${{ inputs.chosen-os }}"]
 
     steps:
     - uses: actions/checkout@v4
     - name: Setup .NET
       uses: actions/setup-dotnet@v4
       with:
-        dotnet-version: 8.0.x
+        dotnet-version: 10.0.x
     - name: Restore dependencies
       run: dotnet restore
     - name: Build

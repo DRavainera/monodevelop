@@ -14,6 +14,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using MonoDevelop.Core;
 using MonoDevelop.Core.Execution;
 
 namespace MonoDevelop.Core.Assemblies
@@ -112,6 +113,59 @@ namespace MonoDevelop.Core.Assemblies
 			return sdkMSBuildPath;
 		}
 
+		static readonly Dictionary<string, string> projectSdkCache = new Dictionary<string, string> ();
+
+		/// <summary>
+		/// Resolves the MSBuild bin directory (SDK root) for a specific project, honoring the
+		/// SDK pinned by the project's global.json when present. Falls back to the highest
+		/// installed SDK, which is what the runtime itself uses. This lets each project choose
+		/// the SDK it is built with while MonoDevelop itself always runs on the latest one.
+		/// </summary>
+		public string GetProjectSdkMSBuildPath (string projectDirectory)
+		{
+			var dir = projectDirectory;
+			while (!string.IsNullOrEmpty (dir)) {
+				if (projectSdkCache.TryGetValue (dir, out var cached))
+					return cached;
+
+				var globalJson = Path.Combine (dir, "global.json");
+				if (File.Exists (globalJson)) {
+					var resolved = ResolveProjectSdk (globalJson);
+					lock (projectSdkCache) projectSdkCache [dir] = resolved;
+					return resolved;
+				}
+
+				var parent = Path.GetDirectoryName (dir);
+				if (parent == dir || parent == null)
+					break;
+				dir = parent;
+			}
+
+			return sdkMSBuildPath;
+		}
+
+		string ResolveProjectSdk (string globalJson)
+		{
+			try {
+				using var doc = System.Text.Json.JsonDocument.Parse (File.ReadAllText (globalJson));
+				if (doc.RootElement.TryGetProperty ("sdk", out var sdkEl) && sdkEl.TryGetProperty ("version", out var verEl)) {
+					var version = verEl.GetString ();
+					if (!string.IsNullOrEmpty (version)) {
+						var dotnetRoot = RuntimeEnvironmentUtil.GetDotnetRoot () ?? ".";
+						var sdkDir = Path.Combine (dotnetRoot, "sdk", version);
+						if (Directory.Exists (sdkDir) && File.Exists (Path.Combine (sdkDir, "MSBuild.dll"))) {
+							LoggingService.LogInfo ("Project SDK '{0}' selected from {1}", version, globalJson);
+							return sdkDir;
+						}
+						LoggingService.LogWarning ("global.json requests SDK '{0}' but it is not installed under {1}; using the latest SDK instead", version, Path.Combine (dotnetRoot, "sdk"));
+					}
+				}
+			} catch (Exception ex) {
+				LoggingService.LogError ("Error reading " + globalJson, ex);
+			}
+			return sdkMSBuildPath;
+		}
+
 		static string ResolveSdkMSBuildPath ()
 		{
 			// Locate the .NET SDK that contains MSBuild.dll.
@@ -119,7 +173,9 @@ namespace MonoDevelop.Core.Assemblies
 			if (dotnetRoot != null) {
 				string sdkDir = Path.Combine (dotnetRoot, "sdk");
 				if (Directory.Exists (sdkDir)) {
-					foreach (string versionDir in Directory.EnumerateDirectories (sdkDir).OrderByDescending (Path.GetFileName)) {
+					// Order by the parsed SDK version: lexicographic ordering would pick 8.0.424
+					// over 10.0.401 ('8' > '1' as text) and the builder would get an old SDK.
+					foreach (string versionDir in Directory.EnumerateDirectories (sdkDir).OrderByDescending (d => System.Version.TryParse (Path.GetFileName (d), out var v) ? v : new System.Version (0, 0))) {
 						if (File.Exists (Path.Combine (versionDir, "MSBuild.dll")))
 							return versionDir;
 					}

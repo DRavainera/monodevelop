@@ -35,6 +35,8 @@ using System.Xml.Linq;
 using System.Linq;
 using System.IO;
 using System.Net;
+using System.Net.Http;
+using System.Net.Sockets;
 
 namespace MonoDevelop.Ide.WelcomePage
 {
@@ -165,7 +167,7 @@ namespace MonoDevelop.Ide.WelcomePage
 					if (t.IsCanceled)
 						return;
 
-					if (t.IsFaulted) {
+if (t.IsFaulted) {
 						Exception ex = t.Exception;
 						if (ex is AggregateException agg) {
 							ex = agg.Flatten ().InnerException;
@@ -179,6 +181,16 @@ namespace MonoDevelop.Ide.WelcomePage
 								LoggingService.LogWarning ("Welcome Page news feed was not found.");
 								return;
 							}
+						}
+						// On .NET Core the connection to a dead host surfaces as HttpRequestException
+						// with an inner SocketException rather than a WebException.
+						if (ex is HttpRequestException && ex.InnerException is SocketException sex &&
+						    (sex.SocketErrorCode == SocketError.HostNotFound || sex.SocketErrorCode == SocketError.NoData ||
+						     sex.SocketErrorCode == SocketError.TryAgain || sex.SocketErrorCode == SocketError.NoRecovery ||
+						     sex.SocketErrorCode == SocketError.ConnectionRefused || sex.SocketErrorCode == SocketError.HostUnreachable ||
+						     sex.SocketErrorCode == SocketError.NetworkUnreachable)) {
+							LoggingService.LogWarning ("Welcome Page news server could not be reached.");
+							return;
 						}
 						LoggingService.LogWarning ("Welcome Page news file could not be downloaded.", ex);
 						return;

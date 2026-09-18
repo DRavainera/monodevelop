@@ -72,7 +72,7 @@ namespace MonoDevelop.Core.Web
 			// when getting the proxy credentials.
 			// https://github.com/mono/mono/issues/10622
 			var correctedProxyAddress = originalSystemProxy.GetProxy (proxyAddress);
-			if (!string.Equals (correctedProxyAddress.AbsoluteUri, proxyAddress.AbsoluteUri))
+			if (correctedProxyAddress != null && !string.Equals (correctedProxyAddress.AbsoluteUri, proxyAddress.AbsoluteUri))
 				return GetCredentialInternal (correctedProxyAddress, authType);
 
 			return null;
@@ -121,8 +121,11 @@ namespace MonoDevelop.Core.Web
 			// return that we don't need a proxy and we should try to connect directly.
 			IWebProxy proxy = WebRequest.DefaultWebProxy;
 			if (proxy != null) {
-				Uri proxyAddress = new Uri (proxy.GetProxy (uri).AbsoluteUri);
-				if (String.Equals (proxyAddress.AbsoluteUri, uri.AbsoluteUri))
+				// On .NET Core GetProxy can return null when the URI is meant to be accessed
+				// directly (no proxy). Dereferencing it would throw a NullReferenceException,
+				// breaking the Welcome page news download (and any other proxied request).
+				Uri proxyUri = proxy.GetProxy (uri);
+				if (proxyUri != null && String.Equals (proxyUri.AbsoluteUri, uri.AbsoluteUri))
 					return false;
 				if (proxy.IsBypassed (uri))
 					return false;

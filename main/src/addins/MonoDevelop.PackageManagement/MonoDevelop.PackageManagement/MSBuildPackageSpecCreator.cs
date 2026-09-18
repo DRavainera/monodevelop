@@ -64,8 +64,15 @@ namespace MonoDevelop.PackageManagement
 								logger.LogWarning (error.ToString ());
 							else
 								logger.LogError (error.ToString ());
+							LoggingService.LogError ("[RestoreDiag] Target error: " + error.ToString ());
 						}
 					}
+					// [RestoreDiag] visibilidad del resultado del target en el log del IDE
+					int errCount = result?.BuildResult?.Errors?.Count ?? -1;
+					bool dgExists = File.Exists (resultsPath);
+					long dgLen = dgExists ? new FileInfo (resultsPath).Length : -1;
+					LoggingService.LogInfo (string.Format ("[RestoreDiag] GenerateRestoreGraphFile: result={0}, errors={1}, dgExists={2}, dgLen={3}",
+						result != null ? "ok" : "null", errCount, dgExists, dgLen));
 				}
 				return GetDependencyGraph (resultsPath);
 			}

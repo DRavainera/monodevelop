@@ -14,8 +14,8 @@ DOTNET_BIN="$(command -v dotnet 2>/dev/null || true)"
 if [ -z "$DOTNET_BIN" ] && [ -x "$HOME/.dotnet/dotnet" ]; then
 	DOTNET_BIN="$HOME/.dotnet/dotnet"
 fi
-if [ -z "$DOTNET_BIN" ] && [ -x "/usr/share/dotnet/dotnet" ]; then
-	DOTNET_BIN="/usr/share/dotnet/dotnet"
+if [ -z "$DOTNET_BIN" ] && [ -x "/usr/lib64/dotnet/dotnet" ]; then
+	DOTNET_BIN="/usr/lib64/dotnet/dotnet"
 fi
 
 if [ -n "$DOTNET_BIN" ]; then

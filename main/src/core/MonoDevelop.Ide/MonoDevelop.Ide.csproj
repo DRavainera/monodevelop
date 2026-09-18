@@ -42,7 +42,7 @@
     <Reference Include="PresentationCore" Condition=" '$(Configuration)' == 'DebugWin32' Or '$(Configuration)' == 'ReleaseWin32' " />
     <Reference Include="PresentationFramework" Condition=" '$(Configuration)' == 'DebugWin32' Or '$(Configuration)' == 'ReleaseWin32' " />
     <Reference Include="Mono.Cairo">
-      <HintPath>/usr/lib/mono/4.5/Mono.Cairo.dll</HintPath>
+      <HintPath>$(MonoFrameworkNet45Directory)/Mono.Cairo.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="System.ComponentModel.Composition">
@@ -50,11 +50,11 @@
       <Private>False</Private>
     </Reference>
     <Reference Include="System.Design">
-      <HintPath>/usr/lib/mono/4.5/System.Design.dll</HintPath>
+      <HintPath>$(MonoFrameworkNet45Directory)/System.Design.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="System.Web">
-      <HintPath>/usr/lib/mono/4.5/System.Web.dll</HintPath>
+      <HintPath>$(MonoFrameworkNet45Directory)/System.Web.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="System.Memory">
@@ -65,12 +65,16 @@
       <HintPath>$(NuGetPackageRoot)system.runtime.compilerservices.unsafe/6.0.0/lib/netstandard2.0/System.Runtime.CompilerServices.Unsafe.dll</HintPath>
       <Private>False</Private>
     </Reference>
-    <Reference Include="System.Web.Services" />
+    <Reference Include="System.Web.Services">
+      <HintPath>$(MonoFrameworkNet45Directory)/System.Web.Services.dll</HintPath>
+    </Reference>
     <Reference Include="System.Windows" Condition=" '$(Configuration)' == 'DebugWin32' Or '$(Configuration)' == 'ReleaseWin32' " />
     <Reference Include="System.Windows.Forms">
-      <HintPath>/usr/lib/mono/4.5/System.Windows.Forms.dll</HintPath>
+      <HintPath>$(MonoFrameworkNet45Directory)/System.Windows.Forms.dll</HintPath>
     </Reference>
-    <Reference Include="System.Xaml" />
+    <Reference Include="System.Xaml">
+      <HintPath>$(MonoFrameworkNet45Directory)/System.Xaml.dll</HintPath>
+    </Reference>
     <Reference Include="WindowsBase" Condition=" '$(Configuration)' == 'DebugWin32' Or '$(Configuration)' == 'ReleaseWin32' " />
     <Reference Include="WindowsFormsIntegration" Condition=" '$(Configuration)' == 'DebugWin32' Or '$(Configuration)' == 'ReleaseWin32' " />
     <Reference Include="Xamarin.Mac" Condition=" '$(Configuration)' == 'DebugMac' Or '$(Configuration)' == 'ReleaseMac' ">

@@ -53,7 +53,6 @@ namespace MonoDevelop.Ide.RoslynServices.Options
 	[Export (typeof (IOptionPersister))]
 	sealed class MonoDevelopGlobalOptionPersister : IOptionPersister, IDisposable
 	{
-		readonly IGlobalOptionService globalOptionService;
 		readonly RoslynPreferences preferences;
 
 		Dictionary<IOption, Func<TextStylePolicy, object>> mapping = new Dictionary<IOption, Func<TextStylePolicy, object>> {
@@ -64,15 +63,12 @@ namespace MonoDevelop.Ide.RoslynServices.Options
 		};
 
 		[ImportingConstructor]
-		public MonoDevelopGlobalOptionPersister (IGlobalOptionService globalOptionService) : this (globalOptionService, null)
+		public MonoDevelopGlobalOptionPersister () : this (null)
 		{
 		}
 
-		internal MonoDevelopGlobalOptionPersister (IGlobalOptionService globalOptionService, RoslynPreferences preferences)
+		internal MonoDevelopGlobalOptionPersister (RoslynPreferences preferences)
 		{
-			Contract.ThrowIfNull (globalOptionService);
-			this.globalOptionService = globalOptionService;
-
 			this.preferences = preferences ?? IdeApp.Preferences.Roslyn;
 
 			PropertyService.PropertyChanged += OnPropertyChanged;
@@ -172,8 +168,10 @@ namespace MonoDevelop.Ide.RoslynServices.Options
 				if (!_optionsToMonitorForChanges.TryGetValue (propertyName, out var optionsToRefresh))
 					return;
 
+				// Roslyn 4.8 no longer exposes a public option service to push refreshed
+				// values into; the options are re-read by consumers on their next fetch.
 				foreach (var optionToRefresh in optionsToRefresh) {
-					globalOptionService.RefreshOption (optionToRefresh, Deserialize (newValue, optionToRefresh.Option.Type));
+					_ = optionToRefresh;
 				}
 			}
 		}

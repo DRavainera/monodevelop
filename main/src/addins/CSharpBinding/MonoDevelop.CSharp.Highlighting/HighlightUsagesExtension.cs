@@ -104,6 +104,11 @@ namespace MonoDevelop.CSharp.Highlighting
 			if (analysisDocument == null)
 				return ImmutableArray<DocumentHighlights>.Empty;
 
+			// The Roslyn feature services are not guaranteed to be present in the MEF catalog of
+			// this host; a null service used to throw an unhandled NRE on every caret move.
+			if (highlightsService == null)
+				return ImmutableArray<DocumentHighlights>.Empty;
+
 			return await highlightsService.GetDocumentHighlightsAsync (analysisDocument, Editor.CaretOffset, ImmutableHashSet<Document>.Empty.Add (analysisDocument), token);
 		}
 

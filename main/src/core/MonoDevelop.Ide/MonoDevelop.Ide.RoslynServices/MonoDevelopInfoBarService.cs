@@ -40,14 +40,12 @@ namespace MonoDevelop.Ide.RoslynServices
 	sealed class MonoDevelopInfoBarService : ForegroundThreadAffinitizedObject, IInfoBarService
 	{
 		readonly IForegroundNotificationService _foregroundNotificationService;
-		readonly IAsynchronousOperationListener _listener;
 
 		[ImportingConstructor]
-		public MonoDevelopInfoBarService (IThreadingContext threadingContext, IForegroundNotificationService foregroundNotificationService, IAsynchronousOperationListenerProvider listenerProvider)
+		public MonoDevelopInfoBarService (IThreadingContext threadingContext, IForegroundNotificationService foregroundNotificationService)
 			: base (threadingContext)
 		{
 			_foregroundNotificationService = foregroundNotificationService;
-			_listener = listenerProvider.GetListener (FeatureAttribute.InfoBar);
 		}
 
 		public void ShowInfoBarInActiveView (string message, params InfoBarUI [] items)
@@ -72,7 +70,7 @@ namespace MonoDevelop.Ide.RoslynServices
 					};
 					infoBarHost.AddInfoBar (options);
 				}
-			}, _listener.BeginAsyncOperation (nameof (ShowInfoBar)));
+			}, null);
 
 			static InfoBarItem [] ToUIItems (InfoBarUI [] items)
 				=> items?.Select (x => new InfoBarItem (x.Title, ToUIKind (x.Kind), x.Action, x.CloseAfterAction)).ToArray ();

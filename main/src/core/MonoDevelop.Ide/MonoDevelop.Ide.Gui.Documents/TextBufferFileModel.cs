@@ -144,8 +144,13 @@ namespace MonoDevelop.Ide.Gui.Documents
 				if (MimeType == null)
 					return PlatformCatalog.Instance.TextBufferFactoryService.InertContentType;
 
-				return MimeTypeCatalog.Instance.GetContentTypeForMimeType (MimeType, FilePath)
-					?? PlatformCatalog.Instance.ContentTypeRegistryService.GetContentType ("text");
+				var mimeResult = MimeTypeCatalog.Instance.GetContentTypeForMimeType (MimeType, FilePath);
+				var registryResult = PlatformCatalog.Instance.ContentTypeRegistryService.GetContentType ("text");
+				if (mimeResult == null || registryResult == null) {
+					MonoDevelop.Core.LoggingService.LogError ("GetContentTypeFromMimeType null leg: MimeType={0} mimeResult={1} registry-text={2}", MimeType, mimeResult?.DisplayName ?? "null", registryResult?.DisplayName ?? "null");
+					MonoDevelop.Core.LoggingService.LogError ("GetContentTypeFromMimeType registry content: {0}", string.Join (",", PlatformCatalog.Instance.ContentTypeRegistryService.ContentTypes.Select (c => c.DisplayName)));
+				}
+				return mimeResult ?? registryResult;
 			}
 
 			void SetTextDocument (ITextDocument doc)

@@ -3803,11 +3803,6 @@ namespace Microsoft.CodeAnalysis.Options
         bool TryPersist(Microsoft.CodeAnalysis.Options.OptionKey optionKey, object value);
     }
 
-    public interface IGlobalOptionService : Microsoft.CodeAnalysis.Host.IWorkspaceService
-    {
-        void RefreshOption(Microsoft.CodeAnalysis.Options.OptionKey optionKey, object value);
-    }
-
     public interface IOptionService : Microsoft.CodeAnalysis.Host.IWorkspaceService
     {
         void RegisterDocumentOptionsProvider(Microsoft.CodeAnalysis.Options.IDocumentOptionsProvider provider);
@@ -3879,17 +3874,6 @@ namespace Microsoft.CodeAnalysis.Shared.TestHooks
 {
     public interface IAsyncToken : IDisposable
     {
-    }
-
-    public interface IAsynchronousOperationListener
-    {
-        Microsoft.CodeAnalysis.Shared.TestHooks.IAsyncToken BeginAsyncOperation(string operationName, string feature = null);
-    }
-
-    public interface IAsynchronousOperationListenerProvider
-    {
-        IAsynchronousOperationListener GetListener(string featureName);
-        IAsynchronousOperationListener GetListener(Microsoft.CodeAnalysis.Shared.TestHooks.FeatureAttribute featureAttribute);
     }
 }
 

@@ -82,6 +82,17 @@ namespace MonoDevelop.Startup
 					}
 				}
 			}
+			// gettext lives inside glibc (libc) on modern Linux; a standalone
+			// libintl is not installed by default. Mono.Unix.Catalog and
+			// Mono.Addins.Localization.GettextDomain P/Invoke "intl" for it.
+			if (dllName == "intl" && RuntimeInformation.IsOSPlatform (OSPlatform.Linux)) {
+				try {
+					return NativeLibrary.Load ("libc");
+				} catch (Exception) {
+					// fall through to the variant search below
+				}
+			}
+
 			string[] variants = { baseName, baseName + ".so", baseName + ".so.0" };
 			if (baseName.StartsWith ("lib", StringComparison.Ordinal)) {
 				string underscore = "lib" + baseName.Substring (3).Replace ('-', '_');
@@ -107,9 +118,14 @@ namespace MonoDevelop.Startup
 			var ctx = AssemblyLoadContext.Default;
 			ctx.Resolving += (_, name) => {
 				if (name.Name == "System.ComponentModel.Composition") {
-					string gac = "/usr/lib/mono/4.5/System.ComponentModel.Composition.dll";
-					if (File.Exists (gac))
-						return ctx.LoadFromAssemblyPath (gac);
+					// Load the .NET runtime facade (which type-forwards System.Lazy<T,TMetadata>
+					// to System.Private.CoreLib) instead of the Mono GAC net472 copy; the Mono copy
+					// defines its own Lazy<T,TMetadata> type, which breaks vs-mef imports that
+					// resolve System.Lazy<T,TMetadata> against it.
+					string facade = Path.Combine (AppContext.BaseDirectory, name.Name + ".dll");
+					if (File.Exists (facade))
+						return ctx.LoadFromAssemblyPath (facade);
+					return null;
 				}
 				foreach (string dir in MonoAssemblyDirs) {
 					string path = Path.Combine (dir, name.Name + ".dll");

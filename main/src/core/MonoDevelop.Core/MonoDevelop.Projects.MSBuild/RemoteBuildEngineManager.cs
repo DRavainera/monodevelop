@@ -150,10 +150,18 @@ namespace MonoDevelop.Projects.MSBuild
 		{
 			CheckShutDown ();
 
+			// Each project builds with the SDK pinned by its own global.json when present
+			// (falling back to the latest installed SDK), so resolve it up front and use it
+			// both as the MSBuild location sent to the builder and as part of the builder
+			// pool key. The .NET-only SDK loader (Microsoft.Build.WindowsDesktop...) still
+			// resolves from the runtime's binDir, but the builder resolves sdk refs and
+			// implicit SDK imports from the project SDK directory.
+			string sdkDir = (runtime as DotNetTargetRuntime)?.GetProjectSdkMSBuildPath (Path.GetDirectoryName (Path.GetFullPath (projectFile)));
+
 			RemoteBuildEngine engine;
 			using (await buildersLock.EnterAsync ().ConfigureAwait (false)) {
 				// Get a builder with the provided requirements
-				engine = await GetBuildEngine (runtime, minToolsVersion, solutionFile, "", buildSessionId, setBusy, allowBusy);
+				engine = await GetBuildEngine (runtime, minToolsVersion, solutionFile, "", buildSessionId, setBusy, allowBusy, sdkDir);
 
 				// Add a reference to make sure the engine is alive while the builder is being used.
 				// This reference will be freed when ReleaseReference() is invoked on the builder.
@@ -171,9 +179,9 @@ namespace MonoDevelop.Projects.MSBuild
 		/// <summary>
 		/// Gets or creates a remote build engine
 		/// </summary>
-		async static Task<RemoteBuildEngine> GetBuildEngine (TargetRuntime runtime, string minToolsVersion, string solutionFile, string group, object buildSessionId, bool setBusy = false, bool allowBusy = true)
+		async static Task<RemoteBuildEngine> GetBuildEngine (TargetRuntime runtime, string minToolsVersion, string solutionFile, string group, object buildSessionId, bool setBusy = false, bool allowBusy = true, string sdkDir = null)
 		{
-			var binDir = MSBuildProjectService.GetMSBuildBinPath (runtime);
+			var binDir = sdkDir ?? MSBuildProjectService.GetMSBuildBinPath (runtime);
 
 			Version tv = Version.Parse (MSBuildProjectService.ToolsVersion);
 			if (Version.TryParse (minToolsVersion, out Version mtv) && tv < mtv) {
@@ -183,8 +191,9 @@ namespace MonoDevelop.Projects.MSBuild
 				);
 			}
 
-			// One builder per solution
-			string builderKey = runtime.Id + " # " + solutionFile + " # " + group;
+			// One builder per solution and SDK, so projects pinning a different SDK via
+			// global.json get their own engine initialized with that SDK's MSBuild.
+			string builderKey = runtime.Id + " # " + solutionFile + " # " + group + " # " + (sdkDir ?? "");
 
 			RemoteBuildEngine builder = null;
 

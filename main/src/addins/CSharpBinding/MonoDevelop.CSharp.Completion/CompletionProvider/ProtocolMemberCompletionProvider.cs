@@ -187,6 +187,20 @@ namespace MonoDevelop.CSharp.Completion.Provider
 
 			var displayService = ws.Services.GetLanguageServices (LanguageNames.CSharp).GetService<ISymbolDisplayService> ();
 
+			// Roslyn 4.8 registers the implementation under the new internal LanguageService
+			// contract, so the old 3.x-shaped interface resolves to null. Degrade to a plain
+			// display-string description instead of NRE-ing.
+			if (displayService == null) {
+				var fallback = new StringBuilder ();
+				fallback.Append ("Text|");
+				fallback.AppendLine (GettextCatalog.GetString ("Creates an implementation for:"));
+				fallback.AppendLine ();
+				fallback.Append ("|");
+				fallback.Append ("Text|");
+				fallback.Append (m.ToDisplayString (SymbolDisplayFormat.MinimallyQualifiedFormat));
+				return fallback.ToString ();
+			}
+
 			var sections = await displayService.ToDescriptionGroupsAsync (ws, semanticModel, position, new [] { m }.AsImmutable (), default (CancellationToken)).ConfigureAwait (false);
 			ImmutableArray<TaggedText> parts;
 

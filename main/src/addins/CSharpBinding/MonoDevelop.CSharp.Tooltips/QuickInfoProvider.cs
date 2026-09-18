@@ -67,6 +67,24 @@ namespace MonoDevelop.SourceEditor
 			var model = await ctx.AnalysisDocument.GetSemanticModelAsync ();
 			var descriptionService = ctx.RoslynWorkspace.Services.GetLanguageServices (model.Language).GetService<ISymbolDisplayService> ();
 
+			// The Roslyn 4.8 feature assemblies register their implementation under the new
+			// Microsoft.CodeAnalysis.LanguageService.ISymbolDisplayService contract (internal to
+			// Features). The fork compiles against the old 3.x-shaped interface from
+			// MonoRoslynCompat, so the host lookup returns null and the old code NRE'd on hover.
+			// Fall back to the ambient/SignatureMarkupCreator description of the symbol, which the
+			// rest of the IDE already uses for tooltips.
+			if (descriptionService == null) {
+				var sig = new SignatureMarkupCreator (ctx, caretOffset);
+				sig.BreakLineAfterReturnType = false;
+				try {
+					tooltipInfo.SignatureMarkup = sig.GetMarkup (symbol);
+				} catch (Exception e) {
+					LoggingService.LogError ("QuickInfo fallback markup failed for " + symbol?.Name, e);
+					tooltipInfo.SignatureMarkup = symbol?.ToDisplayString (SymbolDisplayFormat.MinimallyQualifiedFormat) ?? "";
+				}
+				return tooltipInfo;
+			}
+
 			var sections = await descriptionService.ToDescriptionGroupsAsync (ctx.RoslynWorkspace, model, caretOffset, new [] { symbol }.AsImmutable (), default (CancellationToken)).ConfigureAwait (false);
 
 			ImmutableArray<TaggedText> parts;

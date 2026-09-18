@@ -51,6 +51,7 @@
     <Compile Include="MonoDevelop.AnalysisCore\AnalysisCommands.cs" />
     <Compile Include="MonoDevelop.AnalysisCore\AnalysisOptions.cs" />
     <Compile Include="MonoDevelop.AnalysisCore\Result.cs" />
+    <Compile Include="MonoDevelop.Refactoring\MefExportShims.cs" />
     <Compile Include="MonoDevelop.Refactoring\RefactoringService.cs" />
     <Compile Include="MonoDevelop.Refactoring\Change.cs" />
     <Compile Include="MonoDevelop.Refactoring.Rename\RenameRefactoring.cs" />

@@ -337,7 +337,7 @@
       <HintPath>$(NuGetPackageRoot)system.composition.attributedmodel/7.0.0/lib/netstandard2.0/System.Composition.AttributedModel.dll</HintPath>
     </Reference>
     <Reference Include="Mono.Cairo">
-      <HintPath>/usr/lib/mono/4.5/Mono.Cairo.dll</HintPath>
+      <HintPath>$(MonoFrameworkNet45Directory)/Mono.Cairo.dll</HintPath>
     </Reference>
     <Reference Include="System.Composition.Hosting">
       <HintPath>$(NuGetPackageRoot)system.composition.hosting/7.0.0/lib/netstandard2.0/System.Composition.Hosting.dll</HintPath>

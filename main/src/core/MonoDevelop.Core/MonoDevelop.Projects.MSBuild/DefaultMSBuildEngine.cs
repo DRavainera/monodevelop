@@ -1157,7 +1157,17 @@ namespace MonoDevelop.Projects.MSBuild
 
 			string basePath;
 			if (!string.IsNullOrEmpty (import.Sdk) && SdkReference.TryParse (import.Sdk, out var sdkRef)) {
-				basePath = SdkResolution.GetResolver (project.GetRootMSBuildProject ().TargetRuntime).GetSdkPath (sdkRef, CustomLoggingService.Instance, null, project.Project.FileName, project.Project.SolutionDirectory);
+				// The real MSBuild tolerates imports that reference an SDK which cannot be resolved (for example the
+				// virtual 'Microsoft.NET.SDK.WorkloadAutoImportPropsLocator' SDK used by modern .NET SDKs): the import is
+				// skipped and evaluation continues, instead of failing the whole project load.
+				try {
+					basePath = SdkResolution.GetResolver (project.GetRootMSBuildProject ().TargetRuntime).GetSdkPath (sdkRef, CustomLoggingService.Instance, null, project.Project.FileName, project.Project.SolutionDirectory);
+				} catch (Exception e) {
+					LoggingService.LogWarning (
+						string.Format ("Could not resolve SDK '{0}' referenced by import '{1}' in project '{2}', the import will be skipped.", sdkRef.Name, import.Project, project.Project.FileName), e);
+					keepSearching = true;
+					return null;
+				}
 				if (basePath == null) {
 					keepSearching = true;
 					return null;

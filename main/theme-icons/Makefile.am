@@ -1,16 +1,16 @@
 theme = hicolor
 themedir = $(datadir)/icons/$(theme)
 theme_icons = \
-	apps,GNOME/monodevelop.svg \
-	apps,GNOME/monodevelop-16.png \
-	apps,GNOME/monodevelop-22.png \
-	apps,GNOME/monodevelop-24.png \
-	apps,GNOME/monodevelop-32.png \
-	apps,GNOME/monodevelop-48.png \
-	apps,GNOME/monodevelop-64.png \
-	apps,GNOME/monodevelop-128.png \
-	apps,GNOME/monodevelop-256.png \
-	apps,GNOME/monodevelop-512.png
+	apps,Linux/monodevelop.svg \
+	apps,Linux/monodevelop-16.png \
+	apps,Linux/monodevelop-22.png \
+	apps,Linux/monodevelop-24.png \
+	apps,Linux/monodevelop-32.png \
+	apps,Linux/monodevelop-48.png \
+	apps,Linux/monodevelop-64.png \
+	apps,Linux/monodevelop-128.png \
+	apps,Linux/monodevelop-256.png \
+	apps,Linux/monodevelop-512.png
 
 install_icon_exec = $(top_srcdir)/theme-icons/icon-theme-installer \
 	-t "$(theme)" \
@@ -27,8 +27,8 @@ uninstall-hook:
 	@-$(install_icon_exec) -u $(theme_icons)
 
 EXTRA_DIST = \
-	$(wildcard GNOME/*.png) \
-	GNOME/monodevelop.svg \
+	$(wildcard Linux/*.png) \
+	Linux/monodevelop.svg \
 	$(wildcard Mac/png/*.png) \
 	$(wildcard Mac/*.icns) \
 	$(wildcard Windows/*.ico) \

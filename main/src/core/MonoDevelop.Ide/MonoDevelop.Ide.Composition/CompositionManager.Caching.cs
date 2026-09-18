@@ -62,10 +62,14 @@ namespace MonoDevelop.Ide.Composition
 		/// <summary>
 		/// Class used to validate whether a MEF cache is re-usable for a given set of assemblies.
 		/// </summary>
-		internal class Caching
+internal class Caching
 		{
 			readonly ICachingFaultInjector? cachingFaultInjector;
 			readonly RuntimeCompositionExceptionHandler exceptionHandler;
+
+			// Bump when the way we build the composition changes (partsToDrop, staged assemblies),
+			// so a stale on-disk cache is regenerated through runtime discovery instead of being reused.
+			internal const int CacheVersion = 5;
 
 			Task saveTask = Task.CompletedTask;
 			readonly HashSet<Assembly> loadedAssemblies;
@@ -138,9 +142,17 @@ namespace MonoDevelop.Ide.Composition
 					return false;
 				}
 
-				//this can return null (if the cache format changed?). clean up and start over.
+//this can return null (if the cache format changed?). clean up and start over.
 				if (controlCache == null) {
 					LoggingService.LogError ("MEF cache control deserialized as null");
+					DeleteFiles ();
+					return false;
+				}
+
+				// A composition built differently (new partsToDrop entries, staged assembly
+				// changes) must not reuse a cache serialized by an older MonoDevelop.Ide.
+				if (controlCache.Version != CacheVersion) {
+					LoggingService.LogInfo ("MEF cache version mismatch, rebuilding: cacheVersion=" + controlCache.Version + ", expected=" + CacheVersion);
 					DeleteFiles ();
 					return false;
 				}
@@ -257,8 +269,9 @@ namespace MonoDevelop.Ide.Composition
 					});
 				}
 
-				// Create cache control data.
+// Create cache control data.
 				var controlCache = new MefControlCache {
+					Version = CacheVersion,
 					MefAssemblyInfos = mefAssemblyInfos,
 					AdditionalInputAssemblyInfos = additionalInputAssemblies,
 				};
@@ -280,9 +293,12 @@ namespace MonoDevelop.Ide.Composition
 			}
 		}
 
-		[Serializable]
+[Serializable]
 		class MefControlCache
 		{
+			[JsonRequired]
+			public int Version;
+
 			[JsonRequired]
 			public List<MefControlCacheAssemblyInfo> MefAssemblyInfos;
 

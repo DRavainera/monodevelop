@@ -45,7 +45,7 @@ namespace MonoDevelop.Ide.RoslynServices
 
 		[ImportingConstructor]
 		[Obsolete (MefConstruction.ImportingConstructorMessage, error: true)]
-		public MonoDevelopTaskSchedulerFactory (IThreadingContext threadingContext, IAsynchronousOperationListenerProvider listenerProvider) : base ()
+		public MonoDevelopTaskSchedulerFactory (IThreadingContext threadingContext) : base ()
 		{
 			_threadingContext = threadingContext;
 		}

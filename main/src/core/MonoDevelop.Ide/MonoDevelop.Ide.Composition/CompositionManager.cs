@@ -134,7 +134,81 @@ static readonly Resolver StandardResolver = Resolver.DefaultInstance;
 		/// <summary>
 		/// Returns an instance of type T that is exported by some composition part. The instance is shared (singleton).
 		/// </summary>
-		public T GetExportedValue<T> () => ExportProvider.GetExportedValue<T> ();
+		public T GetExportedValue<T> () {
+			try {
+				return ExportProvider.GetExportedValue<T> ();
+			} catch {
+				// Diagnostics for the "Value exported from X cannot be assigned to import site Y"
+				// failures seen while opening documents on Linux: dump every loaded copy of
+				// the editor assemblies with their load context and location.
+				if (Environment.GetEnvironmentVariable ("MD_LOG_ASM_DUMP") == "1")
+					DumpVsMefImports (Instance?.RuntimeComposition, "MD_LAD GetExportedValue<" + typeof (T).FullName + "> failed");
+				throw;
+			}
+		}
+
+		static string TypeRefName (object typeRef)
+		{
+			if (typeRef == null)
+				return "<null>";
+			if (typeRef is Type t)
+				return t.AssemblyQualifiedName ?? t.FullName ?? t.ToString ();
+			return typeRef.GetType ().GetProperty ("FullName")?.GetValue (typeRef)?.ToString ()
+				?? typeRef.GetType ().GetProperty ("AssemblyQualifiedName")?.GetValue (typeRef)?.ToString ()
+				?? typeRef.ToString ();
+		}
+
+		static void DumpVsMefImports (RuntimeComposition rc, string tag)
+		{
+			if (Environment.GetEnvironmentVariable ("MD_LOG_ASM_DUMP") != "1")
+				return;
+			try {
+				var sb = new System.Text.StringBuilder ();
+				if (rc == null) {
+					LoggingService.LogError (tag + ": RuntimeComposition null");
+					return;
+				}
+				sb.AppendLine ("Parts: " + rc.Parts.Count);
+				foreach (var part in rc.Parts) {
+					var typeRef = part.GetType ().GetProperty ("TypeRef")?.GetValue (part);
+					var fullName = typeRef?.GetType ().GetProperty ("FullName")?.GetValue (typeRef)?.ToString () ?? "";
+					if (!fullName.Contains ("TextViewZoomManager") && !fullName.Contains ("StatusBarService") && !fullName.Contains ("UIThreadOperationExecutor"))
+						continue;
+					sb.AppendLine ("PART " + fullName);
+					var imports = (System.Collections.IEnumerable)part.GetType ().GetProperty ("ImportingMembers")?.GetValue (part);
+					if (imports == null) continue;
+					foreach (var imp in imports) {
+						var itf = imp.GetType ().GetProperty ("ImportingSiteTypeRef");
+						var wc = imp.GetType ().GetProperty ("ImportingSiteTypeWithoutCollectionRef");
+						var wcResolved = imp.GetType ().GetProperty ("ImportingSiteTypeWithoutCollection");
+						sb.AppendLine ("  IMPORT site=" + TypeRefName (itf?.GetValue (imp)) + " withoutCol=" + TypeRefName (wc?.GetValue (imp)));
+						sb.AppendLine ("    wcResolved=" + TypeRefName (wcResolved?.GetValue (imp)));
+						var wt = wcResolved?.GetValue (imp) as Type;
+						if (wt != null) {
+							sb.AppendLine ("      asm=" + wt.Assembly.FullName + " loc=" + (wt.Assembly.Location ?? ""));
+							sb.AppendLine ("      ctx=" + System.Runtime.Loader.AssemblyLoadContext.GetLoadContext (wt.Assembly)?.Name);
+							var ga = wt.GetTypeInfo ().GenericTypeArguments;
+							for (int g = 0; g < ga.Length; g++)
+								sb.AppendLine ("      arg[" + g + "]=" + ga[g].AssemblyQualifiedName + " ctx=" + System.Runtime.Loader.AssemblyLoadContext.GetLoadContext (ga[g].Assembly)?.Name + " loc=" + ga[g].Assembly.Location);
+						}
+						var sats = (System.Collections.IEnumerable)imp.GetType ().GetProperty ("SatisfyingExports")?.GetValue (imp);
+						if (sats == null) continue;
+						foreach (var sat in sats) {
+							var contract = sat.GetType ().GetProperty ("ContractName")?.GetValue (sat);
+							var valRef = sat.GetType ().GetProperty ("ExportedValueTypeRef")?.GetValue (sat);
+							var valResolved = sat.GetType ().GetProperty ("ExportedValueType")?.GetValue (sat);
+							sb.AppendLine ("    SAT contract=" + contract + " valueRef=" + TypeRefName (valRef) + " valueResolved=" + TypeRefName (valResolved));
+							var vt = valResolved as Type;
+							if (vt != null)
+								sb.AppendLine ("      ctx=" + System.Runtime.Loader.AssemblyLoadContext.GetLoadContext (vt.Assembly)?.Name + " loc=" + vt.Assembly.Location);
+						}
+					}
+				}
+				LoggingService.LogError (tag + ":\n" + sb);
+			} catch (Exception ex) {
+				LoggingService.LogError (tag + " inspect failed: " + ex);
+			}
+		}
 
 		/// <summary>
 		/// Returns all instances of type T that are exported by some composition part. The instances are shared (singletons).
@@ -190,9 +264,26 @@ static readonly Resolver StandardResolver = Resolver.DefaultInstance;
 				metadata.Timings ["LoadRuntimeComposition"] = stepTimer.ElapsedMilliseconds;
 				stepTimer.Restart ();
 
-				ExportProviderFactory = RuntimeComposition.CreateExportProviderFactory ();
+ExportProviderFactory = RuntimeComposition.CreateExportProviderFactory ();
 				ExportProvider = ExportProviderFactory.CreateExportProvider ();
 				HostServices = Microsoft.VisualStudio.LanguageServices.VisualStudioMefHostServices.Create (ExportProvider);
+
+				if (Environment.GetEnvironmentVariable ("MD_PING_MEF") == "1") {
+					try {
+						var ops = ExportProvider.GetExportedValue<Microsoft.VisualStudio.Text.Operations.IEditorOperationsFactoryService> ();
+						LoggingService.LogInfo ("MD_PING IEditorOperationsFactoryService OK: " + (ops == null ? "null" : ops.GetType ().FullName));
+					} catch (Exception ex1) {
+						LoggingService.LogError ("MD_PING IEditorOperationsFactoryService FAIL : " + ex1);
+						DumpVsMefImports (this.RuntimeComposition, "MD_LAD IEditorOperationsFactoryService");
+					}
+					try {
+						var opts = ExportProvider.GetExportedValue<Microsoft.VisualStudio.Text.Editor.IEditorOptionsFactoryService> ();
+						var g = opts.GlobalOptions;
+						LoggingService.LogInfo ("MD_PING IEditorOptionsFactoryService OK options=" + g.SupportedOptions.Count ());
+					} catch (Exception ex2) {
+						LoggingService.LogError ("MD_PING IEditorOptionsFactoryService FAIL : " + ex2);
+					}
+				}
 
 				var existing = Environment.GetEnvironmentVariable ("MD_LOG_MEF_HOST");
 				if (existing == "1") {
@@ -234,9 +325,61 @@ static readonly Resolver StandardResolver = Resolver.DefaultInstance;
 
 		internal static async Task<(RuntimeComposition, ComposableCatalog)> CreateRuntimeCompositionFromDiscovery (Caching caching, ITimeTracker timer = null)
 		{
-			var parts = await Discovery.CreatePartsAsync (caching.MefAssemblies);
+			// Discover over every assembly loaded at this point (the preload in
+			// ReadAssembliesFromAddins has pulled in the whole staged tree) rather than only
+			// the extension-point set. The isolated verification probe discovers over all
+			// loaded assemblies and its composition satisfies every editor import; restricting
+			// discovery to the extension-point set made some import/export pairs resolve to
+			// unresolvable TypeRefs ("Value exported from X cannot be assigned to import site
+			// Y") and left the content-type registry empty.
+			var allLoaded = AppDomain.CurrentDomain.GetAssemblies ().Where (a => !a.IsDynamic).ToArray ();
+			var parts = await Discovery.CreatePartsAsync (allLoaded);
+
+			// Some parts from the staged Roslyn feature/accessibility assemblies import contracts
+			// that only exist in the real Visual Studio host (EnC update source registration,
+			// Pythia/VSTypeScript host APIs) and have no matching export on this platform. Drop
+			// those parts instead of the whole assembly so the rest of the feature services stays.
+			var partsToDrop = new HashSet<string> {
+				"Microsoft.CodeAnalysis.EditAndContinue.EditAndContinueDiagnosticUpdateSource",
+				"Microsoft.CodeAnalysis.ExternalAccess.Pythia.PythiaSignatureHelpProvider",
+				"Microsoft.CodeAnalysis.ExternalAccess.VSTypeScript.VSTypeScriptAnalyzerService",
+				// On the Linux (GTK) host, activating any of the staged vs-editor tagger providers makes the
+				// cached runtime composition fail with "Value exported ... cannot be assigned to import
+				// site ... TagAggregatorFactoryService.BufferTaggerProviders", which blocks every text
+				// view from loading ("View failed to load"). The two ITaggerProvider parts of the
+				// staged Microsoft.VisualStudio.Logic.Text.Classification.Aggregator.Implementation
+				// assembly both trip this (ClassifierTaggerProvider first, then ProjectionWorkaroundProvider),
+				// so drop them both instead of whack-a-mole; classification colors are provided by the
+				// Mono.TextEditor-based fallback until the VS tagging path is ported.
+			"Microsoft.VisualStudio.Text.Classification.Implementation.ClassifierTaggerProvider",
+			"Microsoft.VisualStudio.Text.Classification.Implementation.ProjectionWorkaroundProvider",
+			// The staged Features assembly exports its internal CodeRefactoringService under the
+			// assembly-qualified contract name of the (also internal) ICodeRefactoringService. The
+			// fork's compatible stub interface (MonoRoslynCompat) has a different method shape, so
+			// the real part does not satisfy the old-editor imports; it only collides with the
+			// InertCodeRefactoringService shim ("Expected 1 export ... found 2"). Drop it and keep
+			// the inert export.
+			"Microsoft.CodeAnalysis.CodeRefactorings.CodeRefactoringService",
+			// With Microsoft.CodeAnalysis.EditorFeatures staged, its DiagnosticsService part
+			// (in the LanguageServer.Protocol assembly) exports the old-editor contract name
+			// "Microsoft.CodeAnalysis.Diagnostics.IDiagnosticService", colliding with the
+			// InertDiagnosticService shim ("Expected 1 export ... found 2") and breaking
+			// ResultsEditorExtension. Drop it; diagnostics squiggles stay on the inert shim.
+			"Microsoft.CodeAnalysis.Diagnostics.DiagnosticService",
+			// Type-identity unification: MonoRoslynCompat re-declares editor utility types under
+			// the same full names the real (internal) EditorFeatures types use, so both the fork's
+			// export and the real part land on the same MEF contract and every import on it becomes
+			// ambiguous ("found 2"). The real types are internal, so type-forwarding is not an
+			// option; drop the real parts and keep the fork's exports as the single source.
+			"Microsoft.CodeAnalysis.Editor.Shared.Utilities.ThreadingContext",
+			"Microsoft.CodeAnalysis.CodeFixes.CodeFixService",
+		};
+			var discoveredParts = parts.Parts
+				.Where (p => p.Type.FullName != null && !partsToDrop.Contains (p.Type.FullName))
+				.ToArray ();
+
 			if (Environment.GetEnvironmentVariable ("MD_LOG_MEF_HOST") == "1") {
-				foreach (var part in parts.Parts) {
+				foreach (var part in discoveredParts) {
 					LoggingService.LogInfo ("MEFPART " + part.Type.FullName + " | " + part.Type.Assembly.GetName ().Name);
 				}
 			}
@@ -244,7 +387,7 @@ static readonly Resolver StandardResolver = Resolver.DefaultInstance;
 
 			ComposableCatalog catalog = ComposableCatalog.Create (StandardResolver)
 				.WithCompositionService ()
-				.AddParts (parts);
+				.AddParts (discoveredParts);
 
 			var discoveryErrors = catalog.DiscoveredParts.DiscoveryErrors;
 			if (!discoveryErrors.IsEmpty) {
@@ -290,9 +433,36 @@ static readonly Resolver StandardResolver = Resolver.DefaultInstance;
 				LoadStagedAssembly (assemblyName);
 			foreach (string assemblyName in VisualStudioEditorAssemblies)
 				LoadStagedAssembly (assemblyName);
+
+			// vs-mef resolves TypeRefs against the assemblies that happen to be loaded when the
+			// composition is built. Lazy editor assembly loading makes some import/export pairs
+			// compare as "cannot be assigned" (and can leave the content-type registry without
+			// definitions), in a non-deterministic way across boots. Preload the whole staged
+			// tree (root first, then add-ins) exactly like the isolated verification probe does.
+			if (Environment.GetEnvironmentVariable ("MD_SKIP_VS_EDITOR_PRELOAD") != "1") {
+				PreloadDirectoryTree (AppContext.BaseDirectory);
+			}
+
 			timer?.Trace ("Start: end reading assemblies");
 
 			return readAssemblies;
+
+			void PreloadDirectoryTree (string baseDir)
+			{
+				foreach (var dll in Directory.GetFiles (baseDir, "*.dll")) {
+					try {
+						Assembly.LoadFrom (dll);
+					} catch {
+					}
+				}
+
+				string addinsDir = Path.Combine (baseDir, "AddIns");
+				if (Directory.Exists (addinsDir)) {
+					foreach (var dir in Directory.GetDirectories (addinsDir)) {
+						PreloadDirectoryTree (dir);
+					}
+				}
+			}
 
 			void LoadStagedAssembly (string assemblyName)
 			{

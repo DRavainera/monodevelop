@@ -47,7 +47,8 @@ namespace MonoDevelop.Core
 			"5.0",
 			"6.0",
 			"7.0",
-			"8.0"
+			"8.0",
+			"9.0"
 		};
 
 		bool createFolders = false;
@@ -243,7 +244,7 @@ namespace MonoDevelop.Core
 		
 		internal static UserProfile ForUnix (string version, bool ensureCreated = true)
 		{
-			FilePath home = Environment.GetFolderPath (Environment.SpecialFolder.Personal);
+			FilePath home = GetUnixHome ();
 			FilePath xdgDataHome = Environment.GetEnvironmentVariable ("XDG_DATA_HOME");
 			if (xdgDataHome.IsNullOrEmpty)
 				xdgDataHome = home.Combine (".local", "share");
@@ -269,6 +270,20 @@ namespace MonoDevelop.Core
 				TempDir = cache.Combine ("Temp"),
 				LogDir = cache.Combine ("Logs"),
 			};
+		}
+
+		// On .NET Framework/Mono, SpecialFolder.Personal returned $HOME, but on .NET Core/5+ it maps
+		// to the XDG documents dir (e.g. ~/Documents), which made the whole profile (.config/.cache/
+		// .local) land inside the user's documents folder. SpecialFolder.UserProfile is the folder
+		// that actually means $HOME on .NET Core; fall back to the HOME variable for exotic setups.
+		static FilePath GetUnixHome ()
+		{
+			FilePath home = Environment.GetFolderPath (Environment.SpecialFolder.UserProfile);
+			if (home.IsNullOrEmpty)
+				home = Environment.GetEnvironmentVariable ("HOME");
+			if (home.IsNullOrEmpty)
+				home = Environment.GetFolderPath (Environment.SpecialFolder.Personal);
+			return home;
 		}
 
 		internal static UserProfile ForMD24 ()

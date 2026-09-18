@@ -224,10 +224,14 @@ namespace MonoDevelop.Components
 #endif
 		}
 
-		public static int RunDialogWithNotification (Gtk.Dialog dialog)
+public static int RunDialogWithNotification (Gtk.Dialog dialog)
 		{
 #if MAC
 			MacRequestAttention (dialog.Modal);
+#else
+			// Gtk.Dialog.Run() only shows the dialog window, not its contents.
+			// Ensure all children are visible so the dialog gets its natural size.
+			dialog.ShowAll ();
 #endif
 
 			return dialog.Run ();

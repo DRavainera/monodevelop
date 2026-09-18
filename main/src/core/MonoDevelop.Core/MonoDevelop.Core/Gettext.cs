@@ -34,6 +34,7 @@ using System.Runtime.InteropServices;
 using System.Threading;
 using Mono.Addins;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace MonoDevelop.Core
 {
@@ -93,6 +94,7 @@ namespace MonoDevelop.Core
 				if (Platform.IsWindows)
 					SetThreadUILanguage (ci.LCID);
 				mainThread.CurrentUICulture = ci;
+				uiCulture = ci;
 			}
 			if (!Platform.IsWindows)
 				Environment.SetEnvironmentVariable ("LANGUAGE", locale);
@@ -101,6 +103,7 @@ namespace MonoDevelop.Core
 		static GettextCatalog ()
 		{
 			mainThread = Thread.CurrentThread;
+			uiCulture = CultureInfo.CurrentUICulture;
 
 			//variable can be used to override where Gettext looks for the catalogues
 			string catalog = Environment.GetEnvironmentVariable ("MONODEVELOP_LOCALE_PATH");
@@ -115,21 +118,24 @@ namespace MonoDevelop.Core
 			if (string.IsNullOrEmpty (catalog) || !Directory.Exists (catalog)) {
 				string location = System.Reflection.Assembly.GetExecutingAssembly ().Location;
 				location = Path.GetDirectoryName (location);
+				var candidates = new List<string> ();
 				if (Platform.IsWindows) {
 					// On windows, load the catalog from a child dir
-					catalog = Path.Combine (location, "locale");
+					candidates.Add (Path.Combine (location, "locale"));
 				}
 				else {
 					// MD is located at $prefix/lib/monodevelop/bin
 					// adding "../../.." should give us $prefix
-					string prefix = Path.Combine (Path.Combine (Path.Combine (location, ".."), ".."), "..");
+					string prefix = Path.GetFullPath (Path.Combine (Path.Combine (Path.Combine (location, ".."), ".."), ".."));
 					if (Platform.IsMac)
-						prefix = Path.Combine (prefix, "..", "MacOS");
-					//normalise it
-					prefix = Path.GetFullPath (prefix);
+						prefix = Path.GetFullPath (Path.Combine (prefix, "..", "MacOS"));
 					//catalogue is installed to "$prefix/share/locale" by default
-					catalog = Path.Combine (Path.Combine (prefix, "share"), "locale");
+					candidates.Add (Path.Combine (Path.Combine (prefix, "share"), "locale"));
+					// Development/build layout: the runtime is in <build>/net10run while the
+					// catalogues are built to <build>/locale (one level up from the binaries).
+					candidates.Add (Path.GetFullPath (Path.Combine (location, "..", "locale")));
 				}
+				catalog = candidates.FirstOrDefault (Directory.Exists) ?? candidates [0];
 			}
 			try {
 				Catalog.Init ("monodevelop", catalog);
@@ -138,14 +144,36 @@ namespace MonoDevelop.Core
 				Console.WriteLine (ex);
 			}
 
+			// The Add-in Manager (Mono.Addins.Gui) is a legacy component that binds to the
+			// Mono.Posix Mono.Unix.Catalog (resolved from the mono GAC by the startup assembly
+			// resolver) and not to MonoDevelop.Core.Catalog. Unless that legacy catalog is
+			// initialized it has no domain, so every GetString() falls back to the English msgid.
+			// Initialize it with the same domain/locale so it issues gettext lookups on the
+			// very same .mo files the rest of the IDE uses.
+			if (!Platform.IsWindows) {
+				try {
+					var legacyCatalog = Type.GetType ("Mono.Unix.Catalog, Mono.Posix", false);
+					legacyCatalog?.GetMethod ("Init", new Type [] { typeof (string), typeof (string) })
+						?.Invoke (null, new object [] { "monodevelop", catalog });
+				}
+				catch (Exception ex) {
+					LoggingService.LogWarning ("Failed to initialize the legacy Mono.Unix.Catalog", ex);
+				}
+			}
+
 			Environment.SetEnvironmentVariable ("MONODEVELOP_LOCALE_PATH", null);
 			Environment.SetEnvironmentVariable ("MONODEVELOP_STUB_LANGUAGE", null);
 		}
 
 		public static string UILocale { get; private set; }
 
+		// Cached UI culture. In .NET 5+ reading Thread.CurrentUICulture of another thread
+		// (the IDE main thread) throws InvalidOperationException, so callers on worker
+		// threads must use this cached value instead.
+		static CultureInfo uiCulture;
+
 		public static CultureInfo UICulture {
-			get { return mainThread.CurrentUICulture; }
+			get { return uiCulture; }
 		}
 		
 		#region GetString

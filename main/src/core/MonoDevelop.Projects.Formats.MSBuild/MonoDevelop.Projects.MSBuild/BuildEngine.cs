@@ -51,8 +51,14 @@ namespace MonoDevelop.Projects.MSBuild
 
 		public void SetGlobalProperties (IDictionary<string, string> properties)
 		{
-			foreach (var p in properties)
+			foreach (var p in properties) {
+				// MSBuild 17 defines MSBuildSDKsPath itself as a toolset property derived from
+				// MSBUILD_EXE_PATH. Injecting it as a global property makes project evaluation fail
+				// with "The property 'MSBuildSDKsPath' is global and cannot be modified".
+				if (string.Equals (p.Key, "MSBuildSDKsPath", StringComparison.OrdinalIgnoreCase))
+					continue;
 				engine.SetGlobalProperty (p.Key, p.Value);
+			}
 		}
 
 		public ProjectBuilder LoadProject (string file)

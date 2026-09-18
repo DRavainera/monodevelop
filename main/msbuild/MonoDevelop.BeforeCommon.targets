@@ -56,6 +56,14 @@
 		<PlatformTarget>x64</PlatformTarget>
 	</PropertyGroup>
 
+	<PropertyGroup Condition="$(Platform.Equals('arm'))">
+	    <PlatformTarget>arm</PlatformTarget>
+    </PropertyGroup>
+
+	<PropertyGroup Condition="$(Platform.Equals('arm64'))">
+		<PlatformTarget>arm64</PlatformTarget>
+    </PropertyGroup>
+
 	<PropertyGroup Condition="$(Configuration.Contains('Mac'))">
 		<DefineConstants>$(DefineConstants);MAC</DefineConstants>
 	</PropertyGroup>
@@ -64,8 +72,8 @@
 		<DefineConstants>$(DefineConstants);WIN32;WINDOWS</DefineConstants>
 	</PropertyGroup>
 
-	<PropertyGroup Condition="$(Configuration.Contains('Gnome'))">
-		<DefineConstants>$(DefineConstants);GNOME;LINUX</DefineConstants>
+	<PropertyGroup Condition="$(Configuration.Contains('Linux'))">
+		<DefineConstants>$(DefineConstants);X11;LINUX</DefineConstants>
 	</PropertyGroup>
 
 	<Target Name="RemoveNoisyAnalyzers" BeforeTargets="CoreCompile">

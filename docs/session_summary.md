@@ -43,7 +43,7 @@ Dejar en verde el build del núcleo de MonoDevelop en Linux usando `dotnet msbui
 - `MDBuildTasks.targets`: condición `'$(DisableDownloadNupkg)'!='true'` en `DownloadNupkg`/`_DownloadNupkgIfNeeded`; `UnitTesting.csproj` `CopyTestAdapters` gateado igual (evita MSB6006/53 y MSB3030).
 - HintPath por patrón: `Debugger.Soft`→mono.cecil 0.10.1 net40; `Debugger.Gdb`/`mdmonitor`/`HexEditor`→`$(MonoFrameworkNet45Directory)\Mono.{Posix,Cairo}.dll` (`/usr/lib/mono/4.5`).
 - `Refactoring.csproj`/`Xml.csproj`/`Autotools.csproj`/`GtkCore.csproj` (revertido GtkCore): refs Roslyn+Immutable.
-- `Main.sln`: podas iterativas Build.0 (cada una con su build; 26→0 errores: b1..b26). Logs `/tmp/opencode/sln_build{N}.log`.
+- `Main.sln`: podas iterativas Build.0 (cada una con su build; 26→0 errores: b1..b26). Logs `/home/daniel/opencode/sln_build{N}.log`.
 
 ## Lecciones clave
 - `dotnet msbuild Main.sln` impone BuildProjectReferences=false → solo compila Build.0; los demás dependen de bin legacy.
@@ -62,7 +62,7 @@ Dejar en verde el build del núcleo de MonoDevelop en Linux usando `dotnet msbui
 - `main/Main.sln` (podas), `main/msbuild/MDBuildTasks.targets` (flags), `session_summary.md`.
 - Addins tocados: TextEditor (stub), SourceEditor2 (2 fixes previos), CSharpBinding, Debugger.{Soft,Gdb}, HexEditor, mdmonitor, Xml, Refactoring (diferido), UnitTesting (gate), Autotools.
 ## GUI MonoDevelop en Linux — EJECUTADA (2026-09-06, sesión actual)
-- Milestone: la GUI arranca y queda estable con ventana GTK `MonoDevelop` (0x01200003) en DISPLAY :0; proceso vivo (>56s, ~170MB RSS); screenshots en `/tmp/opencode/md_gui_live_shot.png`.
+- Milestone: la GUI arranca y queda estable con ventana GTK `MonoDevelop` (0x01200003) en DISPLAY :0; proceso vivo (>56s, ~170MB RSS); screenshots en `/home/daniel/opencode/md_gui_live_shot.png`.
 - Admite ejecución SIN `timeout` (loop GTK normal tras el banner "Starting MonoDevelop 9.0 Alpha Preview").
 - Causa raíz de los crashers previos y fixes (todos en `main/build/bin`):
   1. `MonoRoslynCompat`/`System.Collections.Immutable` (dll aportadas) y `Mono.Cecil.dll` corrupto → reemplazado por net40 0.10.1 (cache).
@@ -92,9 +92,9 @@ Dejar en verde el build del núcleo de MonoDevelop en Linux usando `dotnet msbui
 - `MonoDevelop.GtkCore`: sigue sin addin construido (solo libstetic*.dll en build/AddIns). Diferido a evaluación separada.
 - Intento de abrir-sln vía GUI (Ctrl+O + chooser) y vía arg posicional (`mono MonoDevelop.exe /tmp/mdsample/Sample.sln`): el chooser se abre (ventana "File to Open") pero la ruta no se confirma; con arg posicional no se registró la solución en user-profile (~/.config/MonoDevelop/8.0/MonoDevelopProperties.xml sin Sample). **Item de In3 pendiente de validar** (compilar un proyecto real).
 - Build (Alt+B, b): sin artefactos en `/tmp/mdsample/bin/Debug` (no había solución activa).
-- Limitación del entorno de throttling: este modelo no acepta imágenes → verificación visual limitada a árbol X + píxeles (contenido real, ~4.7k colores) y logs; las capturas `/tmp/opencode/md_*.png` quedan para revisión humana.
-- Herramienta muleta creada: `/tmp/opencode/keys.py` (teclas XTEST robustas) y `/tmp/opencode/killmd.py` (kill por argv exacto, incluido wrapper `mono MonoDevelop.exe`).
-- Instancia MD SIGUE CORRIENDO en DISPLAY :0 (1 proceso, log `/tmp/opencode/md_sln.log`, UserProfile regenerado en `~/.config/MonoDevelop/8.0`).
+- Limitación del entorno de throttling: este modelo no acepta imágenes → verificación visual limitada a árbol X + píxeles (contenido real, ~4.7k colores) y logs; las capturas `/home/daniel/opencode/md_*.png` quedan para revisión humana.
+- Herramienta muleta creada: `/home/daniel/opencode/keys.py` (teclas XTEST robustas) y `/home/daniel/opencode/killmd.py` (kill por argv exacto, incluido wrapper `mono MonoDevelop.exe`).
+- Instancia MD SIGUE CORRIENDO en DISPLAY :0 (1 proceso, log `/home/daniel/opencode/md_sln.log`, UserProfile regenerado en `~/.config/MonoDevelop/8.0`).
 
 ### Sesión 2026-09-07 (noche) — fixes de causa raíz para apertura de solución + aclaración de alcance
 - **Aclaración del usuario**: el plan "Interfaz" es la **migración de la GUI a .NET 8 SDK+Runtime**; lo actual es **solo preparación**. La app debe funcionar 100% con SDK/Runtime .NET 8, sin mono SDK ni ejecución con Runtime Mono → a partir de aquí la verificación es a nivel de build (`dotnet msbuild`), no de GUI bajo mono.
@@ -118,7 +118,7 @@ Dejar en verde el build del núcleo de MonoDevelop en Linux usando `dotnet msbui
 - **Cableado de 3 dependencias** en `Main.sln` (tras los 12 previos): Deployment, PackageManagement, DotNetCore (Insert de `{GUID}.Debug|Any CPU.Build.0` con python, BOM preservado).
 - **Incidente BOM**: mi script de escritura duplicó el BOM y metió el literal `ï»¿` → `MSB5010: No se encuentra ningún encabezado de formato de archivo`. Normalizado a BOM único (`EF BB BF` + texto, verificado por bytes).
 - **Resultado**: build29 MSB5010 → build30 CS0012 → build31 **EXIT=0**. Autotools y AspNetCore compilan verdes dentro del sln.
-- Commit `602f9788db` (97 archivos, +3836/−1313) pusheado a `origin/agents/sub-agent-senior-dev-role-report`: incluye TODO el bloque Roslyn-4.8/compat (CSharpBinding, MonoRoslynCompat, Refactoring — commitablе junto al wiring por solape en csproj) + wiring. Logs: `/tmp/opencode/sln_build{27,28,29,30,31}.log`; backups `Main.sln.bak`/`.bak2`.
+- Commit `602f9788db` (97 archivos, +3836/−1313) pusheado a `origin/agents/sub-agent-senior-dev-role-report`: incluye TODO el bloque Roslyn-4.8/compat (CSharpBinding, MonoRoslynCompat, Refactoring — commitablе junto al wiring por solape en csproj) + wiring. Logs: `/home/daniel/opencode/sln_build{27,28,29,30,31}.log`; backups `Main.sln.bak`/`.bak2`.
 
 ### Sesión 2026-09-11 (parte 3) — inicio de la fase de migración .NET 8 (M2 bloque 5a: Core → net8)
 - **Bloque 5a (commit `b7418c960b`)**: `MonoDevelop.Core.csproj` → **SDK-style `net8.0`**. Patrón: `Sdk="Microsoft.NET.Sdk"` + override `MDFrameworkVersion=v8.0`/`MDTargetFramework=net8.0`/`TargetFrameworkVersion=v8.0` DESPUÉS del import de `MonoDevelop.props` (que si no fuerza `TargetFramework=net472` vía `AfterCommon.props`).
@@ -126,7 +126,7 @@ Dejar en verde el build del núcleo de MonoDevelop en Linux usando `dotnet msbui
 - Fixes de deps: `SharpZipLib 1.4.2` (Mono.Addins.Setup net8 la exige → NU1605), `System.CodeDom 5.0.0` cacheado (CS1069: `System.CodeDom.Compiler` no está en el ref pack net8), quitadas 10 `<Reference>` muertas de System* (MSB3245; las provee el shared framework).
 - Fixes de API net8: `Debug.Listeners` → `Trace.Listeners` (LoggingService), `RegistryHive.DynData`/HKEY_DYN_DATA → `ArgumentException` (IntrinsicFunctions), `NoWarn SYSLIB0011` (BinaryFormatter legacy).
 - `AssemblyInfo.cs` sustituido por `GenerateAssemblyInfo` del SDK (Version 2.6.0.0; IVT vía items).
-- **Gates**: `dotnet build` EXIT=0, 0 errores, 185 avisos. Load-smoke net8 (`/tmp/opencode/net8_core_smoke`): `MonoDevelop.Core 2.6.0.0 PKT=3ead7498f347467b`, 567 tipos exportados, probes OK.
+- **Gates**: `dotnet build` EXIT=0, 0 errores, 185 avisos. Load-smoke net8 (`/home/daniel/opencode/net8_core_smoke`): `MonoDevelop.Core 2.6.0.0 PKT=3ead7498f347467b`, 567 tipos exportados, probes OK.
 - Siguiente (bloque 5b): repetir el patrón con `main/MonoDevelop.Ide` + addins clave; luego gate E2E de evaluación C# con Core net8 (M2 completo).
 - **método**: lista de los 76 proyectos con `ActiveCfg` sin `Build.0` (GUID→nombre vía script); lotes de 8→3-proyectos; cada lote validado con Rebuild del sln (commits `598aa7b744` y `1cd6e143d1`). Escritura del sln siempre BOM-safe (bytes: descodificar utf-8-sig, editar texto, escribir `BOM+utf-8`).
 - **build32** (lote1: Packaging, ConnectedServices, Gettext, ChangeLogAddIn, Deployment.Linux, CSharpBinding.AspNet, PerformanceDiagnosticsAddIn, VersionControl): EXIT=1 → causas: (a) `VersionControl.csproj` tenía el mismo bug de HintPath residual `..\..\..\..\$(NuGetPackageRoot)...` que arreglé en Deployment (mi regex del bump solo quitó `build\bin`, no el prefijo); (b) `ConnectedServices` necesitaba `System.Memory 4.5.5` (mismo CS0012 `Span<>/ReadOnlySpan<>` que PM); (c) `PerformanceDiagnosticsAddIn` es **Mac-only** (ref incondicional `Xamarin.Mac.dll`, código `Foundation`/`ObjCRuntime`) → **des-cableada**. build33 **EXIT=0** (94 activos).
@@ -137,7 +137,228 @@ Dejar en verde el build del núcleo de MonoDevelop en Linux usando `dotnet msbui
 ### Sesión 2026-09-08 — sellado de la cadena host-services Roslyn (runs 9-11)
 - **Causa raíz del FATAL "Can't create roslyn workspace"**: `MefWorkspaceServices.GetService[T]` (Workspaces 3.4) hace castclass al valor exportado; el `SolutionServices..ctor` pide 3 servicios (`ITemporaryStorageService`, `IMetadataService`, `IProjectCacheHostService`). Los factories de MonoDevelop.Ide exportaban solo `IWorkspaceServiceFactory`, y su unwrap MEF (`b__1` → `CreateService`) producía valores (manager de metadata / cache host) no casteables al contrato interno.
 - **Fix sistémico (9 factories/partes de MonoDevelop.Ide)**: cada `[ExportWorkspaceServiceFactory]` implementa además su contrato y `CreateService` devuelve `this` (soporta export directo y unwrap de fábrica). `IMetadataService` (delega vía `GetRequiredService<MonoDevelopMetadataReferenceManager>`), `IProjectCacheHostService` (shim `NoOpProjectCacheHostService`, porque el stub de compat `ProjectCacheService` no implementa el interface interno → el downcast reventaba dentro de `CreateService`), `IDocumentTrackingService`, `IErrorReportingService`, `IFrameworkAssemblyPathResolver`, `ISymbolNavigationService`, `INotificationService` (x2), `IExtensionManager`. Build MonoDevelop.Ide a 0 errores CS.
-- **Evidencia runs**: run9 (`Ide.2026-09-08__00-20-02.log`) y run10 (`...00-26-59.log`) exit 124 sin FATAL ni InvalidCast; run11 (`...00-38-17.log`, con `/tmp/opencode/testproj/TestProj.sln`) crea RootWorkspace+TypeSystemService+CompositionManager y compone MEF sellado.
+- **Evidencia runs**: run9 (`Ide.2026-09-08__00-20-02.log`) y run10 (`...00-26-59.log`) exit 124 sin FATAL ni InvalidCast; run11 (`...00-38-17.log`, con `/home/daniel/opencode/testproj/TestProj.sln`) crea RootWorkspace+TypeSystemService+CompositionManager y compone MEF sellado.
 - **Evaluación de proyecto C# bajo mono queda bloqueada por entorno** (no por Roslyn): los `Microsoft.Build*.dll` de `build/bin` son copias del dotnet SDK 8.0.424 (refs `System.Runtime 8.0.0.0`, inbindables) y no existe engine MSBuild 15.x mono-compatible en Arch (`/usr/lib/mono/msbuild` ausente; xbuild 4.x no evalúa SDK-style). Subproceso de evaluación en `RemoteBuildEngineManager.cs:456`. Se re-resuelve con MSBuild net8 en la migración.
 - **0-exports del vs-editor del fork (IGuardedOperations, IBufferGraphFactoryService, IContentTypeRegistryService, UndoHistoryRegistry, TextSearchService, …)**: interfaces en compat sin implementación en el fork → diferido a In3 (rework de catálogo con `Microsoft.VisualStudio.LanguageServices` net8). Errores de composición MEF siguen siendo warnings no críticos.
 - **Framework paths del sistema** (`TargetRuntime.cs:645-653`): `ReadTargetFramework` captura y registra ERROR por cada `.NETFramework` cuyo `*-api` no existe en Arch (4.6/4.6.1/... ); benigno, frameworks disponibles cargan.
+
+### Sesión 2026-09-15 (noche) — mono sin Mono: GTK# reconstruida desde el clon 2.12 en net10run
+- **Contexto**: usuario desinstaló Mono; la app (`main/build/net10run/MonoDevelop.dll`, .NET 10.0.12) ya pasaba MEF/CompositionManager y cargaba glue; el bloqueo era un SIGSEGV en `g_markup_escape_text` (pid 805338, core `md16.core`).
+- **Diagnóstico del crash (cierre de la causa raíz)** con `ilspycmd` (herramienta global, `$HOME/.dotnet/tools/ilspycmd`): la `glib-sharp.dll` **del fork** declaraba `g_markup_escape_text (IntPtr text, int len)` — `int` (32-bit) contra el `gssize` nativo (64-bit) → en CoreCLR x64 los bits altos del registro quedan basura → NUL-scan gigante → SIGSEGV. En Mono no explotaba. `Marshaller.g_utf16_to_utf8` del fork también declaraba `IntPtr items_written` by-value (sin `&`), difiriendo del clon.
+- **Decisión**: no parchear por IL (el intento previo está en `main/build/gtk-sharp-patch/`), sino **reconstruir todo el managed GTK# desde el clon `mono/gtk-sharp` 2.12** (`/home/daniel/opencode/gtksharp-2-12`), que usa `IntPtr`/`out IntPtr` correctos.
+- **Reconstrucción** (`/home/daniel/opencode/gsbuild/`): csprojs SDK-style net10, firmados con `gtk-sharp.snk` para los 5 (glib/pango/gdk/atk/gtk → assemblies `glib-sharp`… `gtk-sharp`, v2.12.0.0) y `mono.snk` para `Mono.Cairo` (v4.0.0.0). Requisitos: `DefineConstants GTK_SHARP_2_6;2_8;2_10;2_12` (si no, CS0102/CS0234), `PublicSign=true` (OpenSSL 3 rechaza la firma SHA-1 del snk), excluir los `generated/*.cs` guardados, excluir `AssemblyInfo.cs` original de cairo, y `InternalsVisibleTo("gtk-sharp, PublicKey=…")` en glib-sharp (lo generaba `glib/Makefile.am`).
+- **Identidades verificadas con `AssemblyName.GetAssemblyName`** (herramienta `/home/daniel/opencode/pktcheck`): glib/pango/gdk/atk/gtk-sharp 2.12.0.0 `PKT=35E10195DAB3C99F`; Mono.Cairo 4.0.0.0 `PKT=0738EB9F132ED756` — idénticas a los stageados del fork/xwt.
+- **Falsos arranques**: el SIGABRT de `cairo_restore`/`cairo_pattern_destroy` en run17a era por **Mono.Cairo reconstruida** (la del clon 2.12 no satisface a Xwt.Gtk); restaurada la `Mono.Cairo.dll` del fork (`/home/daniel/opencode/gtksharp-fork-backup/`).
+- **run17b (aceptación)**: la app arranca con la nueva cadena glib/pango/gdk/atk/gtk-sharp + Mono.Cairo del fork y queda **estable >10 min**; ventana X mapeada con título `HelloWorld – Main.cs – MonoDevelop` (documento abierto con texto); MEF OK (`IEditorOperationsFactoryService`, `IEditorOptionsFactoryService`), MainWindow inicializada, ~33 addins cargados.
+- **Residuos no críticos**: `MonoPosixHelper.so` no encontrado (warning `Mono.Unix.Catalog` + un excepción no fatal en AddinManagerDialog por `Mono.Unix.Native.Stdlib`); diálogo "Acerca de" necesita `System.Xaml 4.0.0.0` (ausente en CoreCLR) → falla no bloqueante; `MonoDeveloperExtensions_nunit.dll` referida en manifest pero no construida (deuda NUnit del sln); motor de temas `murrine` ausente (cosmético).
+- **Siguiente**: decidir si reconstruir también `Mono.Cairo` desde una fuente que satisfaga Xwt (o mantener la del fork + gitignore el backup), y revisar los 3 símbolos glue faltantes (`gtksharp_gtk_style_set_mid_gc`, `pangosharp_attr_size_get_absolute`, `pangosharp_attr_size_get_size`).
+
+---
+
+## 2026-09-15 — Fix #3 MEF cerrado: build de MonoDevelop.Ide sin Mono y editor verificable
+
+**Causa raíz #3 confirmada y corregida**
+- Cotidiano NRE `EditorPreferences.Wrap[T]` (`ERROR: View failed to load`, `md_run19.log`, `md_run17b.log:249-250`): faltaba la opción MEF `BraceCompletion/Enabled` (`DefaultTextViewOptions.BraceCompletionEnabledOptionId`). En stock la exporta `Microsoft.VisualStudio.Text.BraceCompletion.Implementation.dll` (nunca se construye en Linux; MD usa su propia implementación en `MonoDevelop.SourceEditor2`). Probe `optprobe`: 75 opciones OK, única MISS `BraceCompletion/Enabled`.
+- **Fix**: nuevo export en `main/src/core/MonoDevelop.Ide/MonoDevelop.Ide.Composition/VSEditorShellParts.cs` (namespace `MonoDevelop.Ide.Composition`): `[Export(typeof(EditorOptionDefinition))] sealed class BraceCompletionEnabledOption : EditorOptionDefinition<bool>` con `Key => DefaultTextViewOptions.BraceCompletionEnabledOptionId`, `Default => true` (contrato de tipo verificado: `EditorOptionDefinition` vive solo en `Microsoft.VisualStudio.Text.Logic.dll`).
+
+**Build standalone de MonoDevelop.Ide (entorno sin Mono)**
+- El sistema perdió Mono (`/usr/lib/mono/4.5` esqueleto vacío); los HintPath hardcodeados a `/usr/lib/mono/4.5/*` del csproj ya no resolvían → MSB3245/CS0246. `ReferencePath` no se busca por defecto (`Directory.Build.targets:9` define `AssemblySearchPaths` sin `{ReferencePath}`) y **sobreescribir `AssemblySearchPaths` global rompe mscorlib** (CS0518 masivo); el `ReferencePath` global sin override no se consulta.
+- **Solución (commit-teable)**: `MonoDevelop.Ide.csproj` — los HintPath de `Mono.Cairo`, `System.Design`, `System.Web`, `System.Web.Services`, `System.Windows.Forms`, `System.Xaml` pasan a `$(MonoFrameworkNet45Directory)/…` (patrón ya usado por el port, ver docs/linux-build-report#2). Dir de refs: **`/home/daniel/opencode/mdrefs45/`** = `System.*` desde `Microsoft.NETFramework.ReferenceAssemblies.net472/1.0.3` (NuGet cache, sin BCL para no romper System.Runtime) + **`Mono.Cairo.dll` del fork** (md5 `3dfffe2b964f115cc7ec854046ef5d23`, NO la reconstruida que SIGABRT).
+- Build OK con: `dotnet msbuild MonoDevelop.Ide.csproj -p:Configuration=Debug -m:1 -t:Build -p:DisableDownloadNupkg=true -p:BuildProjectReferences=false -p:MonoGtkSharpDirectory=/home/daniel/opencode/mdrefs -p:MonoFrameworkNet45Directory=/home/daniel/opencode/mdrefs45` → **EXIT=0** (`/home/daniel/opencode/ide_build_fix4.log`). Salida en `main/build/bin/net10.0/MonoDevelop.Ide.dll` (23:21:00 hoy, contiene `BraceCompletionEnabledOption`).
+
+**Stage + verificación del run fijo**
+- `MonoDevelop.Ide.dll/.pdb` stageados a `main/build/net10run/` (backup `.bak092909`); relanzado (`md_run_fix4.log`, pid 369538).
+- `optprobe` sobre net10run: `BraceCompletion/Enabled` → **OK**.
+- Sin `View failed to load`/NRE. Errores restantes = los pre-existentes: 2 warnings de manifest `MonoDeveloperExtensions_nunit.dll`, assert `MonoDevelopMetadataReferenceManager` y falta de `MonoDevelop.MSBuildBuilder.exe` (todos presentes en run19).
+- **Render verificado por píxeles** (modelo sin visión): región editor pasó de 3 colores planos (`appwin_live.png`: #333) a **1419 colores con glifos** (fondo #000 + texto antialias); tab strip pasó de plano a **112 colores con acento azul** `(52,149,215)` — editor con texto y pestañas renderizando.
+
+**Notas/decisiones nuevas**
+- El build sln completo sigue roto por proyectos net472 que referencian Core/Ide net10; el flujo real es build por proyecto + stage (confirmado en docs/cold-boot-fix-report.md).
+- `~/.var/` (pool wine-mono) quedó **prohibido** por el usuario; las refs BCL se obtienen solo de `~/.nuget` + pack del SDK + fork stageado.
+- Siguientes: tema GTK `murrine` (workbench gris), probe headless NuGet 5.4.0, warnings manifest nunit; ya no es necesario reconstruir Mono.Cairo (fork OK).
+
+## 2026-09-16 — Fix #4 (manifest CSharpBinding) y Fix #5 (NuGet net472) + editor plano
+
+**Causa raíz #4: `View failed to load` por tipo faltante en add-in CSharpBinding (ya en `md_run_fix4.log:220-230`)**
+- Cadena de extensiones del editor (`TextEditor.InitializeExtensionChain`, `TextEditor.cs:1188`) falla con `Type 'MonoDevelop.CSharp.UnitTestTextEditorExtension' not found in add-in 'MonoDevelop.CSharpBinding,9.0'`.
+- Manifest `CSharpBinding.addin.xml:156` declara `<Class fileExtensions=".cs" class=...UnitTestTextEditorExtension/>` pero `CSharpBinding.csproj:176/236` ya había **excluido** `UnitTestTextEditorExtension.cs` ("NUnit integration excluded", depende de `MonoDevelop.UnitTesting`). La clase vive en `MonoDevelop.CSharp.UnitTests/` y extiende `AbstractUnitTestTextEditorExtension` (de `MonoDevelop.UnitTesting`).
+- **Fix en fuente**: nodo eliminado de `CSharpBinding.addin.xml` (línea 156). Rebuild completo de CSharpBinding no es viable standalone (CS0006: falta `obj/ref` de Debugger/DesignerSupport/Refactoring/SourceEditor2/TextEditor).
+- **Fix de binarios stageados**: parche Cecil en `/home/daniel/opencode/csbprobe/` (resolver con TODOS los subdirs de net10run) sobre `AddIns/CSharpBinding/MonoDevelop.CSharpBinding.dll` y `.../net10.0/...`: recurso embebido `CSharpBinding.addin.xml` sin el nodo. `grep -c UnitTestTextEditorExtension` = 0; backups `.bak092915`. OJO: `RuntimeAddin.GetType`/`LoadModule` solo recorre las assemblies importadas en el manifest → un stub dll suelto en el dir del add-in no se resolvería; por eso el fix es a nivel manifest.
+
+**Verificación con solución abierta (`md_run_sln.log`, pid 416711)**
+- Sin `View failed to load` ni errores de `UnitTestTextEditorExtension`. Ventana: "ConsoleApplication – Program.cs – MonoDevelop".
+- Errores restantes no-fatal: `ResultsEditorExtension` (falta export MEF `IDiagnosticService`) y `CodeActionEditorExtension` (falta `ICodeFixService`), ambos en `TextEditor.InitializeExtensionChain` (cadena se recupera por nodo). `GetContentTypeFromMimeType null leg: text/x-csharp` → el registry MEF del editor NO declara el content type `C#` (solo code/UNKNOWN/text/any/intellisense/sighelp/inert/plaintext/sighelp-doc/projection).
+- **Estado visual reportado por el usuario**: texto visible pero sin coloreado de sintaxis (plano). Las pestañas renderizan.
+
+**Fix #5: diálogo "Administrar paquetes NuGet" — `StsAuthenticationHandler` no en netstandard2.0**
+- Error usuario: `Could not load type 'NuGet.Protocol.StsAuthenticationHandler' from assembly 'NuGet.Protocol, Version=5.4.0.3'` al abrir "Administrar paquetes NuGet" en solución.
+- Causa: `MonoDevelop.PackageManagement` compila contra `lib/net472/NuGet.Protocol.dll` (5.4.0, SÍ tiene la clase; usado en `MonoDevelopHttpHandlerResourceV3Provider.cs:62`), pero el staging copió la build **netstandard2.0** (sin `StsAuthenticationHandler`). Runtime → TypeLoadException.
+- **Fix**: sustituidas las `NuGet.Protocol.dll` stageadas (`AddIns/MonoDevelop.PackageManagement/NuGet.Protocol.dll` y `net10.0/...`) por la build **net472** del paquete 5.4.0 (backups `.bak092017`). Verificado con probe de carga real en .NET 10: LoadContext=Default, `NuGet.Protocol.StsAuthenticationHandler` resuelve.
+- Repro GUI (XTEST): menú Proyecto (~Alt+P) → ítem "Administrar paquetes NuGet" → diálogo `Administrar paquetes NuGet: solución` (0xe0057d). **Sin** error de TypeLoad ni "Unable to load the service index" en `md_run_nuget.log`.
+- Deuda nueva: `Unhandled Exception in HighlightingUsagesExtension` (NRE en `ResolveAsync`) al interactuar con el editor.
+
+**Pendientes**: ~~coloreado de sintaxis~~ (FIX #6, abajo), ~~errores MEF `IDiagnosticService`+`ICodeFixService`~~ (FIX #8, abajo), NRE `HighlightingUsagesExtension` (FIX #6c, abajo), `MonoDevelop.MSBuildBuilder.exe` ausente, tema murrine.
+
+## 2026-09-16 (noche) — Fix #6: coloreado de sintaxis del editor + guard NRE HighlightUsages
+
+**Causa raíz #6a: no existía la definición MEF del content type `CSharp`**
+- El registry del editor (`ContentTypeRegistryImpl` en `Microsoft.VisualStudio.CoreUtilityImplementation`) construye content types SOLO desde exports `[Export] ContentTypeDefinition` + `[Name]/[BaseDefinition]`. En el árbol stageado la única fuente era `BufferFactoryService` (any/text/code/plaintext/projection/inert) + `DefaultSignatureHelpPresenterProvider` (intellisense/sighelp/sighelp-doc). Nadie definía `CSharp`.
+- Cadena: `MimeTypeCatalog.GetContentTypeForMimeType("text/x-csharp")` → null (log "GetContentTypeFromMimeType null leg") → buffer queda con content type `text` → `TextDocument.MimeType` resuelve `text/plain` → `InitializeSyntaxMode` no encuentra definición → `DefaultSyntaxHighlighting` (todo foreground = texto plano).
+- **Patrón MEF clave (para otros agentes)**: el registry importa `Lazy<ContentTypeDefinition, IContentTypeDefinitionMetadata>` → el valor exportado debe SER un `ContentTypeDefinition`. Un `[Export]` sobre una clase plain usa la clase como contrato y nunca casa (falso verde compilando). Patrón correcto = campos tipados `ContentTypeDefinition` con `[Export][Name][BaseDefinition]` (como `BufferFactoryService`), verificado con probe reflexivo (`/home/daniel/opencode/ctprobe2`).
+- **Fix**: nuevo part `LanguageContentTypes` en `VSEditorShellParts.cs` (MonoDevelop.Ide) con campos `CSharp` y `VisualBasic` (base `code`).
+
+**Causa raíz #6b: el clasificador del agregador no tiene taggers en este host**
+- `ClassifierTaggerProvider` está en `partsToDrop` del catálogo MEF (decisión previa documentada: sus parts rompen la composición), así que `TagBasedSyntaxHighlighting.GetHighlightedLineAsync` (que instala `HighlightUsagesExtension` con scope `source.cs`) siempre recibía 0 classification spans → texto plano aunque el fallback TextMate existiera.
+- **Fix**: `TagBasedSyntaxHighlighting` crea ahora un `fallbackHighlighting` (TextMate embebido `C#.sublime-syntax` via `SyntaxHighlightingService.GetSyntaxHighlightingDefinition(FileName)`) y lo usa cuando el clasificador no devuelve spans; reenvía `HighlightingStateChanged` y lo libera en `Dispose`.
+
+**Fix #6c: guard NRE en `HighlightUsagesExtension.ResolveAsync` (CSharpBinding)**
+- `highlightsService` (IDocumentHighlightsService) puede ser null si el servicio Roslyn no está en el catálogo → NRE no manejada en cada caret move (`DelayedTooltipShow`). Ahora devuelve `ImmutableArray<DocumentHighlights>.Empty` si es null.
+- Bonus: `CSharpBinding.csproj` compiló standalone a 0 errores por primera vez (HintPath de Mono.Cairo apuntaba a `/usr/lib/mono/4.5/Mono.Cairo.dll`, inexistente; movido a `$(MonoFrameworkNet45Directory)`; se tuvieron que poblar `obj/Debug/net10.0/ref/` de Debugger/DesignerSupport/Refactoring/TextEditor con los dlls stageados).
+
+**Builds**: MonoDevelop.Ide (22:41), MonoDevelop.SourceEditor (22:06), CSharpBinding (22:07) → 0 errores; stageados a `net10run` (backups `.bak2210`).
+
+**Verificación (run 22:47, pid 279354, `md_run_syntax3.log`)**
+- `dotnet MonoDevelop.dll /home/daniel/opencode/ctprobe/Program.cs` → ventana `Program.cs – MonoDevelop` (0xc00341).
+- **Coloreado OK**: análisis de píxeles de la región del editor (`/home/daniel/opencode/editor_syntax.png`): 2.726 colores distintos; ~5.5k px azules (keywords), ~1.4k verdes (strings/comments), ~2.4k naranjas (tipos). Antes: región plana `#333`.
+- `GetContentTypeFromMimeType null leg`: **0** ocurrencias (antes: 2 por apertura). NRE `HighlightingUsagesExtension`: **0** (antes: 10+). FATAL: 0.
+- Quedan (siguiente fix): `ResultsEditorExtension`/`CodeActionEditorExtension` fallan al instanciarse por falta de exports MEF `IDiagnosticService` e `ICodeFixService` (la cadena del editor se recupera por nodo, pero conviene proveerlos o stubbarlos).
+- Artefactos: diálogo File→Open NO acepta rutas tipeadas (files-asociations de GTK filtran: "Archivo no encontrado: ...7tmp7..." — los `/` llegan como `7`); abrir vía arg posicional funciona.
+
+**Pendientes**: errores MEF `IDiagnosticService`+`ICodeFixService` (ResultsEditorExtension / CodeActionEditorExtension) → resuelto luego (FIX #8), `MonoDevelop.MSBuildBuilder.exe` ausente, tema murrine.
+
+## 2026-09-16 (noche) — Fix #7: perfil del usuario caía en ~/Documentos (SpecialFolder.Personal)
+
+**Causa raíz**: `UserProfile.ForUnix` resolvía el home con `Environment.GetFolderPath (Environment.SpecialFolder.Personal)`. En Mono/.NET Framework eso devolvía `$HOME`, pero en .NET Core/5+ `Personal` mapea a `XDG_DOCUMENTS_DIR` (`~/Documentos` con user-dirs en español). Verificado con probe: `Personal=/home/daniel/Documentos`, `UserProfile=/home/daniel`, `HOME=/home/daniel`.
+- Resultado: `.config/MonoDevelop`, `.cache/MonoDevelop` y `.local/share/MonoDevelop` se creaban DENTRO de `~/Documentos` (logs de sesión en `/home/daniel/Documentos/.cache/MonoDevelop/9.0/Logs/`).
+- **Fix**: `UserProfile.cs` — nuevo helper `GetUnixHome()` que usa `SpecialFolder.UserProfile` (el que significa `$HOME` en .NET Core) con fallback a la env var `HOME` y por último `Personal`. Aplicado en `ForUnix`.
+- Otros usos de `Personal` en core/Ide son default-paths de UI (FileSelector, FileScout, IDEStyleOptionsPanel, ExportProjectPolicyDialog, RecentFileStorage `.recently-used`, ProjectsDefaultPath) — se comportan igual en Mono que antes (documentos), no rompen el perfil; se dejan (candidatos a normalizar si se quiere `$HOME`).
+- **Build**: MonoDevelop.Core 0 errores (23:01), stageado a net10run (backup `.bak2301`).
+- **Verificación (run 23:03, pid 312168)**: logs nuevos en `~/.cache/MonoDevelop/9.0/Logs/`, config en `~/.config/MonoDevelop/9.0/`, datos en `~/.local/share/MonoDevelop/9.0/`; `~/Documentos` ya no recibe nada nuevo; ventana OK, 0 FATAL; sin migración previa ("Did not find previous version from which to migrate data") — perfil viejo en `~/Documentos` queda como basura eliminable.
+- NOTA XDG: si existieran `XDG_CONFIG_HOME`/`XDG_CACHE_HOME`/`XDG_DATA_HOME` definidas, `ForUnix` ya las respeta (no cambia con este fix).
+- **Limpieza del perfil huérfano (23:07)**: borrados `~/Documentos/.config/MonoDevelop`, `~/Documentos/.cache/MonoDevelop` (26MB, incluía el `8.0` viejo) y `~/Documentos/.local/share/MonoDevelop` con la app parada. Cold boot posterior verificado: perfil regenerado en `~/.config`/`~/.cache`/`~/.local/share`, ventana OK, 0 FATAL, `~/Documentos` sin rastros de MonoDevelop.
+
+## 2026-09-17 (madrugada) — Fix #8: exports MEF de IDiagnosticService / ICodeFixService / ICodeRefactoringService
+
+**Diagnóstico** (probes de reflexión sobre los binarios stageados):
+- El Roslyn 4.8 staged **no trae** los servicios que importan las extensiones del editor viejo:
+  - `ICodeFixService` vive en `Microsoft.CodeAnalysis.Editor` (EditorFeatures), **no stageado** por decisión del fork.
+  - `ICodeRefactoringService` real existe en `Microsoft.CodeAnalysis.Features` pero es **interno** y con firma distinta (`TextDocument`+`CodeActionOptionsProvider`, 6 parámetros) — el stub de 3 parámetros de MonoRoslynCompat nunca lo satisfará.
+  - `IDiagnosticService` (contrato de la época del fork `SystemTools`) ya no existe; su equivalente moderno es el `IDiagnosticAnalyzerService` interno (push/pull diferente).
+- Resultado: al abrir cualquier documento, `ResultsEditorExtension` y `CodeActionEditorExtension` fallaban con `Expected 1 export(s) with contract name ... but found 0` (venía del log `md_run_sln.log` del 09-15).
+
+**Fix** (patrón shim inerte, como el telemetría `NoOpLoggingServiceInternal`):
+- `MonoDevelop.Refactoring/MonoDevelop.Refactoring/MefExportShims.cs` (NUEVO): `InertDiagnosticService`, `InertCodeFixService`, `InertCodeRefactoringService` — exports `[Export(typeof(...))]` de los contratos stub, con comportamiento vacío (0 fixes / 0 refactorings / 0 diagnostics). Las extensiones componen y arrancan; la funcionalidad de fixes/diagnósticos queda degradada hasta portar el pipeline de Features/EditorFeatures.
+- `MonoDevelop.Refactoring.csproj`: `<Compile Include>` del nuevo archivo (EnableDefaultCompileItems=false — **lección: un .cs nuevo no entra al build si no se registra**; el build anterior "0 errores" no lo incluía).
+- `CompositionManager.cs`: `partsToDrop` += `Microsoft.CodeAnalysis.CodeRefactorings.CodeRefactoringService` (el part real interno de Features también exporta bajo el AQN del contrato stub y colisiona: "found 2").
+- `CompositionManager.Caching.cs`: `CacheVersion` 2→3 (invalida cache MEF por el cambio de catálogo).
+- **Build**: MonoRoslynCompat 0 errores (con `-p:NuGetPackageRoot=$HOME/.nuget/packages/` con trailing slash — sin él, `NuGetPackageRoot` vacío rompe todos los HintPath de Roslyn), MonoDevelop.Ide 0 errores, MonoDevelop.Refactoring 0 errores (con `-p:MonoFrameworkDirectory=/home/daniel/opencode/mdrefs45` para el HintPath Mono.Cairo). Stageados a `net10run` con backups `.bak-shim`.
+- **Verificación (run 00:35, pid 535966)**: documento `Program.cs` abierto, ventana viva >2 min, log con **0** "Expected 1 export", **0** "Error while creating text editor extension", 0 FATAL; MEF compone desde cache (v3).
+- **Pendiente nuevo detectado**: NRE en `QuickInfoProvider.GetQuickInfoAsync` (tooltip hover, vía editor nuevo) — separado de este fix.
+- **Nota de proceso**: la app muere silenciosamente si el proceso queda hijo del shell del tool; lanzar con `nohup setsid` para que sobreviva.
+
+**Pendientes**: NRE `QuickInfoProvider.GetQuickInfoAsync` (hover), `MonoDevelop.MSBuildBuilder.exe` ausente, tema murrine, evaluación de cargar proyecto (MSBuild SDK resolver).
+
+## 2026-09-17 — Fix #9: NRE en QuickInfoProvider.GetQuickInfoAsync (tooltip hover)
+
+**Causa raíz**: `CSharpBinding` compila contra el contrato viejo `Microsoft.CodeAnalysis.ISymbolDisplayService` (namespace 3.x de MonoRoslynCompat), pero el Roslyn 4.8 staged registra el servicio de lenguaje bajo `Microsoft.CodeAnalysis.LanguageService.ISymbolDisplayService` (interno en Features). `GetLanguageServices(...).GetService<ISymbolDisplayService>()` resuelve contra el contrato viejo → `null` → NRE al construir el tooltip. Segundo consumidor con el mismo patrón: `ProtocolMemberCompletionProvider`.
+
+**Fix**:
+- `QuickInfoProvider.cs` (CSharpBinding): guard `descriptionService == null` → fallback con `SignatureMarkupCreator` (markup propio del fork, sin depender del servicio Roslyn ausente).
+- `ProtocolMemberCompletionProvider.cs` (CSharpBinding): mismo guard en la ruta de completion.
+- Stageado `MonoDevelop.CSharpBinding.dll` (build 00:53).
+- **Verificación (run 02:13)**: hovers repetidos con XTEST sobre el editor (`/home/daniel/opencode/hover.py`, barrido de 6 posiciones) → **0** "Object reference not set", **0** "GetQuickInfoAsync" en el log.
+
+## 2026-09-17 — Fix #10: Microsoft.CodeAnalysis.EditorFeatures stageado a net10run
+
+**Origen del binario**: el metapaquete NuGet `Microsoft.CodeAnalysis.EditorFeatures 4.8.0-7.25569.21` no trae `lib/` (solo nuspec+icono); el DLL real vive en `Microsoft.CodeAnalysis.EditorFeatures.Common` (se usó el flavor `netstandard2.0`, coherente con el resto de Roslyn stageado). Toda la clausura de dependencias ya estaba en el cache NuGet local.
+
+**Stageados (16 dlls, ninguno sobrescribe un staged 16.0 de vs-editor)**: `Microsoft.CodeAnalysis.{EditorFeatures, EditorFeatures.Text, Remote.Workspaces, LanguageServer.Protocol, InteractiveHost, Scripting}`, `Microsoft.CommonLanguageServerProtocol.Framework`, `Microsoft.VisualStudio.LanguageServer.{Protocol, Protocol.Internal, Protocol.Extensions, Client}`, `Microsoft.VisualStudio.Debugger.Contracts`, `Nerdbank.Streams`, `Microsoft.ServiceHub.{Framework, Client}`, `System.IO.Pipelines`.
+
+**Ajustes**:
+- `CompositionManager.cs`: `partsToDrop` += `Microsoft.CodeAnalysis.Diagnostics.DiagnosticService` (part del assembly LanguageServer.Protocol que exporta bajo el FullName del contrato stub `IDiagnosticService` → colisión "found 2" con el shim inerte y `ResultsEditorExtension` roto).
+- `CompositionManager.Caching.cs`: `CacheVersion` 3→4.
+- Rebuild de MonoDevelop.Ide a 0 errores (`-p:MonoFrameworkDirectory=/home/daniel/opencode/mdrefs45` para el HintPath de Mono.Cairo), stageado con backup `.bak-ef1`.
+
+**Verificación (run 02:13, pid 592647)**: ventana "Program.cs – MonoDevelop" viva >8 min con documento abierto y hovers de prueba; **0 FATAL, 0 "View failed", 0 "Expected 1 export", 0 "Error while creating text editor extension", 0 NRE**; solo los 2 ERROR preexistentes de manifest (`MonoDeveloperExtensions_nunit.dll`). Los 118 parts de EditorFeatures entran al catálogo (visible con `MD_LOG_MEF_HOST=1`). Los 37 "found 2" restantes son duplicidad de `IThreadingContext`/`ICodeFixService` (stub MonoRoslynCompat vs real de EditorFeatures) que no lanza excepciones en runtime.
+
+**Cobertura de referencias** (escáner System.Reflection.Metadata sobre 1036 dlls del árbol): los únicos faltantes son gaps preexistentes ya tolerados por carga perezosa (Humanizer, Elfie, SQLitePCLRaw.batteries_v2, MessagePack, ServiceHub.Resources/Telemetry); `System.Runtime.CompilerServices.Unsafe` lo provee el shared framework; WindowsBase/Presentation* solo afectan al camino WPF no usado en GTK.
+
+**Pendientes**: `MonoDevelop.MSBuildBuilder.exe` ausente, tema murrine, evaluación de cargar proyecto (MSBuild SDK resolver), integración real de quick-fixes (el shim inerte sigue; el `CodeFixService` real exige unificar identidad de tipos: `IThreadingContext`, `IEditorOptionsFactoryService`, ...).
+
+## 2026-09-17 — Migración del tooling: /tmp/opencode → ~/opencode
+
+`/tmp` iba a ser borrado: se copió **todo** el toolkit (1,1 GB, 5.803 archivos) a **`/home/daniel/opencode/`** (verificado con `diff -rq`), se reescribieron las rutas en scripts/csproj/obj y se añadió `~/opencode/README.md` con el contexto para agentes futuros (mdrefs45, runmd_ef.sh, hover.py, arf, ctprobe). Builds standalone: usar `-p:MonoFrameworkDirectory=/home/daniel/opencode/mdrefs45`.
+
+## 2026-09-17 — Fix #10b: unificación de identidad de tipos en la composición MEF
+
+**Diagnóstico** (con escáner de metadatos `~/opencode/tscan`): `MonoRoslynCompat.dll` **declara** tipos con los mismos FullNames que los tipos internos reales de EditorFeatures (p.ej. `Microsoft.CodeAnalysis.Editor.Shared.Utilities.IThreadingContext`). Con EditorFeatures stageado, el part real `ThreadingContext` y el export del fork `MonoDevelopThreadingContext` caen en el mismo contrato MEF (importaciones ambiguas, "found 2": 37 en el run anterior). El type-forwarding no es opción: los tipos reales son **internos**.
+
+**Fix** (patrón del fork: drop del part real, export único del fork):
+- `CompositionManager.cs`: `partsToDrop` += `Microsoft.CodeAnalysis.Editor.Shared.Utilities.ThreadingContext` (real) y `Microsoft.CodeAnalysis.CodeFixes.CodeFixService` (real; el inerte `InertCodeFixService` queda como export único).
+- `CompositionManager.Caching.cs`: `CacheVersion` 4→5.
+
+**Verificación (run 02:44, pid 612419)**: documento abierto, hovers OK, **0 "found 2"** (antes 37), 0 "Expected 1 export", 0 errores de creación de extensiones, 0 FATAL, 0 NRE; coloreado de sintaxis intacto (captura `~/opencode/unify_ef_final.png`: 3.201 colores). Los 92 "MEF composition error" restantes son **latentes** (sin excepción en runtime): parts reales de EditorFeatures que importan `IThreadingContext` (identidad del stub ≠ real) o servicios aún sin export (`IWorkspaceDiagnosticAnalyzerService`-family, `IPreviewService`). Desaparecerán al migrar los consumidores del fork al contrato real o al stagear las exports host que faltan.
+
+**Pendientes**: `MonoDevelop.MSBuildBuilder.exe` ausente, tema murrine, migración profunda de identidad de tipos (consumidores fork → tipos reales de EditorFeatures) para quick fixes/diagnostics reales.
+
+## 2026-09-17 — Fix #11: carga de proyectos desbloqueada (resolver de SDK de MSBuild)
+
+**Síntoma**: abrir un `.csproj` moderno abortaba con `UserException: No se encuentra el SDK "Microsoft.NET.SDK.WorkloadAutoImportPropsLocator"` → `MSBuild project could not be evaluated` + `Load operation failed` (log 2026-09-16 23:35:17).
+
+**Diagnóstico** (causa raíz, cadena completa):
+1. `Microsoft.NET.Sdk.props` del SDK 8/10 activa `MSBuildEnableWorkloadResolver=true` por defecto (salvo sentinel `DisableWorkloadResolver.sentinel`) → importa `Microsoft.NET.Sdk.ImportWorkloads.props`.
+2. Ese .props importa `AutoImport.props` con `Sdk="Microsoft.NET.SDK.WorkloadAutoImportPropsLocator"`: un **SDK virtual** que el resolver real de .NET sirve en memoria (no existe carpeta en `Sdks/`); con MSBuild real el preprocesado lo muestra saltado/comentado, sin error.
+3. El motor de evaluación in-process del fork (`DefaultMSBuildEngine.GetImportFiles`) llamaba `SdkResolution.GetSdkPath` que lanza `UserException` si ningún resolver resuelve → la evaluación entera moría. Nota: el resolver real `WorkloadSdkResolver` se cargaba pero chocaba con 2 bugs adicionales del host fork: `SdkResultFactory.IndicateSuccess(IEnumerable...)` **NotImplementedException** (firma multi-path sin implementar en `SdkResolution.SdkResultFactoryImpl`) y `FileLoadException NuGet.Common 6.11.2.1` (conflicto de versión con el NuGet in-process).
+
+**Fix** (mínimo, un punto de llamada único; el `.csproj` con `<Project Sdk=...>` resuelve por otra vía — `GetImplicitlyImportedSdks` — y no pasa por aquí):
+- `DefaultMSBuildEngine.cs` (`GetImportFiles`): capturar la excepción de resolución de SDK **solo para imports** (`<Import Sdk="..."/>`), loguear WARNING "...the import will be skipped" y continuar la evaluación — replicando la tolerancia del MSBuild real con imports no resolubles. Los errores del SDK *principal* del proyecto no pasan por este camino.
+- Rebuild de `MonoDevelop.Core` a 0 errores y stageado.
+
+**Verificación (run 21:50, pid 290956, `ctprobe.csproj` por línea de comandos)**:
+- **0 "Load operation failed", 0 "could not be evaluated", 0 FATAL** (antes: carga abortada).
+- Los imports de workloads se saltan con el WARNING esperado: `Could not resolve SDK 'Microsoft.NET.SDK.WorkloadAutoImportPropsLocator' ... will be skipped` (igual para `WorkloadManifestTargetsLocator`). La evaluación continúa y completa.
+- El proyecto **se carga en el workspace**: se ejecuta el target `ResolvePackageDependencies` y Roslyn inicializa sus servicios de workspace (IAnalyzerService, IDocumentationProviderService, IPersistentStorageLocationService...).
+- El único error posterior es el pendiente ya conocido: `Did not find MSBuild builder .../MonoDevelop.MSBuildBuilder.exe` (builder remoto out-of-proc, necesario para **ejecutar targets**; la **evaluación** del proyecto ya funciona).
+- Los 78 ERROR del log son de esa familia `[MSBuild]` (resolvers reales de .NET que el fork carga y no puede satisfacer: NotImplementedException/NuGet.Common) — logueados y tolerados, sin abortar nada.
+
+**Pendientes**: tema murrine, migración profunda de identidad de tipos, sanear los resolvers SDK externos (IndicateSuccess multi-path + NuGet.Common) para que el resolver real sirva los SDK virtuales en lugar de saltarse los imports.
+
+## 2026-09-17 — Fix #12: MonoDevelop.MSBuildBuilder.exe operativo (targets MSBuild en marcha)
+
+**Estado previo**: la evaluación de proyectos funcionaba (Fix #11) pero ejecutar targets moría con `Did not find MSBuild builder .../MonoDevelop.MSBuildBuilder.exe`.
+
+**Trabajo realizado (3 capas):**
+
+1. **Builder remoto construido y stageado**. El fuente existe (`MonoDevelop.Projects.Formats.MSBuild/MonoDevelop.MSBuildBuilder.csproj`) pero el árbol no tenía el `.dll` managed (solo un apphost huérfano del 11/09). Se creó un envoltorio de build **durable** (`~/opencode/msbbuilder/MonoDevelop.MSBuildBuilder.build.csproj`) que compila exactamente los mismos fuentes contra los `Microsoft.Build` del SDK 10.0.401 (los que el builder carga en runtime). Artefactos stageados a `net10run`: `MonoDevelop.MSBuildBuilder.exe` (apphost renombrado, mismo truco que `CopyAppHostAsExe` del csproj original), `.dll`, `.runtimeconfig.json`, `.deps.json`.
+
+2. **Fix .NET Core en GettextCatalog.UICulture** (`Gettext.cs`): en .NET 5+ leer `Thread.CurrentUICulture` del main thread desde un worker lanza `InvalidOperationException` (en Mono era legal). Ahora la cultura se cachea en `uiCulture` durante el static ctor y `SetLocale`; `RemoteBuildEngineManager` la lee para `InitializeRequest.CultureName` sin tocar el Thread. Único consumidor en todo el src.
+
+3. **Fix propiedad reservada MSBuildSDKsPath** (builder): MSBuild 17 define `MSBuildSDKsPath` como toolset property derivada de `MSBUILD_EXE_PATH`; inyectarla como global property mata la evaluación con "La propiedad 'MSBuildSDKsPath' es global y no se puede modificar". Se filtra en `BuildEngine.SetGlobalProperties` y `ProjectBuilder.Run` (paths Initialize/SetGlobalProperties/per-build).
+
+4. **Fix selección de SDK por versión real** (`DotNetTargetRuntime.ResolveSdkMSBuildPath`): ordenaba los directorios del SDK **lexicográficamente** y elegía 8.0.424 sobre 10.0.401 ('8' > '1' como texto) → el builder evaluaba el proyecto con el SDK 8.0.424 y `GenerateRestoreGraphFile` fallaba con `NETSDK1045` (no soporta net10.0) → `.dg` vacío → restore con "No se pueden crear especificaciones de paquete". Ahora ordena por `Version.TryParse` (10.0.401 > 8.0.424). Lección: cualificar `System.Version` explícitamente (dentro de `DotNetTargetRuntime`, `Version` resuelve a la propiedad de instancia).
+
+5. **Diagnóstico permanente**: `[RestoreDiag]` en `MSBuildPackageSpecCreator.GetDependencyGraphSpec` registra en el log del IDE el resultado del target (errors, existencia y tamaño del .dg) — la ruta restore antes era invisible (los errores iban a un NullLogger de NuGet).
+
+**Verificación (run 23:14, pid 457827 + builder pid 469178)**: `[RestoreDiag] GenerateRestoreGraphFile: result=ok, errors=0, dgExists=True, dgLen=21131` — el builder remoto ejecutó el target con el SDK 10 correcto, NuGet completó el restore **sin excepciones** (0 NETSDK1045, 0 "No se pudieron restaurar", 0 FATAL). Los errores restantes del log son la familia conocida: resolvers SDK del SDK 8.0.424 cargados in-proc (NuGet.Common/NotImplementedException, logueados y tolerados), `ToolLocationHelper` con TargetFrameworkVersion vacía (14 evaluaciones in-proc toleradas), manifest `MonoDeveloperExtensions_nunit` (preexistente) y el assertion de `MonoDevelopMetadataReferenceManager` (no bloquea).
+
+**Probe durable**: `~/opencode/msbprobe/` replica el flujo del builder (env vars, resolver ALC hacia el SDK, ProjectCollection con globals del IDE) y confirma el target `GenerateRestoreGraphFile` OK con el SDK 10 (BUILD RESULT: True, .dg 21131 bytes). Útil para depurar futuros problemas del builder sin arrancar el IDE.
+
+**Pendientes**: tema murrine, migración profunda de identidad de tipos, sanear los resolvers SDK externos (IndicateSuccess multi-path + NuGet.Common), verificar build completo F7 de un proyecto en UI.
+
+## 2026-09-18 — Fix #13: SDK por proyecto (global.json) en el builder remoto
+
+**Requisito**: MonoDevelop compila/ejecuta solo con .NET 10, pero **cada proyecto abierto debe poder elegir el SDK con que se compila/debuggea**.
+
+**Hueco encontrado**: la **evaluación** in-proc ya honraba global.json (vía `SdkResolution`), pero el **builder remoto** recibía siempre `BinDir` del SDK más alto (`DotNetTargetRuntime.sdkMSBuildPath`, 10.0.401) — un proyecto con `global.json` → SDK 8.0.424 se habría compilado con el SDK equivocado. Síntoma observado: el build de un proyecto net8.0 quedaba estancado con el builder de SDK 10.
+
+**Fix (2 piezas):**
+
+1. `DotNetTargetRuntime.GetProjectSdkMSBuildPath (projectDirectory)`: resuelve el SDK del proyecto subiendo por los directorios padres buscando `global.json` (caché por directorio); si la versión pedida está instalada devuelve ese SDK, si no (o sin global.json) cae al más alto. Log INFO `Project SDK 'X' selected from <global.json>` y WARNING si la versión pedida no está instalada.
+
+2. `RemoteBuildEngineManager.GetRemoteProjectBuilder`: resuelve el SDK por proyecto y lo usa como `BinDir` del `InitializeRequest`; la clave del pool pasa a incluir el SDK (`runtime # solution # group # sdkDir`), así cada SDK tiene su propio builder con MSBuild coherente.
+
+**Viabilidad probada antes de integrar** (`~/opencode/msbprobe` + `~/opencode/sdk8probe`): el apphost .NET 10 con Microsoft.Build 17.14 del SDK 10, apuntando env/resolver al SDK 8.0.424, ejecutó `Restore` + `Build` completos de un proyecto net8.0 (`NETCoreSdkVersion=8.0.424` escrito por un target del propio proyecto) — mezcla host-10/SDK-8 es estable.
+
+**Verificación runtime**: proyecto `sdk8probe` (net8.0 + `global.json` 8.0.424, `rollForward: disable`) cargado en el IDE. Log: `Project SDK '8.0.424' selected from /home/daniel/opencode/sdk8probe/global.json`; `/proc/<builder>/maps` muestra que **los builders remotos cargan `/home/daniel/.dotnet/sdk/8.0.424/Microsoft.Build.dll`** (no el 10). La ruta por defecto (sin global.json → SDK 10) quedó probada en Fix #12 con ctprobe (build real desde UI). Nota UI: el disparo F8 por automatización XTEST es poco fiable (foco del editor GTK), pero la cadena de selección queda probada por maps/artefactos.
+
+**Pendientes**: tema murrine, migración profunda de identidad de tipos, sanear resolvers SDK externos, depurar el disparo de build desde UI (foco GTK) y el estancamiento ocasional del primer build (se recupera reintentando).

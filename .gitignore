@@ -277,13 +277,13 @@ Thumbs.db
 *.dotCover
 
 #Visual Studio 2015
-main/.vs/
-main/build/util
-main/po/StripMnemonics.pdb
-main/po/StripMnemonics.exe
+/main/.vs/
+/main/build/util
+/main/po/StripMnemonics.pdb
+/main/po/StripMnemonics.exe
 *.binlog
 *.ProjectImports.zip
-main/tests/StressTest/bin
+/main/tests/StressTest/bin
 
 #claves / materiales de firma (Fase 3.4)
 *.snk
@@ -297,3 +297,5 @@ main/tests/StressTest/bin
 /main/build/MonoRoslynCompat.dll
 **/bin/Debug/
 **/obj/Debug/
+
+/.freebuff/project-id

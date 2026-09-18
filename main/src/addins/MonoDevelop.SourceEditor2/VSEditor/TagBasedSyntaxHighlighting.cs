@@ -63,6 +63,38 @@ namespace Microsoft.VisualStudio.Platform
 				classificationMap = GetClassificationMap (defaultScope);
 			else
 				defaultScopeStack = new ScopeStack (EditorThemeColors.Foreground);
+			fallbackHighlighting = CreateFallbackHighlighting (defaultScope);
+			if (fallbackHighlighting != null)
+				fallbackHighlighting.HighlightingStateChanged += ForwardFallbackHighlightingStateChanged;
+		}
+
+		void ForwardFallbackHighlightingStateChanged (object sender, LineEventArgs e)
+		{
+			var handler = _highlightingStateChanged;
+			handler?.Invoke (this, e);
+		}
+
+		// The VS classification aggregator has no taggers on this host (ClassifierTaggerProvider is
+		// dropped from the MEF catalog because its parts fail composition), so GetClassificationSpans
+		// always returns an empty list and every line would render in the foreground color. Keep a
+		// TextMate-based highlighter (the embedded sublime-syntax for the language) as a fallback so
+		// at least lexical highlighting works until the tagging path is ported.
+		ISyntaxHighlighting fallbackHighlighting;
+
+		ISyntaxHighlighting CreateFallbackHighlighting (string defaultScope)
+		{
+			try {
+				var fileName = textDocument?.FileName;
+				if (fileName == null || fileName.Value.IsNullOrEmpty)
+					return null;
+				var def = SyntaxHighlightingService.GetSyntaxHighlightingDefinition (fileName.Value, null);
+				if (def == null)
+					return null;
+				return new SyntaxHighlighting (def, textDocument);
+			} catch (Exception e) {
+				LoggingService.LogInternalError ("TagBasedSyntaxHighlighting fallback init failed", e);
+				return null;
+			}
 		}
 
 		public Task<HighlightedLine> GetHighlightedLineAsync (IDocumentLine line, CancellationToken cancellationToken)
@@ -80,6 +112,10 @@ namespace Microsoft.VisualStudio.Platform
  				int end = snapshotSpan.End.Position;
  				
  				var classifications = classifier.GetClassificationSpans(snapshotSpan);
+ 				if ((classifications == null || classifications.Count == 0) && fallbackHighlighting != null) {
+					// No classification tagger covers this buffer: lexical fallback instead of flat text.
+					return fallbackHighlighting.GetHighlightedLineAsync (line, cancellationToken);
+				}
  				
  				int lastClassifiedOffsetEnd = start;
  				ScopeStack scopeStack;
@@ -457,6 +493,10 @@ namespace Microsoft.VisualStudio.Platform
 
 		public void Dispose ()
 		{
+			if (fallbackHighlighting != null) {
+				fallbackHighlighting.HighlightingStateChanged -= ForwardFallbackHighlightingStateChanged;
+				(fallbackHighlighting as IDisposable)?.Dispose ();
+			}
 		}
 	}
 }
