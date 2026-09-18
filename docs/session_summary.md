@@ -362,3 +362,17 @@ Dejar en verde el build del núcleo de MonoDevelop en Linux usando `dotnet msbui
 **Verificación runtime**: proyecto `sdk8probe` (net8.0 + `global.json` 8.0.424, `rollForward: disable`) cargado en el IDE. Log: `Project SDK '8.0.424' selected from /home/daniel/opencode/sdk8probe/global.json`; `/proc/<builder>/maps` muestra que **los builders remotos cargan `/home/daniel/.dotnet/sdk/8.0.424/Microsoft.Build.dll`** (no el 10). La ruta por defecto (sin global.json → SDK 10) quedó probada en Fix #12 con ctprobe (build real desde UI). Nota UI: el disparo F8 por automatización XTEST es poco fiable (foco del editor GTK), pero la cadena de selección queda probada por maps/artefactos.
 
 **Pendientes**: tema murrine, migración profunda de identidad de tipos, sanear resolvers SDK externos, depurar el disparo de build desde UI (foco GTK) y el estancamiento ocasional del primer build (se recupera reintentando).
+
+## 2026-09-18 — Fix #14: resolvers SDK externos sanados (0 errores [MSBuild] en arranque)
+
+**Estado previo**: el arranque acumulaba 52 errores `[MSBuild]` tolerados: 26× `NotImplementedException` (los resolvers reales del SDK llamaban los overloads multi-path de `SdkResultFactory`, que en la base son `virtual { throw NotImplementedException(); }` y el fork no los sobreescribía) + 26× `SDK not found` (consecuencia: los SDK virtuales de workload quedaban sin resolver) + el `NuGetSdkResolver` no cargaba (`NuGet.Common 7.9` pedido frente al 6.11 ya cargado en el contexto default). Los imports de workloads se saltaban en evaluación.
+
+**Fix (2 piezas en `SdkResolution.cs`):**
+
+1. **`SdkResultFactoryImpl` completo**: se implementan los 4 overloads multi-path (`IndicateSuccess` con `paths`/`propertiesToAdd`/`itemsToAdd`/`warnings`/`environmentVariablesToAdd`, y el variante de un path con props/items) y `SdkResultImpl` gana un ctor multi-path: primer path → propiedad `Path` (virtual), resto → `AdditionalPaths` (setter público), más `PropertiesToAdd`/`ItemsToAdd`/`EnvironmentVariablesToAdd` vía setters protegidos, y se pobla el `SdkReference` base (antes nulo). Firmas tomadas por reflexión del `Microsoft.Build.Framework.dll` real (probe `~/opencode/fwprobe`).
+
+2. **`SdkResolverLoadContext`**: los resolvers externos (`SdkResolvers/<name>/<name>.dll`) ya no cargan con `Assembly.LoadFrom` (contexto default, colisión de versiones) sino en su propio `AssemblyLoadContext` con `AssemblyDependencyResolver` sobre su `<name>.deps.json` y probe del propio directorio con guarda de versión mayor/menor; las assemblies del host (Microsoft.Build*, System.*, Mono*, MonoDevelop*, mscorlib/netstandard) devuelven null para unificar tipos con el proceso.
+
+**Verificación (sdk8probe con global.json 8.0.424)**: **0 errores `[MSBuild]`** (antes 52), **0 NotImplementedException**, **0 "SDK not found"**, NuGetSdkResolver **carga**, **0 imports de workloads saltados** (los SDK virtuales ahora se resuelven de verdad en evaluación, como el MSBuild real), 0 FATAL, selector de SDK intacto (`Project SDK '8.0.424' selected`). Sanity en la ruta por defecto (ctprobe net10 sin global.json → SDK 10): 0 FATAL, 0 errores, carga normal.
+
+**Pendientes**: tema murrine (ruido GTK del arranque), migración profunda de identidad de tipos, disparo de build desde UI (foco GTK/XTEST) y estancamiento ocasional del primer build (probablemente ya resuelto con Fix #13; confirmar).

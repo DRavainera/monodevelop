@@ -7,6 +7,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.Loader;
 using System.Runtime.Serialization;
 using System.Text;
 using Microsoft.Build.Framework;
@@ -237,7 +238,12 @@ namespace MonoDevelop.Projects.MSBuild
 		{
 			Assembly assembly;
 			try {
-				assembly = Assembly.LoadFrom (resolverPath);
+				// Load the resolver into its own assembly load context so its private
+				// dependencies (e.g. the NuGet.* assemblies of the SDK's NuGet resolver)
+				// bind to the versions shipped next to it instead of colliding with the
+				// versions the IDE itself already loaded in the default context.
+				var loadContext = new SdkResolverLoadContext (resolverPath);
+				assembly = loadContext.LoadFromAssemblyPath (resolverPath);
 			} catch (Exception e) {
 				logger.LogWarning (string.Format ("The SDK resolver assembly \"{0}\" could not be loaded. {1}", resolverPath, e.Message));
 				return;
@@ -256,6 +262,60 @@ namespace MonoDevelop.Projects.MSBuild
 					logger.LogWarning (string.Format ("The SDK resolver type \"{0}\" failed to load. {1}", type.Name, e.Message));
 					return;
 				}
+			}
+		}
+
+		sealed class SdkResolverLoadContext : AssemblyLoadContext
+		{
+			readonly AssemblyDependencyResolver dependencyResolver;
+			readonly string baseDirectory;
+
+			public SdkResolverLoadContext (string resolverAssemblyPath)
+				: base ("SdkResolver: " + resolverAssemblyPath)
+			{
+				baseDirectory = Path.GetDirectoryName (resolverAssemblyPath);
+				try {
+					var depsFile = Path.Combine (baseDirectory, Path.GetFileNameWithoutExtension (resolverAssemblyPath) + ".deps.json");
+					dependencyResolver = File.Exists (depsFile) ? new AssemblyDependencyResolver (depsFile) : null;
+				} catch {
+					dependencyResolver = null;
+				}
+			}
+
+			protected override Assembly Load (AssemblyName assemblyName)
+			{
+				// Prefer a dependency resolved from the resolver's own deps.json
+				string path = dependencyResolver?.ResolveAssemblyToPath (assemblyName);
+				if (!string.IsNullOrEmpty (path) && File.Exists (path))
+					return LoadFromAssemblyPath (path);
+
+				// Fall back to probing the resolver directory for its private dependencies,
+				// accepting the candidate only when its requested version matches so we
+				// never shadow framework assemblies the host must provide.
+				var candidate = Path.Combine (baseDirectory, assemblyName.Name + ".dll");
+				if (File.Exists (candidate) && !IsHostAssembly (assemblyName)) {
+					try {
+						var candidateName = AssemblyName.GetAssemblyName (candidate);
+						if (assemblyName.Version == null || (candidateName.Version.Major == assemblyName.Version.Major && candidateName.Version.Minor == assemblyName.Version.Minor))
+							return LoadFromAssemblyPath (candidate);
+					} catch {
+					}
+				}
+
+				// Returning null falls through to the default context (Microsoft.Build.Framework,
+				// System.* and the IDE's own assemblies, so resolver types unify with the host).
+				return null;
+			}
+
+			static bool IsHostAssembly (AssemblyName name)
+			{
+				var n = name.Name ?? "";
+				return n.StartsWith ("Microsoft.Build", StringComparison.OrdinalIgnoreCase) ||
+					n.StartsWith ("System.", StringComparison.OrdinalIgnoreCase) ||
+					n.StartsWith ("Mono.", StringComparison.OrdinalIgnoreCase) ||
+					n.StartsWith ("MonoDevelop.", StringComparison.OrdinalIgnoreCase) ||
+					string.Equals (n, "mscorlib", StringComparison.OrdinalIgnoreCase) ||
+					string.Equals (n, "netstandard", StringComparison.OrdinalIgnoreCase);
 			}
 		}
 
@@ -296,6 +356,7 @@ namespace MonoDevelop.Projects.MSBuild
 			{
 				Success = false;
 				Sdk = sdkReference;
+				SdkReference = sdkReference;
 				Errors = errors;
 				Warnings = warnings;
 			}
@@ -304,9 +365,41 @@ namespace MonoDevelop.Projects.MSBuild
 			{
 				Success = true;
 				Sdk = sdkReference;
+				SdkReference = sdkReference;
 				Path = path;
 				Version = version;
 				Warnings = warnings;
+			}
+
+			public SdkResultImpl (SdkReference sdkReference, IEnumerable<string> paths, string version,
+				IEnumerable<string> warnings,
+				IDictionary<string, string> propertiesToAdd = null,
+				IDictionary<string, SdkResultItem> itemsToAdd = null,
+				IDictionary<string, string> environmentVariablesToAdd = null)
+			{
+				bool first = true;
+				foreach (var p in paths) {
+					if (first) {
+						// Primary path goes through the virtual base property
+						Path = FixFilePath (p);
+						first = false;
+					} else {
+						if (AdditionalPaths == null)
+							AdditionalPaths = new List<string> ();
+						AdditionalPaths.Add (FixFilePath (p));
+					}
+				}
+				Success = true;
+				Sdk = sdkReference;
+				SdkReference = sdkReference;
+				Version = version;
+				Warnings = warnings;
+				if (propertiesToAdd != null)
+					PropertiesToAdd = propertiesToAdd;
+				if (itemsToAdd != null)
+					ItemsToAdd = itemsToAdd;
+				if (environmentVariablesToAdd != null)
+					EnvironmentVariablesToAdd = environmentVariablesToAdd;
 			}
 
 			public SdkReference Sdk { get; }
@@ -333,6 +426,38 @@ namespace MonoDevelop.Projects.MSBuild
 			public override SdkResult IndicateFailure (IEnumerable<string> errors, IEnumerable<string> warnings = null)
 			{
 				return new SdkResultImpl (_sdkReference, errors, warnings);
+			}
+
+			// Multi-path overloads: the Framework base implements them as 'throw new
+			// NotImplementedException()', but the real .NET SDK resolvers (loaded in-process
+			// from SdkResolvers/, e.g. WorkloadMSBuildSdkResolver) call them, so they must
+			// be overridden here or every workload-related SDK resolution fails.
+			public override SdkResult IndicateSuccess (string path, string version,
+				IDictionary<string, string> propertiesToAdd, IDictionary<string, SdkResultItem> itemsToAdd,
+				IEnumerable<string> warnings = null)
+			{
+				return new SdkResultImpl (_sdkReference, new [] { path }, version, warnings, propertiesToAdd, itemsToAdd);
+			}
+
+			public override SdkResult IndicateSuccess (string path, string version,
+				IDictionary<string, string> propertiesToAdd, IDictionary<string, SdkResultItem> itemsToAdd,
+				IEnumerable<string> warnings = null, IDictionary<string, string> environmentVariablesToAdd = null)
+			{
+				return new SdkResultImpl (_sdkReference, new [] { path }, version, warnings, propertiesToAdd, itemsToAdd, environmentVariablesToAdd);
+			}
+
+			public override SdkResult IndicateSuccess (IEnumerable<string> paths, string version,
+				IDictionary<string, string> propertiesToAdd, IDictionary<string, SdkResultItem> itemsToAdd,
+				IEnumerable<string> warnings)
+			{
+				return new SdkResultImpl (_sdkReference, paths, version, warnings, propertiesToAdd, itemsToAdd);
+			}
+
+			public override SdkResult IndicateSuccess (IEnumerable<string> paths, string version,
+				IDictionary<string, string> propertiesToAdd = null, IDictionary<string, SdkResultItem> itemsToAdd = null,
+				IEnumerable<string> warnings = null, IDictionary<string, string> environmentVariablesToAdd = null)
+			{
+				return new SdkResultImpl (_sdkReference, paths, version, warnings, propertiesToAdd, itemsToAdd, environmentVariablesToAdd);
 			}
 		}
 
