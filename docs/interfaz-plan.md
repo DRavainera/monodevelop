@@ -103,7 +103,7 @@ Requisitos adicionales al plan base, con estado y evidencia:
 | 3 | Pestañas del panel central estilo isla (navegador) | **HECHO** (M4) | `TabItem.island` en `App.axaml` (esquinas redondeadas, hover, activa fundida con el documento) |
 | 4 | Soporte nativo Wayland y X11 | **HECHO** (M4) | `Avalonia.Desktop` + `UsePlatformDetect`, sin GTK; verificado en X11 |
 | 5 | Temas claro y oscuro consistentes | **HECHO** (M4) | `ThemeDictionaries` (paleta `Ide*`) + cambio en runtime (menú View) |
-| 6 | Mono.Cairo → SkiaSharp | PENDIENTE (M5) | sustituirá el dibujo de Mono.TextEditor/lstetic; refs `SkiaSharp` en el proyecto del editor Avalonia |
+| 6 | Mono.Cairo → SkiaSharp | **EN CURSO (M5)** | `SkTextEditor` (Avalonia) renderiza vía SkiaSharp (WriteableBitmap + SKSurface) con gutter, caret, edición y resaltado C# consciente del tema; ref base para sustituir el dibujo Cairo de Mono.TextEditor |
 | 7 | Módulos Mono.* sin reemplazo: fork del repo (solo módulos afectados), port a .NET 10, quitar Gtk, rebranding `Mono.* → DotNet.*`, submódulo en `main/external/*` | EN CURSO | los 15 submódulos ya están forkeados a `DRavainera` y enlazados (commit 14b2bacaa4) con rama `net10`; port/renombre módulo a módulo según se toque en M5/M6 |
 | 8 | Xwt y módulos dependientes de Gtk o Mac-only: evaluar reemplazo o modificación | PENDIENTE | `xwt` forkeado; decisión por módulo cuando el cutover lo requiera |
 | 9 | Rediseño iconos PNG (MonoDevelop.Ide/icons/) estilo Fluent respetando tamaño y transparencias | PENDIENTE | mismo tamaño/archivo, reemplazo uno a uno con QA visual |
@@ -136,5 +136,7 @@ Migración módulo a módulo con QA de paridad funcional contra el diálogo Gtk 
 - **Preferences**: estructura completa de secciones (Environment, Projects, Text Editor, Source Code, Version Control, Other), panel Visual Style funcional con selector de tema en vivo (dark/light), placeholder informativo para paneles aún no portados, OK/Cancel. QA: panel por defecto, cambio de tema en vivo verificado (panel blanco en light), placeholder Fonts verificado (`--prefs=fonts`).
 - **Hooks QA** (`--about` | `--prefs` | `--addins` | `--prefs=<light|dark|panelId>`): abren cada diálogo al arrancar para validación automatizada sin navegación de UI; usados por el bucle de pruebas y aprovechables en CI.
 - **Add-in Manager**: pestañas Installed/Updates/Gallery con **datos reales** del registry de Mono.Addins compartido con el IDE (AddinEngine con `startupDirectory` = `main/build/net10run`, misma base de datos de addins), filtro de búsqueda, panel de detalles (versión/autor/descripción), Enable/Disable, Uninstall, Install from file (.mpack), Refresh. QA: 27 addins del IDE listados, render verificado.
+
+- **UI Gtk legacy**: se conservará en el árbol (oculta) y será ejecutable con el parámetro `--old-gui` durante toda la etapa de migración; su eliminación se decidirá cuando la nueva UI Avalonia esté madura (orden explícita del usuario).
 
 Hallazgo de QA del entorno: los clics sintéticos XTEST no llegan a ventanas que no tienen el foco de input en este escritorio (mutter); por eso los hooks `--prefs=<valor>` son la vía de validación programática del estado de cada panel.

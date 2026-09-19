@@ -1,5 +1,6 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="using:MonoDevelop.AvaloniaShell.Controls"
         x:Class="MonoDevelop.AvaloniaShell.Views.MainWindow"
         Title="MonoDevelop — Avalonia Shell"
         Width="1280" Height="800"
@@ -74,9 +75,12 @@
               BorderBrush="{DynamicResource IdeBorderBrush}" BorderThickness="0,0,1,0">
         <TabControl x:Name="DocTabs" TabStripPlacement="Top">
           <TabItem Classes="island" Header="Program.cs">
-            <TextBox AcceptsReturn="True" Text="public class Program { }"
-                     FontFamily="Consolas,DejaVu Sans Mono,monospace" FontSize="13"
-                     Background="Transparent" Foreground="{DynamicResource IdeFgBrush}" />
+            <controls:SkTextEditor Text="public class Program { }"
+                                   FontSize="13"
+                                   Foreground="{DynamicResource IdeFgBrush}"
+                                   GutterBackground="{DynamicResource IdeChromeBgBrush}"
+                                   GutterForeground="{DynamicResource IdeFgBrush}"
+                                   CaretBrush="{DynamicResource IdeFgBrush}" />
           </TabItem>
           <TabItem Classes="island" Header="global.json">
             <TextBox AcceptsReturn="True" Text="{}{ &quot;sdk&quot;: { } }"
