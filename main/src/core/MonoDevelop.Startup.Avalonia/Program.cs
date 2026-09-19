@@ -21,6 +21,12 @@ internal static class Program
 			a is "--about" or "--prefs" or "--addins"
 			|| a.StartsWith ("--prefs=", StringComparison.Ordinal)) ?? "";
 
+	// Optional path of a solution to open at startup (--sln=<path>); the Solution
+	// pad is then populated with the real projects of that solution.
+	public static string SolutionArg =>
+		Environment.GetCommandLineArgs ().FirstOrDefault (a => a.StartsWith ("--sln=", StringComparison.Ordinal)) is { } arg
+			? arg.Substring ("--sln=".Length) : "";
+
 	// Avalonia configuration, don't remove; also used by visual designer.
 	public static AppBuilder BuildAvaloniaApp ()
 		=> AppBuilder.Configure<App> ()

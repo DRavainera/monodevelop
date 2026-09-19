@@ -138,5 +138,6 @@ Migración módulo a módulo con QA de paridad funcional contra el diálogo Gtk 
 - **Add-in Manager**: pestañas Installed/Updates/Gallery con **datos reales** del registry de Mono.Addins compartido con el IDE (AddinEngine con `startupDirectory` = `main/build/net10run`, misma base de datos de addins), filtro de búsqueda, panel de detalles (versión/autor/descripción), Enable/Disable, Uninstall, Install from file (.mpack), Refresh. QA: 27 addins del IDE listados, render verificado.
 
 - **UI Gtk legacy**: se conservará en el árbol (oculta) y será ejecutable con el parámetro `--old-gui` durante toda la etapa de migración; su eliminación se decidirá cuando la nueva UI Avalonia esté madura (orden explícita del usuario).
+- **Pad Solution con datos reales**: `SolutionLoader` (reflection sobre `Microsoft.Build.dll` del runtime/SDK, `SolutionFile.Parse`) puebla el pad con la jerarquía real de una solución vía `--sln=<ruta>`; verificado con `SyntaxProbe.sln` (2 proyectos) y estado en la barra inferior.
 
 Hallazgo de QA del entorno: los clics sintéticos XTEST no llegan a ventanas que no tienen el foco de input en este escritorio (mutter); por eso los hooks `--prefs=<valor>` son la vía de validación programática del estado de cada panel.

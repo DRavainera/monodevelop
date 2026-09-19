@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
 using Avalonia;
@@ -57,7 +58,46 @@ public partial class MainWindow : Window
 			} else if (qa == "--addins") {
 				new AddinManagerDialog { WindowStartupLocation = WindowStartupLocation.CenterOwner }.ShowDialog (this);
 			}
+
+			// Load a real solution into the Solution pad when requested (--sln=<path>).
+			var slnArg = Program.SolutionArg;
+			if (slnArg.Length > 0)
+				LoadSolution (slnArg);
 		};
+
+		// Double-click a project in the Solution pad opens its .csproj tab in the editor.
+		if (SolutionList is not null)
+			SolutionList.DoubleTapped += OnSolutionOpen;
+	}
+
+	void LoadSolution (string path)
+	{
+		try {
+			var loaded = Services.SolutionLoader.Load (path);
+			if (loaded is null) {
+				StatusText.Text = "Failed to load solution: " + path;
+				return;
+			}
+			var (title, projects) = loaded.Value;
+			var items = new System.Collections.ObjectModel.ObservableCollection<string> {
+				$"Solution '{title}' ({projects.Count (p => !p.IsFolder)} project(s))"
+			};
+			foreach (var p in projects) {
+				var indent = p.Parent is null ? "" : "    ";
+				var icon = p.IsFolder ? "[f]" : "[p]";
+				items.Add ($"{indent}{icon} {p.Name}");
+			}
+			SolutionList!.ItemsSource = items;
+			StatusText.Text = "Loaded " + Path.GetFileName (path);
+		} catch (Exception ex) {
+			StatusText.Text = "Error loading solution: " + ex.Message;
+		}
+	}
+
+	void OnSolutionOpen (object? sender, RoutedEventArgs e)
+	{
+		if (SolutionList?.SelectedItem is string sel && sel.EndsWith (".csproj", StringComparison.Ordinal))
+			StatusText.Text = "Open: " + sel.Trim ();
 	}
 
 	/// <summary>macOS: caption buttons live at the left edge of the menu bar row.</summary>
