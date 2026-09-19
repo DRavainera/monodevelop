@@ -64,7 +64,7 @@ namespace Microsoft.Build.Evaluation
 			if (TryLoadNuGetFrameworks ()) {
 				var fw = NuGetParse (tfm);
 				if (fw != null)
-					return (string)nugetGetFramework.Invoke (null, new object [] { fw });
+					return (string)nugetGetFramework.Invoke (fw, null);
 			}
 
 			return GetFallbackIdentifier (tfm);
@@ -79,7 +79,7 @@ namespace Microsoft.Build.Evaluation
 			if (TryLoadNuGetFrameworks ()) {
 				var fw = NuGetParse (tfm);
 				if (fw != null) {
-					var version = (Version)nugetGetVersion.Invoke (null, new object [] { fw });
+					var version = (Version)nugetGetVersion.Invoke (fw, null);
 					return GetNonZeroVersionParts (version, versionPartCount);
 				}
 			}
@@ -98,7 +98,7 @@ namespace Microsoft.Build.Evaluation
 			if (TryLoadNuGetFrameworks ()) {
 				var fw = NuGetParse (tfm);
 				if (fw != null)
-					return (string)nugetGetPlatform.Invoke (null, new object [] { fw });
+					return (string)nugetGetPlatform.Invoke (fw, null);
 			}
 
 			int dash = tfm.IndexOf ('-');
@@ -113,7 +113,7 @@ namespace Microsoft.Build.Evaluation
 			if (TryLoadNuGetFrameworks ()) {
 				var fw = NuGetParse (tfm);
 				if (fw != null) {
-					var version = (Version)nugetGetPlatformVersion.Invoke (null, new object [] { fw });
+					var version = (Version)nugetGetPlatformVersion.Invoke (fw, null);
 					return GetNonZeroVersionParts (version, versionPartCount);
 				}
 			}

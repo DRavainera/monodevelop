@@ -405,4 +405,10 @@ Dejar en verde el build del núcleo de MonoDevelop en Linux usando `dotnet msbui
 
 - **Pendiente nuevo detectado**: la run-configuration de ejecución intenta lanzar `bin/Debug/net8.0/sdk8probe.exe` (extensión .exe que no existe en Linux/.NET) — corregir la selección del ejecutable para proyectos .NET.
 
+**4. Fix de seguimiento (mismo día 22:58): `TargetException` al resolver intrínsecos en el IDE**:
+
+- **Causa**: `TargetFrameworkIntrinsics` invocaba los *getters de instancia* de `NuGetFramework` (`Framework`, `Version`, `Platform`, `PlatformVersion`) con `Invoke(null, args)` → `TargetException: Non-static method requires a target` (56 errores "MSBuild property evaluation failed" IDE-side al cargar cualquier proyecto). Apareció al activar la preferencia por el `NuGet.Frameworks` ya cargado (6.11 del addin) — esa ruta antes no se ejercitaba.
+- **Fix**: los cuatro `Invoke` pasan la instancia (`nugetGetFramework.Invoke(fw, null)` etc.).
+- **Verificación**: arranque IDE con sdk8probe → **0** errores de evaluación (antes 56); restore-on-load `result=ok, errors=0` con `runtimeIdentifierGraphPath` del **SDK 8.0.424** y assets `targets: ['net8.0']`; dll final verificado en `bin/Debug/net8.0/` (corrida F8 22:39–22:42 con 0 errores de build).
+
 **Pendientes restantes**: migración profunda de identidad de tipos, launcher de ejecución .NET (extensión del binario), y AvaloniaUI 12 en espera de señal explícita del usuario.
