@@ -1513,9 +1513,20 @@ namespace MonoDevelop.Projects
 
 		internal protected virtual ExecutionCommand OnCreateExecutionCommand (ConfigurationSelector configSel, DotNetProjectConfiguration configuration)
 		{
-			DotNetExecutionCommand cmd = new DotNetExecutionCommand (configuration.CompiledOutputName);
+			FilePath output = configuration.CompiledOutputName;
+
+			// Native .NET SDK builds (net5.0+ executables) produce an extension-less native
+			// apphost next to the managed assembly instead of "<assembly>.exe" on Unix. When
+			// the ".exe" variant does not exist but the apphost does, launch the apphost.
+			if (configuration.CompileTarget != CompileTarget.Library && output.Extension == ".exe" && !File.Exists (output)) {
+				var apphost = output.ParentDirectory.Combine (output.FileNameWithoutExtension);
+				if (File.Exists (apphost))
+					output = apphost;
+			}
+
+			DotNetExecutionCommand cmd = new DotNetExecutionCommand (output);
 			cmd.Arguments = configuration.CommandLineParameters;
-			cmd.WorkingDirectory = Path.GetDirectoryName (configuration.CompiledOutputName);
+			cmd.WorkingDirectory = Path.GetDirectoryName (output);
 			cmd.EnvironmentVariables = configuration.GetParsedEnvironmentVariables ();
 			cmd.TargetRuntime = TargetRuntime;
 			return cmd;

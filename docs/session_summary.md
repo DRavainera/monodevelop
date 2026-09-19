@@ -411,4 +411,15 @@ Dejar en verde el build del núcleo de MonoDevelop en Linux usando `dotnet msbui
 - **Fix**: los cuatro `Invoke` pasan la instancia (`nugetGetFramework.Invoke(fw, null)` etc.).
 - **Verificación**: arranque IDE con sdk8probe → **0** errores de evaluación (antes 56); restore-on-load `result=ok, errors=0` con `runtimeIdentifierGraphPath` del **SDK 8.0.424** y assets `targets: ['net8.0']`; dll final verificado en `bin/Debug/net8.0/` (corrida F8 22:39–22:42 con 0 errores de build).
 
-**Pendientes restantes**: migración profunda de identidad de tipos, launcher de ejecución .NET (extensión del binario), y AvaloniaUI 12 en espera de señal explícita del usuario.
+**5. Fix workspace: export inerte de `IDiagnosticUpdateSourceRegistrationService` (commit 9c5aeba09d)**:
+
+- **Causa del popup al cargar proyectos**: `ProjectSystemHandler` importa el stub compat (`DiagnosticsCompat.cs`) para registrar el `HostDiagnosticUpdateSource` al cargar un workspace, pero nada lo exportaba desde que se retiró el fork Roslyn SystemTools → "found 0" → `Could not load parser database` → diálogo de error al usuario. El contrato real es internal a `Microsoft.CodeAnalysis.Features` con otra identidad de tipo (no satisfacía la importación).
+- **Fix**: shim inerte `InertDiagnosticUpdateSourceRegistrationService` en `MefExportShims.cs` (patrón existente) + bump del MEF `CacheVersion` 5 → 6.
+- **Verificación**: arranque con sdk8probe → 0 `Could not load parser`, proyecto cargado, restore ok. Nota: el bump revela 92 `MEF composition error` INFO-tolerados preexistentes (familia `MonoDevelopThreadingContext`/host VS ausente) que el camino cacheado no re-logueaba.
+
+**6. Fix launcher de ejecución .NET: apphost sin extensión en Unix**:
+
+- **Causa**: el camino genérico de ejecución (`DotNetProject.OnCreateExecutionCommand`) usaba `CompiledOutputName`, que añade `.exe` para ejecutables no-librería; en Linux el SDK .NET produce un **apphost nativo sin extensión** → `Win32Exception: No existe el fichero` al ejecutar (F5).
+- **Fix**: si el destino termina en `.exe` y no existe, se usa el apphost sin extensión del mismo directorio si está presente.
+
+**Pendientes restantes**: migración profunda de identidad de tipos (errores MEF tolerados), y AvaloniaUI 12 en espera de señal explícita del usuario.
