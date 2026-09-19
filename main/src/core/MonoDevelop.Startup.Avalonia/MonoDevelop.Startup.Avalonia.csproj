@@ -14,4 +14,8 @@
     <AvaloniaResource Include="branding\AboutImage.png" />
     <AvaloniaResource Include="branding\AboutImage@2x.png" />
   </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\external\mono-addins\Mono.Addins\Mono.Addins.csproj" />
+    <ProjectReference Include="..\..\..\external\mono-addins\Mono.Addins.Setup\Mono.Addins.Setup.csproj" />
+  </ItemGroup>
 </Project>
