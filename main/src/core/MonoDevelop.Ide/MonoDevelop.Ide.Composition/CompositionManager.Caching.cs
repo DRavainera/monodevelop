@@ -69,7 +69,7 @@ internal class Caching
 
 			// Bump when the way we build the composition changes (partsToDrop, staged assemblies),
 			// so a stale on-disk cache is regenerated through runtime discovery instead of being reused.
-			internal const int CacheVersion = 5;
+			internal const int CacheVersion = 6;
 
 			Task saveTask = Task.CompletedTask;
 			readonly HashSet<Assembly> loadedAssemblies;

@@ -92,6 +92,22 @@ namespace MonoDevelop.Refactoring.Composition
 	}
 }
 
+namespace Microsoft.CodeAnalysis
+{
+	// Exported under the contract the DiagnosticsCompat stub declares (MonoDevelop.Ide
+	// TypeSystem/DiagnosticsCompat.cs), which is what MonoDevelopWorkspace.ProjectSystemHandler
+	// imports to register the HostDiagnosticUpdateSource when a workspace loads. The real
+	// IDiagnosticUpdateSourceRegistrationService lives internal to Microsoft.CodeAnalysis.Features
+	// and its export carries a different contract identity, so the stub import found 0 exports and
+	// the workspace load failed with "Could not load parser database". Until the diagnostics
+	// pipeline is ported, Register is a no-op matching the inert shim pattern above.
+	[Export (typeof (IDiagnosticUpdateSourceRegistrationService))]
+	sealed class InertDiagnosticUpdateSourceRegistrationService : IDiagnosticUpdateSourceRegistrationService
+	{
+		public void Register (AbstractHostDiagnosticUpdateSource source) { }
+	}
+}
+
 namespace Microsoft.CodeAnalysis.CodeRefactorings
 {
 	// Exported under the contract the MonoRoslynCompat stub declares (GetRefactoringsAsync(Document, TextSpan, ct)),
