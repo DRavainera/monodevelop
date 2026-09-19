@@ -31,5 +31,16 @@ namespace Microsoft.Build.Evaluation
 		// Similar to https://github.com/microsoft/msbuild/pull/4731
 		// This avoids creating a string copy for the purpose of evaluation in metadata items.
 		internal static string Copy (string value) => value;
+
+		// Target framework intrinsics (ported from MSBuild's NuGetFrameworkWrapper-backed
+		// implementation; see TargetFrameworkIntrinsics). The modern .NET SDK needs these
+		// during evaluation to derive TargetFrameworkIdentifier/TargetFrameworkVersion.
+		internal static string GetTargetFrameworkIdentifier (string tfm) => TargetFrameworkIntrinsics.GetTargetFrameworkIdentifier (tfm);
+
+		internal static string GetTargetFrameworkVersion (string tfm, int versionPartCount = 2) => TargetFrameworkIntrinsics.GetTargetFrameworkVersion (tfm, versionPartCount);
+
+		internal static string GetTargetPlatformIdentifier (string tfm) => TargetFrameworkIntrinsics.GetTargetPlatformIdentifier (tfm);
+
+		internal static string GetTargetPlatformVersion (string tfm, int versionPartCount = 2) => TargetFrameworkIntrinsics.GetTargetPlatformVersion (tfm, versionPartCount);
 	}
 }

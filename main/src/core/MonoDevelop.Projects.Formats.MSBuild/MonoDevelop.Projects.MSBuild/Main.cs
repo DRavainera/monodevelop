@@ -51,6 +51,29 @@ namespace MonoDevelop.Projects.MSBuild
 			server.Connect (args, new AssemblyResolver (server));
 		}
 
+		static void PreloadSdkMsBuildAssemblies (string sdkDir)
+		{
+			if (string.IsNullOrEmpty (sdkDir) || !Directory.Exists (sdkDir))
+				return;
+
+			foreach (var name in new[] {
+				"Microsoft.Build.Framework",
+				"Microsoft.Build",
+				"Microsoft.Build.Tasks.Core",
+				"Microsoft.Build.Utilities.Core",
+				"NuGet.Frameworks",
+			}) {
+				var path = Path.Combine (sdkDir, name + ".dll");
+				if (!File.Exists (path))
+					continue;
+				try {
+					Assembly.LoadFrom (path);
+				} catch (Exception) {
+					// Let the regular resolution path (MSBuildAssemblyResolver) handle it
+				}
+			}
+		}
+
 		/// <summary>
 		/// Since BuildEngine class directly access MSBuild types it tries to load Microsoft.Build.dll assembly when
 		/// constructor is called so before Initialize is called which specifies msbuildBinDir and installs MSBuildAssemblyResolver.
@@ -98,6 +121,12 @@ namespace MonoDevelop.Projects.MSBuild
 			public BinaryMessage Initialize (InitializeRequest msg)
 			{
 				msbuildBinDir = msg.BinDir;
+				// The IDE resolved the SDK to use for this builder (global.json-aware) and sends
+				// its directory in BinDir. Preloading the SDK's MSBuild assemblies (and the
+				// NuGet.Frameworks dependency of its TFM inference) before the engine binds the
+				// copies that happen to live next to the builder exe ensures the whole build runs
+				// with the SDK selected by the project.
+				PreloadSdkMsBuildAssemblies (msg.BinDir);
 				// On .NET MSBuild derives MSBuildBinPath/MSBuildToolsPath from MSBUILD_EXE_PATH and
 				// locates the SDK via MSBuildSDKsPath, so point both at the SDK passed in BinDir.
 				Environment.SetEnvironmentVariable ("MSBUILD_EXE_PATH", Path.Combine (msg.BinDir, "MSBuild.dll"));

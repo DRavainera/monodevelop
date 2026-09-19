@@ -256,6 +256,12 @@ namespace MonoDevelop.Ide.Gui
 				LoggingService.LogError (message, e);
 			}
 
+			// Themes referencing GTK engines that are not installed (e.g. murrine) emit a
+			// warning on every rc parse; the IDE ships its own styling and cannot install
+			// the engine, so skip just those messages instead of flooding the log.
+			if (logLevel == LogLevelFlags.Warning && message != null && message.IndexOf ("murrine", StringComparison.OrdinalIgnoreCase) >= 0)
+				return;
+
 			string msg = string.Format ("{0}-{1}: {2}\n{3}", logDomain, logLevel, message, GetStacktraceIfNeeded (logLevel));
 
 			switch (logLevel) {

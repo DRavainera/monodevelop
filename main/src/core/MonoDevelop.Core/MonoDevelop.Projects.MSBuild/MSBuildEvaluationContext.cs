@@ -718,8 +718,20 @@ namespace MonoDevelop.Projects.MSBuild
 				}
 
 				int n;
-				for (n = 0; n < numArgs; n++)
+				int providedArgs = Math.Min (parameterValues.Length, numArgs);
+				for (n = 0; n < providedArgs; n++)
 					convertedArgs [n] = ConvertArg (method, n, parameterValues [n], methodParams [n].ParameterType);
+
+				// Fill parameters omitted by the caller with their declared default values.
+				for (; n < numArgs; n++) {
+					if (!methodParams [n].HasDefaultValue)
+						break;
+					var defValue = methodParams [n].DefaultValue;
+					var defType = methodParams [n].ParameterType;
+					if (defType.IsEnum && defValue != null)
+						defValue = Enum.ToObject (defType, Convert.ChangeType (defValue, Enum.GetUnderlyingType (defType), CultureInfo.InvariantCulture));
+					convertedArgs [n] = defValue;
+				}
 
 				if (methodParams.Length == parameterValues.Length && paramsArgType != null) {
 					// Invoking an method with a params argument, but the number of arguments provided is the same as the
@@ -805,10 +817,11 @@ namespace MonoDevelop.Projects.MSBuild
 
 		(MethodBase method, ParameterInfo[] parameters) FindBestOverload (IEnumerable<MemberInfo> members, object [] args, out Type paramsArgType)
 		{
-			(MethodBase, ParameterInfo[]) methodWithParams = default;
 			(MethodBase, ParameterInfo[]) validMatch = default;
+			Type validMatchParamsArgType = null;
 
 			paramsArgType = null;
+			int bestMatchRank = int.MaxValue;
 
 			foreach (var member in members) {
 				if (!(member is MethodBase m))
@@ -817,10 +830,28 @@ namespace MonoDevelop.Projects.MSBuild
 				var argInfo = m.GetParameters ();
 
 				if (args.Length == argInfo.Length - 1) {
-					if (m.DeclaringType == typeof (IntrinsicFunctions) && m.Name == nameof (IntrinsicFunctions.GetPathOfFileAbove)) {
+				if (m.DeclaringType == typeof (IntrinsicFunctions) && m.Name == nameof (IntrinsicFunctions.GetPathOfFileAbove)) {
+					// GetPathOfFileAbove omits the starting-directory parameter, which
+					// does not declare a default value.
+					int omittedArgRank = OverloadMatchRank (args, argInfo);
+					if (omittedArgRank < bestMatchRank) {
+						bestMatchRank = omittedArgRank;
 						validMatch = (m, argInfo);
-						continue;
+						validMatchParamsArgType = null;
 					}
+					continue;
+				}
+				// Allow omitting a trailing parameter that declares a default value
+				// (e.g. $([MSBuild]::GetTargetFrameworkVersion('net8.0'))).
+				if (argInfo [argInfo.Length - 1].HasDefaultValue) {
+					int omittedArgRank = OverloadMatchRank (args, argInfo);
+					if (omittedArgRank < bestMatchRank) {
+						bestMatchRank = omittedArgRank;
+						validMatch = (m, argInfo);
+						validMatchParamsArgType = null;
+					}
+					continue;
+				}
 				}
 
 				// Unable to match in this case.
@@ -828,18 +859,33 @@ namespace MonoDevelop.Projects.MSBuild
 					continue;
 
 				var kind = MatchArgs (args, argInfo);
-				if (kind == MatchKind.Exact)
+				if (kind == MatchKind.Exact) {
+					// An exact arity and type match cannot be beaten.
+					paramsArgType = null;
 					return (m, argInfo);
+				}
+				if (kind == MatchKind.None)
+					continue;
 
-				if (kind == MatchKind.CanConvert)
+				// Keep the closest candidate rather than the first one, following the C#
+				// overload tiebreakers: a params candidate beats one that needs an
+				// optional parameter filled (e.g. string.Split('.') resolves to
+				// Split(char[]) and not Split(char[], StringSplitOptions)); conversions
+				// are compared next, where a scalar argument may be promoted to a
+				// single-element array parameter (MSBuild semantics).
+				int rank = kind == MatchKind.Params ? 0 : OverloadMatchRank (args, argInfo);
+				if (rank < bestMatchRank) {
+					bestMatchRank = rank;
 					validMatch = (m, argInfo);
-				else if (kind == MatchKind.Params) {
-					methodWithParams = (m, argInfo);
-					paramsArgType = argInfo [argInfo.Length - 1].ParameterType.GetElementType ();
+					validMatchParamsArgType = kind == MatchKind.Params ? argInfo [argInfo.Length - 1].ParameterType.GetElementType () : null;
 				}
 			}
 
-			return validMatch != default ? validMatch : methodWithParams;
+			if (validMatch == default)
+				return default;
+
+			paramsArgType = validMatchParamsArgType;
+			return validMatch;
 		}
 
 		enum MatchKind
@@ -850,9 +896,28 @@ namespace MonoDevelop.Projects.MSBuild
 			Exact,
 		}
 
-		static MatchKind MatchArgs (object[] args, ParameterInfo[] parameters)
-		{
-			bool isParams = parameters.Length > 0 && IsParamsArg (parameters [parameters.Length - 1]);
+			// Lower is better, following C# overload tiebreakers: an overload that does not
+			// rely on optional parameters wins (e.g. string.Split('.') resolves to
+			// Split(char[]) and not Split(char[], StringSplitOptions)); conversions are
+			// compared next, where a scalar argument is an acceptable match for a
+			// single-element array parameter (MSBuild semantics).
+			static int OverloadMatchRank (object[] args, ParameterInfo[] parameters)
+			{
+				int rank = (parameters.Length - args.Length) * 10;
+				for (int i = 0; i < args.Length; i++) {
+					var pt = parameters [i].ParameterType;
+					if (pt.IsInstanceOfType (args [i]))
+						continue;
+					rank++;
+					if (pt.IsArray && args [i] != null && !(args [i] is System.Collections.IList))
+						rank++;
+				}
+				return rank;
+			}
+
+			static MatchKind MatchArgs (object[] args, ParameterInfo[] parameters)
+			{
+				bool isParams = parameters.Length > 0 && IsParamsArg (parameters [parameters.Length - 1]);
 
 			int last = parameters.Length;
 			if (isParams)
@@ -906,8 +971,29 @@ namespace MonoDevelop.Projects.MSBuild
 				if (parameterType.IsInstanceOfType (argument))
 					return MatchKind.Exact;
 
-				if (checkComplexType && IsComplexType (parameterType))
+				// MSBuild promotes a scalar argument to a single-element array parameter
+				// (e.g. string.Split('.')), so let the array check below decide instead of
+				// rejecting the parameter outright for being a complex type.
+				bool scalarToArray = parameterType.IsArray && argument != null && !(argument is System.Collections.IList);
+
+				if (checkComplexType && IsComplexType (parameterType) && !scalarToArray)
 					return MatchKind.None;
+
+				if (scalarToArray) {
+					var elementType = parameterType.GetElementType ();
+					if (elementType == null)
+						return MatchKind.None;
+					// A string maps to a char[] as a whole (fan-out via ToCharArray, e.g.
+					// TrimStart('vV')), so test the array type itself instead of requiring
+					// the whole string to convert to a single element.
+					if (argument is string && parameterType == typeof (char[]))
+						return MatchKind.CanConvert;
+					// Convertible if the argument converts to the element type; ConvertArg
+					// performs the actual promotion when the method is invoked.
+					if (!CanConvertArg (argument, elementType))
+						return MatchKind.None;
+					return MatchKind.CanConvert;
+				}
 
 				if (CanConvertArg (argument, parameterType))
 					return MatchKind.CanConvert;
@@ -931,8 +1017,10 @@ namespace MonoDevelop.Projects.MSBuild
 			if (sval != null && parameterType == typeof (char []))
 				return true;
 
-			if (sval != null && sval.Length != 1 && parameterType == typeof (char)) {
-				return false;
+			if (sval != null && parameterType == typeof (char)) {
+				// Convert.ChangeType cannot handle string -> char, but a single-character
+				// string is a valid char argument (e.g. string.Split('.')).
+				return sval.Length == 1;
 			}
 
 			if (sval != null && parameterType.IsEnum) {
@@ -963,8 +1051,19 @@ namespace MonoDevelop.Projects.MSBuild
 			if (sval == "null" || value == null)
 				return null;
 
+			if (sval != null && parameterType == typeof (char))
+				return sval [0];
+
 			if (sval != null && parameterType == typeof (char[]))
 				return sval.ToCharArray ();
+
+			if (parameterType.IsArray && !(value is System.Collections.IList)) {
+				// Promote a scalar argument to a single-element array (MSBuild semantics).
+				var elementType = parameterType.GetElementType ();
+				var array = Array.CreateInstance (elementType, 1);
+				array.SetValue (ConvertArg (method, argNum, value, elementType), 0);
+				return array;
+			}
 
 			if (sval != null && parameterType.IsEnum) {
 				// Enum.Parse expects comma separated values.

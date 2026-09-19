@@ -1,4 +1,4 @@
-<Project DefaultTargets="Build" Sdk="Microsoft.NET.Sdk" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+﻿<Project DefaultTargets="Build" Sdk="Microsoft.NET.Sdk" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <Import Project="..\..\..\MonoDevelop.props" />
   <PropertyGroup>
     <MDFrameworkVersion>v10.0</MDFrameworkVersion>
@@ -791,6 +791,7 @@
     <Compile Include="MonoDevelop.Projects\FrameworkReference.cs" />
     <Compile Include="MonoDevelop.Core\DedicatedThreadScheduler.cs" />
     <Compile Include="MonoDevelop.Projects.MSBuild\IntrinsicFunctions.Extensions.cs" />
+    <Compile Include="MonoDevelop.Projects.MSBuild\TargetFrameworkIntrinsics.cs" />
     <Compile Include="MonoDevelop.Core.FeatureConfiguration\FeatureSwitch.cs" />
     <Compile Include="MonoDevelop.Core.AddIns\FeatureSwitchExtensionNode.cs" />
     <Compile Include="MonoDevelop.Core.FeatureConfiguration\IFeatureSwitchController.cs" />

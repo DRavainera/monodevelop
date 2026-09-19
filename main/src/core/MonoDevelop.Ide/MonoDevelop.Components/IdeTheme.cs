@@ -105,6 +105,16 @@ namespace MonoDevelop.Components
 			if (!Platform.IsLinux)
 				UpdateGtkTheme ();
 
+			if (Platform.IsLinux) {
+				// The user's desktop theme may require a GTK engine that is not installed
+				// (e.g. murrine); GTK prints a warning for every rc parse while loading the
+				// theme during Init. The IDE cannot install the engine and ships its own
+				// styling, so drop just that message and keep every other GTK warning.
+				// Fully qualify GLib#: the unqualified name resolves to MonoDevelop.Ide.Gui.GLibLogging.
+				earlyGtkWarningFilter = FilterEarlyGtkWarnings;
+				global::GLib.Log.SetLogHandler ("Gtk", global::GLib.LogLevelFlags.Warning, earlyGtkWarningFilter);
+			}
+
 			Gtk.Application.Init (BrandingService.ApplicationName, ref args);
 
 			// Reset our environment after initialization on Mac
@@ -112,6 +122,15 @@ namespace MonoDevelop.Components
 				Environment.SetEnvironmentVariable ("GTK_MODULES", null);
 				Environment.SetEnvironmentVariable ("GTK2_RC_FILES", DefaultGtk2RcFiles);
 			}
+		}
+
+		static global::GLib.LogFunc earlyGtkWarningFilter;
+
+		static void FilterEarlyGtkWarnings (string logDomain, global::GLib.LogLevelFlags logLevel, string message)
+		{
+			if (message != null && message.IndexOf ("murrine", StringComparison.OrdinalIgnoreCase) >= 0)
+				return;
+			global::GLib.Log.DefaultHandler (logDomain, logLevel, message);
 		}
 
 		internal static void SetupXwtTheme ()

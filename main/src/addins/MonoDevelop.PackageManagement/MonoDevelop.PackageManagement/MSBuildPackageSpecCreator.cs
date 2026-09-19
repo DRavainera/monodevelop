@@ -56,6 +56,11 @@ namespace MonoDevelop.PackageManagement
 				var context = new TargetEvaluationContext ();
 				context.GlobalProperties.SetValue ("RestoreGraphOutputPath", resultsPath);
 
+				// [RestoreDiag] Capture the exact target evaluation (global properties included)
+				// in a binlog when verbose restore logging is enabled.
+				if (VerboseLogging)
+					context.BinLogFilePath = resultsPath + ".binlog";
+
 				using (var monitor = CreateProgressMonitor ()) {
 					var result = await project.RunTarget (monitor, "GenerateRestoreGraphFile", configuration, context);
 					if (result != null) {
