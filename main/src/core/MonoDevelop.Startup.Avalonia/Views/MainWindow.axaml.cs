@@ -40,10 +40,22 @@ public partial class MainWindow : Window
 			ApplyThemeVariant (Application.Current?.ActualThemeVariant ?? ThemeVariant.Dark);
 
 			// Automated QA: open the requested dialog directly.
-			switch (Program.QaDialogArg) {
-			case "--about": new AboutDialog { WindowStartupLocation = WindowStartupLocation.CenterOwner }.ShowDialog (this); break;
-			case "--prefs": new PreferencesDialog { WindowStartupLocation = WindowStartupLocation.CenterOwner }.ShowDialog (this); break;
-			case "--addins": new AddinManagerDialog { WindowStartupLocation = WindowStartupLocation.CenterOwner }.ShowDialog (this); break;
+			var qa = Program.QaDialogArg;
+			if (qa == "--prefs") {
+				new PreferencesDialog { WindowStartupLocation = WindowStartupLocation.CenterOwner }.ShowDialog (this);
+			} else if (qa.StartsWith ("--prefs=", StringComparison.Ordinal)) {
+				var arg = qa.Substring ("--prefs=".Length);
+				var dlg = new PreferencesDialog { WindowStartupLocation = WindowStartupLocation.CenterOwner };
+				dlg.ShowDialog (this);
+				if (arg is "light" or "dark")
+					Application.Current!.RequestedThemeVariant =
+						arg == "light" ? ThemeVariant.Light : ThemeVariant.Dark;
+				else
+					dlg.SelectPanel (arg);
+			} else if (qa == "--about") {
+				new AboutDialog { WindowStartupLocation = WindowStartupLocation.CenterOwner }.ShowDialog (this);
+			} else if (qa == "--addins") {
+				new AddinManagerDialog { WindowStartupLocation = WindowStartupLocation.CenterOwner }.ShowDialog (this);
 			}
 		};
 	}

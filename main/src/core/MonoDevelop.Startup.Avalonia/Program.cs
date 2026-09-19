@@ -14,8 +14,12 @@ internal static class Program
 
 	// QA hooks: --about | --prefs | --addins open the corresponding dialog at startup
 	// so automated runs can validate each migrated dialog without UI navigation.
+	// --prefs also accepts a value (--prefs=light|dark|<panelId>) to drive the dialog
+	// programmatically in automated runs.
 	public static string QaDialogArg =>
-		Environment.GetCommandLineArgs ().FirstOrDefault (a => a is "--about" or "--prefs" or "--addins") ?? "";
+		Environment.GetCommandLineArgs ().FirstOrDefault (a =>
+			a is "--about" or "--prefs" or "--addins"
+			|| a.StartsWith ("--prefs=", StringComparison.Ordinal)) ?? "";
 
 	// Avalonia configuration, don't remove; also used by visual designer.
 	public static AppBuilder BuildAvaloniaApp ()

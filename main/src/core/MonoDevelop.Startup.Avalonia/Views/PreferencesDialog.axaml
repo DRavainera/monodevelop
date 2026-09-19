@@ -2,28 +2,78 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="MonoDevelop.AvaloniaShell.Views.PreferencesDialog"
         Title="Preferences"
-        Width="720" Height="520"
-        WindowStartupLocation="CenterOwner">
-  <DockPanel>
-    <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="12">
-      <Button x:Name="OkButton" Content="OK" Width="80" />
-      <Button x:Name="CancelButton" Content="Cancel" Width="80" />
-    </StackPanel>
-    <Grid ColumnDefinitions="Auto,*">
-      <ListBox x:Name="PanelList" Width="180" SelectedIndex="0">
-        <ListBoxItem Content="General" />
-        <ListBoxItem Content="Source Code" />
-        <ListBoxItem Content="Build" />
-        <ListBoxItem Content="Projects" />
-        <ListBoxItem Content="Version Control" />
-        <ListBoxItem Content="Add-ins" />
+        Width="820" Height="560"
+        WindowStartupLocation="CenterOwner"
+        SystemDecorations="None"
+        ExtendClientAreaToDecorationsHint="True"
+        Background="{DynamicResource IdeWindowBgBrush}">
+
+  <Grid RowDefinitions="Auto,*,Auto">
+    <!-- Custom chrome -->
+    <Border Grid.Row="0" Background="{DynamicResource IdeChromeBgBrush}"
+            BorderBrush="{DynamicResource IdeBorderBrush}" BorderThickness="0,0,0,1">
+      <Grid ColumnDefinitions="*,Auto">
+        <TextBlock Text="Preferences" Margin="12,6" FontWeight="SemiBold"
+                   Foreground="{DynamicResource IdeFgBrush}" />
+        <Button Grid.Column="1" Classes="caption captionclose" Content="&#x2715;" Click="OnCancel" />
+      </Grid>
+    </Border>
+
+    <!-- Section tree + panel -->
+    <Grid Grid.Row="1" ColumnDefinitions="220,*">
+      <ListBox x:Name="SectionList" Margin="8" Background="Transparent"
+               Foreground="{DynamicResource IdeFgBrush}" SelectionChanged="OnSectionSelected">
+        <ListBoxItem Content="Environment" IsEnabled="False" FontWeight="Bold" />
+        <ListBoxItem Content="   Visual Style" Tag="style" />
+        <ListBoxItem Content="   Author Information" Tag="author" />
+        <ListBoxItem Content="   Key Bindings" Tag="keybindings" />
+        <ListBoxItem Content="   Fonts" Tag="fonts" />
+        <ListBoxItem Content="   Updates" Tag="updates" />
+        <ListBoxItem Content="   Tasks" Tag="tasks" />
+        <ListBoxItem Content="   External Tools" Tag="externaltools" />
+        <ListBoxItem Content="Projects" IsEnabled="False" FontWeight="Bold" />
+        <ListBoxItem Content="   Load/Save" Tag="loadsave" />
+        <ListBoxItem Content="   Build" Tag="build" />
+        <ListBoxItem Content="   .NET Runtimes" Tag="dotnetruntimes" />
+        <ListBoxItem Content="   SDK Locations" Tag="sdklocations" />
+        <ListBoxItem Content="Text Editor" IsEnabled="False" FontWeight="Bold" />
+        <ListBoxItem Content="   Formatting" Tag="formatting" />
+        <ListBoxItem Content="   Code Snippets" Tag="codesnippets" />
+        <ListBoxItem Content="   Language Bundles" Tag="languagebundles" />
+        <ListBoxItem Content="Source Code" IsEnabled="False" FontWeight="Bold" />
+        <ListBoxItem Content="   .NET Naming Policies" Tag="naming" />
+        <ListBoxItem Content="   Code Formatting" Tag="codeformatting" />
+        <ListBoxItem Content="   Standard Header" Tag="standardheader" />
+        <ListBoxItem Content="Version Control" IsEnabled="False" FontWeight="Bold" />
+        <ListBoxItem Content="Other" IsEnabled="False" FontWeight="Bold" />
       </ListBox>
-      <Border Grid.Column="1" BorderBrush="#333333" BorderThickness="1,0,0,0">
-        <StackPanel Margin="16" Spacing="8">
-          <TextBlock x:Name="PanelTitle" Text="General" FontWeight="Bold" />
-          <TextBlock Text="Preferences panel — deferred until M5 (port of MonoDevelop.Core preferences binding)." TextWrapping="Wrap" Foreground="#B0B0B0" />
-        </StackPanel>
-      </Border>
+
+      <ScrollViewer Grid.Column="1" Margin="8" BorderBrush="{DynamicResource IdeBorderBrush}"
+                    BorderThickness="1,1,0,0">
+        <Panel>
+          <!-- Visual Style panel (functional): theme switching wired to the shell -->
+          <StackPanel x:Name="PanelStyle" Margin="16" Spacing="10">
+            <TextBlock Text="User Interface Theme" FontWeight="SemiBold" Foreground="{DynamicResource IdeFgBrush}" />
+            <RadioButton x:Name="ThemeDarkRadio" GroupName="uitheme" Content="Dark"
+                         Foreground="{DynamicResource IdeFgBrush}" />
+            <RadioButton x:Name="ThemeLightRadio" GroupName="uitheme" Content="Light"
+                         Foreground="{DynamicResource IdeFgBrush}" />
+          </StackPanel>
+
+          <!-- Generic placeholder for panels not ported yet -->
+          <StackPanel x:Name="PanelPlaceholder" Margin="16" IsVisible="False" Spacing="8">
+            <TextBlock x:Name="PlaceholderTitle" FontWeight="SemiBold" Foreground="{DynamicResource IdeFgBrush}" />
+            <TextBlock Text="This options panel has not been ported to the new UI yet. Its settings remain available through the legacy interface until the cutover."
+                       TextWrapping="Wrap" Foreground="{DynamicResource IdeFgBrush}" Opacity="0.7" />
+          </StackPanel>
+        </Panel>
+      </ScrollViewer>
     </Grid>
-  </DockPanel>
+
+    <!-- OK/Cancel -->
+    <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="12,10">
+      <Button Content="OK" Click="OnOk" Width="88" Margin="0,0,8,0" />
+      <Button Content="Cancel" Click="OnCancel" Width="88" />
+    </StackPanel>
+  </Grid>
 </Window>
