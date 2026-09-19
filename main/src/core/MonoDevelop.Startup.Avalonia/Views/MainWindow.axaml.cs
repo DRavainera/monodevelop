@@ -20,16 +20,16 @@ public partial class MainWindow : Window
 		InitializeComponent ();
 		Output ("MonoDevelop Avalonia shell initialized.");
 
-		// Window drag on the chrome row (menu bar doubles as the title bar).
-		PointerPressed += (s, e) => {
-			if (e.GetCurrentPoint (this).Properties.IsLeftButtonPressed &&
-			    TitleBarRow?.Bounds.Contains (e.GetPosition (TitleBarRow)) == true)
-				BeginMoveDrag (e);
-		};
-		DoubleTapped += (s, e) => {
-			if (TitleBarRow?.Bounds.Contains (e.GetPosition (TitleBarRow)) == true)
-				ToggleMaximize ();
-		};
+		// Window drag on the chrome row background (menu bar doubles as the title bar).
+		// Attached to the row, not the window: menu/button presses are handled first by
+		// their own controls and never reach this bubbling handler.
+		if (TitleBarRow is not null) {
+			TitleBarRow.PointerPressed += (s, e) => {
+				if (e.GetCurrentPoint (this).Properties.IsLeftButtonPressed)
+					BeginMoveDrag (e);
+			};
+			TitleBarRow.DoubleTapped += (s, e) => ToggleMaximize ();
+		}
 
 		// The placement convention (mac left, Windows/Linux right) is handled in
 		// OnOpened by re-parenting the caption buttons to the requested side; the
@@ -38,6 +38,13 @@ public partial class MainWindow : Window
 			if (IsMac)
 				MoveCaptionButtonsLeft ();
 			ApplyThemeVariant (Application.Current?.ActualThemeVariant ?? ThemeVariant.Dark);
+
+			// Automated QA: open the requested dialog directly.
+			switch (Program.QaDialogArg) {
+			case "--about": new AboutDialog { WindowStartupLocation = WindowStartupLocation.CenterOwner }.ShowDialog (this); break;
+			case "--prefs": new PreferencesDialog { WindowStartupLocation = WindowStartupLocation.CenterOwner }.ShowDialog (this); break;
+			case "--addins": new AddinManagerDialog { WindowStartupLocation = WindowStartupLocation.CenterOwner }.ShowDialog (this); break;
+			}
 		};
 	}
 

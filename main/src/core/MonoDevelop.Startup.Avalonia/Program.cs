@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using Avalonia;
 
 namespace MonoDevelop.AvaloniaShell;
@@ -10,6 +11,11 @@ internal static class Program
 	[STAThread]
 	public static void Main (string [] args)
 		=> BuildAvaloniaApp ().StartWithClassicDesktopLifetime (args);
+
+	// QA hooks: --about | --prefs | --addins open the corresponding dialog at startup
+	// so automated runs can validate each migrated dialog without UI navigation.
+	public static string QaDialogArg =>
+		Environment.GetCommandLineArgs ().FirstOrDefault (a => a is "--about" or "--prefs" or "--addins") ?? "";
 
 	// Avalonia configuration, don't remove; also used by visual designer.
 	public static AppBuilder BuildAvaloniaApp ()

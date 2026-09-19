@@ -11,5 +11,7 @@
     <PackageReference Include="Avalonia.Desktop" Version="12.1.2" />
     <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.2" />
     <PackageReference Include="Avalonia.Fonts.Inter" Version="12.1.2" />
+    <AvaloniaResource Include="branding\AboutImage.png" />
+    <AvaloniaResource Include="branding\AboutImage@2x.png" />
   </ItemGroup>
 </Project>

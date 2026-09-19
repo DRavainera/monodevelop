@@ -2,18 +2,70 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="MonoDevelop.AvaloniaShell.Views.AboutDialog"
         Title="About MonoDevelop"
-        Width="480" Height="300"
+        Width="560" Height="520"
         WindowStartupLocation="CenterOwner"
-        CanResize="False">
-  <DockPanel Margin="20">
-    <StackPanel DockPanel.Dock="Bottom" HorizontalAlignment="Right" Spacing="8">
-      <Button x:Name="CloseButton" Content="Close" Width="80" HorizontalAlignment="Right" />
+        CanResize="False"
+        SystemDecorations="None"
+        ExtendClientAreaToDecorationsHint="True"
+        Background="{DynamicResource IdeWindowBgBrush}">
+
+  <Grid RowDefinitions="Auto,*,Auto">
+    <!-- Custom chrome row: dialog title + close -->
+    <Border x:Name="ChromeRow" Grid.Row="0" Background="{DynamicResource IdeChromeBgBrush}"
+            BorderBrush="{DynamicResource IdeBorderBrush}" BorderThickness="0,0,0,1">
+      <Grid ColumnDefinitions="*,Auto">
+        <TextBlock Text="About MonoDevelop" Margin="12,6" FontWeight="SemiBold"
+                   Foreground="{DynamicResource IdeFgBrush}" />
+        <Button Grid.Column="1" Classes="caption captionclose" Content="&#x2715;" Click="OnClose" />
+      </Grid>
+    </Border>
+
+    <!-- Pages -->
+    <Panel Grid.Row="1">
+      <!-- Page 0: product page -->
+      <ScrollViewer x:Name="ProductPage">
+        <StackPanel Margin="16">
+          <Image x:Name="AboutImage" Height="140" Stretch="Uniform" HorizontalAlignment="Center" />
+          <StackPanel Margin="0,12,0,0">
+            <TextBlock Text="Version" FontWeight="Bold" Foreground="{DynamicResource IdeFgBrush}" />
+            <TextBlock x:Name="VersionText" Margin="12,2,0,0" Foreground="{DynamicResource IdeFgBrush}" />
+
+            <StackPanel x:Name="LicenseSection">
+              <TextBlock Text="License" FontWeight="Bold" Margin="0,10,0,0"
+                         Foreground="{DynamicResource IdeFgBrush}" />
+              <TextBlock Classes="link" Text="License Terms" Margin="12,2,0,0"
+                         Foreground="#5C2D91" Cursor="Hand" />
+              <TextBlock Classes="link" x:Name="PrivacyLink" Text="Privacy Statement" Margin="12,2,0,0"
+                         Foreground="#5C2D91" Cursor="Hand" />
+            </StackPanel>
+
+            <TextBlock Text="Copyright" FontWeight="Bold" Margin="0,10,0,0"
+                       Foreground="{DynamicResource IdeFgBrush}" />
+            <TextBlock x:Name="Copyright1" Margin="12,2,0,0" Foreground="{DynamicResource IdeFgBrush}" />
+            <TextBlock x:Name="Copyright2" Margin="12,2,0,0" Foreground="{DynamicResource IdeFgBrush}" />
+            <TextBlock x:Name="Copyright3" Margin="12,2,0,0" Foreground="{DynamicResource IdeFgBrush}" />
+          </StackPanel>
+        </StackPanel>
+      </ScrollViewer>
+
+      <!-- Page 1: version information details -->
+      <ScrollViewer x:Name="DetailsPage" IsVisible="False">
+        <StackPanel Margin="16">
+          <TextBlock x:Name="SystemInfoText" TextWrapping="Wrap" FontSize="12"
+                     Foreground="{DynamicResource IdeFgBrush}" />
+          <Separator Margin="0,8" />
+          <TextBlock Text="Loaded Assemblies" FontWeight="Bold" Foreground="{DynamicResource IdeFgBrush}" />
+          <TextBlock x:Name="AssembliesText" FontFamily="Consolas,DejaVu Sans Mono,monospace" FontSize="11"
+                     TextWrapping="Wrap" Margin="0,4,0,0" Foreground="{DynamicResource IdeFgBrush}" />
+        </StackPanel>
+      </ScrollViewer>
+    </Panel>
+
+    <!-- Action buttons -->
+    <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="12,10">
+      <Button x:Name="CopyButton" Content="Copy Information" Click="OnCopy" IsVisible="False"
+              Margin="0,0,8,0" />
+      <Button x:Name="DetailsButton" Content="Show Details" Click="OnToggleDetails" />
     </StackPanel>
-    <StackPanel Spacing="10" VerticalAlignment="Center">
-      <TextBlock Text="MonoDevelop" FontSize="26" FontWeight="Bold" />
-      <TextBlock x:Name="VersionText" Text="undefined" Foreground="#B0B0B0" />
-      <TextBlock Text="Avalonia 12 shell prototype." TextWrapping="Wrap" Foreground="#D0D0D0" />
-      <TextBlock x:Name="RuntimeText" Text="undefined" Foreground="#808080" FontSize="11" />
-    </StackPanel>
-  </DockPanel>
+  </Grid>
 </Window>
