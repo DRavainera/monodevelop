@@ -4,5 +4,75 @@
              RequestedThemeVariant="Dark">
   <Application.Styles>
     <FluentTheme />
+    <!-- Island tabs: browser-style detached tabs for the document well -->
+    <Style Selector="TabItem.island">
+      <Setter Property="Foreground" Value="{DynamicResource IdeFgBrush}" />
+      <Setter Property="Template">
+        <ControlTemplate>
+          <Border Name="TabRoot"
+                  CornerRadius="9,9,0,0"
+                  Margin="3,7,3,0"
+                  Padding="14,7"
+                  Background="{DynamicResource TabIdleBrush}">
+            <ContentPresenter Name="PART_ContentPresenter"
+                              Content="{TemplateBinding Header}"
+                              ContentTemplate="{TemplateBinding HeaderTemplate}" />
+          </Border>
+        </ControlTemplate>
+      </Setter>
+    </Style>
+    <Style Selector="TabItem.island:selected /template/ Border#TabRoot">
+      <Setter Property="Background" Value="{DynamicResource TabActiveBrush}" />
+    </Style>
+    <Style Selector="TabItem.island:pointerover /template/ Border#TabRoot">
+      <Setter Property="Background" Value="{DynamicResource TabHoverBrush}" />
+    </Style>
+    <!-- Caption buttons (min/max/close merged with the menu bar) -->
+    <Style Selector="Button.caption">
+      <Setter Property="Width" Value="44" />
+      <Setter Property="Height" Value="30" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="Foreground" Value="{DynamicResource IdeFgBrush}" />
+      <Setter Property="FontSize" Value="12" />
+    </Style>
+    <Style Selector="Button.caption:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource CaptionHoverBrush}" />
+    </Style>
+    <Style Selector="Button.captionclose:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="#E81123" />
+      <Setter Property="Foreground" Value="White" />
+    </Style>
   </Application.Styles>
+  <Application.Resources>
+    <ResourceDictionary>
+      <ResourceDictionary.ThemeDictionaries>
+        <ResourceDictionary x:Key="Dark">
+          <Color x:Key="IdeWindowBg">#1E1E1E</Color>
+          <Color x:Key="IdeChromeBg">#2D2D2D</Color>
+          <Color x:Key="IdeTabActive">#1E1E1E</Color>
+          <Color x:Key="IdeTabHover">#3A3A3A</Color>
+          <Color x:Key="IdeFg">#E0E0E0</Color>
+          <Color x:Key="IdeBorder">#3A3A3A</Color>
+          <Color x:Key="IdeCaptionHover">#404040</Color>
+        </ResourceDictionary>
+        <ResourceDictionary x:Key="Light">
+          <Color x:Key="IdeWindowBg">#FFFFFF</Color>
+          <Color x:Key="IdeChromeBg">#F3F3F3</Color>
+          <Color x:Key="IdeTabActive">#FFFFFF</Color>
+          <Color x:Key="IdeTabHover">#E8E8E8</Color>
+          <Color x:Key="IdeFg">#1A1A1A</Color>
+          <Color x:Key="IdeBorder">#D0D0D0</Color>
+          <Color x:Key="IdeCaptionHover">#E0E0E0</Color>
+        </ResourceDictionary>
+      </ResourceDictionary.ThemeDictionaries>
+      <SolidColorBrush x:Key="IdeWindowBgBrush" Color="{DynamicResource IdeWindowBg}" />
+      <SolidColorBrush x:Key="IdeChromeBgBrush" Color="{DynamicResource IdeChromeBg}" />
+      <SolidColorBrush x:Key="TabActiveBrush" Color="{DynamicResource IdeTabActive}" />
+      <SolidColorBrush x:Key="TabHoverBrush" Color="{DynamicResource IdeTabHover}" />
+      <SolidColorBrush x:Key="TabIdleBrush" Color="#00000000" />
+      <SolidColorBrush x:Key="IdeFgBrush" Color="{DynamicResource IdeFg}" />
+      <SolidColorBrush x:Key="IdeBorderBrush" Color="{DynamicResource IdeBorder}" />
+      <SolidColorBrush x:Key="CaptionHoverBrush" Color="{DynamicResource IdeCaptionHover}" />
+    </ResourceDictionary>
+  </Application.Resources>
 </Application>
