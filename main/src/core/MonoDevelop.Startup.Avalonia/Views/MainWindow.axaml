@@ -12,22 +12,9 @@
     <!-- Title bar row: menu bar + caption buttons (no OS title bar) -->
     <Panel x:Name="TitleBarRow" DockPanel.Dock="Top" Background="{DynamicResource IdeChromeBgBrush}">
       <Grid ColumnDefinitions="*,Auto">
-        <Menu>
-          <MenuItem Header="_File" />
-          <MenuItem Header="_Edit" />
-          <MenuItem Header="_View">
-            <MenuItem x:Name="ViewSolutionPad" Header="Solution Pad" IsChecked="True" Click="OnTogglePad" />
-            <MenuItem x:Name="ViewOutput" Header="Output" IsChecked="True" Click="OnTogglePad" />
-            <Separator />
-            <MenuItem x:Name="ThemeDark" Header="Dark Theme" Click="OnTheme" />
-            <MenuItem x:Name="ThemeLight" Header="Light Theme" Click="OnTheme" />
-          </MenuItem>
-          <MenuItem Header="_Help">
-            <MenuItem Header="About…" Click="OnAbout" />
-            <MenuItem Header="Preferences" Click="OnPreferences" />
-            <MenuItem Header="Add-in Manager" Click="OnAddinManager" />
-          </MenuItem>
-        </Menu>
+        <!-- Full legacy main menu (structure/labels/icons of MainMenu.addin.xml + addins),
+             built by MenuService/MenuBuilder. -->
+        <Menu x:Name="MainMenu" />
         <StackPanel Grid.Column="1" Orientation="Horizontal" x:Name="CaptionButtons">
           <Button Classes="caption" Content="&#x2013;" Click="OnMinimize" />
           <Button Classes="caption" Content="&#x25A1;" Click="OnMaximize" />

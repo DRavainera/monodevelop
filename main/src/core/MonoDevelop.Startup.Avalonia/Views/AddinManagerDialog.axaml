@@ -4,7 +4,10 @@
         x:Class="MonoDevelop.AvaloniaShell.Views.AddinManagerDialog"
         Title="Add-in Manager"
         Width="860" Height="600"
-        WindowStartupLocation="CenterOwner">
+        WindowStartupLocation="CenterOwner"
+        SystemDecorations="None"
+        ExtendClientAreaToDecorationsHint="True"
+        Background="{DynamicResource IdeWindowBgBrush}">
 
   <Window.Styles>
     <!-- Tab headers styled as plain toggle-ish labels -->
@@ -15,16 +18,19 @@
     </Style>
   </Window.Styles>
 
-  <DockPanel>
-    <!-- Bottom action bar -->
-    <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="12,8">
-      <Button x:Name="InstallFromFileButton" Content="Install from file..." Width="130"/>
-      <Button x:Name="RefreshButton" Content="Refresh" Width="90"/>
-      <Button x:Name="CloseButton" Content="Close" Width="90" Click="OnCloseClicked"/>
-    </StackPanel>
+  <Grid RowDefinitions="Auto,Auto,*">
+    <!-- Custom Avalonia chrome row (same as About/Preferences): dialog title + close -->
+    <Border Grid.Row="0" Background="{DynamicResource IdeChromeBgBrush}"
+            BorderBrush="{DynamicResource IdeBorderBrush}" BorderThickness="0,0,0,1">
+      <Grid x:Name="ChromeGrid" ColumnDefinitions="*,Auto">
+        <TextBlock Text="Add-in Manager" Margin="12,6" FontWeight="SemiBold"
+                   Foreground="{DynamicResource IdeFgBrush}" />
+        <Button Grid.Column="1" Classes="caption captionclose" Content="&#x2715;" Click="OnCloseClicked" />
+      </Grid>
+    </Border>
 
-    <!-- Main content: tabs on the left of the list, list + details on the right -->
-    <Grid RowDefinitions="Auto,Auto,*">
+    <!-- Main content -->
+    <Grid Grid.Row="1" RowDefinitions="Auto,*">
       <!-- Tab row -->
       <ListBox x:Name="TabList" Grid.Row="0" Classes="addintabs" SelectionMode="Single,Toggle"
                SelectionChanged="OnTabSelected" Margin="12,10,12,0" Background="Transparent">
@@ -64,5 +70,12 @@
         </ScrollViewer>
       </Grid>
     </Grid>
-  </DockPanel>
+
+    <!-- Bottom action bar -->
+    <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="12,8">
+      <Button x:Name="InstallFromFileButton" Content="Install from file..." Width="130"/>
+      <Button x:Name="RefreshButton" Content="Refresh" Width="90"/>
+      <Button x:Name="CloseButton" Content="Close" Width="90" Click="OnCloseClicked"/>
+    </StackPanel>
+  </Grid>
 </Window>

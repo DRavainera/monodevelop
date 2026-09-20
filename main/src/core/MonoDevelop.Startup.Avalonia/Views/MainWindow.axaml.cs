@@ -16,10 +16,18 @@ public partial class MainWindow : Window
 {
 	static readonly bool IsMac = RuntimeInformation.IsOSPlatform (OSPlatform.OSX);
 
+	public static MainWindow? Instance { get; private set; }
+
 	public MainWindow ()
 	{
 		InitializeComponent ();
+		Instance = this;
 		Output ("MonoDevelop Avalonia shell initialized.");
+
+		// Full legacy main menu: same structure/order/labels/icons/shortcuts as the GTK UI.
+		MainMenu!.Items.Clear ();
+		foreach (var item in MenuBuilder.BuildItems (MenuService.BuildMainMenu ()))
+			MainMenu.Items.Add (item);
 
 		// Window drag on the chrome row background (menu bar doubles as the title bar).
 		// Attached to the row, not the window: menu/button presses are handled first by
@@ -156,6 +164,29 @@ public partial class MainWindow : Window
 			OutputPane!.IsVisible = menu.IsChecked;
 			break;
 		}
+	}
+
+	// ----- Menu actions surfaced for MenuService -----
+
+	public void OnAboutMenu ()
+		=> OnAbout (this, new RoutedEventArgs ());
+
+	public void OnPreferencesMenu ()
+		=> OnPreferences (this, new RoutedEventArgs ());
+
+	public void OnAddinManagerMenu ()
+		=> OnAddinManager (this, new RoutedEventArgs ());
+
+	public void ToggleFullScreen ()
+		=> WindowState = WindowState == WindowState.FullScreen ? WindowState.Normal : WindowState.FullScreen;
+
+	// Commands still pending port: report like the unported option panels instead of
+	// silently hiding the legacy feature.
+	public void OnMenuCommand (string commandId)
+	{
+		var message = $"'{commandId}' is not wired in the new UI yet — its GTK implementation remains available through --old-gui until the cutover.";
+		Output ("[menu] " + message);
+		Console.WriteLine ("[menu] " + message);
 	}
 
 	void OnAbout (object? sender, RoutedEventArgs e)

@@ -24,26 +24,111 @@
       <ListBox x:Name="SectionList" Margin="8" Background="Transparent"
                Foreground="{DynamicResource IdeFgBrush}" SelectionChanged="OnSectionSelected">
         <ListBoxItem Content="Environment" IsEnabled="False" FontWeight="Bold" />
-        <ListBoxItem Content="   Visual Style" Tag="style" />
-        <ListBoxItem Content="   Author Information" Tag="author" />
-        <ListBoxItem Content="   Key Bindings" Tag="keybindings" />
-        <ListBoxItem Content="   Fonts" Tag="fonts" />
-        <ListBoxItem Content="   Updates" Tag="updates" />
-        <ListBoxItem Content="   Tasks" Tag="tasks" />
-        <ListBoxItem Content="   External Tools" Tag="externaltools" />
+        <ListBoxItem Tag="style">
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <Image Width="16" Height="16" x:Name="IconStyle" />
+            <TextBlock Text="Visual Style" />
+          </StackPanel>
+        </ListBoxItem>
+        <ListBoxItem Tag="language">
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <Image Width="16" Height="16" x:Name="IconLanguage" />
+            <TextBlock Text="User Interface Language" />
+          </StackPanel>
+        </ListBoxItem>
+        <ListBoxItem Tag="author">
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <Image Width="16" Height="16" x:Name="IconAuthor" />
+            <TextBlock Text="Author Information" />
+          </StackPanel>
+        </ListBoxItem>
+        <ListBoxItem Tag="keybindings">
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <Image Width="16" Height="16" x:Name="IconKeyBindings" />
+            <TextBlock Text="Key Bindings" />
+          </StackPanel>
+        </ListBoxItem>
+        <ListBoxItem Tag="fonts">
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <Image Width="16" Height="16" x:Name="IconFonts" />
+            <TextBlock Text="Fonts" />
+          </StackPanel>
+        </ListBoxItem>
+        <ListBoxItem Tag="updates">
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <Image Width="16" Height="16" x:Name="IconUpdates" />
+            <TextBlock Text="Updates" />
+          </StackPanel>
+        </ListBoxItem>
+        <ListBoxItem Tag="tasks">
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <Image Width="16" Height="16" x:Name="IconTasks" />
+            <TextBlock Text="Tasks" />
+          </StackPanel>
+        </ListBoxItem>
+        <ListBoxItem Tag="externaltools">
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <Image Width="16" Height="16" x:Name="IconExternalTools" />
+            <TextBlock Text="External Tools" />
+          </StackPanel>
+        </ListBoxItem>
         <ListBoxItem Content="Projects" IsEnabled="False" FontWeight="Bold" />
-        <ListBoxItem Content="   Load/Save" Tag="loadsave" />
-        <ListBoxItem Content="   Build" Tag="build" />
-        <ListBoxItem Content="   .NET Runtimes" Tag="dotnetruntimes" />
-        <ListBoxItem Content="   SDK Locations" Tag="sdklocations" />
+        <ListBoxItem Tag="loadsave">
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <Image Width="16" Height="16" x:Name="IconLoadSave" />
+            <TextBlock Text="Load/Save" />
+          </StackPanel>
+        </ListBoxItem>
+        <ListBoxItem Tag="build">
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <Image Width="16" Height="16" x:Name="IconBuild" />
+            <TextBlock Text="Build" />
+          </StackPanel>
+        </ListBoxItem>
+        <ListBoxItem Tag="sdklocations">
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <Image Width="16" Height="16" x:Name="IconSdkLocations" />
+            <TextBlock Text="SDK Locations" />
+          </StackPanel>
+        </ListBoxItem>
         <ListBoxItem Content="Text Editor" IsEnabled="False" FontWeight="Bold" />
-        <ListBoxItem Content="   Formatting" Tag="formatting" />
-        <ListBoxItem Content="   Code Snippets" Tag="codesnippets" />
-        <ListBoxItem Content="   Language Bundles" Tag="languagebundles" />
+        <ListBoxItem Tag="formatting">
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <Image Width="16" Height="16" x:Name="IconFormatting" />
+            <TextBlock Text="Formatting" />
+          </StackPanel>
+        </ListBoxItem>
+        <ListBoxItem Tag="codesnippets">
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <Image Width="16" Height="16" x:Name="IconCodeSnippets" />
+            <TextBlock Text="Code Snippets" />
+          </StackPanel>
+        </ListBoxItem>
+        <ListBoxItem Tag="languagebundles">
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <Image Width="16" Height="16" x:Name="IconLanguageBundles" />
+            <TextBlock Text="Language Bundles" />
+          </StackPanel>
+        </ListBoxItem>
         <ListBoxItem Content="Source Code" IsEnabled="False" FontWeight="Bold" />
-        <ListBoxItem Content="   .NET Naming Policies" Tag="naming" />
-        <ListBoxItem Content="   Code Formatting" Tag="codeformatting" />
-        <ListBoxItem Content="   Standard Header" Tag="standardheader" />
+        <ListBoxItem Tag="naming">
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <Image Width="16" Height="16" x:Name="IconNaming" />
+            <TextBlock Text=".NET Naming Policies" />
+          </StackPanel>
+        </ListBoxItem>
+        <ListBoxItem Tag="codeformatting">
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <Image Width="16" Height="16" x:Name="IconCodeFormatting" />
+            <TextBlock Text="Code Formatting" />
+          </StackPanel>
+        </ListBoxItem>
+        <ListBoxItem Tag="standardheader">
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <Image Width="16" Height="16" x:Name="IconStandardHeader" />
+            <TextBlock Text="Standard Header" />
+          </StackPanel>
+        </ListBoxItem>
         <ListBoxItem Content="Version Control" IsEnabled="False" FontWeight="Bold" />
         <ListBoxItem Content="Other" IsEnabled="False" FontWeight="Bold" />
       </ListBox>
@@ -58,6 +143,21 @@
                          Foreground="{DynamicResource IdeFgBrush}" />
             <RadioButton x:Name="ThemeLightRadio" GroupName="uitheme" Content="Light"
                          Foreground="{DynamicResource IdeFgBrush}" />
+          </StackPanel>
+
+          <!-- User Interface Language panel (legacy parity: LocalizationService locales,
+               selection stored like IdeApp.Preferences.UserInterfaceLanguage; takes effect
+               on restart, as announced by the note below). -->
+          <StackPanel x:Name="PanelLanguage" Margin="16" Spacing="10" IsVisible="False">
+            <TextBlock Text="User Interface Language" FontWeight="SemiBold" Foreground="{DynamicResource IdeFgBrush}" />
+            <ComboBox x:Name="LanguageCombo" MinWidth="260"
+                      Foreground="{DynamicResource IdeFgBrush}" />
+            <TextBlock x:Name="LanguageRestartNote"
+                       Text="These preferences will take effect next time you start MonoDevelop"
+                       TextWrapping="Wrap" Opacity="0.8" Foreground="{DynamicResource IdeFgBrush}" />
+            <StackPanel x:Name="LanguageRestartRow" Orientation="Horizontal" Spacing="8" IsVisible="False">
+              <Button x:Name="LanguageRestartButton" Content="Restart MonoDevelop" Click="OnRestartClicked" />
+            </StackPanel>
           </StackPanel>
 
           <!-- Generic placeholder for panels not ported yet -->
