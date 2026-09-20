@@ -34,8 +34,8 @@ public static class MenuService
 		public Action? OnClick;
 	}
 
-	public static IReadOnlyList<MenuEntry> BuildMainMenu () => new List<MenuEntry> {
-		BuildFile (),
+	public static IReadOnlyList<MenuEntry> BuildMainMenu (IReadOnlyList<string>? recentSolutions = null) => new List<MenuEntry> {
+		BuildFile (recentSolutions),
 		BuildEdit (),
 		BuildView (),
 		BuildSearch (),
@@ -49,24 +49,32 @@ public static class MenuService
 	};
 
 	// ---------- File ----------
-	static MenuEntry BuildFile () => new () {
-		Label = "_File",
-		Children = {
-			Item ("New _File...", icon: "md-regular-file", shortcut: "Ctrl N", click: Command ("MonoDevelop.Ide.Commands.FileCommands.NewFile")),
-			Item ("New _Solution...", icon: "md-new-solution", shortcut: "Ctrl Shift N", click: Command ("MonoDevelop.Ide.Commands.FileCommands.NewProject")),
-			Sep (),
-			Item ("_Open...", icon: "gtk-open", shortcut: "Ctrl O", click: Command ("MonoDevelop.Ide.Commands.FileCommands.OpenFile")),
-			Sep (),
-			Sub ("Recent _Files", new List<MenuEntry> {
-				Item ("(Empty)", disabled: true),
+	static MenuEntry BuildFile (IReadOnlyList<string>? recentSolutions)
+	{
+		var recents = new List<MenuEntry> ();
+		if (recentSolutions is { Count: > 0 }) {
+			foreach (var path in recentSolutions)
+				recents.Add (Item (System.IO.Path.GetFileNameWithoutExtension (path), click: Command ("recent:" + path)));
+		} else {
+			recents.Add (Item ("(Empty)", disabled: true));
+		}
+		recents.Add (Sep ());
+		recents.Add (Item ("_Clear Recent Solutions List", click: Command ("MonoDevelop.Ide.Commands.FileCommands.ClearRecentProjects")));
+
+		return new () {
+			Label = "_File",
+			Children = {
+				Item ("New _File...", icon: "md-regular-file", shortcut: "Ctrl N", click: Command ("MonoDevelop.Ide.Commands.FileCommands.NewFile")),
+				Item ("New _Solution...", icon: "md-new-solution", shortcut: "Ctrl Shift N", click: Command ("MonoDevelop.Ide.Commands.FileCommands.NewProject")),
 				Sep (),
-				Item ("_Clear Recent Files List", click: Command ("MonoDevelop.Ide.Commands.FileCommands.ClearRecentFiles")),
-			}),
-			Sub ("Recent Solu_tions", new List<MenuEntry> {
-				Item ("(Empty)", disabled: true),
+				Item ("_Open...", icon: "gtk-open", shortcut: "Ctrl O", click: Command ("MonoDevelop.Ide.Commands.FileCommands.OpenFile")),
 				Sep (),
-				Item ("_Clear Recent Solutions List", click: Command ("MonoDevelop.Ide.Commands.FileCommands.ClearRecentProjects")),
-			}),
+				Sub ("Recent _Files", new List<MenuEntry> {
+					Item ("(Empty)", disabled: true),
+					Sep (),
+					Item ("_Clear Recent Files List", click: Command ("MonoDevelop.Ide.Commands.FileCommands.ClearRecentFiles")),
+				}),
+				Sub ("Recent Solu_tions", recents),
 			Sep (),
 			Item ("_Save", icon: "gtk-save", shortcut: "Ctrl S", click: Command ("MonoDevelop.Ide.Commands.FileCommands.Save")),
 			Item ("Save _As...", click: Command ("MonoDevelop.Ide.Commands.FileCommands.SaveAs")),
@@ -82,7 +90,8 @@ public static class MenuService
 			Sep (),
 			Item ("_Quit", icon: "gtk-quit", shortcut: "Ctrl Q", click: Command ("MonoDevelop.Ide.Commands.FileCommands.Exit")),
 		}
-	};
+		};
+	}
 
 	// ---------- Edit ----------
 	static MenuEntry BuildEdit () => new () {
@@ -149,6 +158,20 @@ public static class MenuService
 			Item ("View List", click: Command ("MonoDevelop.Ide.Commands.ViewCommands.ViewList")),
 			Sep (),
 			Item ("Layout List", click: Command ("MonoDevelop.Ide.Commands.ViewCommands.LayoutList")),
+			Sep (),
+			Sub ("_Pads", new List<MenuEntry> {
+				Item ("Solution", click: Command ("pads:left")),
+				Item ("Classes", click: Command ("pads:left")),
+				Sep (),
+				Item ("Toolbox", click: Command ("pads:right")),
+				Item ("Properties", click: Command ("pads:right")),
+				Item ("Document Outline", click: Command ("pads:right")),
+				Sep (),
+				Item ("Errors", click: Command ("pads:bottom")),
+				Item ("Tasks", click: Command ("pads:bottom")),
+				Sep (),
+				Item ("Help", click: Command ("pads:right")),
+			}),
 			Sep (),
 			Item ("Save Curre_nt Layout...", icon: "gtk-add", click: Command ("MonoDevelop.Ide.Commands.ViewCommands.NewLayout")),
 			Item ("_Delete Current Layout", icon: "gtk-remove", click: Command ("MonoDevelop.Ide.Commands.ViewCommands.DeleteCurrentLayout")),
@@ -330,7 +353,7 @@ public static class MenuService
 			Sep (),
 			Item ("Close _All", shortcut: "Ctrl Shift W", click: Command ("MonoDevelop.Ide.Commands.FileCommands.CloseAllFiles")),
 			Sep (),
-			Item ("Welcome Page", icon: "gtk-home", click: Command ("MonoDevelop.Ide.Commands.ViewCommands.ShowWelcomePage")),
+			Item ("Welcome Page", icon: "gtk-home", click: Command ("cmd:welcome")),
 			Sep (),
 			Item ("Window List", click: Command ("MonoDevelop.Ide.Commands.WindowCommands.OpenWindowList")),
 			Sep (),

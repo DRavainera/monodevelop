@@ -1,5 +1,6 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:views="using:MonoDevelop.AvaloniaShell.Views"
         xmlns:controls="using:MonoDevelop.AvaloniaShell.Controls"
         x:Class="MonoDevelop.AvaloniaShell.Views.MainWindow"
         Title="MonoDevelop — Avalonia Shell"
@@ -44,12 +45,19 @@
       </DockPanel>
     </Border>
 
+    <!-- Hidden-pad restore strip (sits right above the status bar) -->
+    <Border x:Name="RestoreStripHost" DockPanel.Dock="Bottom" Padding="4,2" IsVisible="False"
+            Background="{DynamicResource IdeChromeBgBrush}">
+      <StackPanel x:Name="RestoreStrip" Orientation="Horizontal" Spacing="4" />
+    </Border>
+
     <!-- Status bar -->
     <Border DockPanel.Dock="Bottom" Padding="6,3" Background="{DynamicResource IdeChromeBgBrush}">
       <TextBlock x:Name="StatusText" Text="Ready" FontSize="12" Foreground="{DynamicResource IdeFgBrush}" />
     </Border>
 
-    <!-- Tool panes + document area -->
+    <!-- Tool panes + document area (legacy DockFrame anatomy: left pad, center docs,
+         right pad, bottom pad; each pad has tabs and can be hidden/restored) -->
     <Grid>
       <Grid.ColumnDefinitions>
         <ColumnDefinition Width="Auto" />
@@ -61,71 +69,30 @@
         <RowDefinition Height="Auto" />
       </Grid.RowDefinitions>
 
-      <!-- Left: Solution pad -->
-      <Border x:Name="SolutionPane" Grid.Row="0" Grid.Column="0" Width="260"
-              BorderBrush="{DynamicResource IdeBorderBrush}" BorderThickness="0,0,1,0"
-              Background="{DynamicResource IdeWindowBgBrush}">
-        <DockPanel>
-          <TextBlock DockPanel.Dock="Top" Padding="8,6" Text="Solution" FontWeight="Bold"
-                     Foreground="{DynamicResource IdeFgBrush}" />
-          <ListBox x:Name="SolutionList" Background="Transparent" Foreground="{DynamicResource IdeFgBrush}">
-            <ListBoxItem Content="Solution 'TestProj' (1 project)" />
-            <ListBoxItem Content="└ TestProj" />
-            <ListBoxItem Content="  └ References" />
-            <ListBoxItem Content="  └ Program.cs" />
-          </ListBox>
-        </DockPanel>
-      </Border>
+      <!-- Left pads: Solution / Classes (legacy ProjectPad + ClassPad) -->
+      <controls:PadHost x:Name="LeftPads" Grid.Row="0" Grid.Column="0" Width="260" />
 
-      <!-- Documents area: island tabs -->
+      <!-- Center: document area (Welcome page behaves as the startup document) -->
       <Border x:Name="DocumentPane" Grid.Row="0" Grid.Column="1"
               Background="{DynamicResource IdeWindowBgBrush}"
               BorderBrush="{DynamicResource IdeBorderBrush}" BorderThickness="0,0,1,0">
-        <TabControl x:Name="DocTabs" TabStripPlacement="Top">
-          <TabItem Classes="island" Header="Program.cs">
-            <controls:SkTextEditor Text="public class Program { }"
-                                   FontSize="13"
-                                   Foreground="{DynamicResource IdeFgBrush}"
-                                   GutterBackground="{DynamicResource IdeChromeBgBrush}"
-                                   GutterForeground="{DynamicResource IdeFgBrush}"
-                                   CaretBrush="{DynamicResource IdeFgBrush}" />
-          </TabItem>
-          <TabItem Classes="island" Header="global.json">
-            <TextBox AcceptsReturn="True" Text="{}{ &quot;sdk&quot;: { } }"
-                     FontFamily="Consolas,DejaVu Sans Mono,monospace" FontSize="13"
-                     Background="Transparent" Foreground="{DynamicResource IdeFgBrush}" />
-          </TabItem>
-        </TabControl>
-      </Border>
-
-      <!-- Right: properties pad (placeholder) -->
-      <Border x:Name="PropertiesPane" Grid.Row="0" Grid.Column="2" Width="220"
-              BorderBrush="{DynamicResource IdeBorderBrush}" BorderThickness="0"
-              Background="{DynamicResource IdeWindowBgBrush}">
         <DockPanel>
-          <TextBlock DockPanel.Dock="Top" Padding="8,6" Text="Properties" FontWeight="Bold"
-                     Foreground="{DynamicResource IdeFgBrush}" />
-          <TextBlock Text="(placeholder)" Padding="8" Foreground="{DynamicResource IdeFgBrush}" Opacity="0.5" />
+          <TabControl x:Name="DocTabs" DockPanel.Dock="Top" TabStripPlacement="Top" />
+          <Panel x:Name="DocContent" />
         </DockPanel>
       </Border>
+
+      <!-- Right pads: Properties / Errors / Tasks / Output-ish tabs live here in the
+           legacy layout's "right dock group"; bottom row hosts the Output pad. -->
+      <controls:PadHost x:Name="RightPads" Grid.Row="0" Grid.Column="2" Width="240" />
 
       <GridSplitter Grid.Row="0" Grid.Column="1" Width="3" HorizontalAlignment="Left"
                     Background="Transparent" ResizeDirection="Columns" />
       <GridSplitter Grid.Row="0" Grid.Column="2" Width="3" HorizontalAlignment="Left"
                     Background="Transparent" ResizeDirection="Columns" />
 
-      <!-- Bottom: output pad -->
-      <Border x:Name="OutputPane" Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3" Height="160"
-              BorderBrush="{DynamicResource IdeBorderBrush}" BorderThickness="0,1,0,0"
-              Background="{DynamicResource IdeWindowBgBrush}">
-        <DockPanel>
-          <TextBlock DockPanel.Dock="Top" Padding="8,4" Text="Output" FontWeight="Bold"
-                     Foreground="{DynamicResource IdeFgBrush}" />
-          <TextBox x:Name="OutputText" AcceptsReturn="True" IsReadOnly="True"
-                   Text="[shell] Avalonia 12.1.2 console ready." FontSize="12"
-                   Padding="8" Background="Transparent" Foreground="{DynamicResource IdeFgBrush}" />
-        </DockPanel>
-      </Border>
+      <!-- Bottom pads: Output / Errors / Tasks (legacy bottom dock group) -->
+      <controls:PadHost x:Name="BottomPads" Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3" Height="170" />
     </Grid>
   </DockPanel>
 </Window>

@@ -1,0 +1,52 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="MonoDevelop.AvaloniaShell.Views.WelcomePageView">
+
+  <!-- Welcome page (legacy WelcomePageFrame anatomy): notification bar on top
+       (shown when a solution is open), then a centered column with the brand,
+       the New/Open actions and the recent solutions list. -->
+  <Grid RowDefinitions="Auto,*">
+    <!-- Project bar: tooltip-style bar with the Go Back affordance -->
+    <Border x:Name="ProjectBar" Grid.Row="0" Background="{DynamicResource IdeTabHoverBrush}"
+            BorderBrush="{DynamicResource IdeBorderBrush}" BorderThickness="0,0,0,1"
+            IsVisible="False" Padding="12,6">
+      <Grid ColumnDefinitions="*,Auto">
+        <TextBlock x:Name="ProjectBarText" Foreground="{DynamicResource IdeFgBrush}" FontSize="12" />
+        <Button x:Name="GoBackButton" Grid.Column="1" Content="Go Back to Solution" FontSize="12"
+                Click="OnGoBack" />
+      </Grid>
+    </Border>
+
+    <!-- Centered welcome content -->
+    <ScrollViewer Grid.Row="1">
+      <StackPanel MaxWidth="640" HorizontalAlignment="Center" Margin="0,40" Spacing="6">
+        <Image x:Name="BrandImage" Width="220" Height="42" HorizontalAlignment="Center" Margin="0,0,0,18" />
+        <TextBlock x:Name="BrandTitle" TextAlignment="Center" FontSize="26" FontWeight="Light"
+                   Foreground="{DynamicResource IdeFgBrush}" Margin="0,0,0,16" />
+
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="24" Margin="0,0,0,22">
+          <Button Classes="welcomelink" Click="OnNewSolution">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <Image x:Name="NewIcon" Width="16" Height="16" />
+              <TextBlock Text="New" VerticalAlignment="Center" />
+            </StackPanel>
+          </Button>
+          <Button Classes="welcomelink" Click="OnOpenSolution">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <Image x:Name="OpenIcon" Width="16" Height="16" />
+              <TextBlock Text="Open" VerticalAlignment="Center" />
+            </StackPanel>
+          </Button>
+        </StackPanel>
+
+        <Border BorderBrush="{DynamicResource IdeBorderBrush}" BorderThickness="0,1,0,0"
+                Padding="0,10" Margin="0,6,0,0">
+          <TextBlock Text="Recent Solutions" FontWeight="SemiBold" FontSize="13"
+                     Foreground="{DynamicResource IdeFgBrush}" Opacity="0.9" />
+        </Border>
+
+        <ItemsControl x:Name="RecentList" />
+      </StackPanel>
+    </ScrollViewer>
+  </Grid>
+</UserControl>

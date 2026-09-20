@@ -166,3 +166,20 @@ Fuente: `src/core/MonoDevelop.Ide` + addins (`grep "class .*: .*Dialog"`). Orden
 - **Wave E — ventanas no modales**: Welcome Page, pads de resultados (Search Results, Errors, Task List), tooltips de marcadores.
 
 Regla transversal: TODAS las ventanas nuevas usan `SystemDecorations=None` + chrome Avalonia (fila título + caption buttons), iconos del set PNG vía `IconService` y temas claro/oscuro.
+
+### M5 — Paridad contra la UI GTK EN VIVO: Welcome Page, Nuevo Proyecto y sistema de pads (2026-09-19, continuación 3)
+
+La UI Gtk corre en .NET 10 (`cd main/build/net10run && ~/.dotnet/dotnet MonoDevelop.dll`; el build obsoleto `build/bin` fue eliminado). Metodología de análisis implementada:
+- **Captura real**: `import/magick x:<winid>` sobre ventanas X concretas (los popups GTK de mutter+XWayland no se componen en `x:root`; capturar por ID sí funciona).
+- **Interacción real**: AT-SPI (accesibilidad) para abrir menús/diálogos por acción (`do_action`) sin depender del foco, más injector XTEST compilado (`/tmp/xinject`) para clics.
+- **Estructura verificada en runtime**: volcado AT-SPI de los 10 menús con TODOS sus ítems/submenús localizados (es) — coincide con `MenuService` y aporta deltas: Ver→**Paneles** (Solución/Clases/Cuadro de herramientas/Propiedades/Esquema/Errores/Tareas/Pruebas/Ayuda) y **Paneles de depuración** (Puntos de interrupción/Locales/Inspeccionar/Subprocesos/Inmediato/Pila de llamadas); Ejecutar completo con depuración (Asociar al proceso, pasos, breakpoints); Proyecto con NuGet; Compilar con Publicar.
+- **Diálogos capturados y medidos**: Nueva Solución (904x632; columnas categorías|plantillas 32px|descripción+campos|vista previa) y Buscar en archivos (480x422; búsqueda+reemplazo, directorios, scopes, file mask) — guardados en `/tmp/gtk-*.png`.
+
+Implementado en el shell Avalonia:
+- **Welcome Page** (`WelcomePageView`): anatomía legacy (`WelcomePageFrame`): barra de proyecto con "Go Back to Solution" cuando hay solución abierta, marca, acciones New/Open y lista "Recent Solutions" con tiles (título en negrita + ruta, hover con fondo/borde y estrella de fijar). Abre por defecto como documento inicial; se oculta al abrir solución (como la GTK).
+- **Diálogo Nueva Solución** (`NewSolutionDialog`, chrome Avalonia 920x600): categorías C#/F#, plantillas con iconos 32px del set PNG (Console/Library/Unit Test/Shared), descripción, nombre, ubicación, checkboxes (directorio/git), panel de vista previa. **Creación funcional**: ejecuta `dotnet new <plantilla>` (fallback .sln mínimo), carga la solución creada vía `SolutionLoader`, la añade a recientes y refresca el menú File.
+- **Sistema de pads** (`PadHost`): panel acoplable con cabecera (título + ocultar ✕), pestañas seleccionables (Solution/Classes a la izquierda; Properties a la derecha; Output/Errors/Tasks abajo, estas últimas ocultas por defecto) y **strip de restauración** sobre la barra de estado con un chip por pad oculto. Ver→**Paneles** conmuta la visibilidad de los grupos (toggle como el legacy).
+- **Cableado funcional**: File→New Solution/Open/Exit/Quit; File→Recent Solutions dinámico (persistido en `MonoDevelopProperties.xml` con formato Property key/value legacy, claves `/MonoDevelop/AvaloniaShell/RecentSolutions/ItemN`, y limpiar lista); Window→Welcome Page; dispatch `pads:`/`recent:`/`cmd:`; toolbar existente.
+- **QA E2E**: clics reales XTEST abren el menú File de Avalonia (popup renderizado con iconos) y Cancel/Create del diálogo funcionan; `dotnet new console` creó `~/TestProj/TestProj.sln` real; `--sln` carga la solución (`Loaded TestProj.sln`), puebla el pad Solution, persiste el reciente y reconstruye el menú. Build 0 errores.
+
+Siguiente: portar Find in Files desde la captura real; wiring de run/build; paneles de depuración cuando se porte el debugger.
