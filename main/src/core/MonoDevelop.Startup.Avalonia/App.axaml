@@ -58,6 +58,17 @@
       <Setter Property="Background" Value="#E81123" />
       <Setter Property="Foreground" Value="White" />
     </Style>
+    <!-- Welcome page link buttons (legacy WelcomePageBarButton: muted gray text + icon,
+         brightens on hover) -->
+    <Style Selector="Button.welcomelink">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="Foreground" Value="{DynamicResource WelcomeLinkBrush}" />
+      <Setter Property="FontSize" Value="12" />
+    </Style>
+    <Style Selector="Button.welcomelink:pointerover">
+      <Setter Property="Foreground" Value="{DynamicResource IdeFgBrush}" />
+    </Style>
   </Application.Styles>
   <Application.Resources>
     <ResourceDictionary>
@@ -70,6 +81,11 @@
           <Color x:Key="IdeFg">#E0E0E0</Color>
           <Color x:Key="IdeBorder">#3A3A3A</Color>
           <Color x:Key="IdeCaptionHover">#404040</Color>
+          <!-- Welcome page palette (legacy MonoDevelop.Ide.WelcomePage/Style.cs, dark) -->
+          <Color x:Key="WelcomePageBg">#000000</Color>
+          <Color x:Key="WelcomePadBg">#222222</Color>
+          <Color x:Key="WelcomeLink">#868686</Color>
+          <Color x:Key="WelcomeTileHover">#2B3E50</Color>
         </ResourceDictionary>
         <ResourceDictionary x:Key="Light">
           <Color x:Key="IdeWindowBg">#FFFFFF</Color>
@@ -79,6 +95,11 @@
           <Color x:Key="IdeFg">#1A1A1A</Color>
           <Color x:Key="IdeBorder">#D0D0D0</Color>
           <Color x:Key="IdeCaptionHover">#E0E0E0</Color>
+          <!-- Welcome page palette (legacy Style.cs light: base bg, pad bg, secondary text) -->
+          <Color x:Key="WelcomePageBg">#F5F5F3</Color>
+          <Color x:Key="WelcomePadBg">#FFFFFF</Color>
+          <Color x:Key="WelcomeLink">#8C8C8C</Color>
+          <Color x:Key="WelcomeTileHover">#E8F0F8</Color>
         </ResourceDictionary>
       </ResourceDictionary.ThemeDictionaries>
       <SolidColorBrush x:Key="IdeWindowBgBrush" Color="{DynamicResource IdeWindowBg}" />
@@ -89,6 +110,11 @@
       <SolidColorBrush x:Key="IdeFgBrush" Color="{DynamicResource IdeFg}" />
       <SolidColorBrush x:Key="IdeBorderBrush" Color="{DynamicResource IdeBorder}" />
       <SolidColorBrush x:Key="CaptionHoverBrush" Color="{DynamicResource IdeCaptionHover}" />
+      <!-- Welcome page brushes (Style.cs semantics) -->
+      <SolidColorBrush x:Key="WelcomePageBgBrush" Color="{DynamicResource WelcomePageBg}" />
+      <SolidColorBrush x:Key="WelcomePadBgBrush" Color="{DynamicResource WelcomePadBg}" />
+      <SolidColorBrush x:Key="WelcomeLinkBrush" Color="{DynamicResource WelcomeLink}" />
+      <SolidColorBrush x:Key="WelcomeTileHoverBrush" Color="{DynamicResource WelcomeTileHover}" />
     </ResourceDictionary>
   </Application.Resources>
 </Application>

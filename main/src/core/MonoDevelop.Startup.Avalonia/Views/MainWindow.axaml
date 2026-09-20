@@ -56,6 +56,7 @@
       <TextBlock x:Name="StatusText" Text="Ready" FontSize="12" Foreground="{DynamicResource IdeFgBrush}" />
     </Border>
 
+    <Panel>
     <!-- Tool panes + document area (legacy DockFrame anatomy: left pad, center docs,
          right pad, bottom pad; each pad has tabs and can be hidden/restored) -->
     <Grid>
@@ -94,5 +95,13 @@
       <!-- Bottom pads: Output / Errors / Tasks (legacy bottom dock group) -->
       <controls:PadHost x:Name="BottomPads" Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3" Height="170" />
     </Grid>
+
+    <!-- Welcome page overlay: covers the whole workbench (pads included) like the
+         legacy WelcomePageService, which adds the WelcomePageFrame over the DockFrame
+         (DockFrame.AddOverlayWidget) — no pads or document tabs show behind it. -->
+    <Border x:Name="WelcomeOverlay" Background="{DynamicResource WelcomePageBgBrush}">
+      <views:WelcomePageView x:Name="WelcomeHost" />
+    </Border>
+    </Panel>
   </DockPanel>
 </Window>

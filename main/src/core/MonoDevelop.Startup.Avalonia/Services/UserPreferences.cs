@@ -103,6 +103,15 @@ public static class RecentSolutions
 
 	public static void Clear () => Save (new List<(string, string)> ());
 
+	/// <summary>
+	/// Pinned (favorite) solutions, the legacy RecentFiles.IsFavoriteFile flag.
+	/// </summary>
+	public static bool IsFavorite (string path)
+		=> UserPreferences.Get ($"{KeyPrefix}Fav/{path}") == "true";
+
+	public static void SetFavorite (string path, bool favorite)
+		=> UserPreferences.Set ($"{KeyPrefix}Fav/{path}", favorite ? "true" : null);
+
 	static void Save (List<(string Path, string TimeStamp)> items)
 	{
 		for (int i = 0; i < MaxItems; i++)

@@ -210,6 +210,39 @@ public static class IconService
 		}
 	}
 
+	/// <summary>
+	/// Loads an icon by raw resource name (e.g. "welcome-link-md-16", "star-16") with the
+	/// same variant conventions. Used by the welcome-page resources that have no
+	/// StockIcons.addin.xml stock id (legacy ImageService.LoadIcon by resource name).
+	/// </summary>
+	public static IImage? GetResourceImage (string name, int scale = 1)
+	{
+		var dark = Application.Current?.ActualThemeVariant == ThemeVariant.Dark;
+		var key = (name, dark, false, scale);
+		if (cache.TryGetValue (key, out var cached) && cached is not null)
+			return cached;
+
+		if (iconsDir is null)
+			return null;
+		string? file = null;
+		foreach (var variant in Variants (name, dark, false, scale)) {
+			var f = Path.Combine (iconsDir, variant);
+			if (File.Exists (f)) {
+				file = f;
+				break;
+			}
+		}
+		if (file is null)
+			return null;
+		try {
+			var bmp = new Bitmap (file);
+			cache[key] = bmp;
+			return bmp;
+		} catch {
+			return null;
+		}
+	}
+
 	/// <summary>True if the stock id is known to this service (used to decide whether to show an icon).</summary>
 	public static bool IsKnown (string stockId)
 		=> StockToResource.ContainsKey (stockId) || VcStockToResource.ContainsKey (stockId);

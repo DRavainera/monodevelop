@@ -15,6 +15,10 @@
     <PackageReference Include="SkiaSharp" Version="3.119.4" />
     <AvaloniaResource Include="branding\AboutImage.png" />
     <AvaloniaResource Include="branding\AboutImage@2x.png" />
+    <AvaloniaResource Include="branding\welcome-logo.png" />
+    <AvaloniaResource Include="branding\welcome-logo@2x.png" />
+    <AvaloniaResource Include="branding\welcome-tile.png" />
+    <AvaloniaResource Include="branding\welcome-tile@2x.png" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\..\external\mono-addins\Mono.Addins\Mono.Addins.csproj" />

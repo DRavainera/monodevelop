@@ -26,7 +26,7 @@ public partial class MainWindow : Window
 
 	WelcomePageView? welcomePage;
 	bool welcomeVisible = true;
-	Border? welcomeDocBorder;
+	bool solutionLoaded;
 
 	public MainWindow ()
 	{
@@ -109,6 +109,13 @@ public partial class MainWindow : Window
 
 		// Legacy default: the Welcome page opens as the startup document.
 		ShowWelcomePage ();
+
+		// Legacy WelcomePageFrame.OnKeyPressEvent: Escape hides the welcome overlay
+		// while a solution is open.
+		KeyDown += (s, e) => {
+			if (e.Key == Avalonia.Input.Key.Escape && welcomeVisible && solutionLoaded)
+				HideWelcomePage ();
+		};
 	}
 
 	// Rebuilds the main menu (called at startup and whenever recents change, so the
@@ -242,34 +249,24 @@ public partial class MainWindow : Window
 		if (welcomePage is not null)
 			return;
 		welcomePage = new WelcomePageView ();
-		welcomeDocBorder = new Border {
-			Child = welcomePage,
-			Background = (Brush)Application.Current!.FindResource ("IdeWindowBgBrush")!,
-		};
-		AddDocument ("Welcome", welcomeDocBorder, closable: false, select: false);
 	}
 
+	// The Welcome page is a full workbench overlay over the DockFrame content
+	// (legacy WelcomePageService.ShowWelcomePage → DockFrame.AddOverlayWidget), so
+	// no pads or document tabs are visible behind it.
 	public void ShowWelcomePage ()
 	{
 		EnsureWelcomePage ();
 		welcomeVisible = true;
-		welcomeDocBorder!.IsVisible = true;
-		if (DocTabs!.Items.OfType<TabItem> ().All (t => (string?)t.Tag != "Welcome")) {
-			var tab = new TabItem { Header = "Welcome", Tag = "Welcome", Classes = { "island" } };
-			DocTabs.Items.Insert (0, tab);
-		}
-		SelectDocument ("Welcome");
+		WelcomeOverlay!.IsVisible = true;
 	}
 
 	public void HideWelcomePage ()
 	{
-		if (welcomeDocBorder is null)
+		if (welcomePage is null)
 			return;
 		welcomeVisible = false;
-		var tab = DocTabs!.Items.OfType<TabItem> ().FirstOrDefault (t => (string?)t.Tag == "Welcome");
-		if (tab is not null)
-			DocTabs.Items.Remove (tab);
-		SelectFirstDocument ();
+		WelcomeOverlay!.IsVisible = false;
 	}
 
 	// ---------- Documents (tabs) ----------
@@ -372,6 +369,7 @@ public partial class MainWindow : Window
 				return;
 			}
 			var (title, projects) = loaded.Value;
+			solutionLoaded = true;
 			solutionTree!.Items.Clear (); // ListBox requires empty Items before ItemsSource
 			var items = new System.Collections.ObjectModel.ObservableCollection<string> {
 				$"Solution '{title}' ({projects.Count (p => !p.IsFolder)} project(s))"

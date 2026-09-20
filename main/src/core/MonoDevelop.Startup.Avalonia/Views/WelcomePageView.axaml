@@ -2,50 +2,123 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="MonoDevelop.AvaloniaShell.Views.WelcomePageView">
 
-  <!-- Welcome page (legacy WelcomePageFrame anatomy): notification bar on top
-       (shown when a solution is open), then a centered column with the brand,
-       the New/Open actions and the recent solutions list. -->
+  <!-- Replica of the legacy GTK/Xwt welcome page (MonoDevelop.Ide.WelcomePage):
+       WelcomePageFrame = project bar (tooltip-style, only while a solution is open)
+       + the page itself: logo strip (876x72 logo over the page background) and the
+       centered column with the link bar and the three "pad" cards (Solutions /
+       News / Did you know?) with the exact metrics of WelcomePage Style.cs. -->
+  <UserControl.Styles>
+    <!-- Section card: rounded pad with border + drop shadow (WelcomePageSection) -->
+    <Style Selector="Border.wsection">
+      <Setter Property="Background" Value="{DynamicResource WelcomePadBgBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource WelcomePadBgBrush}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="4" />
+      <Setter Property="BoxShadow" Value="0 2 6 0 #33000000" />
+      <Setter Property="Padding" Value="20" />
+    </Style>
+    <!-- Large section title (Pad.LargeTitleFontSize = 24 on Linux) -->
+    <Style Selector="TextBlock.wtitle">
+      <Setter Property="FontSize" Value="24" />
+      <Setter Property="FontWeight" Value="Light" />
+      <Setter Property="Foreground" Value="{DynamicResource IdeFgBrush}" />
+    </Style>
+    <!-- Link tile (WelcomePageListButton: 260x46, hover color, hand cursor) -->
+    <Style Selector="Border.wtile">
+      <Setter Property="Height" Value="46" />
+      <Setter Property="Width" Value="260" />
+      <Setter Property="CornerRadius" Value="3" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <Style Selector="Border.wtile:pointerover">
+      <Setter Property="Background" Value="{DynamicResource WelcomeTileHoverBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource WelcomeTileHoverBrush}" />
+    </Style>
+  </UserControl.Styles>
+
   <Grid RowDefinitions="Auto,*">
-    <!-- Project bar: tooltip-style bar with the Go Back affordance -->
-    <Border x:Name="ProjectBar" Grid.Row="0" Background="{DynamicResource IdeTabHoverBrush}"
-            BorderBrush="{DynamicResource IdeBorderBrush}" BorderThickness="0,0,0,1"
-            IsVisible="False" Padding="12,6">
+    <!-- WelcomePageProjectBar: tooltip-style bar, shown only while a solution is open -->
+    <Border x:Name="ProjectBar" Grid.Row="0" IsVisible="False" Padding="3,3,12,3"
+            Background="{DynamicResource IdeTabHoverBrush}" CornerRadius="3" Margin="4,4,4,0"
+            MinHeight="26">
       <Grid ColumnDefinitions="*,Auto">
-        <TextBlock x:Name="ProjectBarText" Foreground="{DynamicResource IdeFgBrush}" FontSize="12" />
-        <Button x:Name="GoBackButton" Grid.Column="1" Content="Go Back to Solution" FontSize="12"
-                Click="OnGoBack" />
+        <TextBlock x:Name="ProjectBarText" VerticalAlignment="Center" FontSize="12"
+                   Foreground="{DynamicResource IdeFgBrush}" />
+        <Button x:Name="GoBackButton" Grid.Column="1" Content="Go Back to Solution"
+                FontSize="12" Padding="8,1" MinHeight="22" Click="OnGoBack" />
       </Grid>
     </Border>
 
-    <!-- Centered welcome content -->
-    <ScrollViewer Grid.Row="1">
-      <StackPanel MaxWidth="640" HorizontalAlignment="Center" Margin="0,40" Spacing="6">
-        <Image x:Name="BrandImage" Width="220" Height="42" HorizontalAlignment="Center" Margin="0,0,0,18" />
-        <TextBlock x:Name="BrandTitle" TextAlignment="Center" FontSize="26" FontWeight="Light"
-                   Foreground="{DynamicResource IdeFgBrush}" Margin="0,0,0,16" />
+    <!-- Page: background color per theme, logo strip at the top (legacy paints the
+         14x72 border tile and the 876x72 logo across the top edge), then the content
+         column starting at logoHeight + Spacing = 120px (Widget alignment padding). -->
+    <ScrollViewer Grid.Row="1" Background="{DynamicResource WelcomePageBgBrush}">
+      <StackPanel>
+        <Image x:Name="LogoImage" Height="72" Width="876" Stretch="Fill"
+               HorizontalAlignment="Center" VerticalAlignment="Top" />
+        <StackPanel Margin="0,30,0,24">
+          <!-- Row 1: link bar (DefaultWelcomePage row1) -->
+          <StackPanel x:Name="LinkBar" Orientation="Horizontal" HorizontalAlignment="Center"
+                      Spacing="30" Margin="0,0,0,30" />
 
-        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="24" Margin="0,0,0,22">
-          <Button Classes="welcomelink" Click="OnNewSolution">
-            <StackPanel Orientation="Horizontal" Spacing="8">
-              <Image x:Name="NewIcon" Width="16" Height="16" />
-              <TextBlock Text="New" VerticalAlignment="Center" />
-            </StackPanel>
-          </Button>
-          <Button Classes="welcomelink" Click="OnOpenSolution">
-            <StackPanel Orientation="Horizontal" Spacing="8">
-              <Image x:Name="OpenIcon" Width="16" Height="16" />
-              <TextBlock Text="Open" VerticalAlignment="Center" />
-            </StackPanel>
-          </Button>
+          <!-- Row 2: three columns (DefaultWelcomePage row2) -->
+          <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="30">
+
+            <!-- Solutions column (WelcomePageRecentProjectsList) -->
+            <Border Classes="wsection" Width="300">
+              <StackPanel>
+                <TextBlock Classes="wtitle" Text="Solutions" Margin="0,0,0,14" />
+                <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,0,0,14">
+                  <Button Classes="welcomelink" Click="OnNewSolution" Padding="6,3"
+                          CornerRadius="3" Width="113">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                      <Image x:Name="NewIcon" Width="16" Height="16" />
+                      <TextBlock Text="New..." VerticalAlignment="Center" />
+                    </StackPanel>
+                  </Button>
+                  <Button Classes="welcomelink" Click="OnOpenSolution" Padding="6,3"
+                          CornerRadius="3" Width="113">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                      <Image x:Name="OpenIcon" Width="16" Height="16" />
+                      <TextBlock Text="Open..." VerticalAlignment="Center" />
+                    </StackPanel>
+                  </Button>
+                </StackPanel>
+                <ItemsControl x:Name="RecentList" />
+              </StackPanel>
+            </Border>
+
+            <!-- News column (WelcomePageNewsFeed: the retired Xamarin feed keeps its
+                 slot; shows a note instead of stale content) -->
+            <Border Classes="wsection" Width="510">
+              <StackPanel>
+                <TextBlock Classes="wtitle" Text="Xamarin News" Margin="0,0,0,14" />
+                <TextBlock x:Name="NewsNote" FontSize="12" TextWrapping="Wrap"
+                           Foreground="{DynamicResource WelcomeLinkBrush}"
+                           Text="The news feed service is no longer available." />
+                <Button x:Name="NewsLink" Classes="welcomelink" HorizontalAlignment="Left"
+                        Padding="0" Margin="0,8,0,0" Click="OnNewsOpen">
+                  <TextBlock Text="mono projects news" />
+                </Button>
+              </StackPanel>
+            </Border>
+
+            <!-- Tip of the day column (WelcomePageTipOfTheDaySection) -->
+            <Border Classes="wsection" Width="300">
+              <StackPanel>
+                <TextBlock Classes="wtitle" Text="Did you know?" Margin="0,0,0,14" />
+                <TextBlock x:Name="TipLabel" FontSize="12" TextWrapping="Wrap"
+                           Width="220" TextAlignment="Left"
+                           Foreground="{DynamicResource IdeFgBrush}" />
+                <Button x:Name="NextTipButton" Content="Next Tip" FontSize="12"
+                        HorizontalAlignment="Left" Margin="0,12,0,0"
+                        Padding="10,2" MinHeight="24" Click="OnNextTip" />
+              </StackPanel>
+            </Border>
+
+          </StackPanel>
         </StackPanel>
-
-        <Border BorderBrush="{DynamicResource IdeBorderBrush}" BorderThickness="0,1,0,0"
-                Padding="0,10" Margin="0,6,0,0">
-          <TextBlock Text="Recent Solutions" FontWeight="SemiBold" FontSize="13"
-                     Foreground="{DynamicResource IdeFgBrush}" Opacity="0.9" />
-        </Border>
-
-        <ItemsControl x:Name="RecentList" />
       </StackPanel>
     </ScrollViewer>
   </Grid>

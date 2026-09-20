@@ -1,6 +1,8 @@
 using System;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Xml;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
@@ -11,25 +13,82 @@ using MonoDevelop.AvaloniaShell.Services;
 
 namespace MonoDevelop.AvaloniaShell.Views;
 
+/// <summary>
+/// Faithful port of the legacy GTK/Xwt welcome page (MonoDevelop.Ide.WelcomePage):
+/// logo strip over the page background, link bar (MonoDevelop.com / Documentation /
+/// Support / Q&A) and the three section pads — Solutions (recent projects with
+/// pinning star), News (feed slot) and Tip of the day (TipsOfTheDay.xml + Next Tip).
+/// Metrics come from WelcomePage Style.cs (tiles 260x46, titles 24px light,
+/// links #868686 dark / secondary light, section pads #222222 dark / white light).
+/// </summary>
 public partial class WelcomePageView : UserControl
 {
 	const int MaxRecents = 10;
+	const string MonoUrl = "http://www.monodevelop.com";
+	const string DocsUrl = "http://www.go-mono.com/docs";
+	const string SupportUrl = "http://monodevelop.com/index.php?title=Help_%26_Contact";
+	const string QaUrl = "http://stackoverflow.com/questions/tagged/monodevelop";
+	const string NewsUrl = "https://www.dotnetfoundation.org/about/news";
+
+	string[] tips = Array.Empty<string> ();
+	int currentTip = -1;
 
 	public WelcomePageView ()
 	{
 		InitializeComponent ();
-		NewIcon.Source = IconService.GetImage ("md-new-solution");
-		OpenIcon.Source = IconService.GetImage ("gtk-open");
+
+		LogoImage!.Source = LoadBranding ("avares://MonoDevelop.AvaloniaShell/branding/welcome-logo.png");
+		NewIcon!.Source = IconService.GetResourceImage ("welcome-new-solution-16");
+		OpenIcon!.Source = IconService.GetResourceImage ("welcome-open-solution-16");
+
+		BuildLinkBar ();
+		LoadTips ();
 		LoadRecents ();
 	}
 
-	// Theme-aware helpers: bind properties to the Ide* palette resources so light/dark
-	// switching works for dynamically created controls.
-	static void BindFg (TextBlock tb)
-		=> tb.Bind (TextBlock.ForegroundProperty, Application.Current!.GetResourceObservable ("IdeFgBrush"));
+	// ---------- Link bar (DefaultWelcomePage row1: WelcomePageBarButton set) ----------
 
-	static void BindBrush (Border b, string key)
-		=> b.Bind (Border.BackgroundProperty, Application.Current!.GetResourceObservable (key));
+	void BuildLinkBar ()
+	{
+		AddLink ("MonoDevelop.com", MonoUrl, "welcome-link-md-16");
+		AddLink ("Documentation", DocsUrl, "welcome-link-info-16");
+		AddLink ("Support", SupportUrl, "welcome-link-support-16");
+		AddLink ("Q&A", QaUrl, "welcome-link-chat-16");
+	}
+
+	void AddLink (string label, string url, string iconResource)
+	{
+		var icon = new Image {
+			Width = 16,
+			Height = 16,
+			Source = IconService.GetResourceImage (iconResource),
+			VerticalAlignment = VerticalAlignment.Center,
+		};
+		// No explicit foreground: the TextBlock inherits the button's (welcomelink style,
+		// muted gray, brightening on hover) like the legacy Pango markup did.
+		var text = new TextBlock { Text = label, VerticalAlignment = VerticalAlignment.Center };
+
+		var button = new Button {
+			Classes = { "welcomelink" },
+			Padding = new Thickness (0),
+			Background = Brushes.Transparent,
+			Content = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4, Children = { icon, text } },
+			HorizontalContentAlignment = HorizontalAlignment.Left,
+		};
+		button.Click += (_, _) => OpenUrl (url);
+		LinkBar!.Children.Add (button);
+	}
+
+	static void OpenUrl (string url)
+	{
+		try {
+			Process.Start (new ProcessStartInfo (url) { UseShellExecute = true });
+		} catch (Exception ex) {
+			MainWindow.Instance?.Output ("[welcome] could not open " + url + ": " + ex.Message);
+		}
+	}
+
+	// ---------- Solutions section (WelcomePageRecentProjectsList) ----------
 
 	void LoadRecents ()
 	{
@@ -45,15 +104,14 @@ public partial class WelcomePageView : UserControl
 				Text = "No recent solutions",
 				Margin = new Thickness (0, 6, 0, 0),
 				Opacity = 0.55,
-				HorizontalAlignment = HorizontalAlignment.Center,
 			};
-			BindFg (empty);
+			empty.Bind (TextBlock.ForegroundProperty, Application.Current!.GetResourceObservable ("IdeFgBrush"));
 			RecentList.Items.Add (empty);
 		}
 	}
 
-	// Tile per legacy WelcomePageListButton: icon + bold title + small path,
-	// hover background + border, pin star on hover, opens the solution.
+	// Tile per legacy WelcomePageListButton: icon + bold title + small directory path,
+	// hover = tile hover color, pin star on hover, click opens the solution.
 	Control BuildTile (string path, string stamp)
 	{
 		var title = Path.GetFileNameWithoutExtension (path);
@@ -62,67 +120,74 @@ public partial class WelcomePageView : UserControl
 		var icon = new Image {
 			Width = 16,
 			Height = 16,
-			Source = IconService.GetImage ("md-new-solution"),
+			Source = IconService.GetImage ("md-solution"),
 			VerticalAlignment = VerticalAlignment.Center,
 		};
 
-		var titleTb = new TextBlock { Text = title, FontWeight = FontWeight.Bold, FontSize = 13 };
-		var dirTb = new TextBlock { Text = dir, FontSize = 11, Opacity = 0.65, TextTrimming = TextTrimming.CharacterEllipsis };
-		BindFg (titleTb);
-		BindFg (dirTb);
+		var titleTb = new TextBlock { Text = title, FontWeight = FontWeight.Bold, FontSize = 12 };
+		var dirTb = new TextBlock {
+			Text = dir,
+			FontSize = 10,
+			Opacity = 0.75,
+			TextTrimming = TextTrimming.CharacterEllipsis,
+		};
+		titleTb.Bind (TextBlock.ForegroundProperty, Application.Current!.GetResourceObservable ("IdeFgBrush"));
+		dirTb.Bind (TextBlock.ForegroundProperty, Application.Current.GetResourceObservable ("IdeFgBrush"));
 
 		var texts = new StackPanel {
 			Orientation = Orientation.Vertical,
 			VerticalAlignment = VerticalAlignment.Center,
-			Margin = new Thickness (8, 0, 0, 0),
+			Margin = new Thickness (38 - 16, 0, 0, 0), // legacy TextLeftPadding=38 from tile edge
 			Children = { titleTb, dirTb },
 		};
 
-		var star = new TextBlock {
-			Text = "\u2606",
-			FontSize = 13,
+		var star = new Image {
+			Width = 16,
+			Height = 16,
 			Opacity = 0,
 			VerticalAlignment = VerticalAlignment.Center,
+			Margin = new Thickness (4, 0, 6, 0),
 		};
-		BindFg (star);
 
-		var grid = new Grid { ColumnDefinitions = ColumnDefinitions.Parse ("Auto,*,Auto") };
-		Grid.SetColumn (icon, 0);
-		Grid.SetColumn (texts, 1);
-		Grid.SetColumn (star, 2);
+		var grid = new Grid { ColumnDefinitions = Avalonia.Controls.ColumnDefinitions.Parse ("Auto,*,Auto") };
 		grid.Children.Add (icon);
+		Grid.SetColumn (texts, 1);
 		grid.Children.Add (texts);
+		Grid.SetColumn (star, 2);
 		grid.Children.Add (star);
+
+		bool pinned = RecentSolutions.IsFavorite (path);
 
 		var border = new Border {
 			Child = grid,
-			Padding = new Thickness (10, 7),
+			Classes = { "wtile" }, // hover background/border from the wtile style
+			Padding = new Thickness (10, 0),
 			Margin = new Thickness (0, 1),
-			CornerRadius = new CornerRadius (3),
-			Background = Brushes.Transparent,
-			BorderThickness = new Thickness (0, 1, 0, 1),
-			BorderBrush = Brushes.Transparent,
 			Cursor = new Cursor (StandardCursorType.Hand),
 		};
 
-		bool pinned = false;
-		border.PointerEntered += (_, _) => {
-			BindBrush (border, "IdeTabHoverBrush");
-			star.Opacity = 0.85;
-			star.Text = pinned ? "\u2605" : "\u2606";
-		};
-		border.PointerExited += (_, _) => {
-			border.Background = Brushes.Transparent;
-			star.Opacity = pinned ? 0.9 : 0;
-		};
+		void UpdateStar ()
+		{
+			var name = pinned ? "star-16" : "unstar-16";
+			if (border.IsPointerOver)
+				name += "-hover";
+			star.Source = IconService.GetResourceImage (name);
+			star.Opacity = border.IsPointerOver ? 1 : (pinned ? 0.9 : 0);
+		}
+
+		border.PointerEntered += (_, _) => UpdateStar ();
+		border.PointerExited += (_, _) => UpdateStar ();
+		UpdateStar ();
+
 		border.PointerPressed += (_, e) => {
+			// Legacy: the star itself toggles pinning (PinClickHandler → SetFavoriteFile)
 			if (e.GetCurrentPoint (border).Properties.IsLeftButtonPressed && star.IsPointerOver) {
 				pinned = !pinned;
-				star.Text = pinned ? "\u2605" : "\u2606";
+				UpdateStar ();
+				RecentSolutions.SetFavorite (path, pinned);
 				e.Handled = true;
 			}
 		};
-		border.DoubleTapped += (_, _) => OpenSolution (path);
 		border.Tapped += (_, _) => OpenSolution (path);
 
 		ToolTip.SetTip (border, $"{title}\n{dir}" + (stamp.Length > 0 ? $"\nLast opened: {stamp}" : ""));
@@ -139,14 +204,99 @@ public partial class WelcomePageView : UserControl
 		MainWindow.Instance?.OpenSolutionInWindow (path);
 	}
 
+	// ---------- Tip of the day (WelcomePageTipOfTheDaySection over TipsOfTheDay.xml) ----------
+
+	void LoadTips ()
+	{
+		try {
+			var dataDir = FindDataPath ();
+			var xmlPath = dataDir is null ? null : Path.Combine (dataDir, "options", "TipsOfTheDay.xml");
+			if (xmlPath is null || !File.Exists (xmlPath))
+				return;
+			var doc = new XmlDocument ();
+			doc.Load (xmlPath);
+			tips = doc.DocumentElement?.ChildNodes.Cast<System.Xml.XmlNode> ()
+				.Where (n => n.NodeType == System.Xml.XmlNodeType.Element)
+				.Select (n => n.InnerText.Trim ())
+				.Where (t => t.Length > 0)
+				.ToArray () ?? Array.Empty<string> ();
+		} catch (Exception ex) {
+			MainWindow.Instance?.Output ("[welcome] tips load failed: " + ex.Message);
+		}
+		if (tips.Length > 0) {
+			currentTip = new Random ().Next () % tips.Length;
+			ShowTip ();
+		} else {
+			TipLabel!.Text = "";
+			NextTipButton!.IsVisible = false;
+		}
+	}
+
+	// build/data is the legacy PropertyService.DataPath for the net10run build.
+	static string? FindDataPath ()
+	{
+		try {
+			var dir = AppContext.BaseDirectory;
+			for (int i = 0; i < 6 && dir is not null; i++) {
+				var candidate = Path.GetFullPath (Path.Combine (dir, "data"));
+				if (File.Exists (Path.Combine (candidate, "options", "TipsOfTheDay.xml")))
+					return candidate;
+				dir = Path.GetDirectoryName (dir);
+			}
+			// Running from the repo tree: fall back to the source options copy.
+			dir = AppContext.BaseDirectory;
+			for (int i = 0; i < 8 && dir is not null; i++) {
+				var candidate = Path.GetFullPath (Path.Combine (dir, "src", "core", "MonoDevelop.Ide"));
+				if (File.Exists (Path.Combine (candidate, "options", "TipsOfTheDay.xml")))
+					return candidate;
+				dir = Path.GetDirectoryName (dir);
+			}
+		} catch { }
+		return null;
+	}
+
+	void ShowTip ()
+	{
+		if (currentTip < 0 || currentTip >= tips.Length)
+			return;
+		TipLabel!.Text = tips [currentTip];
+	}
+
+	void OnNextTip (object? sender, RoutedEventArgs e)
+	{
+		if (tips.Length == 0)
+			return;
+		currentTip = (currentTip + 1) % tips.Length;
+		ShowTip ();
+	}
+
+	void OnNewsOpen (object? sender, RoutedEventArgs e) => OpenUrl (NewsUrl);
+
+	// ---------- Theme-aware helpers ----------
+
+	static IImage? LoadBranding (string uri)
+	{
+		try {
+			if (Avalonia.Platform.AssetLoader.Open (new Uri (uri)) is Stream stream)
+				return new Avalonia.Media.Imaging.Bitmap (stream);
+		} catch (Exception ex) {
+			Console.WriteLine ("[welcome] branding load failed: " + ex.Message);
+		}
+		return null;
+	}
+
+	// ---------- Project bar (WelcomePageFrame.UpdateProjectBar semantics) ----------
+
 	// Project bar mirrors WelcomePageProjectBar.UpdateContent: visible while a
-	// solution/workspace is open, with the Go Back affordance.
+	// solution is open, tooltip-style bar with the Go Back affordance.
 	public void UpdateProjectBar (string? solutionName)
 	{
 		var has = !string.IsNullOrEmpty (solutionName);
 		ProjectBar!.IsVisible = has;
-		if (has)
+		if (has) {
 			ProjectBarText!.Text = $"Solution '{solutionName}' is currently open";
+			GoBackButton!.Content = "Go Back to Solution";
+		}
 	}
 
 	void OnGoBack (object? sender, RoutedEventArgs e)
