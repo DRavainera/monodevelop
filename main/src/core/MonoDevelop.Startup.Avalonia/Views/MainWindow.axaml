@@ -14,7 +14,7 @@
       <Grid ColumnDefinitions="*,Auto">
         <!-- Full legacy main menu (structure/labels/icons of MainMenu.addin.xml + addins),
              built by MenuService/MenuBuilder. -->
-        <Menu x:Name="MainMenu" />
+        <Menu x:Name="MainMenu" FontSize="12" />
         <StackPanel Grid.Column="1" Orientation="Horizontal" x:Name="CaptionButtons">
           <Button Classes="caption" Content="&#x2013;" Click="OnMinimize" />
           <Button Classes="caption" Content="&#x25A1;" Click="OnMaximize" />
@@ -22,6 +22,27 @@
         </StackPanel>
       </Grid>
     </Panel>
+
+    <!-- Main toolbar: legacy MainToolbar layout (RoundButton run, configuration/run
+         configuration/runtime combos, search box on the right). Doubles as a drag row,
+         like the composited title bar of the GTK UI. -->
+    <Border x:Name="ToolbarRow" DockPanel.Dock="Top" Background="{DynamicResource IdeChromeBgBrush}"
+            BorderBrush="{DynamicResource IdeBorderBrush}" BorderThickness="0,0,0,1">
+      <DockPanel Margin="8,3" LastChildFill="False">
+        <Button x:Name="RunButton" Classes="runbutton" Width="28" Height="22" Margin="0,0,8,0"
+                Click="OnToolbarRun" ToolTip.Tip="Start Without Debugging (Ctrl F5)">
+          <Image x:Name="RunIcon" Width="16" Height="16" />
+        </Button>
+        <ComboBox x:Name="RunConfigCombo" Width="150" Height="22" FontSize="12"
+                  ToolTip.Tip="Run configuration" SelectionChanged="OnToolbarConfigChanged" />
+        <ComboBox x:Name="ConfigCombo" Width="150" Height="22" FontSize="12" Margin="8,0"
+                  ToolTip.Tip="Active configuration" SelectionChanged="OnToolbarConfigChanged" />
+        <ComboBox x:Name="RuntimeCombo" Width="150" Height="22" FontSize="12"
+                  ToolTip.Tip="Runtime" SelectionChanged="OnToolbarConfigChanged" />
+        <TextBox x:Name="ToolbarSearch" Width="240" Height="22" FontSize="12" Margin="8,0,0,0"
+                 Watermark="Search" VerticalContentAlignment="Center" />
+      </DockPanel>
+    </Border>
 
     <!-- Status bar -->
     <Border DockPanel.Dock="Bottom" Padding="6,3" Background="{DynamicResource IdeChromeBgBrush}">

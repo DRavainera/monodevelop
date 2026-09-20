@@ -5,14 +5,18 @@
   <Application.Styles>
     <FluentTheme />
     <!-- Island tabs: browser-style detached tabs for the document well -->
+    <!-- Island tabs, compact: browser-like but IDE-density (small paddings, 12px text,
+         slim vertical footprint so more tabs fit under the toolbar). -->
     <Style Selector="TabItem.island">
       <Setter Property="Foreground" Value="{DynamicResource IdeFgBrush}" />
+      <Setter Property="FontSize" Value="12" />
+      <Setter Property="MinHeight" Value="24" />
       <Setter Property="Template">
         <ControlTemplate>
           <Border Name="TabRoot"
-                  CornerRadius="9,9,0,0"
-                  Margin="3,7,3,0"
-                  Padding="14,7"
+                  CornerRadius="6,6,0,0"
+                  Margin="2,4,2,0"
+                  Padding="10,3"
                   Background="{DynamicResource TabIdleBrush}">
             <ContentPresenter Name="PART_ContentPresenter"
                               Content="{TemplateBinding Header}"
@@ -26,6 +30,18 @@
     </Style>
     <Style Selector="TabItem.island:pointerover /template/ Border#TabRoot">
       <Setter Property="Background" Value="{DynamicResource TabHoverBrush}" />
+    </Style>
+    <!-- Caption buttons (min/max/close merged with the menu bar) -->
+    <!-- Toolbar run button: small round-ish accent button (legacy RoundButton). -->
+    <Style Selector="Button.runbutton">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="CornerRadius" Value="11" />
+      <Setter Property="HorizontalContentAlignment" Value="Center" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Button.runbutton:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource CaptionHoverBrush}" />
     </Style>
     <!-- Caption buttons (min/max/close merged with the menu bar) -->
     <Style Selector="Button.caption">

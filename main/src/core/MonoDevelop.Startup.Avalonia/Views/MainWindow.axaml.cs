@@ -8,6 +8,7 @@ using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Interactivity;
 using Avalonia.Media;
 using Avalonia.Styling;
+using Avalonia.VisualTree;
 using MonoDevelop.AvaloniaShell.Views;
 
 namespace MonoDevelop.AvaloniaShell.Views;
@@ -40,6 +41,29 @@ public partial class MainWindow : Window
 			TitleBarRow.DoubleTapped += (s, e) => ToggleMaximize ();
 		}
 
+		// Toolbar row doubles as a drag row too (like the composited GTK title bar),
+		// except over its interactive controls (run button, combos, search box).
+		if (ToolbarRow is not null) {
+			ToolbarRow.PointerPressed += (s, e) => {
+				if (e.GetCurrentPoint (this).Properties.IsLeftButtonPressed &&
+					e.Source is Avalonia.Visual v && !IsToolbarInteractive (v))
+					BeginMoveDrag (e);
+			};
+			ToolbarRow.DoubleTapped += (s, e) => ToggleMaximize ();
+		}
+
+		// Toolbar content mirrors the GTK MainToolbar: run button, configuration/run
+		// configuration/runtime combos and the search box on the right.
+		RunConfigCombo!.PlaceholderText = "Default";
+		foreach (var rc in new[] { "Default", "Debug", "Release" })
+			RunConfigCombo.Items.Add (rc);
+		ConfigCombo!.Items.Add ("Debug");
+		ConfigCombo.Items.Add ("Release");
+		ConfigCombo.SelectedIndex = 0;
+		RuntimeCombo!.PlaceholderText = "Default (Mono)";
+		foreach (var rt in new[] { "Mono", ".NET" })
+			RuntimeCombo.Items.Add (rt);
+
 		// The placement convention (mac left, Windows/Linux right) is handled in
 		// OnOpened by re-parenting the caption buttons to the requested side; the
 		// XAML default places them on the right, matching Linux and Windows.
@@ -47,6 +71,7 @@ public partial class MainWindow : Window
 			if (IsMac)
 				MoveCaptionButtonsLeft ();
 			ApplyThemeVariant (Application.Current?.ActualThemeVariant ?? ThemeVariant.Dark);
+			SetToolbarIcons ();
 
 			// Automated QA: open the requested dialog directly.
 			var qa = Program.QaDialogArg;
@@ -142,16 +167,54 @@ public partial class MainWindow : Window
 	{
 		var menu = (MenuItem)sender!;
 		ApplyThemeVariant (menu.Name == "ThemeLight" ? ThemeVariant.Light : ThemeVariant.Dark);
-	}
+	}		void ApplyThemeVariant (ThemeVariant variant)
+		{
+			if (Application.Current is null)
+				return;
+			Application.Current.RequestedThemeVariant = variant;
+			Background = new SolidColorBrush (
+				variant == ThemeVariant.Light ? Color.Parse ("#FFFFFF") : Color.Parse ("#1E1E1E"));
+			SetToolbarIcons ();
+		}
 
-	void ApplyThemeVariant (ThemeVariant variant)
-	{
-		if (Application.Current is null)
-			return;
-		Application.Current.RequestedThemeVariant = variant;
-		Background = new SolidColorBrush (
-			variant == ThemeVariant.Light ? Color.Parse ("#FFFFFF") : Color.Parse ("#1E1E1E"));
-	}
+		// Toolbar glyphs come from the same redesigned PNG set (IconService) and follow the
+		// theme variant, like the legacy ImageService icons.
+		void SetToolbarIcons ()
+		{
+			if (Services.IconService.GetImage ("gtk-execute") is Avalonia.Media.Imaging.Bitmap bmp)
+				RunIcon!.Source = bmp;
+		}
+
+		static bool IsToolbarInteractive (Avalonia.Visual v)
+			=> FindAncestor<ComboBox> (v) is not null ||
+			   FindAncestor<Button> (v) is not null ||
+			   FindAncestor<TextBox> (v) is not null;
+
+		static T? FindAncestor<T> (Avalonia.Visual v) where T : class
+		{
+			while (v is not null) {
+				if (v is T match)
+					return match;
+				v = v.GetVisualParent ();
+			}
+			return null;
+		}
+
+		void OnToolbarRun (object? sender, RoutedEventArgs e)
+		{
+			var message = "'Start Without Debugging' is not wired in the new UI yet — run remains available through --old-gui until the cutover.";
+			Output ("[toolbar] " + message);
+			Console.WriteLine ("[toolbar] " + message);
+		}
+
+		void OnToolbarConfigChanged (object? sender, SelectionChangedEventArgs e)
+		{
+			if (sender is not ComboBox cb || cb.SelectedItem is not string sel)
+				return;
+			var name = cb == ConfigCombo ? "configuration" : cb == RunConfigCombo ? "run configuration" : "runtime";
+			Output ($"[toolbar] {name} → {sel}");
+		}
+
 
 	void OnTogglePad (object? sender, RoutedEventArgs e)
 	{

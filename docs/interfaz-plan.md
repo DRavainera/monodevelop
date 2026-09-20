@@ -149,3 +149,20 @@ Hallazgo de QA del entorno: los clics sintéticos XTEST no llegan a ventanas que
 - **Preferences — selector de idioma**: nueva sección "User Interface Language" con la lista completa de locales de `LocalizationService` (25 entradas), lectura/persistencia de `MonoDevelop.Ide.UserInterfaceLanguage` (MonoDevelop-properties.xml), nota "takes effect next time you start" y botón Restart (UX de `IDEStyleOptionsPanel`). Iconos `md-prefs-*` en el árbol de secciones.
 - **Add-in Manager — chrome Avalonia**: `SystemDecorations="None"` + fila de título propia (título + botón close), igual que About/Preferences; ya no muestra el borde del OS.
 - QA: build 0 errores; smoke 12s OK; `--addins` lista 27 addins del registry real; `--prefs=language` sin excepciones; verificado que los ~65 recursos PNG referenciados existen (IDE + Version Control).
+
+### M5 — Toolbar principal + pestañas compactas + inventario de ventanas (2026-09-19, continuación 2)
+
+- **Barra de herramientas bajo el menú** (paridad del `MainToolbar` GTK): fila con botón Run redondo (icono `gtk-execute` del set PNG, sensible al tema), combos *Run Configuration / Configuration / Runtime* (150px, como el legacy) y caja de búsqueda a la derecha (240px). La fila hace de zona de arrastre + doble-clic maximizar como la barra compuesta del título GTK; los controles (combo/botón/entry) se excluyen del drag (`IsToolbarInteractive`). Handlers reportan en Output/barra de estado mientras los comandos reales se portan.
+- **Pestañas isla compactas**: padding 14,7→10,3, radio 9→6, margen 3,7→2,4, FontSize 12 y MinHeight 24 (antes ~34px por pestaña). QA visual por análisis de píxel de captura (render ASCII de bandas): perfil de filas menú→toolbar→pestañas correcto y pestañas de ~14px de alto.
+
+#### Inventario de ventanas/diálogos Gtk aún no migrados (hoja de ruta M5/M6, todas con chrome Avalonia)
+
+Fuente: `src/core/MonoDevelop.Ide` + addins (`grep "class .*: .*Dialog"`). Orden por oleadas de impacto:
+
+- **Wave A — flujo esencial**: New Solution/New Project (`GtkNewProjectDialogBackend` + `NewProjectOptionsWidget`), Open File/Project (`OpenFileDialog`/`FileSelectorDialog`), Dirty Files al cerrar (`DirtyFilesDialog`), progreso (`ProgressDialog`, `MultiTaskProgressDialog`), alertas base (`AlertDialog`/`TextQuestionDialog` de Components.Extensions, `GtkAlertDialog`, `MultiMessageDialog`, `AddinLoadErrorDialog`), Find in Files (`FindInFilesDialog`), Navigate To / Go to File / Go to Type (`NavigateToCommand`).
+- **Wave B — configuración de proyecto**: Project/Solution Options (`ProjectOptionsDialog`/`CombineOptionsDialog` reutilizando el marco de `OptionsDialog`/Preferences ya portado), Apply/Export Policy (`ApplyPolicyDialog`, `ExportProjectPolicyDialog`, `NewPolicySetDialog`, `DefaultPolicyOptionsDialog`), New Layout (`NewLayoutDialog`), New Configuration (`NewConfigurationDialog`), New Folder (`NewFolderDialog`), Select File Format (`SelectFileFormatDialog`), Confirm Project Delete (`ConfirmProjectDeleteDialog`), Custom Execution Modes (`CustomExecutionModeDialog`, `CustomExecutionModeManagerDialog`, `PortableRuntimeSelectorDialog`, `NewSolutionRunConfigurationDialog`).
+- **Wave C — depurador**: Attach to Process, Breakpoint Properties, Debug Application, Expression Evaluator, Busy Evaluator, Value Visualizer (`MonoDevelop.Debugger`).
+- **Wave D — addins**: Gettext (Translation Project Options, Language Chooser), AspNetCore (Publish to Folder), SourceEditor (New Color Scheme), CodeTemplates (Edit Template), Version Control (History, Diff viewer, Status, Resolve Conflict).
+- **Wave E — ventanas no modales**: Welcome Page, pads de resultados (Search Results, Errors, Task List), tooltips de marcadores.
+
+Regla transversal: TODAS las ventanas nuevas usan `SystemDecorations=None` + chrome Avalonia (fila título + caption buttons), iconos del set PNG vía `IconService` y temas claro/oscuro.
