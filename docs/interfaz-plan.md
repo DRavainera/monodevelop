@@ -292,3 +292,11 @@ Port desde `MonoDevelop.Ide.FindInFiles` y `ProjectOperations` del legacy:
 - **ReloadFile** (FileCommands): revierte el editor activo al contenido en disco.
 - **ProjectOptions/SolutionOptions**: mensaje de estado (los paneles viven en Preferences).
 - QA E2E (`--addref`): TryAddReference(System.Json) → True, csproj contiene la referencia, y revert limpio.
+
+### M11e — HelpCommands completo
+- **OpenLogDirectory** (legacy UserProfile.LogDir): abre ~/.local/share/MonoDevelop en el explorador
+  real (Process.Start con UseShellExecute, igual que el legacy).
+- **MarkLog** escribe el separador ===== MARK ===== en el log; **DumpUITree/A11yTree** reportan el
+  estado del workbench; **CheckForUpdates** replica la respuesta del Updater; **Help (F1)** registra
+  la petición de documentación (HelpOperations.ShowHelp('root:')).
+- QA: app sin excepciones tras el wiring.

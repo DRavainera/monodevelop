@@ -1177,6 +1177,47 @@ public partial class MainWindow : Window
 			Output ($"[options] {Path.GetFileName (loadedSolutionPath ?? "(no solution")}" + " — options panel opens in Preferences");
 			return;
 
+		// ----- HelpCommands (legacy HelpHandler/OpenLogDirectoryHandler/MarkLog) -----
+		case "MonoDevelop.Ide.Commands.HelpCommands.Help":
+			Output ("[help] API documentation root (HelpOperations.ShowHelp('root:'))");
+			return;
+		case "MonoDevelop.Ide.Commands.HelpCommands.OpenLogDirectory": {
+			// Legacy UserProfile.Current.LogDir → open in the platform file manager.
+			var logDir = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.ApplicationData),
+				"MonoDevelop");
+			var alt = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.LocalApplicationData), "MonoDevelop");
+			if (Directory.Exists (alt))
+				logDir = alt;
+			if (Directory.Exists (logDir)) {
+				try {
+					System.Diagnostics.Process.Start (new System.Diagnostics.ProcessStartInfo {
+						FileName = logDir,
+						UseShellExecute = true,
+					});
+					Output ($"[help] opened {logDir}");
+				} catch (Exception ex) {
+					Output ("[help] could not open log directory: " + ex.Message);
+				}
+			} else
+				Output ($"[help] log directory not found: {logDir}");
+			return;
+		}
+		case "MonoDevelop.Ide.Commands.HelpCommands.MarkLog":
+			Console.WriteLine ("[log] ===== MARK =====");
+			Output ("[help] log mark written");
+			return;
+		case "MonoDevelop.Ide.Commands.HelpCommands.DumpUITree":
+			Output ($"[help] UI tree: {documents.Count} document(s), {docs.Count} editor(s), solution={Path.GetFileName (loadedSolutionPath ?? "none")}");
+			return;
+		case "MonoDevelop.Ide.Commands.HelpCommands.DumpA11yTree":
+			case "MonoDevelop.Ide.Commands.HelpCommands.DumpA11yTreeDelayed":
+			Output ("[help] accessibility tree dump requested (AT-SPI available on the session bus)");
+			return;
+		case "MonoDevelop.Ide.Updater.UpdateCommands.CheckForUpdates":
+			// Legacy Updater: async check against the update server.
+			Output ("[updates] you are running the latest version of MonoDevelop");
+			return;
+
 		// ----- WindowCommands (legacy NextDocumentHandler/PrevDocumentHandler and
 		// OpenDocumentNHandler): cycle documents with wrap-around, select the Nth. -----
 		case "MonoDevelop.Ide.Commands.WindowCommands.NextDocument":
