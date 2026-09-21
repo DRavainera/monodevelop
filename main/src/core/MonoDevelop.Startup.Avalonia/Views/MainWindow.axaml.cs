@@ -115,6 +115,22 @@ public partial class MainWindow : Window
 				_ = RunStartupProjectAsync ();
 			} else if (qa == "--goto") {
 				_ = new GoToDialog ().ShowDialog (this);
+			} else if (qa == "--addref") {
+				// QA: exercise AddReference against the real csproj.
+				var proj = ResolveActiveProject ();
+				if (proj is not null) {
+					var dlg = new AddReferenceDialog (proj);
+					// Deterministic QA path: add a known reference programmatically.
+					bool ok = dlg.TryAddReference ("System.Json");
+					Output ($"[addref-qa] TryAddReference(System.Json) → {ok}");
+					var text = File.ReadAllText (proj);						Output ($"[addref-qa] csproj contains reference: {text.Contains ("System.Json")}");
+					// Revert so the project stays clean.
+					var clean = System.Text.RegularExpressions.Regex.Replace (
+						text, "\\s*<Reference Include=\"System.Json\" />", "");
+					File.WriteAllText (proj, clean);
+					Output ("[addref-qa] csproj reverted");
+				} else
+					Output ("[addref-qa] no project");
 			} else if (qa == "--bookmarks") {
 				// QA: exercise bookmark toggle/next/prev/clear with pixel-visible marks.
 				var file = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile),
@@ -1130,6 +1146,37 @@ public partial class MainWindow : Window
 			FindNextInEditor (forward: false);
 			return;
 
+		case "MonoDevelop.Ide.Commands.ProjectCommands.AddReference": {
+			// Legacy AddReferenceDialog: adds a <Reference> to the active project file.
+			var proj = ResolveActiveProject ();
+			if (proj is null) {
+				Output ("[refs] no project loaded");
+				return;
+			}
+			var dlg = new AddReferenceDialog (proj);
+			dlg.Closed += (_, _) => {
+				if (dlg.AddedReference is not null)
+					Output ($"[refs] added '{dlg.AddedReference}' to {Path.GetFileName (proj)}");
+			};
+			_ = dlg.ShowDialog (this);
+			return;
+		}
+		case "MonoDevelop.Ide.Commands.FileCommands.ReloadFile":
+			// Legacy ReloadFile: reverts the active editor to the on-disk content.
+			if (docs.TryGetValue ((DocTabs.SelectedItem as TabItem)?.Tag as string ?? "", out var rl)
+				&& !string.IsNullOrEmpty (rl.FilePath) && File.Exists (rl.FilePath)) {
+				rl.Text = File.ReadAllText (rl.FilePath);
+				rl.IsDirty = false;
+				UpdateDocTabTitle ((DocTabs.SelectedItem as TabItem)!.Tag!.ToString ()!, docDirty: false);
+				Output ("[file] reloaded from disk");
+			} else
+				Output ("[file] active document has no file to reload");
+			return;
+		case "MonoDevelop.Ide.Commands.ProjectCommands.ProjectOptions":
+		case "MonoDevelop.Ide.Commands.ProjectCommands.SolutionOptions":
+			Output ($"[options] {Path.GetFileName (loadedSolutionPath ?? "(no solution")}" + " — options panel opens in Preferences");
+			return;
+
 		// ----- WindowCommands (legacy NextDocumentHandler/PrevDocumentHandler and
 		// OpenDocumentNHandler): cycle documents with wrap-around, select the Nth. -----
 		case "MonoDevelop.Ide.Commands.WindowCommands.NextDocument":
@@ -1564,6 +1611,21 @@ public partial class MainWindow : Window
 	{
 		if (n >= 1 && n <= documents.Count)
 			SelectDocument (documents [n - 1].Tag);
+	}
+
+	// First project file of the loaded solution (legacy IdeApp.Workbench.ActiveProject).
+	string? ResolveActiveProject ()
+	{
+		var sln = loadedSolutionPath;
+		if (string.IsNullOrEmpty (sln))
+			return null;
+		var dir = Path.GetDirectoryName (sln)!;
+		try {
+			return Directory.GetFiles (dir, "*.csproj", SearchOption.AllDirectories)
+				.FirstOrDefault (p => !p.Contains ("obj") && !p.Contains ("bin"));
+		} catch {
+			return null;
+		}
 	}
 
 	// NavigationHistoryService jump: open the file (if needed) and restore the caret line.

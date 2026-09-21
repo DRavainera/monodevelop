@@ -284,3 +284,11 @@ Port desde `MonoDevelop.Ide.FindInFiles` y `ProjectOperations` del legacy:
   (cuadrado azul estilo gutter-bookmark-15) + tinte de fila completa.
 - **UseSelectionForFind**: prellenado de la búsqueda con la selección actual (SearchCommands legacy).
 - QA E2E (`--bookmarks` con solución cargada): toggle de 3 líneas, next con wrap 9→1, prev 1→9.
+
+### M11d — AddReference + ReloadFile + Project/Solution Options
+- **AddReferenceDialog** (legacy AddReferenceDialog, pestaña assemblies): lista de ensamblados
+  conocidos + campo custom, y **edición real del .csproj** (XDocument: dedupe + `<ItemGroup><Reference/>`),
+  la misma transformación que `DotNetProject.References.Add` del legacy.
+- **ReloadFile** (FileCommands): revierte el editor activo al contenido en disco.
+- **ProjectOptions/SolutionOptions**: mensaje de estado (los paneles viven en Preferences).
+- QA E2E (`--addref`): TryAddReference(System.Json) → True, csproj contiene la referencia, y revert limpio.
