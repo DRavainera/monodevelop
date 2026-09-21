@@ -115,6 +115,23 @@ public partial class MainWindow : Window
 				_ = RunStartupProjectAsync ();
 			} else if (qa == "--goto") {
 				_ = new GoToDialog ().ShowDialog (this);
+			} else if (qa == "--navhist") {
+				// QA: exercise the navigation history service.
+				var file = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile),
+					"TestProj", "TestProj", "Program.cs");
+				if (File.Exists (file)) {
+					OpenFileDocument (file);
+					PushNavigationPoint ();
+					OpenFileDocumentAtLine (file, 7);
+					PushNavigationPoint ();
+					OpenFileDocumentAtLine (file, 11);
+					PushNavigationPoint ();
+					Output ($"[nav-qa] back from l11 → {Services.NavigationHistoryService.MoveBack ()}");
+					Output ($"[nav-qa] back again → {Services.NavigationHistoryService.MoveBack ()}");
+					Output ($"[nav-qa] forward → {Services.NavigationHistoryService.MoveForward ()}");
+					Services.NavigationHistoryService.Clear ();
+					Output ($"[nav-qa] after clear: CanMoveBack={Services.NavigationHistoryService.CanMoveBack}");
+				}
 			} else if (qa == "--windocs") {
 				// QA: exercise document cycling / Nth selection.
 				var file = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile),
@@ -1102,6 +1119,45 @@ public partial class MainWindow : Window
 		case "MonoDevelop.Ide.Commands.WindowCommands.PrevDocument":
 			CycleDocument (-1);
 			return;
+
+		// ----- NavigationCommands (legacy NavigationHistoryService) + Zoom -----
+		case "MonoDevelop.Ide.Commands.NavigationCommands.NavigateBack": {
+			var p = Services.NavigationHistoryService.MoveBack ();
+			if (p is not null)
+				NavigateToPoint (p);
+			else
+				Output ("[nav] no earlier navigation point");
+			return;
+		}
+		case "MonoDevelop.Ide.Commands.NavigationCommands.NavigateForward": {
+			var p = Services.NavigationHistoryService.MoveForward ();
+			if (p is not null)
+				NavigateToPoint (p);
+			else
+				Output ("[nav] no later navigation point");
+			return;
+		}
+		case "MonoDevelop.Ide.Commands.NavigationCommands.NavigateHistory": {
+			var (points, current) = Services.NavigationHistoryService.GetNavigationList (15);
+			for (int i = 0; i < points.Count; i++)
+				Output ($"[nav] {(i == current ? "→" : " ")} {points [i]}");
+			if (points.Count == 0)
+				Output ("[nav] history empty");
+			return;
+		}
+		case "MonoDevelop.Ide.Commands.NavigationCommands.ClearNavigationHistory":
+			Services.NavigationHistoryService.Clear ();
+			Output ("[nav] history cleared");
+			return;
+		case "MonoDevelop.Ide.Commands.ViewCommands.ZoomIn":
+			WithActiveEditor (e => e.ZoomIn ());
+			return;
+		case "MonoDevelop.Ide.Commands.ViewCommands.ZoomOut":
+			WithActiveEditor (e => e.ZoomOut ());
+			return;
+		case "MonoDevelop.Ide.Commands.ViewCommands.ZoomReset":
+			WithActiveEditor (e => e.ZoomReset ());
+			return;
 		case "MonoDevelop.Ide.Commands.WindowCommands.OpenDocumentList":
 			Output ("[window] open documents: " + string.Join (", ", documents.Select (d => d.Tag)));
 			return;
@@ -1467,6 +1523,22 @@ public partial class MainWindow : Window
 	{
 		if (n >= 1 && n <= documents.Count)
 			SelectDocument (documents [n - 1].Tag);
+	}
+
+	// NavigationHistoryService jump: open the file (if needed) and restore the caret line.
+	void NavigateToPoint (Services.NavigationPoint p)
+	{
+		if (!string.IsNullOrEmpty (p.File) && File.Exists (p.File))
+			OpenFileDocumentAtLine (p.File, p.Line);
+		Output ("[nav] → " + p);
+	}
+
+	// Records the current caret as a navigation point (called after user jumps).
+	void PushNavigationPoint ()
+	{
+		var tag = (DocTabs.SelectedItem as TabItem)?.Tag as string;
+		if (tag is not null && docs.TryGetValue (tag, out var ed))
+			Services.NavigationHistoryService.Push (ed.FilePath is { Length: > 0 } ? ed.FilePath : null, ed.CurrentLine + 1);
 	}
 
 	// Runs an edit action on the active document when it is a text editor.

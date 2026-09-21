@@ -270,3 +270,10 @@ Port desde `MonoDevelop.Ide.FindInFiles` y `ProjectOperations` del legacy:
 - **CloseAllFiles** cierra en orden; **CloseWorkspace** cierra documentos + solución y muestra Welcome
   (mismo flujo legacy FileCommands).
 - QA E2E (`--windocs`): ciclo Program.cs↔new1.cs, OpenDocument2 correcto, out-of-range inofensivo.
+
+### M11b — NavigationCommands + Zoom (legacy NavigationHistoryService)
+- **NavigationHistoryService** nuevo: pila de puntos (archivo+línea) con MoveBack/MoveForward,
+  CanMoveBack/Forward, truncado de rama forward y Clear — la misma semántica que los handlers legacy.
+- **NavigateBack/Forward/History/ClearNavigationHistory** dispatchados; **ZoomIn/Out/Reset** operan el
+  FontSize del editor Skia (límites 5..60, reset a 12 como el legacy Options.ZoomReset).
+- QA E2E (`--navhist`): back 11→7→1, forward→7, clear→CanMoveBack=False.

@@ -890,6 +890,27 @@ public class SkTextEditor : Control
 
 	public void InsertAtCaret (string text) => InsertText (text);
 
+	// ----- Zoom (legacy TextEditor.Options.ZoomIn/Out/Reset) -----
+	public const double BaseFontSize = 12.0;
+
+	public void ZoomIn ()
+	{
+		FontSize = Math.Min (FontSize * 1.1, 60);
+		InvalidateVisual ();
+	}
+
+	public void ZoomOut ()
+	{
+		FontSize = Math.Max (FontSize / 1.1, 5);
+		InvalidateVisual ();
+	}
+
+	public void ZoomReset ()
+	{
+		FontSize = BaseFontSize;
+		InvalidateVisual ();
+	}
+
 	// ----- Undo/Redo (full-text snapshots, the MVP of the legacy undo stack) -----
 	readonly List<(string Text, int Line, int Col)> undoStack = new ();
 	readonly List<(string Text, int Line, int Col)> redoStack = new ();
