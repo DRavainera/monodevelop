@@ -326,6 +326,24 @@ public class SkTextEditor : Control
 			SelectAll ();
 			e.Handled = true;
 			return;
+		case Key.K when ctrl:
+			// Legacy TextEditorCommands.DeleteToLineEnd (Control|K).
+			DeleteToLineEnd ();
+			e.Handled = true;
+			return;
+		case Key.D when ctrl && e.KeyModifiers.HasFlag (KeyModifiers.Shift):
+			// Legacy TextEditorCommands.DuplicateLine.
+			DuplicateLine ();
+			e.Handled = true;
+			return;
+		case Key.Up when e.KeyModifiers.HasFlag (KeyModifiers.Alt):
+			MoveBlockUp ();
+			e.Handled = true;
+			return;
+		case Key.Down when e.KeyModifiers.HasFlag (KeyModifiers.Alt):
+			MoveBlockDown ();
+			e.Handled = true;
+			return;
 		}
 		switch (e.Key) {
 		case Key.Back:
@@ -530,9 +548,25 @@ public class SkTextEditor : Control
 		Commit ();
 	}
 
+	void PushUndo (string before)
+	{
+		if (undoing)
+			return;
+		var joined = string.Join ("\n", lines);
+		if (before == joined)
+			return;
+		undoStack.Add ((before, caretLine, caretCol));
+		if (undoStack.Count > 200)
+			undoStack.RemoveAt (0);
+		redoStack.Clear ();
+	}
+
 	void Commit ()
 	{
-		SetValue (TextProperty, string.Join ("\n", lines));
+		var before = Text ?? "";
+		var joined = string.Join ("\n", lines);
+		PushUndo (before);
+		SetValue (TextProperty, joined);
 		if (!IsDirty)
 			IsDirty = true; // user edit → legacy modified marker on the tab
 		ShowCaret ();
@@ -687,6 +721,210 @@ public class SkTextEditor : Control
 			caretCol = Math.Clamp (column - 1, 0, lines [caretLine].Length);
 			ShowCaret ();
 		}
+	}
+
+	// ----- Line operations (legacy TextEditorCommands.DeleteLine/DuplicateLine,
+	// EditCommands.ToggleCodeComment/JoinWithNextLine/SortSelectedLines …) -----
+
+	void MutateLines (Action<List<string>> mutator, (int Line, int Col)? newCaret = null)
+	{
+		var before = Text ?? "";
+		mutator (lines);
+		PushUndo (before);
+		SetValue (TextProperty, string.Join ("\n", lines));
+		if (newCaret is { } nc) {
+			caretLine = Math.Clamp (nc.Line, 0, lines.Count - 1);
+			caretCol = Math.Clamp (nc.Col, 0, lines [caretLine].Length);
+		}
+		hasSelection = false;
+		IsDirty = true;
+		EnsureCaretVisible ();
+		MarkDirty ();
+	}
+
+	public void DeleteLine ()
+	{
+		if (lines.Count <= 1) {
+			lines [0] = "";
+			caretCol = 0;
+			MarkDirty ();
+			return;
+		}
+		int at = caretLine;
+		int col = caretCol;
+		MutateLines (ls => ls.RemoveAt (at), (at, col));
+	}
+
+	public void DeleteToLineStart ()
+	{
+		MutateLines (ls => { ls [caretLine] = ls [caretLine].Substring (Math.Min (caretCol, ls [caretLine].Length)); }, (caretLine, 0));
+	}
+
+	public void DeleteToLineEnd ()
+	{
+		MutateLines (ls => { ls [caretLine] = ls [caretLine].Substring (0, Math.Min (caretCol, ls [caretLine].Length)); }, (caretLine, caretCol));
+	}
+
+	public void DuplicateLine ()
+	{
+		int at = caretLine;
+		MutateLines (ls => ls.Insert (at + 1, ls [at]), (at + 1, caretCol));
+	}
+
+	public void MoveBlockUp ()
+	{
+		if (caretLine == 0)
+			return;
+		int at = caretLine;
+		MutateLines (ls => (ls [at], ls [at - 1]) = (ls [at - 1], ls [at]), (at - 1, caretCol));
+	}
+
+	public void MoveBlockDown ()
+	{
+		if (caretLine >= lines.Count - 1)
+			return;
+		int at = caretLine;
+		MutateLines (ls => (ls [at], ls [at + 1]) = (ls [at + 1], ls [at]), (at + 1, caretCol));
+	}
+
+	public void ToggleLineComment ()
+	{
+		var (sl, sc, el, ec) = hasSelection ? SelectionRange () : (caretLine, 0, caretLine, 0);
+		bool allCommented = true;
+		for (int i = sl; i <= el && allCommented; i++) {
+			var t = lines [i].TrimStart ();
+			if (!t.StartsWith ("//") && t.Length > 0)
+				allCommented = false;
+		}
+		for (int i = sl; i <= el; i++) {
+			if (lines [i].Trim ().Length == 0)
+				continue;
+			if (allCommented) {
+				int idx = lines [i].IndexOf ("//", StringComparison.Ordinal);
+				if (idx >= 0)
+					// Legacy removes the inserted "// " token including its space.
+					lines [i] = lines [i].Remove (idx, idx + 2 < lines [i].Length && lines [i] [idx + 2] == ' ' ? 3 : 2);
+			}
+			else {
+				int first = lines [i].Length - lines [i].TrimStart ().Length;
+				lines [i] = lines [i].Insert (first, "// ");
+			}
+		}
+		SetValue (TextProperty, string.Join ("\n", lines));
+		IsDirty = true;
+		MarkDirty ();
+	}	public void JoinWithNextLine ()
+	{
+		if (caretLine >= lines.Count - 1)
+			return;
+		int at = caretLine;
+		MutateLines (ls => {
+			ls [at] = ls [at].TrimEnd () + " " + ls [at + 1].TrimStart ();
+			ls.RemoveAt (at + 1);
+		}, (at, caretCol));
+	}
+
+	public void SortSelectedLines ()
+	{
+		var (sl, sc, el, ec) = hasSelection ? SelectionRange () : (caretLine, 0, caretLine, lines [caretLine].Length);
+		var sorted = new List<string> ();
+		for (int i = sl; i <= el; i++)
+			sorted.Add (lines [i]);
+		sorted.Sort (StringComparer.Ordinal);
+		for (int i = sl; i <= el; i++)
+			lines [i] = sorted [i - sl];
+		SetValue (TextProperty, string.Join ("\n", lines));
+		IsDirty = true;
+		MarkDirty ();
+	}
+
+	public void TransformSelection (Func<string, string> transform)
+	{
+		if (!hasSelection)
+			return;
+		ReplaceSelection (transform (SelectedText));
+	}
+
+	public void UppercaseSelection () => TransformSelection (s => s.ToUpperInvariant ());
+
+	public void LowercaseSelection () => TransformSelection (s => s.ToLowerInvariant ());
+
+	public void DeleteForward ()
+	{
+		if (hasSelection) {
+			ReplaceSelection ("");
+			return;
+		}
+		var line = lines [caretLine];
+		if (caretCol < line.Length)
+			lines [caretLine] = line.Remove (caretCol, 1);
+		else if (caretLine < lines.Count - 1) {
+			lines [caretLine] += lines [caretLine + 1];
+			lines.RemoveAt (caretLine + 1);
+		}
+		Commit ();
+	}
+
+	public void IndentSelection (int steps = 1)
+	{
+		var (sl, _, el, _) = hasSelection ? SelectionRange () : (caretLine, 0, caretLine, 0);
+		for (int i = sl; i <= el; i++) {
+			if (steps > 0)
+				lines [i] = new string (' ', 4 * steps) + lines [i];
+			else if (lines [i].StartsWith (new string (' ', 4 * -steps), StringComparison.Ordinal))
+				lines [i] = lines [i].Substring (4 * -steps);
+		}
+		SetValue (TextProperty, string.Join ("\n", lines));
+		IsDirty = true;
+		MarkDirty ();
+	}
+
+	public void RemoveTrailingWhitespace ()
+	{
+		for (int i = 0; i < lines.Count; i++)
+			lines [i] = lines [i].TrimEnd ();
+		SetValue (TextProperty, string.Join ("\n", lines));
+		IsDirty = true;
+		MarkDirty ();
+	}
+
+	public void InsertAtCaret (string text) => InsertText (text);
+
+	// ----- Undo/Redo (full-text snapshots, the MVP of the legacy undo stack) -----
+	readonly List<(string Text, int Line, int Col)> undoStack = new ();
+	readonly List<(string Text, int Line, int Col)> redoStack = new ();
+	bool undoing;
+
+	public bool CanUndo => undoStack.Count > 0;
+
+	public void Undo ()
+	{
+		if (undoStack.Count == 0)
+			return;
+		var (text, line, col) = undoStack [^1];
+		undoStack.RemoveAt (undoStack.Count - 1);
+		undoing = true;
+		redoStack.Add ((Text ?? "", caretLine, caretCol));
+		Text = text; // OnPropertyChanged → SetLines
+		undoing = false;
+		caretLine = Math.Clamp (line, 0, lines.Count - 1);
+		caretCol = Math.Clamp (col, 0, lines [caretLine].Length);
+		hasSelection = false;
+		MarkDirty ();
+	}
+
+	public void Redo ()
+	{
+		if (redoStack.Count == 0)
+			return;
+		var (text, line, col) = redoStack [^1];
+		redoStack.RemoveAt (redoStack.Count - 1);
+		undoStack.Add ((Text ?? "", caretLine, caretCol));
+		Text = text;
+		caretLine = Math.Clamp (line, 0, lines.Count - 1);
+		caretCol = Math.Clamp (col, 0, lines [caretLine].Length);
+		hasSelection = false;
+		MarkDirty ();
 	}
 
 	#endregion

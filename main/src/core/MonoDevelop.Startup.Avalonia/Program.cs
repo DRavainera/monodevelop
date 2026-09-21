@@ -24,7 +24,7 @@ internal static class Program
 	public static string QaDialogArg =>
 		Environment.GetCommandLineArgs ().FirstOrDefault (a =>
 			a is "--about" or "--prefs" or "--addins" or "--find" or "--build" or "--run"
-				or "--goto" or "--tasks" or "--tool"
+				or "--goto" or "--tasks" or "--tool" or "--editops"
 			|| a.StartsWith ("--prefs=", StringComparison.Ordinal)
 			|| a.StartsWith ("--gotoline", StringComparison.Ordinal)) ?? "";
 

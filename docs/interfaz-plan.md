@@ -248,3 +248,12 @@ Port desde `MonoDevelop.Ide.FindInFiles` y `ProjectOperations` del legacy:
   equivalente a `DesktopService.GetIconForFile`).
 - Doble clic en archivo abre editor isla (ya funcional); nodos References/carpetas ignoran el open.
 - QA: árbol con contenido e iconos coloreados verificados por captura.
+
+### M9 — Operaciones de línea, undo/redo y dispatch del menú Edit
+- **SkTextEditor**: DeleteLine, DeleteToLineStart/End (Ctrl+K), DuplicateLine (Ctrl+Shift+D),
+  MoveBlockUp/Down (Alt+Up/Down), ToggleLineComment (idempotente, estilo legacy `// `), JoinWithNextLine,
+  SortSelectedLines, Indent/Unindent, Upper/Lowercase, RemoveTrailingWhitespace, InsertGuid, DeleteForward.
+- **Undo/Redo** con stack de snapshots (200) compartido por Commit y MutateLines; el menú Edit
+  (Undo/Redo/Cut/Copy/Paste/Delete/SelectAll + submenús Format) despacha al editor activo vía
+  `WithActiveEditor`, igual que el legacy SourceEditorView.
+- QA E2E (`--editops`): duplicate→undo→comment→uncomment→redo/undo con aserciones por texto y conteo.

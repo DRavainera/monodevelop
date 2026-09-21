@@ -115,6 +115,29 @@ public partial class MainWindow : Window
 				_ = RunStartupProjectAsync ();
 			} else if (qa == "--goto") {
 				_ = new GoToDialog ().ShowDialog (this);
+			} else if (qa == "--editops") {
+				// QA: exercise the line operations on a real document.
+				var file = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile),
+					"TestProj", "TestProj", "Program.cs");
+				if (File.Exists (file)) {
+					OpenFileDocument (file);
+					if (docs.TryGetValue (Path.GetFileName (file), out var ed)) {
+						SelectDocument (Path.GetFileName (file));
+						ed.GotoLine (6); // 'static void Main ()' line
+						ed.DuplicateLine ();
+						Output ($"[editops] duplicate → caret line {ed.CurrentLine + 1}, lines now {ed.Text.Count (c => c == '\n') + 1}");
+						ed.Undo ();
+						Output ($"[editops] undo → lines back to {ed.Text.Count (c => c == '\n') + 1}");
+						ed.GotoLine (0);
+						ed.ToggleLineComment ();
+						Output ($"[editops] comment first line → '{ed.Text.Split ('\n') [0]}'");
+						ed.ToggleLineComment ();
+						Output ($"[editops] uncomment → '{ed.Text.Split ('\n') [0]}'");
+						ed.Redo ();
+						ed.Undo ();
+						Output ($"[editops] redo/undo ok → first line '{ed.Text.Split ('\n') [0]}'");
+					}
+				}
 			} else if (qa == "--tasks") {
 				RescanTasks ();
 			} else if (qa.StartsWith ("--gotoline", StringComparison.Ordinal)) {
@@ -1078,6 +1101,76 @@ public partial class MainWindow : Window
 				Output ("[goto] open a document first");
 			return;
 		}
+
+		// ----- Edit/TextEditor line operations on the active island editor -----
+		case "MonoDevelop.Ide.Commands.EditCommands.Undo":
+		case "MonoDevelop.Ide.Commands.TextEditorCommands.Undo":
+			WithActiveEditor (e => e.Undo ());
+			return;
+		case "MonoDevelop.Ide.Commands.EditCommands.Redo":
+		case "MonoDevelop.Ide.Commands.TextEditorCommands.Redo":
+			WithActiveEditor (e => e.Redo ());
+			return;
+		case "MonoDevelop.Ide.Commands.EditCommands.Cut":
+			WithActiveEditor (e => e.CutSelection ());
+			return;
+		case "MonoDevelop.Ide.Commands.EditCommands.Copy":
+			WithActiveEditor (e => e.CopySelection ());
+			return;
+		case "MonoDevelop.Ide.Commands.EditCommands.Paste":
+			WithActiveEditor (e => e.PasteClipboard ());
+			return;
+		case "MonoDevelop.Ide.Commands.EditCommands.Delete":
+			WithActiveEditor (e => e.DeleteForward ());
+			return;
+		case "MonoDevelop.Ide.Commands.EditCommands.SelectAll":
+			WithActiveEditor (e => e.SelectAll ());
+			return;
+		case "MonoDevelop.Ide.Commands.TextEditorCommands.DeleteLine":
+			WithActiveEditor (e => e.DeleteLine ());
+			return;
+		case "MonoDevelop.Ide.Commands.TextEditorCommands.DeleteToLineStart":
+			WithActiveEditor (e => e.DeleteToLineStart ());
+			return;
+		case "MonoDevelop.Ide.Commands.TextEditorCommands.DeleteToLineEnd":
+			WithActiveEditor (e => e.DeleteToLineEnd ());
+			return;
+		case "MonoDevelop.Ide.Commands.TextEditorCommands.DuplicateLine":
+			WithActiveEditor (e => e.DuplicateLine ());
+			return;
+		case "MonoDevelop.Ide.Commands.TextEditorCommands.MoveBlockUp":
+			WithActiveEditor (e => e.MoveBlockUp ());
+			return;
+		case "MonoDevelop.Ide.Commands.TextEditorCommands.MoveBlockDown":
+			WithActiveEditor (e => e.MoveBlockDown ());
+			return;
+		case "MonoDevelop.Ide.Commands.EditCommands.ToggleCodeComment":
+			WithActiveEditor (e => e.ToggleLineComment ());
+			return;
+		case "MonoDevelop.Ide.Commands.EditCommands.JoinWithNextLine":
+			WithActiveEditor (e => e.JoinWithNextLine ());
+			return;
+		case "MonoDevelop.Ide.Commands.EditCommands.SortSelectedLines":
+			WithActiveEditor (e => e.SortSelectedLines ());
+			return;
+		case "MonoDevelop.Ide.Commands.EditCommands.IndentSelection":
+			WithActiveEditor (e => e.IndentSelection (1));
+			return;
+		case "MonoDevelop.Ide.Commands.EditCommands.UnIndentSelection":
+			WithActiveEditor (e => e.IndentSelection (-1));
+			return;
+		case "MonoDevelop.Ide.Commands.EditCommands.UppercaseSelection":
+			WithActiveEditor (e => e.UppercaseSelection ());
+			return;
+		case "MonoDevelop.Ide.Commands.EditCommands.LowercaseSelection":
+			WithActiveEditor (e => e.LowercaseSelection ());
+			return;
+		case "MonoDevelop.Ide.Commands.EditCommands.RemoveTrailingWhiteSpaces":
+			WithActiveEditor (e => e.RemoveTrailingWhitespace ());
+			return;
+		case "MonoDevelop.Ide.Commands.EditCommands.InsertGuid":
+			WithActiveEditor (e => e.InsertAtCaret (Guid.NewGuid ().ToString ()));
+			return;
 		case "MonoDevelop.Ide.Commands.ToolCommands.TaskList":
 			RescanTasks ();
 			return;
@@ -1278,6 +1371,15 @@ public partial class MainWindow : Window
 	{
 		if (docs.TryGetValue ((DocTabs.SelectedItem as TabItem)?.Tag as string ?? "", out var ed) && lastSearchText.Length > 0)
 			ed.FindFromCaret (lastSearchText, forward);
+	}
+
+	// Runs an edit action on the active document when it is a text editor.
+	void WithActiveEditor (Action<Controls.SkTextEditor> action)
+	{
+		if (docs.TryGetValue ((DocTabs.SelectedItem as TabItem)?.Tag as string ?? "", out var ed))
+			action (ed);
+		else
+			Output ("[edit] no active text editor");
 	}
 
 	string lastSearchText = "";
