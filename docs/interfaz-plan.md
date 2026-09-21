@@ -257,3 +257,9 @@ Port desde `MonoDevelop.Ide.FindInFiles` y `ProjectOperations` del legacy:
   (Undo/Redo/Cut/Copy/Paste/Delete/SelectAll + submenús Format) despacha al editor activo vía
   `WithActiveEditor`, igual que el legacy SourceEditorView.
 - QA E2E (`--editops`): duplicate→undo→comment→uncomment→redo/undo con aserciones por texto y conteo.
+
+### M10 — File > New File / Open File / Save As funcionales
+- **NewFile** (legacy AddFileDialog vacío): documento "newN.cs" sin archivo backing, persistible con Save As.
+- **OpenFile** ya no abre solo soluciones: `FilePickerOpenOptions` para cualquier archivo de texto → editor isla.
+- **SaveAs** (legacy FileService.SaveAs): escribe a la ruta elegida, retargetea el editor y re-nombra la pestaña isla.
+- QA: app sin excepciones; los pickers nativos quedan wired al dispatch del menú.

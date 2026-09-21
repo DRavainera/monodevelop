@@ -1013,8 +1013,14 @@ public partial class MainWindow : Window
 		case "MonoDevelop.Ide.Commands.FileCommands.NewProject":
 			_ = OpenNewSolutionDialogAsync ();
 			return;
+		case "MonoDevelop.Ide.Commands.FileCommands.NewFile":
+			OpenNewFileDocument ();
+			return;
 		case "MonoDevelop.Ide.Commands.FileCommands.OpenFile":
-			OpenSolutionPickerAsync ();
+			OpenAnyFilePickerAsync ();
+			return;
+		case "MonoDevelop.Ide.Commands.FileCommands.SaveAs":
+			_ = SaveActiveDocumentAsAsync ();
 			return;
 		case "MonoDevelop.Ide.Commands.FileCommands.Exit":
 			Close ();
@@ -1380,6 +1386,72 @@ public partial class MainWindow : Window
 			action (ed);
 		else
 			Output ("[edit] no active text editor");
+	}
+
+	// FileCommands.NewFile (legacy AddFileDialog with empty template): a new document
+	// with no backing file until saved.
+	void OpenNewFileDocument ()
+	{
+		var name = $"new{newFileCounter}.cs";
+		newFileCounter++;
+		var editor = new Controls.SkTextEditor {
+			FilePath = "",
+			IsDirty = false,
+			Background = Brushes.Transparent,
+		};
+		editor.Text = "";
+		AttachEditorContextMenu (editor);
+		AddDocument (name, editor);
+		Output ($"[file] new document {name} (use Save As to persist)");
+	}
+
+	int newFileCounter = 1;
+
+	// FileCommands.OpenFile over any text file (not only solutions).
+	async void OpenAnyFilePickerAsync ()
+	{
+		var files = await StorageProvider.OpenFilePickerAsync (new Avalonia.Platform.Storage.FilePickerOpenOptions {
+			AllowMultiple = false,
+			Title = "Open File",
+		});
+		if (files.Count > 0) {
+		var path = files [0].Path.LocalPath;
+		if (!string.IsNullOrEmpty (path))
+			OpenFileDocument (path);
+		}
+	}
+
+	// FileCommands.SaveAs (legacy FileService.SaveAs): writes the active document to
+	// a user-chosen path and retargets the editor to it.
+	async System.Threading.Tasks.Task SaveActiveDocumentAsAsync ()
+	{
+		if (!docs.TryGetValue ((DocTabs.SelectedItem as TabItem)?.Tag as string ?? "", out var ed)) {
+			Output ("[save-as] no active document");
+			return;
+		}
+		var file = await StorageProvider.SaveFilePickerAsync (new Avalonia.Platform.Storage.FilePickerSaveOptions {
+			Title = "Save File As",
+			SuggestedFileName = string.IsNullOrEmpty (ed.FilePath) ? "untitled.cs" : Path.GetFileName (ed.FilePath),
+		});
+		if (file is null)
+			return;
+		var path = file.Path.LocalPath;
+		if (string.IsNullOrEmpty (path))
+			return;
+		await File.WriteAllTextAsync (path, ed.Text ?? "");
+		var oldTag = DocTabs.SelectedItem is TabItem { Tag: string t } ? t : null;
+		if (oldTag is not null && docs.ContainsKey (oldTag)) {
+			docs.Remove (oldTag);
+			var doc = documents.FirstOrDefault (d => d.Tag == oldTag);
+			if (doc.Tag is not null)
+				documents.Remove (doc);
+			CloseDocument (oldTag);
+		}
+		ed.FilePath = path;
+		ed.IsDirty = false;
+		AttachEditorContextMenu (ed);
+		AddDocument (Path.GetFileName (path), ed);
+		Output ("[save-as] wrote " + path);
 	}
 
 	string lastSearchText = "";
