@@ -113,6 +113,16 @@ public partial class MainWindow : Window
 				_ = RunBuildAsync ();
 			} else if (qa == "--run") {
 				_ = RunStartupProjectAsync ();
+			} else if (qa == "--goto") {
+				_ = new GoToDialog ().ShowDialog (this);
+			} else if (qa == "--tasks") {
+				RescanTasks ();
+			} else if (qa == "--tool") {
+				var first = Services.SettingsStore.LoadTools ().FirstOrDefault ();
+				if (first is not null)
+					_ = Services.ExternalToolRunner.Run (first);
+				else
+					Output ("[tool] no external tools configured (Preferences > External Tools)");
 			}
 		};
 
@@ -802,6 +812,12 @@ public partial class MainWindow : Window
 			TogglePad (commandId.Substring ("pad:".Length));
 			return;
 		}
+		if (commandId.StartsWith ("tool:", StringComparison.Ordinal)) {
+			var tool = Services.SettingsStore.LoadTools ().FirstOrDefault (t => t.MenuCommand == commandId.Substring ("tool:".Length));
+			if (tool is not null)
+				_ = Services.ExternalToolRunner.Run (tool);
+			return;
+		}
 		if (commandId.StartsWith ("cmd:", StringComparison.Ordinal)) {
 			switch (commandId.Substring ("cmd:".Length)) {
 			case "welcome":
@@ -887,6 +903,23 @@ public partial class MainWindow : Window
 			return;
 		case "MonoDevelop.Ide.Commands.ProjectCommands.Stop":
 			StopBuildOrRun ();
+			return;
+
+		// SearchCommands.GoToFile / GoToType (legacy SearchPopupWindow categories).
+		case "MonoDevelop.Ide.Commands.SearchCommands.GotoFile":
+			_ = new GoToDialog ().ShowDialog (this);
+			return;
+		case "MonoDevelop.Ide.Commands.SearchCommands.GotoType":
+			_ = new GoToDialog { Title = "Go To Type" }.ShowDialog (this);
+			return;
+		case "MonoDevelop.Ide.Commands.SearchCommands.GotoLineNumber": {
+			// Legacy GotoLineNumber: input dialog with the current line pre-filled.
+			if (docs.TryGetValue ((DocTabs.SelectedItem as TabItem)?.Tag as string ?? "", out var ed))
+				Output ($"[goto] current line is {ed.CurrentLine + 1} — use the pad toolbar to jump");
+			return;
+		}
+		case "MonoDevelop.Ide.Commands.ToolCommands.TaskList":
+			RescanTasks ();
 			return;
 		}
 		var message = $"'{commandId}' is not wired in the new UI yet — its GTK implementation remains available through --old-gui until the cutover.";
@@ -1018,6 +1051,60 @@ public partial class MainWindow : Window
 		dp.Children.Add (content);
 		return dp;
 	}
+
+	// ---------- Go To helpers / editor accessors (used by GoToDialog & tools) ----------
+
+	public string? ActiveEditorPath ()
+	{
+		var tag = (DocTabs.SelectedItem as TabItem)?.Tag as string;
+		return tag is not null && docs.TryGetValue (tag, out var ed) ? ed.FilePath : null;
+	}
+
+	public bool IsEditorDirty (string path)
+		=> docs.TryGetValue (Path.GetFileName (path), out var ed) && ed.IsDirty;
+
+	public void SaveActiveEditor ()
+	{
+		var tag = (DocTabs.SelectedItem as TabItem)?.Tag as string;
+		if (tag is not null && docs.TryGetValue (tag, out var ed)) {
+			ed.Save ();
+			UpdateDocTabTitle (tag, docDirty: false);
+		}
+	}
+
+	// ---------- Tasks pad (legacy CommentTasksView / TaskList) ----------
+
+	// Rescans the solution comment tokens (Monodevelop.TaskListTokens: FIXME/TODO/HACK/
+	// UNDONE with :priority) and rebuilds the Tasks pad rows; double-click opens the line.
+	public void RescanTasks ()
+	{
+		var dir = LoadedSolutionDirectory ();
+		if (dir is null) {
+			Output ("[tasks] no solution loaded");
+			return;
+		}
+		var rows = Services.TaskScanner.Scan (dir);
+		var list = new ListBox { Background = Brushes.Transparent };
+		list.Bind (ListBox.ForegroundProperty, Application.Current!.GetResourceObservable ("IdeFgBrush"));
+		var items = new System.Collections.ObjectModel.ObservableCollection<string> ();
+		taskRows.Clear ();
+		foreach (var r in rows) {
+			var row = $"[{r.Tag}] {Path.GetFileName (r.File)}:{r.Line}: {r.Description}";
+			items.Add (row);
+			taskRows [row] = r;
+		}
+		list.ItemsSource = items;
+		list.DoubleTapped += (_, _) => {
+			if (list.SelectedItem is string s && taskRows.TryGetValue (s, out var hit))
+				OpenFileDocumentAtLine (hit.File, hit.Line);
+		};
+		BottomPads.SetTabVisible ("tasks", true);
+		BottomPads.Select ("tasks");
+		BottomPads.ReplaceTabContent ("tasks", WrapWithHeader ($"{rows.Count} task(s) — tags: {string.Join (", ", Services.TaskScanner.GetTags ().Select (t => t.Tag))}", list));
+		Output ($"[tasks] {rows.Count} task(s) found");
+	}
+
+	readonly Dictionary<string, Services.TaskScanner.TaskRow> taskRows = new ();
 
 	// Legacy SearchResultWidget.Activate: opens the document and moves the caret.
 	public void OpenFileDocumentAtLine (string path, int line)

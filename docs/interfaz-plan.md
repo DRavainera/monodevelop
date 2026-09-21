@@ -216,3 +216,16 @@ Port desde `MonoDevelop.Ide.FindInFiles` y `ProjectOperations` del legacy:
 - **Pad Errors con parseo MSBuild**: las líneas `archivo(line,col): error|warning CODE: mensaje` se parsean (`ParseBuildMessage`) y activan el pad Errors con "N problem(s) — last: …", el flujo legacy BuildCycle→ErrorListPad; "Build succeeded." en verde de estado cuando exit 0.
 - **QA hooks**: `--find` (diálogo + búsqueda automatizada), `--build`, `--run`.
 - **QA E2E real**: búsqueda de "Hello" en ~/TestProj → 1 match y fila en el pad (la plantilla no contiene "class" → 0 matches verificado también); build con error inyectado → `CS1525` parseado al pad Errors y exit 1; build limpio → exit 0; Run → `Hello, World!` en el Output.
+
+### M6 — Go To File/Type + pad Tasks + External Tools (portados del GTK)
+- **Go To File/Type** (`GoToDialog.axaml.cs`, legacy `SearchPopupWindow`+`FileSearchCategory`): popup sin chrome,
+  ranking por subsecuencia (prefijo > inicio de palabra > subsecuencia, como `MatchRank`), iconos stock
+  `md-class`/`md-plain-file`, Enter o doble clic abre el documento vía `OpenFileDocument`. QA: filtro "Prog"
+  → 1 resultado → Enter abre Program.cs en pestaña isla.
+- **Pad Tasks** (`TaskScanner.cs`, legacy `TaskService` + `Monodevelop.TaskListTokens`): escanea .cs del
+  proyecto con los tokens legacy (FIXME:2;TODO:1;HACK:1;UNDONE:0, case-sensitive con `:`), filas
+  `archivo:línea: texto` y activación del pad al rescan. QA: 1 TODO real detectado en TestProj.
+- **External Tools** (`ExternalToolRunner.cs`, legacy `ToolsCommands.LaunchTool`): lee `MonoDevelop-tools.xml`,
+  expande `${FilePath} ${FileDir} ${FileName} ${SolutionDir} ${CurLine:Text}` y ejecuta con salida al pad Output.
+  Herramientas visibles en el menú Tools (antes de Preferences, como el legacy).
+- QA E2E: app + solución cargada, GoTo con teclado real (XTEST), Tasks rescan con match real, build exit 0.

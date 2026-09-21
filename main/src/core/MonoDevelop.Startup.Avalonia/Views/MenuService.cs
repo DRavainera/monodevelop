@@ -49,7 +49,7 @@ public static class MenuService
 			BuildBuild (),
 			BuildRun (),
 			BuildVersionControl (),
-			BuildTools (),
+			BuildToolsWithExternal (),
 			BuildWindow (),
 			BuildHelp (),
 		};
@@ -386,6 +386,16 @@ public static class MenuService
 	};
 
 	// ---------- Tools ----------
+	// The legacy ToolService inserts one menu item per configured external tool
+	// (MonoDevelop-tools.xml) before Preferences; each runs with tag expansion.
+	static List<MenuEntry> ExternalToolItems ()
+	{
+		var items = new List<MenuEntry> ();
+		foreach (var t in SettingsStore.LoadTools ())
+			items.Add (Item (t.MenuCommand, icon: "md-execute", click: Command ("tool:" + t.MenuCommand)));
+		return items;
+	}
+
 	static MenuEntry BuildTools () => new () {
 		Label = "_Tools",
 		Children = {
@@ -396,12 +406,30 @@ public static class MenuService
 				Item ("Replay Session...", icon: "gtk-go-forward", click: Command ("MonoDevelop.Ide.Commands.ToolCommands.ReplaySession")),
 			}, autoHide: true),
 			Sep (),
+			Item ("Task List", icon: "md-task-list", click: Command ("MonoDevelop.Ide.Commands.ToolCommands.TaskList")),
 			Item ("Tool List", click: Command ("MonoDevelop.Ide.Commands.ToolCommands.ToolList")),
 			Item ("Edit Custom Tools...", click: Command ("MonoDevelop.Ide.Commands.ToolCommands.EditCustomTools")),
-			Sep (),
-			Item ("Pr_eferences...", icon: "gtk-preferences", click: OpenPrefs ()),
 		}
 	};
+
+	// Builds the Tools menu with the external tool items inserted before Preferences
+	// (legacy ToolService.AddMenuItems). Called from BuildMainMenu.
+	internal static MenuEntry BuildToolsWithExternal ()
+	{
+		var tools = BuildTools ();
+		var children = new List<MenuEntry> (tools.Children);
+		var ext = ExternalToolItems ();
+		if (ext.Count > 0) {
+			// Insert before the Preferences item, with a separator, like the GTK menu.
+			var prefIndex = children.FindIndex (c => c.Label.Contains ("Pr_eferences", StringComparison.Ordinal));
+			var insertAt = prefIndex < 0 ? children.Count : prefIndex;
+			children.Insert (insertAt, Sep ());
+			children.InsertRange (insertAt + 1, ext);
+		}
+		tools.Children.Clear ();
+		tools.Children.AddRange (children);
+		return tools;
+	}
 
 	// ---------- Window ----------
 	static MenuEntry BuildWindow () => new () {

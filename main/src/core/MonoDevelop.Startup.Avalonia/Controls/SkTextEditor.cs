@@ -57,6 +57,9 @@ public class SkTextEditor : Control
 		set => SetValue (IsDirtyProperty, value);
 	}
 
+	// 0-based caret line (legacy GetCurrentLine); status bar / goto handlers use it.
+	public int CurrentLine => caretLine;
+
 	// Current selection as plain text (empty when collapsed — legacy GetSelectedText).
 	public string SelectedText {
 		get {

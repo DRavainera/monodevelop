@@ -24,6 +24,7 @@ internal static class Program
 	public static string QaDialogArg =>
 		Environment.GetCommandLineArgs ().FirstOrDefault (a =>
 			a is "--about" or "--prefs" or "--addins" or "--find" or "--build" or "--run"
+				or "--goto" or "--tasks" or "--tool"
 			|| a.StartsWith ("--prefs=", StringComparison.Ordinal)) ?? "";
 
 	// Optional path of a solution to open at startup (--sln=<path>); the Solution
