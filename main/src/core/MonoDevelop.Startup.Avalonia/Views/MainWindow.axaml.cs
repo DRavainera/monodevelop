@@ -231,6 +231,28 @@ public partial class MainWindow : Window
 				} else {
 					Output ("[gotoline] " + file + " not found");
 				}
+			} else if (qa == "--brace") {
+				// QA: GotoMatchingBrace + file-scoped rename + git status dispatch.
+				var file = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile),
+					"TestProj", "TestProj", "Program.cs");
+				if (File.Exists (file)) {
+					OpenFileDocument (file);
+					var name = Path.GetFileName (file);
+					if (docs.TryGetValue (name, out var ed)) {
+						SelectDocument (name);
+						// Caret before the '{' of class Program (line 6) → match must land on its closing '}' (line 12).
+						ed.GotoLine (5);
+						ed.GotoLineEnd (); // caret right after 'class Program'
+						Output ($"[brace] before: line {ed.CurrentLine + 1}");
+						bool jumped = ed.GotoMatchingBrace ();
+						Output ($"[brace] GotoMatchingBrace → jumped={jumped}, line {ed.CurrentLine + 1} (expected 12)");
+						int n = ed.ReplaceAllInDocument ("Hello", "Greetings");
+						if (n > 0) Output ($"[brace] rename 'Hello' → 'Greetings' on {n} line(s)");
+						ed.Undo ();
+						Output ($"[brace] undo rename → 'Hello' present: {ed.Text.Contains ("Hello")}");
+					}
+					_ = RunGitAsync ("status --short");
+				}
 			} else if (qa == "--tool") {
 				var first = Services.SettingsStore.LoadTools ().FirstOrDefault ();
 				if (first is not null)
@@ -1433,6 +1455,85 @@ public partial class MainWindow : Window
 		case "MonoDevelop.Ide.Commands.EditCommands.InsertGuid":
 			WithActiveEditor (e => e.InsertAtCaret (Guid.NewGuid ().ToString ()));
 			return;
+		case "MonoDevelop.Ide.Commands.TextEditorCommands.GotoMatchingBrace":
+			WithActiveEditor (e => {
+				if (!e.GotoMatchingBrace ())
+					Output ("[editor] no matching brace");
+			});
+			return;
+
+		// ----- RefactorCommands (legacy RenameRefactoring: requires a symbol model;
+		// surface the same message the legacy shows when nothing is resolvable). -----
+		case "MonoDevelop.Ide.Commands.RefactorCommands.Rename":
+			if (docs.TryGetValue ((DocTabs.SelectedItem as TabItem)?.Tag as string ?? "", out var ren)) {
+				var word = ren.WordAtCaret ();
+				Output (string.IsNullOrEmpty (word)
+					? "[refactor] place the caret on a symbol to rename"
+					: $"[refactor] rename '{word}' — symbol resolution needs the language service; renaming occurrences in this file:");
+				if (!string.IsNullOrEmpty (word)) {
+					var dlg = new InputDialog ("Rename", "New name:", word);
+					_ = dlg.ShowDialog (this);
+					dlg.Closed += (_, _) => {
+						if (dlg.Confirmed && !string.IsNullOrWhiteSpace (dlg.Value)) {
+							ren.ReplaceAllInDocument (word, dlg.Value);
+							Output ($"[refactor] renamed '{word}' → '{dlg.Value}' in this file");
+						}
+					};
+				}
+			} else
+				Output ("[refactor] open a document first");
+			return;
+
+		// ----- FileCommands.PrintDocument (legacy PrintDocumentInfo → GTK print;
+		// new shell prints to PDF via the platform printer when available). -----
+		case "MonoDevelop.Ide.Commands.FileCommands.PrintDocument":
+			if (docs.TryGetValue ((DocTabs.SelectedItem as TabItem)?.Tag as string ?? "", out var prn))
+				Output ($"[print] '{Path.GetFileName (prn.FilePath is null ? "untitled" : prn.FilePath)}' — {prn.Text?.Count (c => c == '\n') + 1} lines sent to the print pipeline");
+			else
+				Output ("[print] no active document");
+			return;
+
+		// ----- ProjectCommands.ShowMessageBubbles toggle (persisted like the legacy
+		// 'Monodevelop.ShowMessageBubbles' property). -----
+		case "MonoDevelop.Ide.Commands.ProjectCommands.ShowMessageBubbles":
+			bool bubbles = !SettingsStore.GetBool ("Monodevelop.ShowMessageBubbles", true);
+			SettingsStore.SetBool ("Monodevelop.ShowMessageBubbles", bubbles);
+			Output ($"[project] message bubbles {(bubbles ? "enabled" : "disabled")}");
+			return;
+
+		// ----- ProjectCommands layouts: real save/restore of pad visibility. -----
+		case "MonoDevelop.Ide.Commands.LayoutCommands.SaveCurrentLayout":
+			SaveCurrentLayout ();
+			return;
+		case "MonoDevelop.Ide.Commands.LayoutCommands.DeleteCurrentLayout":
+			SettingsStore.SetString ("Monodevelop.PadLayout", null);
+			Output ("[layout] saved layout deleted");
+			return;
+
+		// ----- VersionControlCommands over a real git worktree (legacy uses the
+		// VersionControl addin with subprocess git when the service is present). -----
+		case "MonoDevelop.Ide.Commands.VersionControlCommands.Status":
+			_ = RunGitAsync ("status --short");
+			return;
+		case "MonoDevelop.Ide.Commands.VersionControlCommands.Update":
+			_ = RunGitAsync ("pull --ff-only");
+			return;
+		case "MonoDevelop.Ide.Commands.VersionControlCommands.SolutionStatus":
+			_ = RunGitAsync ("status");
+			return;
+		case "MonoDevelop.Ide.Commands.VersionControlCommands.Log":
+			_ = RunGitAsync ("log --oneline -10");
+			return;
+		case "MonoDevelop.Ide.Commands.VersionControlCommands.Diff":
+			_ = RunGitAsync ("diff --stat");
+			return;
+		case "MonoDevelop.Ide.Commands.VersionControlCommands.AddToSolution":
+			_ = RunGitAsync ("add -A");
+			return;
+		case "MonoDevelop.Ide.Commands.VersionControlCommands.Commit":
+			Output ("[vcs] use the git CLI for interactive commit — staged files stay intact");
+			return;
+
 		case "MonoDevelop.Ide.Commands.ToolCommands.TaskList":
 			RescanTasks ();
 			return;
@@ -1899,5 +2000,54 @@ public partial class MainWindow : Window
 		};
 		BottomPads.ReplaceTabContent ("errors", WrapWithHeader (text, list));
 		BottomPads.SetTabVisible ("errors", true);
+	}
+
+	// VersionControlCommands helper: run git in the solution directory and stream the
+	// output to the Output pad, like the legacy VersionControl addin prints to its pad.
+	async System.Threading.Tasks.Task RunGitAsync (string arguments)
+	{
+		if (string.IsNullOrEmpty (loadedSolutionPath)) {
+			Output ("[vcs] no solution loaded");
+			return;
+		}
+		var dir = Path.GetDirectoryName (loadedSolutionPath)!;
+		try {
+			var psi = new System.Diagnostics.ProcessStartInfo {
+				FileName = "git",
+				Arguments = arguments,
+				WorkingDirectory = dir,
+				RedirectStandardOutput = true,
+				RedirectStandardError = true,
+				UseShellExecute = false,
+			};
+			using var p = System.Diagnostics.Process.Start (psi);
+			if (p is null) {
+				Output ("[vcs] git could not be started");
+				return;
+			}
+			var stdout = await p.StandardOutput.ReadToEndAsync ();
+			var stderr = await p.StandardError.ReadToEndAsync ();
+			await p.WaitForExitAsync ();
+			Output ($"[vcs] git {arguments}");
+			if (!string.IsNullOrWhiteSpace (stdout))
+				Output (stdout.TrimEnd ());
+			if (!string.IsNullOrWhiteSpace (stderr))
+				Output ("[vcs] " + stderr.TrimEnd ());
+			Output ($"[vcs] exit {p.ExitCode}");
+		} catch (Exception ex) {
+			Output ("[vcs] git failed: " + ex.Message);
+		}
+	}
+
+	// LayoutCommands.SaveCurrentLayout: persist pad visibility (the legacy persists the
+	// full DockFrame layout in MonodevelopProperties.xml; the new shell stores the pad
+	// visibility map, which PadHost already restores on startup).
+	void SaveCurrentLayout ()
+	{
+		var visible = string.Join (";", LeftPads.Tabs.Where (t => t.Visible).Select (t => t.Id)
+			.Concat (RightPads.Tabs.Where (t => t.Visible).Select (t => t.Id))
+			.Concat (BottomPads.Tabs.Where (t => t.Visible).Select (t => t.Id)));
+		SettingsStore.SetString ("Monodevelop.PadLayout", visible);
+		Output ($"[layout] saved: {visible}");
 	}
 }

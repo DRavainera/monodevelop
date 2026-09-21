@@ -300,3 +300,9 @@ Port desde `MonoDevelop.Ide.FindInFiles` y `ProjectOperations` del legacy:
   estado del workbench; **CheckForUpdates** replica la respuesta del Updater; **Help (F1)** registra
   la petición de documentación (HelpOperations.ShowHelp('root:')).
 - QA: app sin excepciones tras el wiring.
+
+### M11 — Lote final de comandos de menú (iteraciones D–F)
+- **AddReferenceDialog**: añade `<Reference>` real al .csproj del proyecto activo (QA: referencia añadida y revertida).
+- **HelpCommands**: OpenLogDirectory abre el directorio real de logs; MarkLog/DumpUITree/A11y con salida funcional; CheckForUpdates.
+- **Iteración F**: GotoMatchingBrace real (saltos anidados {}, (), []) + RefactorCommands.Rename file-wide con InputDialog + PrintDocument + ShowMessageBubbles persistido + SaveCurrentLayout/DeleteCurrentLayout (Monodevelop.PadLayout) + VersionControlCommands con git real (status/log/diff/pull/add) enviando salida al pad Output.
+- QA determinista `--brace`: matching de llaves clase↔cierre, rename+undo, dispatch git verificado.

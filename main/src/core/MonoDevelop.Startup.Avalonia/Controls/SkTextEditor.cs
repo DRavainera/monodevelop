@@ -124,6 +124,15 @@ public class SkTextEditor : Control
 		MarkDirty ();
 	}
 
+	// End-key behavior: move the caret to the end of the current line.
+	public void GotoLineEnd ()
+	{
+		caretCol = lines [caretLine].Length;
+		hasSelection = false;
+		EnsureCaretVisible ();
+		MarkDirty ();
+	}
+
 	(int Line, int Col) OffsetToPosition (int offset)
 	{
 		int acc = 0;
@@ -947,6 +956,83 @@ public class SkTextEditor : Control
 		if (prev < 0)
 			prev = bookmarkLines.Max ();
 		GotoLine (prev);
+	}
+
+	// Returns the word under the caret (used by RefactorCommands.Rename).
+	public string WordAtCaret ()
+	{
+		var line = lines [caretLine];
+		int start = Math.Min (caretCol, line.Length);
+		while (start > 0 && IsWordChar (line [start - 1]))
+			start--;
+		int end = start;
+		while (end < line.Length && IsWordChar (line [end]))
+			end++;
+		return start < end ? line [start..end] : "";
+	}
+
+	static bool IsWordChar (char c) => char.IsLetterOrDigit (c) || c == '_';
+
+	// Replace every occurrence in the document (file-scoped rename). Commit () pushes
+	// the undo snapshot exactly like a user edit.
+	public int ReplaceAllInDocument (string find, string replace)
+	{
+		if (string.IsNullOrEmpty (find))
+			return 0;
+		int n = 0;
+		for (int i = 0; i < lines.Count; i++) {
+			if (lines [i].Contains (find)) {
+				lines [i] = lines [i].Replace (find, replace);
+				n++;
+			}
+		}
+		if (n > 0)
+			Commit ();
+		return n;
+	}
+
+	// Legacy TextEditorCommands.GotoMatchingBrace: jump to the brace matching the one
+	// before the caret ({}, (), []). Returns false when there is no match.
+	public bool GotoMatchingBrace ()
+	{
+		const string Open = "{([";
+		const string Close = "})]";
+		// Search backwards on the current line for the nearest brace before the caret.
+		var line = lines [caretLine];
+		int pos = Math.Min (caretCol, line.Length) - 1;
+		while (pos >= 0 && Open.IndexOf (line [pos]) < 0 && Close.IndexOf (line [pos]) < 0)
+			pos--;
+		if (pos < 0)
+			return false;
+		char ch = line [pos];
+		bool forward = Open.IndexOf (ch) >= 0;
+		char mate = forward ? Close [Open.IndexOf (ch)] : Open [Close.IndexOf (ch)];
+		int depth = 1;
+		int cl = caretLine, cc = pos;
+		while (forward ? (cl < lines.Count) : (cl >= 0)) {
+			var l = lines [cl];
+			int i = forward ? (cl == caretLine ? pos + 1 : 0) : (cl == caretLine ? pos - 1 : l.Length - 1);
+			while (forward ? (i < l.Length) : (i >= 0)) {
+				char c = l [i];
+				if (c == ch) depth++;
+				else if (c == mate) {
+					depth--;
+					if (depth == 0) {
+						caretLine = cl;
+						caretCol = Math.Clamp (i, 0, l.Length);
+						hasSelection = false;
+						EnsureCaretVisible ();
+						MarkDirty ();
+						return true;
+					}
+				}
+				i += forward ? 1 : -1;
+			}
+			cl += forward ? 1 : -1;
+			if (cl < 0 || cl >= lines.Count)
+				break;
+		}
+		return false;
 	}
 
 	// ----- Undo/Redo (full-text snapshots, the MVP of the legacy undo stack) -----
