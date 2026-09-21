@@ -115,6 +115,23 @@ public partial class MainWindow : Window
 				_ = RunStartupProjectAsync ();
 			} else if (qa == "--goto") {
 				_ = new GoToDialog ().ShowDialog (this);
+			} else if (qa == "--windocs") {
+				// QA: exercise document cycling / Nth selection.
+				var file = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile),
+					"TestProj", "TestProj", "Program.cs");
+				if (File.Exists (file)) {
+					OpenFileDocument (file);
+					OpenNewFileDocument ();
+					Output ($"[win] active before cycle: {DocTabs.SelectedItem}");
+					CycleDocument (1);
+					Output ($"[win] after NextDocument: {(DocTabs.SelectedItem as TabItem)?.Tag}");
+					CycleDocument (-1);
+					Output ($"[win] after PrevDocument: {(DocTabs.SelectedItem as TabItem)?.Tag}");
+					SelectNthDocument (2);
+					Output ($"[win] after OpenDocument2: {(DocTabs.SelectedItem as TabItem)?.Tag}");
+					SelectNthDocument (5);
+					Output ($"[win] after OpenDocument5 (out of range): {(DocTabs.SelectedItem as TabItem)?.Tag}");
+				}
 			} else if (qa == "--editops") {
 				// QA: exercise the line operations on a real document.
 				var file = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile),
@@ -1077,8 +1094,62 @@ public partial class MainWindow : Window
 			FindNextInEditor (forward: false);
 			return;
 
-		// ProjectCommands build/run (legacy ProjectOperations.Build/Run via MSBuild).
-		case "MonoDevelop.Ide.Commands.ProjectCommands.BuildSolution":
+		// ----- WindowCommands (legacy NextDocumentHandler/PrevDocumentHandler and
+		// OpenDocumentNHandler): cycle documents with wrap-around, select the Nth. -----
+		case "MonoDevelop.Ide.Commands.WindowCommands.NextDocument":
+			CycleDocument (1);
+			return;
+		case "MonoDevelop.Ide.Commands.WindowCommands.PrevDocument":
+			CycleDocument (-1);
+			return;
+		case "MonoDevelop.Ide.Commands.WindowCommands.OpenDocumentList":
+			Output ("[window] open documents: " + string.Join (", ", documents.Select (d => d.Tag)));
+			return;
+		case "MonoDevelop.Ide.Commands.WindowCommands.OpenWindowList":
+			Output ("[window] only one workbench window in the new shell");
+			return;
+		case "MonoDevelop.Ide.Commands.WindowCommands.OpenDocument1":
+			SelectNthDocument (1);
+			return;
+		case "MonoDevelop.Ide.Commands.WindowCommands.OpenDocument2":
+			SelectNthDocument (2);
+			return;
+		case "MonoDevelop.Ide.Commands.WindowCommands.OpenDocument3":
+			SelectNthDocument (3);
+			return;
+		case "MonoDevelop.Ide.Commands.WindowCommands.OpenDocument4":
+			SelectNthDocument (4);
+			return;
+		case "MonoDevelop.Ide.Commands.WindowCommands.OpenDocument5":
+			SelectNthDocument (5);
+			return;
+		case "MonoDevelop.Ide.Commands.WindowCommands.OpenDocument6":
+			SelectNthDocument (6);
+			return;
+		case "MonoDevelop.Ide.Commands.WindowCommands.OpenDocument7":
+			SelectNthDocument (7);
+			return;
+		case "MonoDevelop.Ide.Commands.WindowCommands.OpenDocument8":
+			SelectNthDocument (8);
+			return;
+		case "MonoDevelop.Ide.Commands.WindowCommands.OpenDocument9":
+			SelectNthDocument (9);
+			return;
+		case "MonoDevelop.Ide.Commands.FileCommands.CloseAllFiles":
+			// Legacy CloseAllFilesHandler: closes every document in order.
+			foreach (var tag in documents.Select (d => d.Tag).ToList ())
+				CloseDocument (tag);
+			Output ("[window] all documents closed");
+			return;
+		case "MonoDevelop.Ide.Commands.FileCommands.CloseWorkspace":
+			// Legacy CloseWorkspaceHandler: closes documents and the solution, shows Welcome.
+			foreach (var tag2 in documents.Select (d => d.Tag).ToList ())
+				CloseDocument (tag2);
+			loadedSolutionPath = null;
+			solutionLoaded = false;
+			ShowWelcomePage ();
+			Output ("[window] workspace closed");
+			return;
 		case "MonoDevelop.Ide.Commands.ProjectCommands.RebuildSolution":
 			_ = RunBuildAsync (rebuild: commandId.Contains ("Rebuild"));
 			return;
@@ -1377,6 +1448,25 @@ public partial class MainWindow : Window
 	{
 		if (docs.TryGetValue ((DocTabs.SelectedItem as TabItem)?.Tag as string ?? "", out var ed) && lastSearchText.Length > 0)
 			ed.FindFromCaret (lastSearchText, forward);
+	}
+
+	// ----- WindowCommands helpers (legacy document cycling semantics) -----
+
+	void CycleDocument (int delta)
+	{
+		if (documents.Count < 2)
+			return; // legacy: disabled with fewer than 2 documents
+		var tags = documents.Select (d => d.Tag).ToList ();
+		var cur = (DocTabs.SelectedItem as TabItem)?.Tag as string ?? tags [0];
+		int idx = Math.Max (0, tags.IndexOf (cur));
+		int next = ((idx + delta) % tags.Count + tags.Count) % tags.Count;
+		SelectDocument (tags [next]);
+	}
+
+	void SelectNthDocument (int n)
+	{
+		if (n >= 1 && n <= documents.Count)
+			SelectDocument (documents [n - 1].Tag);
 	}
 
 	// Runs an edit action on the active document when it is a text editor.

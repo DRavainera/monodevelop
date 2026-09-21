@@ -263,3 +263,10 @@ Port desde `MonoDevelop.Ide.FindInFiles` y `ProjectOperations` del legacy:
 - **OpenFile** ya no abre solo soluciones: `FilePickerOpenOptions` para cualquier archivo de texto → editor isla.
 - **SaveAs** (legacy FileService.SaveAs): escribe a la ruta elegida, retargetea el editor y re-nombra la pestaña isla.
 - QA: app sin excepciones; los pickers nativos quedan wired al dispatch del menú.
+
+### M11a — Menú Window completo (Next/Prev/Document List/1-9/Close All/Close Workspace)
+- **Next/PrevDocument** (legacy NextDocumentHandler/PrevDocumentHandler): ciclo con wrap-around,
+  deshabilitado con <2 documentos. **OpenDocument1-9** (OpenDocumentNHandler): selecciona el N-ésimo.
+- **CloseAllFiles** cierra en orden; **CloseWorkspace** cierra documentos + solución y muestra Welcome
+  (mismo flujo legacy FileCommands).
+- QA E2E (`--windocs`): ciclo Program.cs↔new1.cs, OpenDocument2 correcto, out-of-range inofensivo.
