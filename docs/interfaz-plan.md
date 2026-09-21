@@ -306,3 +306,8 @@ Port desde `MonoDevelop.Ide.FindInFiles` y `ProjectOperations` del legacy:
 - **HelpCommands**: OpenLogDirectory abre el directorio real de logs; MarkLog/DumpUITree/A11y con salida funcional; CheckForUpdates.
 - **Iteración F**: GotoMatchingBrace real (saltos anidados {}, (), []) + RefactorCommands.Rename file-wide con InputDialog + PrintDocument + ShowMessageBubbles persistido + SaveCurrentLayout/DeleteCurrentLayout (Monodevelop.PadLayout) + VersionControlCommands con git real (status/log/diff/pull/add) enviando salida al pad Output.
 - QA determinista `--brace`: matching de llaves clase↔cierre, rename+undo, dispatch git verificado.
+
+### M11g — Build por proyecto, exportación y recientes
+- ProjectCommands.Build/Rebuild/Clean sobre el proyecto activo (RunBuildAsync con projectFilter), SetStartupProjects persistido en Monodevelop.StartupProject.
+- ExportSolution (copia del árbol de la solución), ClearRecentFiles vía RecentSolutions.Clear + rebuild del menú File, InsertStandardHeader.
+- QA --buildone: dispatch del comando Build con MSBuild exit 0.

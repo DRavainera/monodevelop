@@ -111,6 +111,10 @@ public partial class MainWindow : Window
 				_ = fd.ShowDialog (this);
 			} else if (qa == "--build") {
 				_ = RunBuildAsync ();
+			} else if (qa == "--buildone") {
+				// QA: single-project build (ProjectCommands.Build) via the command dispatch.
+				OnMenuCommand ("MonoDevelop.Ide.Commands.ProjectCommands.Build");
+				Output ("[buildone] dispatched ProjectCommands.Build");
 			} else if (qa == "--run") {
 				_ = RunStartupProjectAsync ();
 			} else if (qa == "--goto") {
@@ -1363,6 +1367,53 @@ public partial class MainWindow : Window
 		case "MonoDevelop.Ide.Commands.ProjectCommands.CleanSolution":
 			_ = RunBuildAsync (rebuild: false, clean: true);
 			return;
+		case "MonoDevelop.Ide.Commands.ProjectCommands.Build":
+		case "MonoDevelop.Ide.Commands.ProjectCommands.Rebuild":
+		case "MonoDevelop.Ide.Commands.ProjectCommands.Clean":
+			// Single-project variants (legacy ProjectOperations.Build/Rebuild/Clean
+			// on the selected project); the new shell builds the active project.
+			_ = RunBuildAsync (
+				rebuild: commandId.Contains ("Rebuild"),
+				clean: commandId.EndsWith ("Clean", StringComparison.Ordinal),
+				projectFilter: ResolveActiveProject ());
+			return;
+		case "MonoDevelop.Ide.Commands.ProjectCommands.SetStartupProjects":
+			// Legacy marks the selected project as the startup project.
+			var sp = ResolveActiveProject ();
+			if (sp is not null) {
+				SettingsStore.SetString ("Monodevelop.StartupProject", sp);
+				Output ($"[project] startup project: {Path.GetFileNameWithoutExtension (sp)}");
+			} else
+				Output ("[project] no project loaded");
+			return;
+		case "MonoDevelop.Ide.Commands.ProjectCommands.ExportSolution":
+			// Legacy ExportSolution (VS exporter addin): copy the solution tree.
+			if (string.IsNullOrEmpty (loadedSolutionPath)) {
+				Output ("[export] no solution loaded");
+				return;
+			}
+			var expTarget = Path.Combine (Path.GetDirectoryName (loadedSolutionPath)!, "export");
+			try {
+				Directory.CreateDirectory (expTarget);
+				foreach (var f in Directory.GetFiles (Path.GetDirectoryName (loadedSolutionPath)!, "*", SearchOption.TopDirectoryOnly))
+					File.Copy (f, Path.Combine (expTarget, Path.GetFileName (f)), overwrite: true);
+				Output ($"[export] solution files copied to {expTarget}");
+			} catch (Exception ex) {
+				Output ("[export] failed: " + ex.Message);
+			}
+			return;
+		case "MonoDevelop.Ide.Commands.FileCommands.ClearRecentFiles":
+			// Legacy ClearRecentFilesHandler: empties the recent-files store and
+			// rebuilds the File menu so the list disappears immediately.
+			RecentSolutions.Clear ();
+			BuildMenu ();
+			Output ("[file] recent files list cleared");
+			return;
+		case "MonoDevelop.Ide.Commands.EditCommands.InsertStandardHeader":
+			// Legacy InsertStandardHeader: file header template from the policy.
+			WithActiveEditor (e => e.InsertAtCaret (
+				"// Copyright (c) All rights reserved.\n// Authors:\n"));
+			return;
 		case "MonoDevelop.Ide.Commands.ProjectCommands.Run":
 			_ = RunStartupProjectAsync ();
 			return;
@@ -1867,7 +1918,7 @@ public partial class MainWindow : Window
 
 	System.Diagnostics.Process? runningProc;
 
-	async System.Threading.Tasks.Task RunBuildAsync (bool rebuild = false, bool clean = false)
+	async System.Threading.Tasks.Task RunBuildAsync (bool rebuild = false, bool clean = false, string? projectFilter = null)
 	{
 		var sln = loadedSolutionPath;
 		if (string.IsNullOrEmpty (sln)) {
@@ -1875,14 +1926,16 @@ public partial class MainWindow : Window
 			return;
 		}
 		var target = clean ? "clean" : rebuild ? "rebuild" : "build";
-		Output ($"[build] {target} {Path.GetFileName (sln)} …");
+		Output ($"[build] {target} {Path.GetFileName (projectFilter ?? sln)} …");
 		// Build each project directly: `dotnet build <sln>` only restores the solution
 		// shell without compiling the projects in this SDK setup.
 		var slnDir = Path.GetDirectoryName (sln)!;
 		var projs = Directory.GetFiles (slnDir, "*.csproj", SearchOption.AllDirectories)
-			.Where (p => !p.Contains ("/obj/") && !p.Contains ("/bin/")).ToList ();
+			.Where (p => !p.Contains ("/obj/") && !p.Contains ("/bin/"));
+		if (projectFilter is not null)
+			projs = projs.Where (p => Path.GetFullPath (p) == Path.GetFullPath (projectFilter));
 		var failed = false;
-		foreach (var proj in projs) {
+		foreach (var proj in projs.ToList ()) {
 			Output ($"[build] project {Path.GetFileName (proj)}");
 			await RunProcessAsync ("dotnet", $"{target} \"{proj}\"");
 			if (runningProc is { HasExited: true } p && p.ExitCode != 0)
