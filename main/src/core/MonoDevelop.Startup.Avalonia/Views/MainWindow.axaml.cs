@@ -105,6 +105,14 @@ public partial class MainWindow : Window
 				ShowWelcomePage ();
 			} else if (qa == "--newsolution") {
 				_ = OpenNewSolutionDialogAsync ();
+			} else if (qa == "--find") {
+				// QA: open Find in Files pre-loaded and run it against the solution.
+				var fd = new FindInFilesDialog { SearchTextOverride = "Hello" };
+				_ = fd.ShowDialog (this);
+			} else if (qa == "--build") {
+				_ = RunBuildAsync ();
+			} else if (qa == "--run") {
+				_ = RunStartupProjectAsync ();
 			}
 		};
 
@@ -849,6 +857,37 @@ public partial class MainWindow : Window
 			if (DocTabs.SelectedItem is TabItem { Tag: string cur })
 				CloseDocument (cur);
 			return;
+
+		// SearchCommands (legacy SearchService): Find/Replace dialogs and quick find.
+		case "MonoDevelop.Ide.Commands.SearchCommands.Find":
+		case "MonoDevelop.Ide.Commands.SearchCommands.Replace":
+			_ = ShowFindInFilesAsync (replace: commandId.EndsWith ("Replace", StringComparison.Ordinal), quick: true);
+			return;
+		case "MonoDevelop.Ide.Commands.SearchCommands.FindInFiles":
+		case "MonoDevelop.Ide.Commands.SearchCommands.ReplaceInFiles":
+			_ = new FindInFilesDialog { ReplaceMode = commandId.EndsWith ("ReplaceInFiles", StringComparison.Ordinal) }.ShowDialog (this);
+			return;
+		case "MonoDevelop.Ide.Commands.SearchCommands.FindNext":
+			FindNextInEditor (forward: true);
+			return;
+		case "MonoDevelop.Ide.Commands.SearchCommands.FindPrevious":
+			FindNextInEditor (forward: false);
+			return;
+
+		// ProjectCommands build/run (legacy ProjectOperations.Build/Run via MSBuild).
+		case "MonoDevelop.Ide.Commands.ProjectCommands.BuildSolution":
+		case "MonoDevelop.Ide.Commands.ProjectCommands.RebuildSolution":
+			_ = RunBuildAsync (rebuild: commandId.Contains ("Rebuild"));
+			return;
+		case "MonoDevelop.Ide.Commands.ProjectCommands.CleanSolution":
+			_ = RunBuildAsync (rebuild: false, clean: true);
+			return;
+		case "MonoDevelop.Ide.Commands.ProjectCommands.Run":
+			_ = RunStartupProjectAsync ();
+			return;
+		case "MonoDevelop.Ide.Commands.ProjectCommands.Stop":
+			StopBuildOrRun ();
+			return;
 		}
 		var message = $"'{commandId}' is not wired in the new UI yet — its GTK implementation remains available through --old-gui until the cutover.";
 		Output ("[menu] " + message);
@@ -906,5 +945,210 @@ public partial class MainWindow : Window
 					ed.FontSize = size;
 			}
 		}
+	}
+
+	// ---------- Search: Find in Files / Search Results pad (legacy SearchResultPad) ----------
+
+	public string? LoadedSolutionDirectory ()
+	{
+		if (!string.IsNullOrEmpty (loadedSolutionPath))
+			return Path.GetDirectoryName (loadedSolutionPath);
+		var recent = RecentSolutions.GetAll ().FirstOrDefault ();
+		return recent.Path is { Length: > 0 } p ? Path.GetDirectoryName (p) : null;
+	}
+
+	public async System.Threading.Tasks.Task ShowFindInFilesAsync (bool replace, bool quick)
+	{
+		var dlg = new FindInFilesDialog { ReplaceMode = replace };
+		// Pre-fill with the selected text of the active editor (legacy UseSelectionForFind).
+		if (docs.TryGetValue ((DocTabs.SelectedItem as TabItem)?.Tag as string ?? "", out var active) && active.SelectedText is { Length: > 0 } sel)
+			dlg.FindCombo!.Text = sel;
+		await dlg.ShowDialog (this);
+	}
+
+	// Runs the search configured in the dialog and populates the Search Results pad,
+	// each row jumpable (legacy SearchResultWidget → ILocationList).
+	public void RunFindInFiles (FindInFilesDialog dlg)
+	{
+		var root = dlg.SearchDirectory;
+		if (string.IsNullOrEmpty (root)) {
+			Output ("[search] no scope available — open a solution first");
+			return;
+		}
+		lastSearchText = dlg.SearchText;
+		lastFileMask = dlg.FileMask;
+		Output ($"[search] searching '{dlg.SearchText}' in {root} …");
+		var results = FindInFilesDialog.Search (
+			root, dlg.SearchText, dlg.CaseSensitive, dlg.WholeWords, dlg.Regex, dlg.Recursive,
+			lastFileMask, dlg.ReplaceText, dlg.ReplaceMode);
+
+		// Populate the Search Results pad tab.
+		var list = new ListBox { Background = Brushes.Transparent };
+		list.Bind (ListBox.ForegroundProperty, Application.Current!.GetResourceObservable ("IdeFgBrush"));
+		var rows = new System.Collections.ObjectModel.ObservableCollection<string> ();
+		findResults.Clear ();
+		foreach (var r in results) {
+			var row = $"{Path.GetFileName (r.File)}:{r.Line}: {r.LineText.Trim ()}";
+			rows.Add (row);
+			findResults [row] = r;
+		}
+		list.ItemsSource = rows;
+		list.DoubleTapped += (_, _) => {
+			if (list.SelectedItem is string s && findResults.TryGetValue (s, out var hit))
+				OpenFileDocumentAtLine (hit.File, hit.Line);
+		};
+		BottomPads.SetTabVisible ("searchresults", true);
+		BottomPads.Select ("searchresults");
+		BottomPads.ReplaceTabContent ("searchresults", WrapWithHeader (
+			$"{results.Count} match(es) for '{dlg.SearchText}'", list));
+		Output ($"[search] {results.Count} match(es)");
+	}
+
+	string lastFileMask = "*";
+
+	readonly Dictionary<string, (string File, int Line, int Offset, int Length, string LineText)> findResults = new ();
+
+	static Control WrapWithHeader (string header, Control content)
+	{
+		var dp = new DockPanel ();
+		var hb = new TextBlock { Text = header, FontSize = 11, Margin = new Thickness (8, 4), Opacity = 0.8 };
+		hb.Bind (TextBlock.ForegroundProperty, Application.Current!.GetResourceObservable ("IdeFgBrush"));
+		DockPanel.SetDock (hb, Dock.Top);
+		dp.Children.Add (hb);
+		dp.Children.Add (content);
+		return dp;
+	}
+
+	// Legacy SearchResultWidget.Activate: opens the document and moves the caret.
+	public void OpenFileDocumentAtLine (string path, int line)
+	{
+		OpenFileDocument (path);
+		if (docs.TryGetValue (Path.GetFileName (path), out var ed))
+			ed.GotoLine (Math.Max (1, line) - 1);
+	}
+
+	void FindNextInEditor (bool forward)
+	{
+		if (docs.TryGetValue ((DocTabs.SelectedItem as TabItem)?.Tag as string ?? "", out var ed) && lastSearchText.Length > 0)
+			ed.FindFromCaret (lastSearchText, forward);
+	}
+
+	string lastSearchText = "";
+
+	// ---------- Build / Run (legacy ProjectOperations via MSBuild) ----------
+
+	System.Diagnostics.Process? runningProc;
+
+	async System.Threading.Tasks.Task RunBuildAsync (bool rebuild = false, bool clean = false)
+	{
+		var sln = loadedSolutionPath;
+		if (string.IsNullOrEmpty (sln)) {
+			Output ("[build] no solution loaded");
+			return;
+		}
+		var target = clean ? "clean" : rebuild ? "rebuild" : "build";
+		Output ($"[build] {target} {Path.GetFileName (sln)} …");
+		// Build each project directly: `dotnet build <sln>` only restores the solution
+		// shell without compiling the projects in this SDK setup.
+		var slnDir = Path.GetDirectoryName (sln)!;
+		var projs = Directory.GetFiles (slnDir, "*.csproj", SearchOption.AllDirectories)
+			.Where (p => !p.Contains ("/obj/") && !p.Contains ("/bin/")).ToList ();
+		var failed = false;
+		foreach (var proj in projs) {
+			Output ($"[build] project {Path.GetFileName (proj)}");
+			await RunProcessAsync ("dotnet", $"{target} \"{proj}\"");
+			if (runningProc is { HasExited: true } p && p.ExitCode != 0)
+				failed = true;
+		}
+	}
+
+	async System.Threading.Tasks.Task RunStartupProjectAsync ()
+	{
+		var sln = loadedSolutionPath;
+		if (string.IsNullOrEmpty (sln)) {
+			Output ("[run] no solution loaded");
+			return;
+		}
+		// Legacy RunSingleStartupProject: run the (first) console project.
+		var proj = Directory.GetFiles (Path.GetDirectoryName (sln)!, "*.csproj", SearchOption.AllDirectories)
+			.FirstOrDefault (p => !p.Contains ("/obj/") && !p.Contains ("/bin/"));
+		if (proj is null) {
+			Output ("[run] no runnable project found");
+			return;
+		}
+		Output ("[run] dotnet run — " + Path.GetFileName (proj));
+		await RunProcessAsync ("dotnet", $"run --project \"{proj}\"");
+	}
+
+	void StopBuildOrRun ()
+	{
+		if (runningProc is { HasExited: false } p) {
+			try { p.Kill (true); } catch { }
+			Output ("[run] stopped");
+		}
+	}
+
+	async System.Threading.Tasks.Task RunProcessAsync (string exe, string args)
+	{
+		try {
+			var psi = new System.Diagnostics.ProcessStartInfo (exe, args) {
+				RedirectStandardOutput = true,
+				RedirectStandardError = true,
+				UseShellExecute = false,
+				CreateNoWindow = true,
+			};
+			var proc = System.Diagnostics.Process.Start (psi);
+			runningProc = proc;
+			if (proc is null) {
+				Output ("[process] failed to start " + exe);
+				return;
+			}
+			// Process events arrive on thread-pool threads: marshal to the UI thread
+			// before touching controls (same model as the legacy Gtk.Application.Invoke).
+			void OnLine (string line)
+			{
+				Avalonia.Threading.Dispatcher.UIThread.Post (() => {
+					Output (line);
+					ParseBuildMessage (line);
+				});
+			}
+			proc.OutputDataReceived += (_, e) => { if (e.Data is not null) OnLine (e.Data); };
+			proc.ErrorDataReceived += (_, e) => { if (e.Data is not null) OnLine (e.Data); };
+			proc.BeginOutputReadLine ();
+			proc.BeginErrorReadLine ();
+			await proc.WaitForExitAsync ();
+			var code = proc.ExitCode;
+			Avalonia.Threading.Dispatcher.UIThread.Post (() => {
+				Output ($"[process] exited with {code}");
+				if (code == 0)
+					SetErrors ("Build succeeded.");
+				else if (buildErrors.Count == 0)
+					SetErrors ($"Build FAILED with exit code {code}.");
+			});
+		} catch (Exception ex) {
+			Output ("[process] " + ex.Message);
+		}
+	}
+
+	// Parses MSBuild error/warning lines into the Errors pad, like the legacy
+	// BuildCycle → ErrorListPad flow ("file(line,col): error CODE: message").
+	readonly List<(string File, int Line, int Col, string Level, string Code, string Message)> buildErrors = new ();
+
+	void ParseBuildMessage (string line)
+	{
+		var match = System.Text.RegularExpressions.Regex.Match (
+			line, "^(.+?)\\((\\d+),(\\d+)\\): (error|warning) ([A-Za-z0-9]+): (.*)$");
+		if (match.Success) {
+			buildErrors.Add ((match.Groups [1].Value, int.Parse (match.Groups [2].Value),
+				int.Parse (match.Groups [3].Value), match.Groups [4].Value,
+				match.Groups [5].Value, match.Groups [6].Value));
+			SetErrors ($"{buildErrors.Count} problem(s) — last: {match.Groups [6].Value}");
+		}
+	}
+
+	void SetErrors (string text)
+	{
+		errorsText!.Text = text;
+		BottomPads.SetTabVisible ("errors", true);
 	}
 }

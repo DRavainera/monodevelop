@@ -177,4 +177,15 @@ public class PadHost : Border
 
 	public bool IsTabVisible (string tabId)
 		=> tabs.FirstOrDefault (x => x.Id == tabId) is { Visible: var v } && v;
+
+	/// <summary>Replaces the content of an existing tab (e.g. new search results run).</summary>
+	public void ReplaceTabContent (string tabId, Control content)
+	{
+		var t = tabs.FirstOrDefault (x => x.Id == tabId);
+		if (t is null)
+			return;
+		t.Content = content;
+		if (SelectedId == tabId)
+			Select (tabId); // re-select refreshes the content host
+	}
 }

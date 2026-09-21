@@ -57,6 +57,16 @@ public class SkTextEditor : Control
 		set => SetValue (IsDirtyProperty, value);
 	}
 
+	// Current selection as plain text (empty when collapsed — legacy GetSelectedText).
+	public string SelectedText {
+		get {
+			if (!hasSelection)
+				return "";
+			var (sl, sc, el, ec) = SelectionRange ();
+			return string.Join ("\n", SliceByLines ((sl, sc), (el, ec)));
+		}
+	}
+
 	// Legacy SaveCommand: FileService.Save. Persisted changes are written to FilePath;
 	// untitled docs surface an error in the Output pad.
 	public void Save ()
@@ -68,6 +78,65 @@ public class SkTextEditor : Control
 		File.WriteAllText (FilePath, Text);
 		IsDirty = false;
 		Console.WriteLine ($"[skeditor] saved {FilePath}");
+	}
+
+	// Legacy SearchService.FindNext: find from the caret and place it at the match.
+	public bool FindFromCaret (string needle, bool forward = true)
+	{
+		if (string.IsNullOrEmpty (needle))
+			return false;
+		var text = string.Join ("\n", lines);
+		int pos = caretLine >= 0 && caretLine < lines.Count
+			? lines.Take (caretLine).Sum (l => l.Length + 1) + Math.Min (caretCol, lines [caretLine].Length)
+			: 0;
+		int idx = forward
+			? text.IndexOf (needle, Math.Min (pos + 1, text.Length), StringComparison.Ordinal)
+			: text.LastIndexOf (needle, Math.Max (0, pos - 1), StringComparison.Ordinal);
+		if (idx < 0)
+			idx = forward ? text.IndexOf (needle, StringComparison.Ordinal)
+				: text.LastIndexOf (needle, StringComparison.Ordinal);
+		if (idx < 0)
+			return false;
+		var (l, c) = OffsetToPosition (idx);
+		caretLine = l;
+		caretCol = c;
+		hasSelection = false;
+		selAnchorLine = l;
+		selAnchorCol = c;
+		EnsureCaretVisible ();
+		MarkDirty ();
+		return true;
+	}
+
+	// Legacy SearchManager/GotoLineNumber (Ctrl+G): caret to a 1-based line.
+	public void GotoLine (int zeroBasedLine)
+	{
+		caretLine = Math.Clamp (zeroBasedLine, 0, lines.Count - 1);
+		caretCol = Math.Clamp (caretCol, 0, lines [caretLine].Length);
+		hasSelection = false;
+		EnsureCaretVisible ();
+		MarkDirty ();
+	}
+
+	(int Line, int Col) OffsetToPosition (int offset)
+	{
+		int acc = 0;
+		for (int i = 0; i < lines.Count; i++) {
+			var len = lines [i].Length + 1;
+			if (offset < acc + len)
+				return (i, offset - acc);
+			acc += len;
+		}
+		return (lines.Count - 1, lines [^1].Length);
+	}
+
+	void EnsureCaretVisible ()
+	{
+		float lineH = LineHeight;
+		if (caretLine < scrollLines)
+			scrollLines = caretLine;
+		else if (caretLine > scrollLines + Bounds.Height / lineH - 2)
+			scrollLines = Math.Max (0, caretLine - Bounds.Height / lineH + 2);
 	}
 
 	#endregion
@@ -316,6 +385,58 @@ public class SkTextEditor : Control
 		}
 	}
 
+	// Selection (legacy editor selection model): anchor at press, extend on drag.
+	bool hasSelection;
+	int selAnchorLine, selAnchorCol;
+	bool dragging;
+
+	(int StartLine, int StartCol, int EndLine, int EndCol) SelectionRange ()
+	{
+		bool anchorFirst = selAnchorLine < caretLine
+			|| (selAnchorLine == caretLine && selAnchorCol <= caretCol);
+		return anchorFirst
+			? (selAnchorLine, selAnchorCol, caretLine, caretCol)
+			: (caretLine, caretCol, selAnchorLine, selAnchorCol);
+	}
+
+	(IEnumerable<string> lines, (int Line, int Col) Start, (int Line, int Col) End) SelectionSlices ()
+	{
+		var (sl, sc, el, ec) = SelectionRange ();
+		var parts = new List<string> ();
+		if (sl == el) {
+			parts.Add (lines [sl].Substring (sc, Math.Max (0, ec - sc)));
+		} else {
+			parts.Add (lines [sl].Substring (sc));
+			for (int i = sl + 1; i < el; i++)
+				parts.Add (lines [i]);
+			parts.Add (lines [el].Substring (0, ec));
+		}
+		return (parts, (sl, sc), (el, ec));
+	}
+
+	string[] SliceByLines ((int Line, int Col) a, (int Line, int Col) b)
+	{
+		var (sl, sc, el, ec) = (a.Line, a.Col, b.Line, b.Col);
+		var parts = new List<string> ();
+		if (sl == el) {
+			parts.Add (lines [sl].Substring (Math.Min (sc, lines [sl].Length), Math.Max (0, Math.Min (ec, lines [el].Length) - Math.Min (sc, lines [sl].Length))));
+		} else {
+			parts.Add (lines [sl].Substring (Math.Min (sc, lines [sl].Length)));
+			for (int i = sl + 1; i < el; i++)
+				parts.Add (lines [i]);
+			parts.Add (lines [el].Substring (0, Math.Min (ec, lines [el].Length)));
+		}
+		return parts.ToArray ();
+	}
+
+	(int Start, int End) SelectionOrder ()
+	{
+		var (sl, sc, el, ec) = SelectionRange ();
+		int start = lines.Take (sl).Sum (l => l.Length + 1) + sc;
+		int end = lines.Take (el).Sum (l => l.Length + 1) + ec;
+		return (start, end);
+	}
+
 	protected override void OnPointerWheelChanged (PointerWheelEventArgs e)
 	{
 		base.OnPointerWheelChanged (e);
@@ -336,9 +457,34 @@ public class SkTextEditor : Control
 			int line = (int)(pt.Position.Y / LineHeight + scrollLines);
 			caretLine = Math.Clamp (line, 0, lines.Count - 1);
 			caretCol = Math.Clamp (col, 0, lines [caretLine].Length);
+			selAnchorLine = caretLine;
+			selAnchorCol = caretCol;
+			hasSelection = false;
+			dragging = true;
 			InvalidateVisual ();
 			e.Handled = true;
 		}
+	}
+
+	protected override void OnPointerMoved (PointerEventArgs e)
+	{
+		base.OnPointerMoved (e);
+		if (!dragging)
+			return;
+		var pt = e.GetPosition (this);
+		double charW = FontSize * 0.6;
+		int col = Math.Max (0, (int)((pt.X - GutterWidth ()) / charW));
+		int line = (int)(pt.Y / LineHeight + scrollLines);
+		caretLine = Math.Clamp (line, 0, lines.Count - 1);
+		caretCol = Math.Clamp (col, 0, lines [caretLine].Length);
+		hasSelection = caretLine != selAnchorLine || caretCol != selAnchorCol;
+		MarkDirty ();
+	}
+
+	protected override void OnPointerReleased (PointerReleasedEventArgs e)
+	{
+		base.OnPointerReleased (e);
+		dragging = false;
 	}
 
 	void InsertText (string text)

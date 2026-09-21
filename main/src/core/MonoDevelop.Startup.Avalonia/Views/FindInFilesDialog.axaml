@@ -1,0 +1,104 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="MonoDevelop.AvaloniaShell.Views.FindInFilesDialog"
+        Title="Find in Files"
+        Width="520" Height="420"
+        WindowStartupLocation="CenterOwner"
+        CanResize="False"
+        SystemDecorations="None"
+        ExtendClientAreaToDecorationsHint="True"
+        Background="{DynamicResource IdeWindowBgBrush}">
+
+  <Window.Styles>
+    <Style Selector="TextBlock">
+      <Setter Property="Foreground" Value="{DynamicResource IdeFgBrush}" />
+    </Style>
+    <Style Selector="TextBox">
+      <Setter Property="Foreground" Value="{DynamicResource IdeFgBrush}" />
+      <Setter Property="Background" Value="{DynamicResource IdeChromeBgBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource IdeBorderBrush}" />
+      <Setter Property="MinHeight" Value="28" />
+    </Style>
+    <Style Selector="CheckBox">
+      <Setter Property="Foreground" Value="{DynamicResource IdeFgBrush}" />
+    </Style>
+    <Style Selector="ComboBox">
+      <Setter Property="Foreground" Value="{DynamicResource IdeFgBrush}" />
+    </Style>
+  </Window.Styles>
+
+  <Grid RowDefinitions="Auto,*,Auto">
+    <!-- Custom chrome (Avalonia border) -->
+    <Border Grid.Row="0" Background="{DynamicResource IdeChromeBgBrush}"
+            BorderBrush="{DynamicResource IdeBorderBrush}" BorderThickness="0,0,0,1">
+      <Grid ColumnDefinitions="*,Auto">
+        <TextBlock x:Name="TitleText" Text="Find in Files" Margin="12,6" FontWeight="SemiBold" />
+        <Button Grid.Column="1" Classes="caption captionclose" Content="&#x2715;" Click="OnCancel" />
+      </Grid>
+    </Border>
+
+    <ScrollViewer Grid.Row="1" Margin="12,8">
+      <StackPanel Spacing="8">
+        <!-- Find / Replace mode (legacy toggleReplaceInFiles / toggleFindInFiles) -->
+        <StackPanel Orientation="Horizontal" Spacing="8">
+          <Button x:Name="ModeFind" Classes="runbutton" Width="34" Height="26" Content="&#x1F50D;" Click="OnModeFind" />
+          <Button x:Name="ModeReplace" Classes="runbutton" Width="34" Height="26" Content="&#x1F501;" Click="OnModeReplace" />
+          <TextBlock x:Name="ModeLabel" Text="Find" FontWeight="SemiBold" VerticalAlignment="Center" />
+        </StackPanel>
+
+        <Grid ColumnDefinitions="120,*">
+          <TextBlock Text="_Find:" VerticalAlignment="Center" />
+          <ComboBox x:Name="FindCombo" Grid.Column="1" MinWidth="300" HorizontalAlignment="Left"
+                    />
+        </Grid>
+        <Grid ColumnDefinitions="120,*" x:Name="ReplaceRow" IsVisible="False">
+          <TextBlock Text="_Replace:" VerticalAlignment="Center" />
+          <ComboBox x:Name="ReplaceCombo" Grid.Column="1" MinWidth="300" HorizontalAlignment="Left"
+                    />
+        </Grid>
+
+        <Grid ColumnDefinitions="120,*">
+          <TextBlock Text="_Path:" VerticalAlignment="Center" />
+          <Grid Grid.Column="1" ColumnDefinitions="*,Auto">
+            <ComboBox x:Name="PathCombo" />
+            <Button Grid.Column="1" Content="…" Click="OnBrowse" />
+          </Grid>
+        </Grid>
+
+        <CheckBox x:Name="RecursiveCheck" Content="Re_cursively" IsChecked="True" />
+
+        <Grid ColumnDefinitions="120,*">
+          <TextBlock Text="_File Mask:" VerticalAlignment="Center" />
+          <ComboBox x:Name="MaskCombo" Grid.Column="1" MinWidth="300" HorizontalAlignment="Left"
+                    />
+        </Grid>
+
+        <Grid ColumnDefinitions="120,*">
+          <TextBlock Text="_Scope:" VerticalAlignment="Center" />
+          <!-- Legacy scopeStore: Whole solution / All solutions / Current project /
+               All open files / Directories / Current document / Selection -->
+          <ComboBox x:Name="ScopeCombo" Grid.Column="1" MinWidth="300" HorizontalAlignment="Left"
+                    SelectedIndex="0">
+            <ComboBoxItem Content="Whole solution" />
+            <ComboBoxItem Content="All solutions" />
+            <ComboBoxItem Content="Current project" />
+            <ComboBoxItem Content="All open files" />
+            <ComboBoxItem Content="Directories" />
+            <ComboBoxItem Content="Current document" />
+            <ComboBoxItem Content="Selection" />
+          </ComboBox>
+        </Grid>
+
+        <TextBlock Text="Options" FontWeight="SemiBold" Margin="0,6,0,0" />
+        <CheckBox x:Name="CaseSensitiveCheck" Content="_Case sensitive" />
+        <CheckBox x:Name="WholeWordCheck" Content="_Whole words only" />
+        <CheckBox x:Name="RegexCheck" Content="Re_gular expression" />
+      </StackPanel>
+    </ScrollViewer>
+
+    <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="12,10">
+      <Button x:Name="ActionBtn" Content="Find" Width="96" Margin="0,0,8,0" Click="OnAction" />
+      <Button Content="Cancel" Width="88" Click="OnCancel" />
+    </StackPanel>
+  </Grid>
+</Window>
