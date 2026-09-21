@@ -229,3 +229,13 @@ Port desde `MonoDevelop.Ide.FindInFiles` y `ProjectOperations` del legacy:
   expande `${FilePath} ${FileDir} ${FileName} ${SolutionDir} ${CurLine:Text}` y ejecuta con salida al pad Output.
   Herramientas visibles en el menú Tools (antes de Preferences, como el legacy).
 - QA E2E: app + solución cargada, GoTo con teclado real (XTEST), Tasks rescan con match real, build exit 0.
+
+### M7 — Go To Line, pad Errors clicable, context menu y clipboard del editor
+- **Go To Line** (legacy `GotoLineNumberWidget` de MonoDevelop.SourceEditor2): overlay dentro del editor
+  (no popup X11), prellenado con la línea actual, parseo idéntico: `N`, `N:C`, `N,C` y saltos relativos
+  `+N/-N`; Enter aplica, Escape cierra. El parseo vive en `SkTextEditor.ParseGotoInput` (compartido con QA).
+- **Pad Errors interactivo** (legacy ErrorListPad → ILocationList): una fila por problema parseado de MSBuild;
+  doble clic abre el archivo en la línea+columna del error. Los errores se limpian en cada build.
+- **Context menu del editor** con iconos stock legacy (gtk-cut/copy/paste/select-all + Go To Line…) y
+  **clipboard real** (Cut/Copy/Paste/SelectAll, Ctrl+X/C/V/A) sobre la selección del editor Skia.
+- QA E2E: `--gotoline=9:9` → caret exactamente en línea 9 col 9 de Program.cs; app estable, build limpio.

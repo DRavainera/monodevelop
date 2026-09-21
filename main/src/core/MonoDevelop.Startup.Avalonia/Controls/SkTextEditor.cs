@@ -4,11 +4,14 @@ using System.IO;
 using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Input;
+using Avalonia.Input.Platform;
 using Avalonia.Media.Imaging;
 using Avalonia.Interactivity;
 using Avalonia.Media;
 using Avalonia.Platform;
+using Avalonia.VisualTree;
 using Avalonia.Threading;
 using SkiaSharp;
 
@@ -305,6 +308,25 @@ public class SkTextEditor : Control
 	protected override void OnKeyDown (KeyEventArgs e)
 	{
 		base.OnKeyDown (e);
+		var ctrl = e.KeyModifiers.HasFlag (KeyModifiers.Control);
+		switch (e.Key) {
+		case Key.X when ctrl:
+			CutSelection ();
+			e.Handled = true;
+			return;
+		case Key.C when ctrl:
+			CopySelection ();
+			e.Handled = true;
+			return;
+		case Key.V when ctrl:
+			PasteClipboard ();
+			e.Handled = true;
+			return;
+		case Key.A when ctrl:
+			SelectAll ();
+			e.Handled = true;
+			return;
+		}
 		switch (e.Key) {
 		case Key.Back:
 			if (caretCol > 0) {
@@ -519,6 +541,152 @@ public class SkTextEditor : Control
 	void ShowCaret ()
 	{
 		MarkDirty ();
+	}
+
+	// ----- Clipboard & selection commands (legacy EditCommands.Cut/Copy/Paste/SelectAll) -----
+
+	public void CutSelection ()
+	{
+		if (!hasSelection)
+			return;
+		CopySelection ();
+		ReplaceSelection ("");
+	}
+
+	public void CopySelection ()
+	{
+		if (hasSelection)
+			TopLevel.GetTopLevel (this)?.Clipboard?.SetTextAsync (SelectedText);
+	}
+
+	public async void PasteClipboard ()
+	{
+		var cb = TopLevel.GetTopLevel (this)?.Clipboard;
+		if (cb is null)
+			return;
+		var text = await cb.TryGetTextAsync ();
+		if (string.IsNullOrEmpty (text))
+			return;
+		ReplaceSelection (text);
+	}
+
+	public void SelectAll ()
+	{
+		selAnchorLine = 0;
+		selAnchorCol = 0;
+		caretLine = lines.Count - 1;
+		caretCol = lines [^1].Length;
+		hasSelection = caretLine != 0 || caretCol != 0 || lines.Count > 1;
+		ShowCaret ();
+	}
+
+	void ReplaceSelection (string text)
+	{
+		if (hasSelection) {
+			var (start, end) = SelectionOrder ();
+			var t = Text ?? "";
+			Text = t.Substring (0, Math.Min (start, t.Length)) + text + t.Substring (Math.Min (end, t.Length));
+			hasSelection = false;
+			// Position the caret at the end of the inserted text (legacy behavior).
+			var (cl, cc) = OffsetToPosition (start + text.Length);
+			caretLine = cl;
+			caretCol = cc;
+			selAnchorLine = cl;
+			selAnchorCol = cc;
+		} else {
+			InsertText (text);
+		}
+		Commit ();
+	}
+
+	// Legacy parse from GotoLineNumberWidget: "N", "N:C", "N,C", "+N/-N" relative.
+	public static (int Line, int Col) ParseGotoInput (string s, int currentLine1Based)
+	{
+		s = s.Trim ();
+		bool relative = s.StartsWith ("+", StringComparison.Ordinal) || s.StartsWith ("-", StringComparison.Ordinal);
+		int cut = relative ? 1 : 0;
+		int line = currentLine1Based, col = 1;
+		var head = s;
+		int sep = s.IndexOfAny (new [] { ':', ',' });
+		if (sep >= 0) {
+			head = s.Substring (0, sep);
+			_ = int.TryParse (s.Substring (sep + 1).Trim (), out col);
+		}
+		if (int.TryParse (head.Length > cut ? head [cut..] : "", out int n) && n != 0)
+			line = relative ? currentLine1Based + n : n;
+		return (line, col);
+	}
+
+	// Legacy GotoLineNumberWidget: "N", "N:C", "+N", "-N" … shown as an in-editor
+	// overlay (the legacy is a Gtk.Bin placed over the text area, not a popup window).
+	Border? gotoOverlay;
+
+	public event EventHandler? GotoOverlayClosed;
+
+	public void GotoLinePopup ()
+	{
+		if (gotoOverlay is not null)
+			return;
+		var currentLine = caretLine + 1;
+		var box = new TextBox {
+			Text = currentLine.ToString (),
+			Width = Math.Max (140, Bounds.Width / 4),
+			Height = 26,
+			FontSize = 12,
+			HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right,
+			VerticalAlignment = Avalonia.Layout.VerticalAlignment.Top,
+			Margin = new Thickness (0, 6, 8, 0),
+		};
+		void CloseOverlay ()
+		{
+			if (gotoOverlay is Border b) {
+				((Panel)b.Parent!).Children.Remove (b);
+				gotoOverlay = null;
+				Focus ();
+				GotoOverlayClosed?.Invoke (this, EventArgs.Empty);
+			}
+		}
+		void Accept ()
+		{
+			var (line, col) = ParseGotoInput (box.Text ?? "", currentLine);
+			GotoLine (line - 1);
+			if (col > 1) {
+				caretCol = Math.Clamp (col - 1, 0, lines [caretLine].Length);
+				ShowCaret ();
+			}
+			CloseOverlay ();
+		}
+		box.KeyDown += (_, e) => {
+			if (e.Key == Key.Enter) {
+				Accept ();
+				e.Handled = true;
+			} else if (e.Key == Key.Escape) {
+				CloseOverlay ();
+				e.Handled = true;
+			}
+		};
+		box.LostFocus += (_, _) => CloseOverlay ();
+		var host = new Border {
+			Background = Brushes.Transparent,
+			Child = box,
+		};
+		gotoOverlay = host;
+		if (this.GetVisualParent () is Panel p) {
+			p.Children.Add (host);
+			host.IsVisible = true;
+			box.Focus ();
+			box.SelectAll ();
+			box.CaretIndex = box.Text?.Length ?? 0;
+		}
+	}
+
+	// Legacy pad jump (ErrorListPad → ILocationList): line + column without popup.
+	public void GotoLinePopupColumn (int column)
+	{
+		if (column > 1) {
+			caretCol = Math.Clamp (column - 1, 0, lines [caretLine].Length);
+			ShowCaret ();
+		}
 	}
 
 	#endregion

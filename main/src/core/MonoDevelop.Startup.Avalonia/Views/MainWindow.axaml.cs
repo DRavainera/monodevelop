@@ -117,6 +117,29 @@ public partial class MainWindow : Window
 				_ = new GoToDialog ().ShowDialog (this);
 			} else if (qa == "--tasks") {
 				RescanTasks ();
+			} else if (qa.StartsWith ("--gotoline", StringComparison.Ordinal)) {
+				// QA: open Program.cs and show the GotoLineNumber overlay widget.
+				// With "=N[:C]" it performs the jump directly (deterministic QA path).
+				var file = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile),
+					"TestProj", "TestProj", "Program.cs");
+				if (File.Exists (file)) {
+					OpenFileDocument (file);
+					if (docs.TryGetValue (Path.GetFileName (file), out var ed)) {
+						int eq = qa.IndexOf ('=');
+						if (eq > 0) {
+							var (line, col) = Controls.SkTextEditor.ParseGotoInput (qa [(eq + 1)..], 1);
+							ed.GotoLine (line - 1);
+							if (col > 1)
+								ed.GotoLinePopupColumn (col);
+							Output ($"[gotoline] parsed '{qa [(eq + 1)..]}' → line {line} col {col}; caret now at line {ed.CurrentLine + 1}");
+						} else {
+							ed.GotoLinePopup ();
+							Output ($"[gotoline] overlay shown (caret line {ed.CurrentLine + 1})");
+						}
+					}
+				} else {
+					Output ("[gotoline] " + file + " not found");
+				}
 			} else if (qa == "--tool") {
 				var first = Services.SettingsStore.LoadTools ().FirstOrDefault ();
 				if (first is not null)
@@ -638,6 +661,7 @@ public partial class MainWindow : Window
 				if (e.Property == Controls.SkTextEditor.IsDirtyProperty)
 					UpdateDocTabTitle (tag, docDirty: editor.IsDirty);
 			};
+			AttachEditorContextMenu (editor);
 			AddDocument (tag, editor);
 		} catch (Exception ex) {
 			Output ("Cannot open " + Path.GetFileName (path) + ": " + ex.Message);
@@ -652,6 +676,33 @@ public partial class MainWindow : Window
 			lbl.Text = docDirty ? tag + " •" : tag;
 			ToolTip.SetTip (tab, docs.TryGetValue (tag, out var ed) && !string.IsNullOrEmpty (ed.FilePath) ? ed.FilePath : tag);
 		}
+	}
+
+	// Editor context menu, same items as the legacy SourceEditorWidget context path
+	// (cut/copy/paste/select all, go to line) with the legacy stock icons.
+	void AttachEditorContextMenu (Controls.SkTextEditor editor)
+	{
+		MenuItem Item (string header, string? stockId, Action onClick)
+		{
+			var panel = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
+			if (stockId is not null && IconService.GetImage (stockId) is { } img)
+				panel.Children.Add (new Image { Source = img, Width = 16, Height = 16 });
+			panel.Children.Add (new TextBlock { Text = header, FontSize = 12 });
+			var mi = new MenuItem { Header = panel };
+			mi.Click += (_, _) => onClick ();
+			return mi;
+		}
+		var menu = new ContextMenu {
+			ItemsSource = new object [] {
+				Item ("Cut", "gtk-cut", editor.CutSelection),
+				Item ("Copy", "gtk-copy", editor.CopySelection),
+				Item ("Paste", "gtk-paste", editor.PasteClipboard),
+				new Separator (),
+				Item ("Select All", "gtk-select-all", editor.SelectAll),
+				Item ("Go To Line…", null, editor.GotoLinePopup),
+			},
+		};
+		editor.ContextMenu = menu;
 	}
 
 	void OnSolutionOpen (object? sender, RoutedEventArgs e)
@@ -913,9 +964,11 @@ public partial class MainWindow : Window
 			_ = new GoToDialog { Title = "Go To Type" }.ShowDialog (this);
 			return;
 		case "MonoDevelop.Ide.Commands.SearchCommands.GotoLineNumber": {
-			// Legacy GotoLineNumber: input dialog with the current line pre-filled.
+			// Legacy GotoLineNumber: editor overlay widget parsing "N", "N:C", "+N/-N".
 			if (docs.TryGetValue ((DocTabs.SelectedItem as TabItem)?.Tag as string ?? "", out var ed))
-				Output ($"[goto] current line is {ed.CurrentLine + 1} — use the pad toolbar to jump");
+				ed.GotoLinePopup ();
+			else
+				Output ("[goto] open a document first");
 			return;
 		}
 		case "MonoDevelop.Ide.Commands.ToolCommands.TaskList":
@@ -1207,6 +1260,8 @@ public partial class MainWindow : Window
 			var code = proc.ExitCode;
 			Avalonia.Threading.Dispatcher.UIThread.Post (() => {
 				Output ($"[process] exited with {code}");
+				buildErrors.Clear ();
+				errorRows.Clear ();
 				if (code == 0)
 					SetErrors ("Build succeeded.");
 				else if (buildErrors.Count == 0)
@@ -1220,6 +1275,7 @@ public partial class MainWindow : Window
 	// Parses MSBuild error/warning lines into the Errors pad, like the legacy
 	// BuildCycle → ErrorListPad flow ("file(line,col): error CODE: message").
 	readonly List<(string File, int Line, int Col, string Level, string Code, string Message)> buildErrors = new ();
+	readonly Dictionary<string, (string File, int Line, int Col, string Level, string Code, string Message)> errorRows = new ();
 
 	void ParseBuildMessage (string line)
 	{
@@ -1236,6 +1292,25 @@ public partial class MainWindow : Window
 	void SetErrors (string text)
 	{
 		errorsText!.Text = text;
+		// Legacy ErrorListPad: one clickable row per parsed problem.
+		var list = new ListBox { Background = Brushes.Transparent, FontSize = 12 };
+		list.Bind (ListBox.ForegroundProperty, Application.Current!.GetResourceObservable ("IdeFgBrush"));
+		var rows = new System.Collections.ObjectModel.ObservableCollection<string> ();
+		foreach (var err in buildErrors) {
+			var row = $"{Path.GetFileName (err.File)} ({err.Line},{err.Col}): {err.Level} {err.Code}: {err.Message}";
+			rows.Add (row);
+			errorRows [row] = err;
+		}
+		list.ItemsSource = rows;
+		list.DoubleTapped += (_, _) => {
+			// Legacy pad double-click → jump to file(line,col).
+			if (list.SelectedItem is string s && errorRows.TryGetValue (s, out var hit)) {
+				OpenFileDocumentAtLine (hit.File, hit.Line);
+				if (docs.TryGetValue (Path.GetFileName (hit.File), out var ed))
+					ed.GotoLinePopupColumn (hit.Col);
+			}
+		};
+		BottomPads.ReplaceTabContent ("errors", WrapWithHeader (text, list));
 		BottomPads.SetTabVisible ("errors", true);
 	}
 }

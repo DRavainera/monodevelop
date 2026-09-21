@@ -25,7 +25,8 @@ internal static class Program
 		Environment.GetCommandLineArgs ().FirstOrDefault (a =>
 			a is "--about" or "--prefs" or "--addins" or "--find" or "--build" or "--run"
 				or "--goto" or "--tasks" or "--tool"
-			|| a.StartsWith ("--prefs=", StringComparison.Ordinal)) ?? "";
+			|| a.StartsWith ("--prefs=", StringComparison.Ordinal)
+			|| a.StartsWith ("--gotoline", StringComparison.Ordinal)) ?? "";
 
 	// Optional path of a solution to open at startup (--sln=<path>); the Solution
 	// pad is then populated with the real projects of that solution.
