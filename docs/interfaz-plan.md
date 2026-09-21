@@ -277,3 +277,10 @@ Port desde `MonoDevelop.Ide.FindInFiles` y `ProjectOperations` del legacy:
 - **NavigateBack/Forward/History/ClearNavigationHistory** dispatchados; **ZoomIn/Out/Reset** operan el
   FontSize del editor Skia (límites 5..60, reset a 12 como el legacy Options.ZoomReset).
 - QA E2E (`--navhist`): back 11→7→1, forward→7, clear→CanMoveBack=False.
+
+### M11c — Bookmarks + Use Selection for Find
+- **IBookmarkBuffer legacy** (ViewCommandHandlers): ToggleBookmark en la línea del cursor,
+  Next/PrevBookmark con wrap-around, ClearBookmarks. Marcador visual en el gutter del editor Skia
+  (cuadrado azul estilo gutter-bookmark-15) + tinte de fila completa.
+- **UseSelectionForFind**: prellenado de la búsqueda con la selección actual (SearchCommands legacy).
+- QA E2E (`--bookmarks` con solución cargada): toggle de 3 líneas, next con wrap 9→1, prev 1→9.

@@ -911,6 +911,44 @@ public class SkTextEditor : Control
 		InvalidateVisual ();
 	}
 
+	// ----- Bookmarks (legacy IBookmarkBuffer: SetBookmarked/NextBookmark/PrevBookmark) -----
+	readonly HashSet<int> bookmarkLines = new ();
+
+	public bool HasSelectionText => hasSelection && SelectedText.Length > 0;
+
+	public void ToggleBookmark ()
+	{
+		if (!bookmarkLines.Add (caretLine))
+			bookmarkLines.Remove (caretLine);
+		MarkDirty ();
+	}
+
+	public void ClearBookmarks ()
+	{
+		bookmarkLines.Clear ();
+		MarkDirty ();
+	}
+
+	public void NextBookmark ()
+	{
+		if (bookmarkLines.Count == 0)
+			return;
+		var next = bookmarkLines.Where (l => l > caretLine).OrderBy (l => l).FirstOrDefault (-1);
+		if (next < 0)
+			next = bookmarkLines.Min ();
+		GotoLine (next);
+	}
+
+	public void PrevBookmark ()
+	{
+		if (bookmarkLines.Count == 0)
+			return;
+		var prev = bookmarkLines.Where (l => l < caretLine).OrderByDescending (l => l).FirstOrDefault (-1);
+		if (prev < 0)
+			prev = bookmarkLines.Max ();
+		GotoLine (prev);
+	}
+
 	// ----- Undo/Redo (full-text snapshots, the MVP of the legacy undo stack) -----
 	readonly List<(string Text, int Line, int Col)> undoStack = new ();
 	readonly List<(string Text, int Line, int Col)> redoStack = new ();
@@ -1015,6 +1053,13 @@ public class SkTextEditor : Control
 			// gutter: line number
 			textPaint.Color = gutterFg;
 			canvas.DrawText ((i + 1).ToString (), 6, baseline, textFont, textPaint);
+			// bookmark marker in the gutter (legacy gutter-bookmark-15: blue square)
+			if (bookmarkLines.Contains (i)) {
+				using var bmPaint = new SKPaint { Color = new SKColor (0x2f, 0x78, 0xc8), IsAntialias = true };
+				canvas.DrawRect (gutterW - 14, y + lineH / 2 - 5, 10, 10, bmPaint);
+				using var bmLine = new SKPaint { Color = new SKColor (0x2f, 0x78, 0xc8).WithAlpha (70), IsAntialias = false };
+				canvas.DrawRect (0, y, (float)Bounds.Width, lineH, bmLine);
+			}
 			// caret line highlight in gutter
 			if (i == caretLine) {
 				using var activePaint = new SKPaint { Color = gutterFg.WithAlpha (40) };

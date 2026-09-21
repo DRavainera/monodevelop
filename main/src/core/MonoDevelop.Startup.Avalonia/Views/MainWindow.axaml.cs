@@ -115,6 +115,24 @@ public partial class MainWindow : Window
 				_ = RunStartupProjectAsync ();
 			} else if (qa == "--goto") {
 				_ = new GoToDialog ().ShowDialog (this);
+			} else if (qa == "--bookmarks") {
+				// QA: exercise bookmark toggle/next/prev/clear with pixel-visible marks.
+				var file = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile),
+					"TestProj", "TestProj", "Program.cs");
+				if (File.Exists (file)) {
+					OpenFileDocument (file);
+					if (docs.TryGetValue (Path.GetFileName (file), out var ed)) {
+						ed.GotoLine (0); ed.ToggleBookmark ();
+						ed.GotoLine (4); ed.ToggleBookmark ();
+						ed.GotoLine (8); ed.ToggleBookmark ();
+						Output ($"[bm-qa] bookmarked lines 1,5,9; caret l9");
+						ed.NextBookmark ();
+						Output ($"[bm-qa] next wraps → line {ed.CurrentLine + 1}");
+						ed.PrevBookmark ();
+						Output ($"[bm-qa] prev → line {ed.CurrentLine + 1}");
+						HideWelcomePage (); // QA: reveal the workbench for the capture
+					}
+				}
 			} else if (qa == "--navhist") {
 				// QA: exercise the navigation history service.
 				var file = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile),
@@ -206,8 +224,10 @@ public partial class MainWindow : Window
 			}
 		};
 
-		// Legacy default: the Welcome page opens as the startup document.
-		ShowWelcomePage ();
+		// Legacy default: the Welcome page opens as the startup document — but a QA
+		// flow that opened a solution/document wins (like opening from the command line).
+		if (!solutionLoaded && documents.Count == 0)
+			ShowWelcomePage ();
 
 		// Legacy WelcomePageFrame.OnKeyPressEvent: Escape hides the welcome overlay
 		// while a solution is open.
@@ -525,8 +545,7 @@ public partial class MainWindow : Window
 
 	public void HideWelcomePage ()
 	{
-		if (welcomePage is null)
-			return;
+		EnsureWelcomePage ();
 		welcomeVisible = false;
 		WelcomeOverlay!.IsVisible = false;
 	}
@@ -1157,6 +1176,28 @@ public partial class MainWindow : Window
 			return;
 		case "MonoDevelop.Ide.Commands.ViewCommands.ZoomReset":
 			WithActiveEditor (e => e.ZoomReset ());
+			return;
+
+		// ----- SearchCommands bookmarks (legacy ViewCommandHandlers → IBookmarkBuffer) -----
+		case "MonoDevelop.Ide.Commands.SearchCommands.ToggleBookmark":
+			WithActiveEditor (e => e.ToggleBookmark ());
+			return;
+		case "MonoDevelop.Ide.Commands.SearchCommands.NextBookmark":
+			WithActiveEditor (e => e.NextBookmark ());
+			return;
+		case "MonoDevelop.Ide.Commands.SearchCommands.PrevBookmark":
+			WithActiveEditor (e => e.PrevBookmark ());
+			return;
+		case "MonoDevelop.Ide.Commands.SearchCommands.ClearBookmarks":
+			WithActiveEditor (e => e.ClearBookmarks ());
+			return;
+		case "MonoDevelop.Ide.Commands.SearchCommands.UseSelectionForFind":
+			// Legacy: prefill the search with the current selection.
+			if (docs.TryGetValue ((DocTabs.SelectedItem as TabItem)?.Tag as string ?? "", out var useSel) && useSel.HasSelectionText) {
+				lastSearchText = useSel.SelectedText;
+				Output ($"[search] selection stored: '{lastSearchText}'");
+			} else
+				Output ("[search] no selection");
 			return;
 		case "MonoDevelop.Ide.Commands.WindowCommands.OpenDocumentList":
 			Output ("[window] open documents: " + string.Join (", ", documents.Select (d => d.Tag)));

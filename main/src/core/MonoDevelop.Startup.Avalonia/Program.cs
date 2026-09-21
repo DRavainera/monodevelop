@@ -21,12 +21,15 @@ internal static class Program
 	// so automated runs can validate each migrated dialog without UI navigation.
 	// --prefs also accepts a value (--prefs=light|dark|<panelId>) to drive the dialog
 	// programmatically in automated runs.
+	// Skips value-carrying args like --sln=<path> first so the FIRST QA flag wins.
 	public static string QaDialogArg =>
-		Environment.GetCommandLineArgs ().FirstOrDefault (a =>
-			a is "--about" or "--prefs" or "--addins" or "--find" or "--build" or "--run"
-				or "--goto" or "--tasks" or "--tool" or "--editops" or "--windocs" or "--navhist"
-			|| a.StartsWith ("--prefs=", StringComparison.Ordinal)
-			|| a.StartsWith ("--gotoline", StringComparison.Ordinal)) ?? "";
+		Environment.GetCommandLineArgs ().SkipWhile (a => a.StartsWith ("--sln=", StringComparison.Ordinal))
+			.FirstOrDefault (a =>
+				a is "--about" or "--prefs" or "--addins" or "--find" or "--build" or "--run"
+					or "--goto" or "--tasks" or "--tool" or "--editops" or "--windocs" or "--navhist"
+					or "--bookmarks"
+				|| a.StartsWith ("--prefs=", StringComparison.Ordinal)
+				|| a.StartsWith ("--gotoline", StringComparison.Ordinal)) ?? "";
 
 	// Optional path of a solution to open at startup (--sln=<path>); the Solution
 	// pad is then populated with the real projects of that solution.

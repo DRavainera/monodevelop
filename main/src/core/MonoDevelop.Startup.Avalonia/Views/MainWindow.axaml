@@ -104,7 +104,7 @@
     <!-- Welcome page overlay: covers the whole workbench (pads included) like the
          legacy WelcomePageService, which adds the WelcomePageFrame over the DockFrame
          (DockFrame.AddOverlayWidget) — no pads or document tabs show behind it. -->
-    <Border x:Name="WelcomeOverlay" Background="{DynamicResource WelcomePageBgBrush}">
+    <Border x:Name="WelcomeOverlay" IsVisible="False" Background="{DynamicResource WelcomePageBgBrush}">
       <views:WelcomePageView x:Name="WelcomeHost" />
     </Border>
     </Panel>
