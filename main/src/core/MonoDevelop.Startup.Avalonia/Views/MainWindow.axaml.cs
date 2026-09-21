@@ -595,19 +595,28 @@ public partial class MainWindow : Window
 			// Solution pad = legacy ProjectPad TreeView (Solution ▸ Projects ▸ files).
 			if (solutionTreeView is not null) {
 				solutionTreeView.Items.Clear ();
-				var root = new TreeViewItem { Header = title, IsExpanded = true, Tag = path };
+				// Legacy tree anatomy (SolutionNodeBuilder → ProjectNodeBuilder →
+				// ProjectReferenceFolderNodeBuilder/ProjectFolderNodeBuilder):
+				// solution → project → [References, folders…, files…] with stock icons.
+				var root = new TreeViewItem {
+					Header = TreeHeader ("md-solution", title),
+					IsExpanded = true,
+					Tag = path,
+				};
 				foreach (var p in projects.Where (p => !p.IsFolder)) {
-					var proj = new TreeViewItem { Header = "[p] " + p.Name, Tag = p.ProjectPath };
-					var dir = Path.GetDirectoryName (p.ProjectPath);
-					if (!string.IsNullOrEmpty (dir) && Directory.Exists (dir)) {
-						foreach (var f in Directory.GetFiles (dir, "*.cs")
-							.Concat (Directory.GetFiles (dir, "*.csproj"))
-							.OrderBy (f => Path.GetFileName (f))) {
-							proj.Items.Add (new TreeViewItem {
-								Header = Path.GetFileName (f),
-								Tag = f,
-							});
-						}
+					var proj = new TreeViewItem {
+						Header = TreeHeader ("md-project", p.Name),
+						Tag = p.ProjectPath,
+						IsExpanded = true,
+					};
+				var dir = Path.GetDirectoryName (p.ProjectPath);
+				if (!string.IsNullOrEmpty (dir) && Directory.Exists (dir)) {
+					projectFileBeingLoaded = p.ProjectPath;
+					// References node (ProjectReferenceFolderNodeBuilder: first child).
+					proj.Items.Add (BuildReferencesNode (p.ProjectPath));
+						// Folders and files (ProjectFolderNodeBuilder ordering).
+						foreach (var child in BuildFolderChildren (dir, 0))
+							proj.Items.Add (child);
 					}
 					root.Items.Add (proj);
 				}
@@ -639,6 +648,104 @@ public partial class MainWindow : Window
 		}
 	}
 
+	// Node header with the legacy stock icon (ProjectPad nodeInfo.Icon).
+	static StackPanel TreeHeader (string stockId, string text)
+	{
+		var sp = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4 };
+		if (IconService.GetImage (stockId) is { } img)
+			sp.Children.Add (new Image { Source = img, Width = 16, Height = 16 });
+		var tb = new TextBlock { Text = text, FontSize = 12, VerticalAlignment = VerticalAlignment.Center };
+		tb.Bind (TextBlock.ForegroundProperty, Application.Current!.GetResourceObservable ("IdeFgBrush"));
+		sp.Children.Add (tb);
+		return sp;
+	}
+
+	// ProjectReferenceFolderNodeBuilder: the project's first child is a References
+	// node (md-reference-folder) with one md-reference row per assembly.
+	TreeViewItem BuildReferencesNode (string projectPath)
+	{
+		var node = new TreeViewItem {
+			Header = TreeHeader ("md-reference-folder", "References"),
+			Tag = "references:" + projectPath,
+		};
+		try {
+			var doc = System.Xml.Linq.XDocument.Load (projectPath);
+			var ns = doc.Root?.Name.Namespace ?? System.Xml.Linq.XNamespace.None;
+			var refs = new List<string> ();
+			foreach (var el in doc.Descendants (ns + "Reference")) {
+				var name = el.Attribute ("Include")?.Value;
+				if (!string.IsNullOrEmpty (name))
+					refs.Add (name.Split (',') [0]);
+			}
+			foreach (var el in doc.Descendants (ns + "PackageReference")) {
+				var id = el.Attribute ("Include")?.Value;
+				if (!string.IsNullOrEmpty (id))
+					refs.Add (id);
+			}
+			foreach (var r in refs.OrderBy (r => r).Distinct ())
+				node.Items.Add (new TreeViewItem {
+					Header = TreeHeader ("md-reference", r),
+					Tag = "reference:" + r,
+				});
+			if (refs.Count == 0)
+				node.Items.Add (new TreeViewItem { Header = TreeHeader ("md-reference", "(none)"), Tag = "reference:none", IsVisible = false });
+		} catch {
+			// Unreadable project file: leave the References node empty (legacy tolerance).
+		}
+		return node;
+	}
+
+	// ProjectFolderNodeBuilder: folders first (md-closed-folder/md-open-folder by
+	// expansion state), then files with DesktopService.GetIconForFile icons.
+	List<TreeViewItem> BuildFolderChildren (string dir, int depth)
+	{
+		var result = new List<TreeViewItem> ();
+		if (depth > 8)
+			return result;
+		try {
+			foreach (var sub in Directory.GetDirectories (dir).OrderBy (d => d, StringComparer.OrdinalIgnoreCase)) {
+				var name = Path.GetFileName (sub);
+				if (name is "bin" or "obj")
+					continue; // legacy hides build outputs by default
+				var folder = new TreeViewItem {
+					Header = TreeHeader ("md-closed-folder", name),
+					Tag = "folder:" + sub,
+				};
+				foreach (var child in BuildFolderChildren (sub, depth + 1))
+					folder.Items.Add (child);
+				result.Add (folder);
+			}
+			foreach (var f in Directory.GetFiles (dir).OrderBy (f => f, StringComparer.OrdinalIgnoreCase)) {
+				var fname = Path.GetFileName (f);
+				if (fname == Path.GetFileName (projectFileBeingLoaded))
+					continue;
+				result.Add (new TreeViewItem {
+					Header = TreeHeader (FileIconId (fname), fname),
+					Tag = f,
+				});
+			}
+		} catch (Exception) {
+			// permission errors: skip silently like the legacy tree does
+		}
+		return result;
+	}
+
+	string? projectFileBeingLoaded;
+
+	// DesktopService.GetIconForFile equivalent over the migrated icon set.
+	static string FileIconId (string fileName)
+	{
+		var ext = Path.GetExtension (fileName).ToLowerInvariant ();
+		return ext switch {
+			".cs" => "md-file-source",
+			".csproj" or ".props" or ".targets" => "md-project",
+			".sln" => "md-solution",
+			".xml" or ".config" => "md-xml-file-icon",
+			".json" => "md-text-file-icon",
+			".md" or ".txt" => "md-text-file-icon",
+			_ => "md-file-source",
+		};
+	}
 	// Opens a text file in an island editor tab (legacy FileService.OpenDocument with
 	// the Mono.TextEditor view). Opening from the Solution pad or File > Open lands here.
 	public void OpenFileDocument (string path)

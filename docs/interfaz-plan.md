@@ -239,3 +239,12 @@ Port desde `MonoDevelop.Ide.FindInFiles` y `ProjectOperations` del legacy:
 - **Context menu del editor** con iconos stock legacy (gtk-cut/copy/paste/select-all + Go To Line…) y
   **clipboard real** (Cut/Copy/Paste/SelectAll, Ctrl+X/C/V/A) sobre la selección del editor Skia.
 - QA E2E: `--gotoline=9:9` → caret exactamente en línea 9 col 9 de Program.cs; app estable, build limpio.
+
+### M8 — Solution pad jerárquico completo (anatomía NodeBuilder legacy)
+- Réplica del árbol `SolutionNodeBuilder → ProjectNodeBuilder`: solución (md-solution) → proyectos
+  (md-project) → **References** (md-reference-folder, con una fila md-reference por Reference/
+  PackageReference del csproj) → carpetas recursivas (md-closed-folder; bin/obj ocultos como el legacy)
+  → archivos con icono por extensión (md-file-source / md-xml-file-icon / md-text-file-icon …,
+  equivalente a `DesktopService.GetIconForFile`).
+- Doble clic en archivo abre editor isla (ya funcional); nodos References/carpetas ignoran el open.
+- QA: árbol con contenido e iconos coloreados verificados por captura.
