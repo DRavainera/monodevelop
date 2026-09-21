@@ -78,7 +78,8 @@
               Background="{DynamicResource IdeWindowBgBrush}"
               BorderBrush="{DynamicResource IdeBorderBrush}" BorderThickness="0,0,1,0">
         <DockPanel>
-          <TabControl x:Name="DocTabs" DockPanel.Dock="Top" TabStripPlacement="Top" />
+          <!-- Document island tab strip (browser-style) -->
+          <TabControl x:Name="DocTabs" DockPanel.Dock="Top" TabStripPlacement="Top" Background="Transparent" />
           <Panel x:Name="DocContent" />
         </DockPanel>
       </Border>
@@ -92,8 +93,12 @@
       <GridSplitter Grid.Row="0" Grid.Column="2" Width="3" HorizontalAlignment="Left"
                     Background="Transparent" ResizeDirection="Columns" />
 
-      <!-- Bottom pads: Output / Errors / Tasks (legacy bottom dock group) -->
-      <controls:PadHost x:Name="BottomPads" Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3" Height="170" />
+      <!-- Bottom docks (legacy bottom group: Output | Errors | Tasks | Code Issues,
+           and the debugger pads Call Stack / Locals in a right sub-dock) -->
+      <Grid Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3" ColumnDefinitions="*,300" Height="170">
+        <controls:PadHost x:Name="BottomPads" Grid.Column="0" />
+        <controls:PadHost x:Name="DebugPads" Grid.Column="1" IsVisible="False" />
+      </Grid>
     </Grid>
 
     <!-- Welcome page overlay: covers the whole workbench (pads included) like the

@@ -19,6 +19,11 @@ public static class IconService
 {
 	static readonly string? iconsDir = FindIconsDir ();
 
+	// Full stock-id → resource map parsed from ExtensionModel/StockIcons.addin.xml
+	// (457 entries in the legacy IDE), falling back to the small hardcoded map above
+	// for ids whose resource needs legacy ImageService magic.
+	static Dictionary<string, string>? parsedStockMap;
+
 	// Fallback chain used when a variant does not exist for a given icon.
 	// Mirrors ImageService: exact id → base id → missing-image.
 	const string FallbackIcon = "missing-image-16";
@@ -155,7 +160,8 @@ public static class IconService
 				dir = addinsRoot;
 			else
 				return null;
-		} else if (!StockToResource.TryGetValue (stockId, out resource)) {
+		} else if (!StockToResource.TryGetValue (stockId, out resource) &&
+			   !(ParsedStockMap ?? StockToResource).TryGetValue (stockId, out resource)) {
 			return null;
 		}
 
@@ -243,9 +249,40 @@ public static class IconService
 		}
 	}
 
+	// Parses <StockIcon stockid="..." resource="..."/> entries out of the legacy
+	// StockIcons.addin.xml, mirroring ImageService's extension-point lookup. Windows-
+	// conditioned entries are skipped (this shell ships the !windows resources).
+	static Dictionary<string, string>? ParsedStockMap {
+		get {
+			if (parsedStockMap is not null || iconsDir is null)
+				return parsedStockMap;
+			try {
+				var addinXml = Path.GetFullPath (Path.Combine (iconsDir, "..", "ExtensionModel", "StockIcons.addin.xml"));
+				if (!File.Exists (addinXml))
+					return parsedStockMap = new Dictionary<string, string> ();
+				var map = new Dictionary<string, string> ();
+				var doc = System.Xml.Linq.XDocument.Load (addinXml);
+				foreach (var el in doc.Descendants ("StockIcon")) {
+					var id = (string?)el.Attribute ("stockid");
+					var res = (string?)el.Attribute ("resource");
+					if (string.IsNullOrEmpty (id) || string.IsNullOrEmpty (res))
+						continue;
+					// resource may carry a subdirectory prefix (add-in relative)
+					map[id] = Path.GetFileName (res!).EndsWith (".png", StringComparison.OrdinalIgnoreCase)
+						? res! [..^4]
+						: res!;
+				}
+				parsedStockMap = map;
+			} catch {
+				parsedStockMap = new Dictionary<string, string> ();
+			}
+			return parsedStockMap;
+		}
+	}
+
 	/// <summary>True if the stock id is known to this service (used to decide whether to show an icon).</summary>
 	public static bool IsKnown (string stockId)
-		=> StockToResource.ContainsKey (stockId) || VcStockToResource.ContainsKey (stockId);
+		=> StockToResource.ContainsKey (stockId) || VcStockToResource.ContainsKey (stockId) || (ParsedStockMap?.ContainsKey (stockId) ?? false);
 
 	/// <summary>Forces a reload on the next GetImage (theme change already handled via ActualThemeVariant key).</summary>
 	public static void ClearCache () => cache.Clear ();

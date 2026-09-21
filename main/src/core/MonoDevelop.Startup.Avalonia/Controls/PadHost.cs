@@ -6,6 +6,8 @@ using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.Media.Imaging;
+using MonoDevelop.AvaloniaShell.Services;
 
 namespace MonoDevelop.AvaloniaShell.Controls;
 
@@ -21,6 +23,7 @@ public class PadHost : Border
 	{
 		public string Id = "";
 		public string Label = "";
+		public string? Icon;
 		public object? Content;
 		public bool Visible = true;
 		internal ToggleButton? HeaderButton;
@@ -110,8 +113,27 @@ public class PadHost : Border
 			return;
 		tabs.Add (tab);
 
+		// Pad tabs carry the pad icon + label, like the legacy DockItem tabstrip.
+		object content = tab.Label;
+		if (tab.Icon is not null && IconService.GetImage (tab.Icon) is Bitmap bmp) {
+			var label = new TextBlock {
+				Text = tab.Label,
+				FontSize = 11,
+				VerticalAlignment = VerticalAlignment.Center,
+			};
+			label.Bind (TextBlock.ForegroundProperty, Application.Current!.GetResourceObservable ("IdeFgBrush"));
+			content = new StackPanel {
+				Orientation = Orientation.Horizontal,
+				Spacing = 4,
+				Children = {
+					new Avalonia.Controls.Image { Source = bmp, Width = 16, Height = 16, VerticalAlignment = VerticalAlignment.Center },
+					label,
+				},
+			};
+		}
+
 		var btn = new ToggleButton {
-			Content = tab.Label,
+			Content = content,
 			FontSize = 11,
 			Padding = new Thickness (8, 3),
 			CornerRadius = new CornerRadius (3),
@@ -152,4 +174,7 @@ public class PadHost : Border
 				x.HeaderButton.IsChecked = x.Id == tabId;
 		}
 	}
+
+	public bool IsTabVisible (string tabId)
+		=> tabs.FirstOrDefault (x => x.Id == tabId) is { Visible: var v } && v;
 }

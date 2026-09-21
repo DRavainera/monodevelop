@@ -10,7 +10,12 @@ internal static class Program
 	// SynchronizationContext-reliant code before AppMain is called.
 	[STAThread]
 	public static void Main (string [] args)
-		=> BuildAvaloniaApp ().StartWithClassicDesktopLifetime (args);
+	{
+		// UI language from the legacy preference (same MonoDevelopProperties.xml the
+		// GTK UI reads), applied before any string is built.
+		MonoDevelop.AvaloniaShell.Services.GettextService.Initialize ();
+		BuildAvaloniaApp ().StartWithClassicDesktopLifetime (args);
+	}
 
 	// QA hooks: --about | --prefs | --addins open the corresponding dialog at startup
 	// so automated runs can validate each migrated dialog without UI navigation.

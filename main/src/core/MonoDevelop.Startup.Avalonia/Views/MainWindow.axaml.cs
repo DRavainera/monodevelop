@@ -7,6 +7,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Controls.Primitives;
+using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Media;
@@ -120,12 +121,66 @@ public partial class MainWindow : Window
 
 	// Rebuilds the main menu (called at startup and whenever recents change, so the
 	// File > Recent Solutions submenu mirrors the persisted list like the GTK UI).
+	// Shortcuts: menu literals keep the legacy gestures (Commands.addin.xml); the
+	// KeyBindings panel persists overrides in Custom.kb.xml and ApplyShortcuts re-applies
+	// them here. HotKeys make the accelerators work application-wide.
 	void BuildMenu ()
 	{
 		MainMenu!.Items.Clear ();
+		Services.KeyboardShortcutRegistry.Reset ();
 		var recents = RecentSolutions.GetAll ().Select (r => r.Path).ToList ();
-		foreach (var item in MenuBuilder.BuildItems (MenuService.BuildMainMenu (recents)))
+		var entries = MenuService.BuildMainMenu (recents);
+		MenuService.ApplyShortcuts (entries);
+		UpdatePadChecks (entries);
+		foreach (var item in MenuBuilder.BuildItems (entries))
 			MainMenu.Items.Add (item);
+		// Re-attach on every rebuild: the items are new instances each time.
+		Services.KeyboardShortcutRegistry.AttachHotKeys (this);
+	}
+
+	// View > Pads checkmarks mirror the real pad visibility on every rebuild, like the
+	// legacy pad toggle items (Gtk.CheckMenuItem.Active from DockItem.Visible).
+	void UpdatePadChecks (System.Collections.Generic.IReadOnlyList<MenuService.MenuEntry> entries)
+	{
+		foreach (var e in entries) {
+			if (e.Children.Count > 0) {
+				UpdatePadChecks (e.Children);
+				continue;
+			}
+			if (e.OnClick?.Target is CommandAction ca && ca.Id.StartsWith ("pad:", StringComparison.Ordinal))
+				e.Checked = IsPadVisible (ca.Id.Substring ("pad:".Length));
+		}
+	}
+
+	// Keyboard dispatch of menu commands (Custom.kb.xml parity: the legacy GTK handles
+	// F-keys etc. globally). Non-modifier-only gestures run the menu command directly;
+	// editor keys (Ctrl X/C/V, plain F2) are handled by the focused editor first.
+	protected override void OnKeyDown (KeyEventArgs e)
+	{
+		base.OnKeyDown (e);
+		if (e.Handled || e.Key is Key.LeftCtrl or Key.RightCtrl or Key.LeftShift or Key.RightShift
+			or Key.LeftAlt or Key.RightAlt or Key.LWin or Key.RWin or Key.System)
+			return;
+		var mods = e.KeyModifiers & ~(KeyModifiers.Meta);
+		var hasMods = mods != KeyModifiers.None || (e.Key != Key.LeftCtrl && e.Key != Key.RightCtrl);
+		bool isTextEditingCombo =
+			(mods == KeyModifiers.Control && e.Key is Key.X or Key.C or Key.V or Key.Z or Key.A);
+		if (e.Key == Key.F2 && !(mods == KeyModifiers.Control))
+			return; // editor rename key: let the focused control handle it
+		if (!hasMods && e.Key != Key.Delete)
+			return;
+		if (isTextEditingCombo)
+			return;
+
+		var bindings = Services.KeyboardShortcutRegistry.GetBindings ();
+		foreach (var (commandId, gesture) in bindings) {
+			if (gesture.Matches (e)) {
+				Console.WriteLine ($"[keys] {gesture} → {commandId}");
+				MenuService.RunCommand (commandId);
+				e.Handled = true;
+				return;
+			}
+		}
 	}
 
 	// ---------- Pads (legacy DockFrame groups) ----------
@@ -141,6 +196,7 @@ public partial class MainWindow : Window
 		LeftPads.Id = "left"; LeftPads.Title = "Solution";
 		RightPads.Id = "right"; RightPads.Title = "Properties";
 		BottomPads.Id = "bottom"; BottomPads.Title = "Output";
+		DebugPads.Id = "debug"; DebugPads.Title = "Call Stack";
 
 		// Solution pad (legacy ProjectPad): tree of the loaded solution.
 		solutionTree = new ListBox {
@@ -148,14 +204,31 @@ public partial class MainWindow : Window
 		};
 		solutionTree.Bind (ListBox.ForegroundProperty, Application.Current!.GetResourceObservable ("IdeFgBrush"));
 		solutionTree.DoubleTapped += OnSolutionOpen;
-		LeftPads.AddTab (new PadHost.PadTab { Id = "solution", Label = "Solution", Content = solutionTree });
+
+		// Legacy ProjectPad is a TreeView: Solution ▸ project ▸ files (double-click opens
+		// the file in an island editor tab).
+		solutionTreeView = new TreeView { Background = Brushes.Transparent };
+		solutionTreeView.Bind (TreeView.ForegroundProperty, Application.Current.GetResourceObservable ("IdeFgBrush"));
+		solutionTreeView.DoubleTapped += OnSolutionOpen;
+
+		var solutionHost = new DockPanel ();
+		DockPanel.SetDock (solutionTreeView, Dock.Left);
+		solutionHost.Children.Add (solutionTreeView);
+		solutionHost.Children.Add (solutionTree);
+		LeftPads.AddTab (new PadHost.PadTab { Id = "solution", Label = "Solution", Icon = "md-solution-pad", Content = solutionHost });
 		solutionTree.Items.Add ("No solution loaded");
 
-		// Classes pad (legacy ClassPad) — placeholder content, real pad pending.
+		// Classes pad (legacy ClassPad, auto-hidden by default like Pads.addin.xml).
 		var classList = new ListBox { Background = Brushes.Transparent };
 		classList.Bind (ListBox.ForegroundProperty, Application.Current.GetResourceObservable ("IdeFgBrush"));
 		classList.Items.Add ("(classes of loaded solutions)");
-		LeftPads.AddTab (new PadHost.PadTab { Id = "classes", Label = "Classes", Content = classList, Visible = false });
+		LeftPads.AddTab (new PadHost.PadTab { Id = "classes", Label = "Classes", Icon = "md-classes-pad", Content = classList, Visible = false });
+
+		// Help pad (legacy HelpTree, left group, auto-hidden).
+		var helpList = new ListBox { Background = Brushes.Transparent };
+		helpList.Bind (ListBox.ForegroundProperty, Application.Current.GetResourceObservable ("IdeFgBrush"));
+		helpList.Items.Add ("(documentation index)");
+		LeftPads.AddTab (new PadHost.PadTab { Id = "help", Label = "Help", Icon = "md-help-pad", Content = helpList, Visible = false });
 
 		// Properties pad (right, legacy layout).
 		propertiesText = new TextBlock {
@@ -165,7 +238,25 @@ public partial class MainWindow : Window
 			TextWrapping = TextWrapping.Wrap,
 		};
 		propertiesText.Bind (TextBlock.ForegroundProperty, Application.Current.GetResourceObservable ("IdeFgBrush"));
-		RightPads.AddTab (new PadHost.PadTab { Id = "properties", Label = "Properties", Content = propertiesText });
+		RightPads.AddTab (new PadHost.PadTab { Id = "properties", Label = "Properties", Icon = "md-properties-pad", Content = propertiesText });
+
+		// Toolbox pad (legacy ToolboxPad, right group, auto-hidden).
+		var toolboxList = new ListBox { Background = Brushes.Transparent };
+		toolboxList.Bind (ListBox.ForegroundProperty, Application.Current.GetResourceObservable ("IdeFgBrush"));
+		toolboxList.Items.Add ("(toolbox items)");
+		RightPads.AddTab (new PadHost.PadTab { Id = "toolbox", Label = "Toolbox", Icon = "md-toolbox-pad", Content = toolboxList, Visible = false });
+
+		// Document Outline pad (legacy DocumentOutlinePad, right group, auto-hidden).
+		var outlineList = new ListBox { Background = Brushes.Transparent };
+		outlineList.Bind (ListBox.ForegroundProperty, Application.Current.GetResourceObservable ("IdeFgBrush"));
+		outlineList.Items.Add ("(document outline)");
+		RightPads.AddTab (new PadHost.PadTab { Id = "documentoutline", Label = "Document Outline", Icon = "md-pad-document-outline", Content = outlineList, Visible = false });
+
+		// Unit Tests pad (legacy TestPad, right group, auto-hidden).
+		var testList = new ListBox { Background = Brushes.Transparent };
+		testList.Bind (ListBox.ForegroundProperty, Application.Current.GetResourceObservable ("IdeFgBrush"));
+		testList.Items.Add ("(unit tests of loaded solutions)");
+		RightPads.AddTab (new PadHost.PadTab { Id = "unittests", Label = "Unit Tests", Icon = "nunit-pad-icon", Content = testList, Visible = false });
 
 		// Output pad (bottom, legacy OutputPad) — same TextBlock instance backs the
 		// Output method and the pad tab, so log lines appear in both places.
@@ -178,17 +269,49 @@ public partial class MainWindow : Window
 			Background = Brushes.Transparent,
 		};
 		outputTextBox.Bind (TextBox.ForegroundProperty, Application.Current.GetResourceObservable ("IdeFgBrush"));
-		BottomPads.AddTab (new PadHost.PadTab { Id = "output", Label = "Output", Content = outputTextBox });
+		BottomPads.AddTab (new PadHost.PadTab { Id = "output", Label = "Output", Icon = "md-output-icon", Content = outputTextBox });
 
-		// Errors pad (legacy ErrorListPad).
+		// Errors pad (legacy ErrorListPad, auto-hidden).
 		errorsText = new TextBlock { Padding = new Thickness (8, 6), Text = "No errors" };
 		errorsText.Bind (TextBlock.ForegroundProperty, Application.Current.GetResourceObservable ("IdeFgBrush"));
-		BottomPads.AddTab (new PadHost.PadTab { Id = "errors", Label = "Errors", Content = errorsText, Visible = false });
+		BottomPads.AddTab (new PadHost.PadTab { Id = "errors", Label = "Errors", Icon = "md-errors-list", Content = errorsText, Visible = false });
 
-		// Tasks pad (legacy TaskListPad).
+		// Tasks pad (legacy TaskListPad, auto-hidden).
 		tasksText = new TextBlock { Padding = new Thickness (8, 6), Text = "No tasks" };
 		tasksText.Bind (TextBlock.ForegroundProperty, Application.Current.GetResourceObservable ("IdeFgBrush"));
-		BottomPads.AddTab (new PadHost.PadTab { Id = "tasks", Label = "Tasks", Content = tasksText, Visible = false });
+		BottomPads.AddTab (new PadHost.PadTab { Id = "tasks", Label = "Tasks", Icon = "md-task-list", Content = tasksText, Visible = false });
+
+		// Code Issues pad (legacy CodeIssuePad, bottom group, auto-hidden).
+		var codeIssues = new TextBlock { Padding = new Thickness (8, 6), Text = "No code issues" };
+		codeIssues.Bind (TextBlock.ForegroundProperty, Application.Current.GetResourceObservable ("IdeFgBrush"));
+		BottomPads.AddTab (new PadHost.PadTab { Id = "codeissues", Label = "Code Issues", Icon = "md-errors-list", Content = codeIssues, Visible = false });
+
+		// Search Results pad (legacy search results host, bottom group, auto-hidden).
+		var searchResults = new ListBox { Background = Brushes.Transparent };
+		searchResults.Bind (ListBox.ForegroundProperty, Application.Current.GetResourceObservable ("IdeFgBrush"));
+		BottomPads.AddTab (new PadHost.PadTab { Id = "searchresults", Label = "Search Results", Icon = "gtk-find", Content = searchResults, Visible = false });
+
+		// Debugger pads (legacy defaultPlacement Bottom, right sub-dock like the GTK
+		// "MonoDevelop.Debugger.StackTracePad/Center Bottom" split).
+		var callStack = new ListBox { Background = Brushes.Transparent };
+		callStack.Bind (ListBox.ForegroundProperty, Application.Current.GetResourceObservable ("IdeFgBrush"));
+		DebugPads.AddTab (new PadHost.PadTab { Id = "callstack", Label = "Call Stack", Icon = "md-view-debug-call-stack", Content = callStack, Visible = false });
+
+		var locals = new ListBox { Background = Brushes.Transparent };
+		locals.Bind (ListBox.ForegroundProperty, Application.Current.GetResourceObservable ("IdeFgBrush"));
+		DebugPads.AddTab (new PadHost.PadTab { Id = "locals", Label = "Locals", Icon = "md-view-debug-locals", Content = locals, Visible = false });
+
+		var watch = new ListBox { Background = Brushes.Transparent };
+		watch.Bind (ListBox.ForegroundProperty, Application.Current.GetResourceObservable ("IdeFgBrush"));
+		DebugPads.AddTab (new PadHost.PadTab { Id = "watch", Label = "Watch", Icon = "md-view-debug-watch", Content = watch, Visible = false });
+
+		var breakpoints = new ListBox { Background = Brushes.Transparent };
+		breakpoints.Bind (ListBox.ForegroundProperty, Application.Current.GetResourceObservable ("IdeFgBrush"));
+		DebugPads.AddTab (new PadHost.PadTab { Id = "breakpoints", Label = "Breakpoints", Icon = "md-view-debug-breakpoints", Content = breakpoints, Visible = false });
+
+		var threads = new ListBox { Background = Brushes.Transparent };
+		threads.Bind (ListBox.ForegroundProperty, Application.Current.GetResourceObservable ("IdeFgBrush"));
+		DebugPads.AddTab (new PadHost.PadTab { Id = "threads", Label = "Threads", Icon = "md-view-debug-threads", Content = threads, Visible = false });
 
 		// Hide buttons feed the restore strip at the bottom edge (legacy pin/hide).
 		LeftPads.Hidden += (_, _) => UpdateRestoreStrip ();
@@ -215,13 +338,50 @@ public partial class MainWindow : Window
 		RestoreStripHost!.IsVisible = restoreStrip.Children.Count > 0;
 	}
 
-	// View > Pads toggles the dock group visibility (legacy pad toggle behavior).
-	public void SetPadVisible (string id, bool visible)
+	// Individual pad visibility (Pads.addin.xml ids): each pad is a tab inside a dock
+	// group; toggling shows the host and selects the pad, like DockItem.Show/Hide.
+	public void SetPadVisible (string padId, bool visible)
+	{
+		var (host, _) = FindPad (padId);
+		if (host is null)
+			return;
+		if (visible) {
+			host.IsVisible = true;
+			DebugPads.IsVisible |= host == DebugPads;
+			host.SetTabVisible (padId, true);
+			host.Select (padId);
+		} else {
+			host.SetTabVisible (padId, false);
+			// Hide the whole host when no visible tabs remain (legacy empty dock hides).
+			if (host.Tabs.All (t => !t.Visible))
+				host.IsVisible = false;
+		}
+		UpdateRestoreStrip ();
+	}
+
+	public bool IsPadVisible (string padId)
+	{
+		var (host, tab) = FindPad (padId);
+		return host is { IsVisible: true } && host!.IsTabVisible (padId)
+			&& (tab is null || tab.Visible);
+	}
+
+	(PadHost? host, PadHost.PadTab? tab) FindPad (string padId) => padId switch {
+		"solution" or "classes" or "help" => (LeftPads, LeftPads.Tabs.FirstOrDefault (t => t.Id == padId)),
+		"toolbox" or "properties" or "documentoutline" or "unittests" => (RightPads, RightPads.Tabs.FirstOrDefault (t => t.Id == padId)),
+		"output" or "errors" or "tasks" or "codeissues" or "searchresults" => (BottomPads, BottomPads.Tabs.FirstOrDefault (t => t.Id == padId)),
+		"callstack" or "locals" or "watch" or "breakpoints" or "threads" => (DebugPads, DebugPads.Tabs.FirstOrDefault (t => t.Id == padId)),
+		_ => (null, null),
+	};
+
+	// Legacy group-level ids kept for the restore strip / old dispatch entries.
+	public void SetGroupVisible (string id, bool visible)
 	{
 		var pad = id switch {
 			"left" => LeftPads,
 			"right" => RightPads,
 			"bottom" => BottomPads,
+			"debug" => DebugPads,
 			_ => null,
 		};
 		if (pad is null) return;
@@ -231,6 +391,10 @@ public partial class MainWindow : Window
 
 	public void TogglePad (string id)
 	{
+		if (FindPad (id).host is not null) {
+			SetPadVisible (id, !IsPadVisible (id));
+			return;
+		}
 		var pad = id switch {
 			"left" => LeftPads,
 			"right" => RightPads,
@@ -272,17 +436,20 @@ public partial class MainWindow : Window
 	// ---------- Documents (tabs) ----------
 
 	readonly List<(string Tag, Control Content)> documents = new ();
+	// Open file editors by tab tag (island tabs): used by Save/SaveAll (FileCommands).
+	readonly Dictionary<string, Controls.SkTextEditor> docs = new ();
 
 	void AddDocument (string tag, Control content, bool closable = true, bool select = true)
 	{
 		if (documents.Any (d => d.Tag == tag))
 			return;
 		documents.Add ((tag, content));
+		if (content is Controls.SkTextEditor ed && !docs.ContainsKey (tag))
+			docs.Add (tag, ed);
 
 		var header = new Panel();
 		var label = new TextBlock { Text = tag, FontSize = 12, VerticalAlignment = VerticalAlignment.Center };
 		label.Bind (TextBlock.ForegroundProperty, Application.Current!.GetResourceObservable ("IdeFgBrush"));
-		header.Children.Add (label);
 
 		if (closable) {
 			var close = new Button {
@@ -295,9 +462,11 @@ public partial class MainWindow : Window
 			};
 			var captured = tag;
 			close.Click += (_, _) => CloseDocument (captured);
-			var sp = new StackPanel { Orientation = Orientation.Horizontal, Children = { label, close } };
-			header.Children.Clear ();
-			header.Children.Add (sp);
+			// Build the StackPanel before parenting anything: a control can only have
+			// one visual parent in Avalonia.
+			header.Children.Add (new StackPanel { Orientation = Orientation.Horizontal, Children = { label, close } });
+		} else {
+			header.Children.Add (label);
 		}
 
 		var tab = new TabItem {
@@ -319,6 +488,8 @@ public partial class MainWindow : Window
 			if (doc.Content is not null) {
 				DocContent!.Children.Clear ();
 				DocContent.Children.Add (doc.Content);
+				if (doc.Content is Controls.SkTextEditor ed && !string.IsNullOrEmpty (ed.FilePath))
+					StatusText!.Text = ed.FilePath;
 			}
 		}
 	}
@@ -348,16 +519,24 @@ public partial class MainWindow : Window
 		var doc = documents.FirstOrDefault (d => d.Tag == tag);
 		if (doc.Content is null)
 			return;
+		// Legacy SaveCommand: warn when an untitled document with changes is discarded.
+		if (docs.TryGetValue (tag, out var ed) && ed.IsDirty && string.IsNullOrEmpty (ed.FilePath)) {
+			Console.WriteLine ($"[docs] '{tag}' has unsaved changes with no file path");
+			Output ($"[docs] '{tag}' has unsaved changes — save first (File > Save All)");
+		}
 		var tab = DocTabs!.Items.OfType<TabItem> ().FirstOrDefault (t => (string?)t.Tag == tag);
 		if (tab is not null)
 			DocTabs.Items.Remove (tab);
 		documents.Remove (doc);
+		docs.Remove (tag);
 		SelectFirstDocument ();
 	}
 
 	// ---------- Solution loading ----------
 
 	ListBox? solutionTree;
+	TreeView? solutionTreeView;
+	string? loadedSolutionPath;
 
 	public void OpenSolutionInWindow (string path)
 	{
@@ -370,16 +549,41 @@ public partial class MainWindow : Window
 			}
 			var (title, projects) = loaded.Value;
 			solutionLoaded = true;
-			solutionTree!.Items.Clear (); // ListBox requires empty Items before ItemsSource
-			var items = new System.Collections.ObjectModel.ObservableCollection<string> {
-				$"Solution '{title}' ({projects.Count (p => !p.IsFolder)} project(s))"
-			};
-			foreach (var p in projects) {
-				var indent = p.Parent is null ? "" : "    ";
-				var icon = p.IsFolder ? "[f]" : "[p]";
-				items.Add ($"{indent}{icon} {p.Name}");
+			loadedSolutionPath = path;
+
+			// Solution pad = legacy ProjectPad TreeView (Solution ▸ Projects ▸ files).
+			if (solutionTreeView is not null) {
+				solutionTreeView.Items.Clear ();
+				var root = new TreeViewItem { Header = title, IsExpanded = true, Tag = path };
+				foreach (var p in projects.Where (p => !p.IsFolder)) {
+					var proj = new TreeViewItem { Header = "[p] " + p.Name, Tag = p.ProjectPath };
+					var dir = Path.GetDirectoryName (p.ProjectPath);
+					if (!string.IsNullOrEmpty (dir) && Directory.Exists (dir)) {
+						foreach (var f in Directory.GetFiles (dir, "*.cs")
+							.Concat (Directory.GetFiles (dir, "*.csproj"))
+							.OrderBy (f => Path.GetFileName (f))) {
+							proj.Items.Add (new TreeViewItem {
+								Header = Path.GetFileName (f),
+								Tag = f,
+							});
+						}
+					}
+					root.Items.Add (proj);
+				}
+				solutionTreeView.Items.Add (root);
 			}
-			solutionTree!.ItemsSource = items;
+			if (solutionTree is not null) {
+				solutionTree.Items.Clear (); // ListBox requires empty Items before ItemsSource
+				var items = new System.Collections.ObjectModel.ObservableCollection<string> {
+					$"Solution '{title}' ({projects.Count (p => !p.IsFolder)} project(s))"
+				};
+				foreach (var p in projects) {
+					var indent = p.Parent is null ? "" : "    ";
+					var icon = p.IsFolder ? "[f]" : "[p]";
+					items.Add ($"{indent}{icon} {p.Name}");
+				}
+				solutionTree.ItemsSource = items;
+			}
 			RecentSolutions.Add (path);
 
 			// Legacy behavior: opening a solution hides the welcome page and updates
@@ -394,10 +598,58 @@ public partial class MainWindow : Window
 		}
 	}
 
+	// Opens a text file in an island editor tab (legacy FileService.OpenDocument with
+	// the Mono.TextEditor view). Opening from the Solution pad or File > Open lands here.
+	public void OpenFileDocument (string path)
+	{
+		var tag = Path.GetFileName (path);
+		if (documents.Any (d => d.Tag == tag)) {
+			SelectDocument (tag);
+			return;
+		}
+		try {
+			var editor = new Controls.SkTextEditor {
+				FilePath = path,
+				IsDirty = false,
+				Background = Brushes.Transparent,
+			};
+			editor.Text = File.ReadAllText (path);
+			editor.IsDirty = false;
+			editor.Bind (Controls.SkTextEditor.ForegroundProperty, Application.Current!.GetResourceObservable ("IdeFgBrush"));
+			editor.PropertyChanged += (_, e) => {
+				if (e.Property == Controls.SkTextEditor.IsDirtyProperty)
+					UpdateDocTabTitle (tag, docDirty: editor.IsDirty);
+			};
+			AddDocument (tag, editor);
+		} catch (Exception ex) {
+			Output ("Cannot open " + Path.GetFileName (path) + ": " + ex.Message);
+		}
+	}
+
+	// Legacy dot-in-title (MonoDevelop doc header shows the modified marker).
+	void UpdateDocTabTitle (string tag, bool docDirty)
+	{
+		var tab = DocTabs!.Items.OfType<TabItem> ().FirstOrDefault (t => (string?)t.Tag == tag);
+		if (tab?.Header is Panel panel && panel.Children.OfType<TextBlock> ().FirstOrDefault () is { } lbl) {
+			lbl.Text = docDirty ? tag + " •" : tag;
+			ToolTip.SetTip (tab, docs.TryGetValue (tag, out var ed) && !string.IsNullOrEmpty (ed.FilePath) ? ed.FilePath : tag);
+		}
+	}
+
 	void OnSolutionOpen (object? sender, RoutedEventArgs e)
 	{
-		if (solutionTree?.SelectedItem is string sel && sel.EndsWith (".csproj", StringComparison.Ordinal))
-			Output ("Open: " + sel.Trim ());
+		// Legacy ProjectPad.OpenItem: double-click on a file node opens its editor.
+		if (solutionTreeView?.SelectedItem is TreeViewItem { Tag: string file }
+			&& File.Exists (file)
+			&& !file.EndsWith (".csproj", StringComparison.Ordinal)) {
+			OpenFileDocument (file);
+			return;
+		}
+		if (solutionTree?.SelectedItem is string sel) {
+			var trimmed = sel.Trim ().Replace ("[p] ", "").Replace ("[f] ", "");
+			if (trimmed.EndsWith (".csproj", StringComparison.Ordinal))
+				Output ("Open: " + trimmed);
+		}
 	}
 
 	public async System.Threading.Tasks.Task OpenNewSolutionDialogAsync ()
@@ -538,6 +790,10 @@ public partial class MainWindow : Window
 			TogglePad (commandId.Substring ("pads:".Length));
 			return;
 		}
+		if (commandId.StartsWith ("pad:", StringComparison.Ordinal)) {
+			TogglePad (commandId.Substring ("pad:".Length));
+			return;
+		}
 		if (commandId.StartsWith ("cmd:", StringComparison.Ordinal)) {
 			switch (commandId.Substring ("cmd:".Length)) {
 			case "welcome":
@@ -566,6 +822,33 @@ public partial class MainWindow : Window
 		case "MonoDevelop.Ide.Commands.ViewCommands.ShowWelcomePage":
 			ShowWelcomePage ();
 			return;
+
+		// FileCommands.Save / FileCommands.SaveAll (legacy FileService.SaveAll): writes
+		// every dirty editor with a backing file back to disk (custom.kb.xml-shortcutable).
+		case "MonoDevelop.Ide.Commands.FileCommands.Save": {
+			if (DocTabs.SelectedItem is TabItem { Tag: string tag } && docs.TryGetValue (tag, out var ed)) {
+				ed.Save ();
+				UpdateDocTabTitle (tag, docDirty: false);
+				Output ("Saved " + (string.IsNullOrEmpty (ed.FilePath) ? tag : Path.GetFileName (ed.FilePath)));
+			}
+			return;
+		}
+		case "MonoDevelop.Ide.Commands.FileCommands.SaveAll": {
+			var saved = 0;
+			foreach (var (tag, ed) in docs.ToList ()) {
+				if (ed.IsDirty && !string.IsNullOrEmpty (ed.FilePath)) {
+					ed.Save ();
+					UpdateDocTabTitle (tag, docDirty: false);
+					saved++;
+				}
+			}
+			Output (saved == 0 ? "Nothing to save" : $"Saved {saved} document(s)");
+			return;
+		}
+		case "MonoDevelop.Ide.Commands.FileCommands.CloseFile":
+			if (DocTabs.SelectedItem is TabItem { Tag: string cur })
+				CloseDocument (cur);
+			return;
 		}
 		var message = $"'{commandId}' is not wired in the new UI yet — its GTK implementation remains available through --old-gui until the cutover.";
 		Output ("[menu] " + message);
@@ -581,5 +864,47 @@ public partial class MainWindow : Window
 			? message
 			: outputTextBox.Text + "\n" + message;
 		StatusText!.Text = message;
+	}
+
+	/// <summary>Rebuilds the main menu (public for the KeyBindings preferences panel).</summary>
+	public void RebuildMenu () => BuildMenu ();
+
+	/// <summary>
+	/// Editable key-binding catalog: (commandId, label) for every menu command in the
+	/// running menu — the KeyBindings preferences panel lists these like the legacy
+	/// KeyBindingsPanel lists Commands.addin.xml commands.
+	/// </summary>
+	public System.Collections.Generic.IReadOnlyList<(string CommandId, string Label)> MenuCommandBindings ()
+	{
+		var list = new List<(string, string)> ();
+		void Walk (System.Collections.Generic.IReadOnlyList<MenuService.MenuEntry> entries)
+		{
+			foreach (var e in entries) {
+				if (e.Children.Count > 0) {
+					Walk (e.Children);
+					continue;
+				}
+				if (!string.IsNullOrEmpty (e.CommandId) && !list.Exists (x => x.Item1 == e.CommandId))
+					list.Add ((e.CommandId!, e.Label.Replace ("_", "")));
+			}
+		}
+		Walk (MenuService.BuildMainMenu (RecentSolutions.GetAll ().Select (r => r.Path).ToList ()));
+		return list;
+	}
+
+	/// <summary>
+	/// Applies FontProperties (Editor role) to the open editors, like the legacy
+	/// FontsPanel triggers a font-changed event consumed by Mono.TextEditor.
+	/// </summary>
+	public void ApplyFontPreferences ()
+	{
+		foreach (var ed in docs.Values) {
+			var spec = Services.SettingsStore.GetFontSpec ("Editor");
+			if (!string.IsNullOrWhiteSpace (spec)) {
+				var sp = spec.LastIndexOf (' ');
+				if (sp > 0 && double.TryParse (spec [(sp + 1)..], out var size))
+					ed.FontSize = size;
+			}
+		}
 	}
 }

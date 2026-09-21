@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
@@ -40,6 +41,36 @@ public class SkTextEditor : Control
 	bool dirty = true;
 	bool caretVisible = true;
 	DispatcherTimer? blinkTimer;
+
+	#region Document identity (legacy FileTextLogic: file + dirty state)
+
+	// Backing file path — set when opened from the Solution pad or File > Open.
+	// Empty for untitled documents (like the legacy "Untitled" documents).
+	public string FilePath { get; set; } = "";
+
+	// Legacy IsDirty: the tab shows the modified marker (dot) and File > Save enables.
+	public static readonly StyledProperty<bool> IsDirtyProperty =
+		AvaloniaProperty.Register<SkTextEditor, bool> (nameof (IsDirty));
+
+	public bool IsDirty {
+		get => GetValue (IsDirtyProperty);
+		set => SetValue (IsDirtyProperty, value);
+	}
+
+	// Legacy SaveCommand: FileService.Save. Persisted changes are written to FilePath;
+	// untitled docs surface an error in the Output pad.
+	public void Save ()
+	{
+		if (string.IsNullOrEmpty (FilePath)) {
+			Console.WriteLine ("[skeditor] cannot save untitled document (no file path)");
+			return;
+		}
+		File.WriteAllText (FilePath, Text);
+		IsDirty = false;
+		Console.WriteLine ($"[skeditor] saved {FilePath}");
+	}
+
+	#endregion
 
 	#region Styled properties
 
@@ -331,6 +362,8 @@ public class SkTextEditor : Control
 	void Commit ()
 	{
 		SetValue (TextProperty, string.Join ("\n", lines));
+		if (!IsDirty)
+			IsDirty = true; // user edit → legacy modified marker on the tab
 		ShowCaret ();
 	}
 

@@ -32,21 +32,69 @@ public static class MenuService
 		public bool Checked;
 		public List<MenuEntry> Children { get; } = new ();
 		public Action? OnClick;
+
+		// Legacy command id when the action is Command ("...") — used by the keyboard
+		// dispatcher (MenuItem keyboard placement) and the KeyBindings preferences panel.
+		public string? CommandId { get; set; }
 	}
 
-	public static IReadOnlyList<MenuEntry> BuildMainMenu (IReadOnlyList<string>? recentSolutions = null) => new List<MenuEntry> {
-		BuildFile (recentSolutions),
-		BuildEdit (),
-		BuildView (),
-		BuildSearch (),
-		BuildProject (),
-		BuildBuild (),
-		BuildRun (),
-		BuildVersionControl (),
-		BuildTools (),
-		BuildWindow (),
-		BuildHelp (),
-	};
+	public static IReadOnlyList<MenuEntry> BuildMainMenu (IReadOnlyList<string>? recentSolutions = null)
+	{
+		var menu = new List<MenuEntry> {
+			BuildFile (recentSolutions),
+			BuildEdit (),
+			BuildView (),
+			BuildSearch (),
+			BuildProject (),
+			BuildBuild (),
+			BuildRun (),
+			BuildVersionControl (),
+			BuildTools (),
+			BuildWindow (),
+			BuildHelp (),
+		};
+		// gettext translations from the same catalogs the GTK UI loads
+		// (build/locale/<lang>/LC_MESSAGES/monodevelop.mo).
+		Translate (menu);
+		return menu;
+	}
+
+	/// <summary>
+	/// Fills MenuEntry.Shortcut (display + accelerator) and CommandId for every entry
+	/// carrying a CommandAction. Precedence: Custom.kb.xml user binding → the legacy
+	/// shortcut from Commands.addin.xml (already in the literal menu).
+	/// </summary>
+	public static void ApplyShortcuts (IReadOnlyList<MenuEntry> entries)
+	{
+		Dictionary<string, string>? userBindings = null;
+		foreach (var e in entries) {
+			if (e.Children.Count > 0) {
+				ApplyShortcuts (e.Children);
+				continue;
+			}
+			// OnClick is typed Action (implicit conversion); the CommandAction lives in
+			// Delegate.Target, same as MenuBuilder recovers it.
+			if (e.OnClick?.Target is CommandAction ca) {
+				e.CommandId = ca.Id;
+				userBindings ??= Services.SettingsStore.LoadKeyBindings ();
+				if (userBindings.TryGetValue (ca.Id, out var custom) && !string.IsNullOrEmpty (custom))
+					e.Shortcut = custom;
+			}
+		}
+	}
+
+	// Runs a command directly (keyboard dispatcher). Mirrors OnMenuCommand dispatch.
+	public static void RunCommand (string commandId)
+		=> MainWindow.Instance?.OnMenuCommand (commandId);
+
+	static void Translate (List<MenuEntry> entries)
+	{
+		foreach (var e in entries) {
+			if (e.Children.Count > 0)
+				Translate (e.Children);
+			e.Label = GettextService.T (e.Label);
+		}
+	}
 
 	// ---------- File ----------
 	static MenuEntry BuildFile (IReadOnlyList<string>? recentSolutions)
@@ -160,17 +208,28 @@ public static class MenuService
 			Item ("Layout List", click: Command ("MonoDevelop.Ide.Commands.ViewCommands.LayoutList")),
 			Sep (),
 			Sub ("_Pads", new List<MenuEntry> {
-				Item ("Solution", click: Command ("pads:left")),
-				Item ("Classes", click: Command ("pads:left")),
+				// One toggle per pad, same order/labels as Pads.addin.xml + addin pads;
+				// MainWindow checks them against actual visibility (pad:<id> dispatch).
+				Item ("Solution", isChecked: true, click: Command ("pad:solution")),
+				Item ("Classes", click: Command ("pad:classes")),
+				Item ("Help", click: Command ("pad:help")),
 				Sep (),
-				Item ("Toolbox", click: Command ("pads:right")),
-				Item ("Properties", click: Command ("pads:right")),
-				Item ("Document Outline", click: Command ("pads:right")),
+				Item ("Toolbox", click: Command ("pad:toolbox")),
+				Item ("Properties", isChecked: true, click: Command ("pad:properties")),
+				Item ("Document Outline", click: Command ("pad:documentoutline")),
+				Item ("Unit Tests", click: Command ("pad:unittests")),
 				Sep (),
-				Item ("Errors", click: Command ("pads:bottom")),
-				Item ("Tasks", click: Command ("pads:bottom")),
+				Item ("Output", isChecked: true, click: Command ("pad:output")),
+				Item ("Errors", click: Command ("pad:errors")),
+				Item ("Tasks", click: Command ("pad:tasks")),
+				Item ("Code Issues", click: Command ("pad:codeissues")),
+				Item ("Search Results", click: Command ("pad:searchresults")),
 				Sep (),
-				Item ("Help", click: Command ("pads:right")),
+				Item ("Call Stack", click: Command ("pad:callstack")),
+				Item ("Locals", click: Command ("pad:locals")),
+				Item ("Watch", click: Command ("pad:watch")),
+				Item ("Breakpoints", click: Command ("pad:breakpoints")),
+				Item ("Threads", click: Command ("pad:threads")),
 			}),
 			Sep (),
 			Item ("Save Curre_nt Layout...", icon: "gtk-add", click: Command ("MonoDevelop.Ide.Commands.ViewCommands.NewLayout")),
@@ -399,7 +458,9 @@ public static class MenuService
 
 	// "Not ported" placeholder action: reports through the output pad + status bar,
 	// mirroring how unported panels surface a placeholder instead of hiding features.
-	static Action Command (string id) => () => MainWindow.Instance?.OnMenuCommand (id);
+	// Returns a CommandAction (implicitly convertible to Action) so MenuBuilder can
+	// recover the command id for keyboard dispatch and the KeyBindings panel.
+	static CommandAction Command (string id) => new (id);
 
 	// helpers returning ready-to-use actions
 	static Action OpenAbout () => () => MainWindow.Instance?.OnAboutMenu ();
@@ -434,4 +495,22 @@ public static class MenuService
 	static MenuEntry Sep () => new () { Label = "-", IsSeparator = true };
 
 	static MenuEntry SepHeader (string label) => new () { Label = label, IsHeader = true, Disabled = true };
+}
+
+/// <summary>
+/// Menu action bound to a legacy command id. The id is recovered by MenuBuilder
+/// (delegate Target) for keyboard shortcut dispatch and editable key bindings.
+/// </summary>
+public sealed class CommandAction
+{
+	public string Id { get; }
+	public Action Run { get; }
+
+	public CommandAction (string id)
+	{
+		Id = id;
+		Run = () => MainWindow.Instance?.OnMenuCommand (id);
+	}
+
+	public static implicit operator Action (CommandAction c) => c.Run;
 }

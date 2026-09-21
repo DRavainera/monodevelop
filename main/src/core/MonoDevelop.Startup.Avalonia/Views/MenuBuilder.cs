@@ -5,6 +5,7 @@ using Avalonia.Controls;
 using Avalonia.Controls.Shapes;
 using Avalonia.Media;
 using MonoDevelop.AvaloniaShell.Services;
+using Avalonia.Interactivity;
 
 namespace MonoDevelop.AvaloniaShell.Views;
 
@@ -21,6 +22,10 @@ public static class MenuBuilder
 			items.Add (BuildItem (entry, topLevel: true));
 		return items;
 	}
+
+	// Extracts the legacy command id from a menu action (CommandAction.Target).
+	public static string? GetCommandId (Delegate? action)
+		=> action?.Target is CommandAction ca ? ca.Id : null;
 
 	static Control BuildItem (MenuService.MenuEntry entry, bool topLevel = false)
 	{
@@ -47,6 +52,10 @@ public static class MenuBuilder
 		} else if (entry.OnClick is not null) {
 			var click = entry.OnClick;
 			item.Click += (_, _) => click ();
+			if (click.Target is CommandAction ca) {
+				item.Tag = ca.Id;
+				KeyboardShortcutRegistry.Register (ca.Id, item);
+			}
 		}
 		return item;
 	}
