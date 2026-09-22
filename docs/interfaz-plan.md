@@ -337,3 +337,14 @@ Port desde `MonoDevelop.Ide.FindInFiles` y `ProjectOperations` del legacy:
   salto de líneas ocultas en render y navegación, y dispatch de los 4 comandos de menú.
 - QA E2E (`--fold`): 2 regiones detectadas en Program.cs; toggle colapsa/expande,
   ToggleAll, EnableDisable limpia regiones y re-habilita — texto siempre intacto.
+
+### M11m — ViewCommands restantes (layouts + navegación de resultados)
+- Legacy: `Workbench.ShowNext/ShowPrevious` (ILocationList), layouts Single/SideBySide,
+  NewLayout/DeleteCurrentLayout, CenterAndFocusCurrentDocument.
+- Avalonia: `ShowNextResult/ShowPreviousResult` recorren los resultados de
+  Búsqueda en Archivos con salto a archivo+línea y wrap-around;
+  `PadHost.SetHostVisible` oculta/restaura los hosts de pads (Single/SideBySide);
+  CenterCaret centra la línea del caret en el viewport; New/DeleteLayout persisten
+  en `Monodevelop.PadLayout`.
+- QA E2E (`--viewcmds`): 3 coincidencias → next/next/prev con saltos verificados;
+  pads ocultos y restaurados.

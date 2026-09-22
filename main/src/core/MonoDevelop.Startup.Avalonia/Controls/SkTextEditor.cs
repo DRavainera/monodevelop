@@ -1104,6 +1104,15 @@ public class SkTextEditor : Control
 		MarkDirty ();
 	}
 
+	// ViewCommands.CenterAndFocusCurrentDocument: scroll so the caret line sits
+	// in the middle of the viewport (legacy centers the caret and focuses the view).
+	public void CenterCaret ()
+	{
+		int visible = Math.Max (1, (int)((Bounds.Height > 0 ? Bounds.Height : 400) / LineHeight));
+		scrollLines = Math.Clamp (caretLine - visible / 2, 0, Math.Max (0, lines.Count - visible));
+		MarkDirty ();
+	}
+
 	public bool HasSelectionText => hasSelection && SelectedText.Length > 0;
 
 	public void ToggleBookmark ()

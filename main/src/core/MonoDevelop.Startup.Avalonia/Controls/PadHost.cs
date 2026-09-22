@@ -175,6 +175,9 @@ public class PadHost : Border
 		}
 	}
 
+	/// <summary>Shows/hides the whole pad host (ViewCommands Single/SideBySide mode).</summary>
+	public void SetHostVisible (bool visible) => IsVisible = visible;
+
 	public bool IsTabVisible (string tabId)
 		=> tabs.FirstOrDefault (x => x.Id == tabId) is { Visible: var v } && v;
 

@@ -142,6 +142,19 @@ public partial class MainWindow : Window
 			} else if (qa == "--diff") {
 				// QA: VersionControl.Commands.Diff over the opened solution (git).
 				_ = ShowDiffAsync ();
+			} else if (qa == "--viewcmds") {
+				// QA: ViewCommands — find results → ShowNext/ShowPrevious with wrap;
+				// SingleMode hides pads, SideBySideMode restores them.
+				var fd = new FindInFilesDialog { SearchTextOverride = "using" };
+				RunFindInFiles (fd);
+				ShowNextResult ();
+				ShowNextResult ();
+				ShowPreviousResult ();
+				bool padsWereVisible = LeftPads.IsVisible;
+				OnMenuCommand ("MonoDevelop.Ide.Commands.ViewCommands.SingleMode");
+				Output ("[viewcmds] singleMode hides pads: " + !LeftPads.IsVisible);
+				OnMenuCommand ("MonoDevelop.Ide.Commands.ViewCommands.SideBySideMode");
+				Output ("[viewcmds] sideBySide restores pads: " + (LeftPads.IsVisible && padsWereVisible));
 			} else if (qa == "--fold") {
 				// QA: code folding — ToggleFolding at the outermost brace, hidden-line
 				// semantics, ToggleAllFoldings and EnableDisableFolding round-trip.
@@ -1365,6 +1378,37 @@ public partial class MainWindow : Window
 		case "MonoDevelop.Ide.Commands.ViewCommands.ZoomReset":
 			WithActiveEditor (e => e.ZoomReset ());
 			return;
+		case "MonoDevelop.Ide.Commands.ViewCommands.ShowNext":
+			ShowNextResult ();
+			return;
+		case "MonoDevelop.Ide.Commands.ViewCommands.ShowPrevious":
+			ShowPreviousResult ();
+			return;
+		case "MonoDevelop.Ide.Commands.ViewCommands.CenterAndFocusCurrentDocument":
+			WithActiveEditor (e => { e.CenterCaret (); e.Focus (); });
+			return;
+		case "MonoDevelop.Ide.Commands.ViewCommands.SingleMode":
+			// Legacy layout switch: single document mode — hide side/bottom pads.
+			LeftPads.SetHostVisible (false);
+			RightPads.SetHostVisible (false);
+			BottomPads.SetHostVisible (false);
+			Output ("[layout] SingleMode: pads hidden (View > View List to restore)");
+			return;
+		case "MonoDevelop.Ide.Commands.ViewCommands.SideBySideMode":
+			// Legacy: restore the full pad frame around the document.
+			LeftPads.SetHostVisible (true);
+			RightPads.SetHostVisible (true);
+			BottomPads.SetHostVisible (true);
+			Output ("[layout] SideBySideMode: pads restored");
+			return;
+		case "MonoDevelop.Ide.Commands.ViewCommands.NewLayout":
+			SaveCurrentLayout ();
+			Output ("[layout] current layout saved (NewLayout)");
+			return;
+		case "MonoDevelop.Ide.Commands.ViewCommands.DeleteCurrentLayout":
+			SettingsStore.SetString ("Monodevelop.PadLayout", "");
+			Output ("[layout] saved layout deleted (DeleteCurrentLayout)");
+			return;
 
 		// ----- SearchCommands bookmarks (legacy ViewCommandHandlers → IBookmarkBuffer) -----
 		case "MonoDevelop.Ide.Commands.SearchCommands.ToggleBookmark":
@@ -1799,10 +1843,13 @@ public partial class MainWindow : Window
 		list.Bind (ListBox.ForegroundProperty, Application.Current!.GetResourceObservable ("IdeFgBrush"));
 		var rows = new System.Collections.ObjectModel.ObservableCollection<string> ();
 		findResults.Clear ();
+		findResultOrder.Clear ();
+		findResultIndex = -1;
 		foreach (var r in results) {
 			var row = $"{Path.GetFileName (r.File)}:{r.Line}: {r.LineText.Trim ()}";
 			rows.Add (row);
 			findResults [row] = r;
+			findResultOrder.Add (r);
 		}
 		list.ItemsSource = rows;
 		list.DoubleTapped += (_, _) => {
@@ -1819,6 +1866,35 @@ public partial class MainWindow : Window
 	string lastFileMask = "*";
 
 	readonly Dictionary<string, (string File, int Line, int Offset, int Length, string LineText)> findResults = new ();
+
+	// Ordered result list for ViewCommands.ShowNext/ShowPrevious (the legacy
+	// ILocationList pad: jump through the matches with wrap-around).
+	readonly List<(string File, int Line, int Offset, int Length, string LineText)> findResultOrder = new ();
+	int findResultIndex = -1;
+
+	public void ShowNextResult ()
+	{
+		if (findResultOrder.Count == 0) {
+			Output ("[search] no results — run Find in Files first");
+			return;
+		}
+		findResultIndex = (findResultIndex + 1) % findResultOrder.Count;
+		var hit = findResultOrder [findResultIndex];
+		OpenFileDocumentAtLine (hit.File, hit.Line);
+		Output ($"[search] show next {findResultIndex + 1}/{findResultOrder.Count}: {Path.GetFileName (hit.File)}:{hit.Line}");
+	}
+
+	public void ShowPreviousResult ()
+	{
+		if (findResultOrder.Count == 0) {
+			Output ("[search] no results — run Find in Files first");
+			return;
+		}
+		findResultIndex = (findResultIndex - 1 + findResultOrder.Count) % findResultOrder.Count;
+		var hit = findResultOrder [findResultIndex];
+		OpenFileDocumentAtLine (hit.File, hit.Line);
+		Output ($"[search] show previous {findResultIndex + 1}/{findResultOrder.Count}: {Path.GetFileName (hit.File)}:{hit.Line}");
+	}
 
 	static Control WrapWithHeader (string header, Control content)
 	{
