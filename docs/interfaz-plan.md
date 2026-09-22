@@ -427,3 +427,12 @@ Port desde `MonoDevelop.Ide.FindInFiles` y `ProjectOperations` del legacy:
   descendiente visible; los ancestros de coincidencias se expanden.
 - QA: determinista (`--filter`: 4→3 nodos con "Program", root visible, vacío
   restaura) + visual E2E (teclear "Wri" → 6 filas; limpiar → 13 filas).
+
+### M11u — Fix: columna duplicada en el Solution pad
+- El host del pad contenía el TreeView real y un ListBox resumen de iteraciones
+  tempranas; en DockPanel el ListBox quedaba a la derecha como segunda columna.
+- Fix: eliminado el ListBox (campo, creación, llenado en OpenSolutionInWindow y
+  fallback en OnSolutionOpen) — el pad queda con search box + árbol, como el
+  ProjectPad legacy.
+- Verificado por captura: el árbol ocupa la única columna y no hay contenido
+  en la banda de la columna eliminada.

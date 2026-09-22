@@ -539,12 +539,6 @@ public partial class MainWindow : Window
 		DebugPads.Id = "debug"; DebugPads.Title = "Call Stack";
 
 		// Solution pad (legacy ProjectPad): tree of the loaded solution.
-		solutionTree = new ListBox {
-			Background = Brushes.Transparent,
-		};
-		solutionTree.Bind (ListBox.ForegroundProperty, Application.Current!.GetResourceObservable ("IdeFgBrush"));
-		solutionTree.DoubleTapped += OnSolutionOpen;
-
 		// Legacy ProjectPad is a TreeView: Solution ▸ project ▸ files (double-click opens
 		// the file in an island editor tab). Right-click selects the node under the
 		// pointer and opens the ProjectPadContextMenu (ProjectPadContextMenu.addin.xml)
@@ -568,11 +562,8 @@ public partial class MainWindow : Window
 		var solutionHost = new DockPanel ();
 		DockPanel.SetDock (solutionSearchBox, Dock.Top);
 		solutionHost.Children.Add (solutionSearchBox);
-		DockPanel.SetDock (solutionTreeView, Dock.Left);
 		solutionHost.Children.Add (solutionTreeView);
-		solutionHost.Children.Add (solutionTree);
 		LeftPads.AddTab (new PadHost.PadTab { Id = "solution", Label = "Solution", Icon = "md-solution-pad", Content = solutionHost });
-		solutionTree.Items.Add ("No solution loaded");
 
 		// Classes pad (legacy ClassPad, auto-hidden by default like Pads.addin.xml).
 		var classList = new ListBox { Background = Brushes.Transparent };
@@ -889,7 +880,6 @@ public partial class MainWindow : Window
 
 	// ---------- Solution loading ----------
 
-	ListBox? solutionTree;
 	TreeView? solutionTreeView;
 	TextBox? solutionSearchBox;
 	string? loadedSolutionPath;
@@ -1126,18 +1116,6 @@ public partial class MainWindow : Window
 				}
 				solutionTreeView.Items.Add (root);
 			}
-			if (solutionTree is not null) {
-				solutionTree.Items.Clear (); // ListBox requires empty Items before ItemsSource
-				var items = new System.Collections.ObjectModel.ObservableCollection<string> {
-					$"Solution '{title}' ({projects.Count (p => !p.IsFolder)} project(s))"
-				};
-				foreach (var p in projects) {
-					var indent = p.Parent is null ? "" : "    ";
-					var icon = p.IsFolder ? "[f]" : "[p]";
-					items.Add ($"{indent}{icon} {p.Name}");
-				}
-				solutionTree.ItemsSource = items;
-			}
 			RecentSolutions.Add (path);
 
 			// Legacy behavior: opening a solution hides the welcome page and updates
@@ -1323,12 +1301,6 @@ public partial class MainWindow : Window
 			&& File.Exists (file)
 			&& !file.EndsWith (".csproj", StringComparison.Ordinal)) {
 			OpenFileDocument (file);
-			return;
-		}
-		if (solutionTree?.SelectedItem is string sel) {
-			var trimmed = sel.Trim ().Replace ("[p] ", "").Replace ("[f] ", "");
-			if (trimmed.EndsWith (".csproj", StringComparison.Ordinal))
-				Output ("Open: " + trimmed);
 		}
 	}
 
