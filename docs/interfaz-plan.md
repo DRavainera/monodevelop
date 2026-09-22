@@ -365,3 +365,14 @@ Port desde `MonoDevelop.Ide.FindInFiles` y `ProjectOperations` del legacy:
 - ViewList/LayoutList reportan pads guardados y layout persistido;
   NavigateTo (toolbar) abre el GoToDialog (Go To File/Type).
 - Inventario: 119/141 → ~127/141 ids de menú con wiring real.
+
+### M11p — Completado de código y plantillas (TextEditorCommands de completado)
+- Legacy: ShowCompletionWindow = "Complete Word" (candidato único → commit, múltiple →
+  ciclo), ShowParameterCompletionWindow (parameter info), ToggleCompletionSuggestionMode,
+  ShowCodeTemplateWindow (plantillas cw/prop/fore/forr/svm/if del CodeTemplate addin)
+  y ShowCodeSurroundingsWindow (surround with if/while/for/foreach/try).
+- Avalonia: `SkTextEditor.CompleteWord` (agrega palabras del documento, ciclo con
+  memoria de prefijo), `ParameterHint`, `ToggleCompletionSuggestionMode`,
+  `ExpandCodeTemplate`, `SurroundSelectionWith` + `CaretRight(n)` para automatización.
+- QA E2E (`--compl`): candidato único 'World'→'WorldWide' insertado y deshecho;
+  parameter info nula fuera de paréntesis; sugerencia conmutada.

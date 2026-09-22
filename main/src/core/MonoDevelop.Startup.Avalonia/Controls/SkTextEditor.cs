@@ -133,6 +133,16 @@ public class SkTextEditor : Control
 		MarkDirty ();
 	}
 
+	/// <summary>Moves the caret right N columns within the current line (public
+	/// equivalent of the Right arrow, used by automated tests and macros).</summary>
+	public void CaretRight (int count = 1)
+	{
+		caretCol = Math.Clamp (caretCol + count, 0, lines [caretLine].Length);
+		hasSelection = false;
+		EnsureCaretVisible ();
+		MarkDirty ();
+	}
+
 	(int Line, int Col) OffsetToPosition (int offset)
 	{
 		int acc = 0;
@@ -1159,6 +1169,174 @@ public class SkTextEditor : Control
 			return;
 		paint.Color = b.isError ? new SKColor (0xf1, 0x6a, 0x6a) : new SKColor (0xe5, 0xb5, 0x6a);
 		canvas.DrawText ("● " + b.text, x + 12, baseline, font, paint);
+	}
+
+	// ----- Completion (legacy TextEditorCommands.ShowCompletionWindow = "Complete Word",
+	// ShowParameterCompletionWindow = parameter info, ToggleCompletionSuggestionMode,
+	// ShowCodeTemplateWindow, ShowCodeSurroundingsWindow). -----
+
+	// All distinct words of the document with length >= 2 (the legacy completion
+	// data source aggregates document words when no language model is available).
+	IEnumerable<string> DocumentWords ()
+	{
+		var set = new HashSet<string> ();
+		foreach (var line in lines) {
+			int start = -1;
+			for (int i = 0; i <= line.Length; i++) {
+				bool wordChar = i < line.Length && (char.IsLetterOrDigit (line [i]) || line [i] == '_');
+				if (wordChar && start < 0)
+					start = i;
+				else if (!wordChar && start >= 0) {
+					if (i - start >= 2)
+						set.Add (line.Substring (start, i - start));
+					start = -1;
+				}
+			}
+		}
+		return set;
+	}
+
+	string WordPrefixBeforeCaret ()
+	{
+		var line = lines [caretLine];
+		int end = Math.Min (caretCol, line.Length);
+		int start = end;
+		while (start > 0 && (char.IsLetterOrDigit (line [start - 1]) || line [start - 1] == '_'))
+			start--;
+		return line.Substring (start, end - start);
+	}
+
+	/// <summary>Legacy Complete Word: unique match → insert; multiple → cycle
+	/// candidates on repeated calls. Returns the inserted text or null.</summary>
+	public string? CompleteWord ()
+	{
+		var prefix = WordPrefixBeforeCaret ();
+		if (prefix.Length == 0)
+			return null;
+		var candidates = DocumentWords ()
+			.Where (w => w != prefix && w.StartsWith (prefix, StringComparison.Ordinal))
+			.OrderBy (w => w, StringComparer.Ordinal)
+			.ToList ();
+		if (candidates.Count == 0)
+			return null;
+		string pick;
+		if (candidates.Count == 1) {
+			pick = candidates [0]; // legacy: commit the unique completion immediately
+		} else {
+			int idx = completionCycle.TryGetValue (prefix, out var c) ? (c + 1) % candidates.Count : 0;
+			completionCycle [prefix] = idx;
+			pick = candidates [idx];
+		}
+		// Replace the prefix with the completed word.
+		var line = lines [caretLine];
+		int end = Math.Min (caretCol, line.Length);
+		lines [caretLine] = line.Substring (0, end - prefix.Length) + pick + line.Substring (end);
+		caretCol = end - prefix.Length + pick.Length;
+		Commit ();
+		return pick;
+	}
+	readonly Dictionary<string, int> completionCycle = new ();
+
+	// Legacy parameter info: name of the method whose '(' precedes the caret.
+	public string? ParameterHint ()
+	{
+		var line = lines [caretLine];
+		for (int i = Math.Min (caretCol, line.Length) - 1; i >= 0; i--) {
+			char c = line [i];
+			if (c == '(') {
+				int s = i - 1;
+				while (s >= 0 && (char.IsLetterOrDigit (line [s]) || line [s] == '_' || line [s] == '.'))
+					s--;
+				var name = line.Substring (s + 1, i - s - 1);
+				return name.Length == 0 ? null : name;
+			}
+			if (c == ')')
+				break;
+		}
+		return null;
+	}
+
+	bool suggestionMode = true;
+	/// <summary>Legacy suggestion mode toggle (soft-selection completion).</summary>
+	public bool ToggleCompletionSuggestionMode () => suggestionMode = !suggestionMode;
+	public bool SuggestionMode => suggestionMode;
+
+	// Legacy code templates (CodeTemplate addin): expand "cw", "prop", "fore"…
+	static readonly Dictionary<string, string[]> CodeTemplates = new () {
+		["cw"] = new [] { "Console.WriteLine ($end$);" },
+		["prop"] = new [] { "public int MyProperty { get; set; }" },
+		["fore"] = new [] { "foreach (var item in collection) {", "", "}" },
+		["forr"] = new [] { "for (int i = length - 1; i >= 0; i--) {", "", "}" },
+		["svm"] = new [] { "static void Main (string[] args)", "{" , "", "}" },
+		["if"] = new [] { "if (condition) {", "", "}" },
+	};
+
+	/// <summary>Expands the code template named by the word before the caret.
+	/// Returns the template name or null when there is no match.</summary>
+	public string? ExpandCodeTemplate ()
+	{
+		var prefix = WordPrefixBeforeCaret ();
+		if (prefix.Length == 0 || !CodeTemplates.TryGetValue (prefix, out var template))
+			return null;
+		// Remove the trigger word.
+		var line = lines [caretLine];
+		int end = Math.Min (caretCol, line.Length);
+		int start = end - prefix.Length;
+		var indent = new string (' ', start - (line.Length - line.TrimStart ().Length) > 0
+			? 0 : 0); // templates carry their own formatting
+		var expanded = template.ToList ();
+		expanded [0] = line.Substring (0, start) + expanded [0];
+		for (int i = 1; i < expanded.Count; i++)
+			expanded [i] = new string (' ', Math.Max (0, start)) + expanded [i];
+		lines [caretLine] = expanded [0];
+		for (int i = expanded.Count - 1; i >= 1; i--)
+			lines.Insert (caretLine + 1, expanded [i]);
+		Commit ();
+		return prefix;
+	}
+
+	public static readonly string[] SurroundTemplates = { "if", "while", "for", "foreach", "try" };
+
+	/// <summary>Surrounds the selection with a block (legacy ShowCodeSurroundingsWindow
+	/// offers the same list). Returns the used template or null without selection.</summary>
+	public string? SurroundSelectionWith (string template)
+	{
+		if (!hasSelection)
+			return null;
+		var (sl, sc, el, ec) = SelectionRange ();
+		string head = template switch {
+			"while" => "while (condition) {",
+			"for" => "for (int i = 0; i < length; i++) {",
+			"foreach" => "foreach (var item in collection) {",
+			"try" => "try {",
+			_ => "if (condition) {",
+		};
+		string indent = new string (' ', sc);
+		// Extract selected text
+		var selected = new List<string> ();
+		if (sl == el)
+			selected.Add (lines [sl].Substring (sc, ec - sc));
+		else {
+			selected.Add (lines [sl].Substring (sc));
+			for (int l = sl + 1; l < el; l++)
+				selected.Add (lines [l]);
+			selected.Add (lines [el].Substring (0, ec));
+		}
+		var replacement = new List<string> { indent + head };
+		foreach (var l in selected)
+			replacement.Add ("    " + l.TrimStart ());
+		replacement.Add (indent + (template == "try" ? "} catch (Exception ex) {" : "}"));
+		if (template == "try")
+			replacement.Add (indent + "}");
+		// Splice the replacement back into the buffer.
+		lines [sl] = lines [sl].Substring (0, sc) + replacement [0];
+		lines [el] = replacement [^1] + lines [el].Substring (ec);
+		var middle = replacement.Skip (1).Take (replacement.Count - 2).ToList ();
+		if (middle.Count > 0)
+			lines.InsertRange (sl + 1, middle);
+		RebuildFolds ();
+		Commit ();
+		return template;
 	}
 
 	public bool HasSelectionText => hasSelection && SelectedText.Length > 0;

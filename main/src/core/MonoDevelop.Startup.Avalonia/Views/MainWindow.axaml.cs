@@ -177,6 +177,26 @@ public partial class MainWindow : Window
 						ed.SetBubbleMode (SkTextEditor.BubbleMode.ForErrors);
 					}
 				}
+			} else if (qa == "--compl") {
+				// QA: Complete Word (unique + cycling), parameter info, template expansion.
+				var file = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile),
+					"TestProj", "TestProj", "Program.cs");
+				if (File.Exists (file)) {
+					OpenFileDocument (file);
+					var name = Path.GetFileName (file);
+					if (docs.TryGetValue (name, out var ed)) {
+						SelectDocument (name);
+						ed.ReplaceAllInDocument ("World", "WorldWide"); // word with a unique longer candidate
+						ed.GotoLine (8); // '        Console.WriteLine ("Hello, WorldWide!");'
+						// Caret right after 'World' inside 'WorldWide' (col 40).
+						ed.CaretRight (40);
+						string picked = ed.CompleteWord ();
+						Output ("[compl] picked: " + (picked ?? "(null)"));
+						Output ("[compl] completed to WorldWide: " + (picked == "WorldWide"));
+						ed.Undo ();
+						Output ("[compl] undo back to original line: " + ed.Text.Contains ("WorldWide"));
+					}
+				}
 			} else if (qa == "--fold") {
 				// QA: code folding — ToggleFolding at the outermost brace, hidden-line
 				// semantics, ToggleAllFoldings and EnableDisableFolding round-trip.
@@ -1682,6 +1702,36 @@ public partial class MainWindow : Window
 			return;
 		case "MonoDevelop.Ide.Commands.EditCommands.InsertGuid":
 			WithActiveEditor (e => e.InsertAtCaret (Guid.NewGuid ().ToString ()));
+			return;
+		case "MonoDevelop.Ide.Commands.TextEditorCommands.ShowCompletionWindow":
+			WithActiveEditor (e => {
+				var pick = e.CompleteWord ();
+				if (pick is null)
+					Output ("[completion] no candidates for the word before the caret");
+			});
+			return;
+		case "MonoDevelop.Ide.Commands.TextEditorCommands.ShowParameterCompletionWindow":
+			WithActiveEditor (e => {
+				var hint = e.ParameterHint ();
+				Output (hint is null ? "[completion] no parameter info at the caret" : $"[completion] parameter info: {hint}(...)");
+			});
+			return;
+		case "MonoDevelop.Ide.Commands.TextEditorCommands.ToggleCompletionSuggestionMode":
+			WithActiveEditor (e => Output ("[completion] suggestion mode: " + (e.ToggleCompletionSuggestionMode () ? "ON" : "OFF")));
+			return;
+		case "MonoDevelop.Ide.Commands.TextEditorCommands.ShowCodeTemplateWindow":
+			WithActiveEditor (e => {
+				var t = e.ExpandCodeTemplate ();
+				if (t is null)
+					Output ("[template] no template matches the word before the caret (cw, prop, fore, forr, svm, if)");
+			});
+			return;
+		case "MonoDevelop.Ide.Commands.TextEditorCommands.ShowCodeSurroundingsWindow":
+			WithActiveEditor (e => {
+				var t = e.SurroundSelectionWith ("if");
+				if (t is null)
+					Output ("[surround] select code first");
+			});
 			return;
 		case "MonoDevelop.Ide.Commands.TextEditorCommands.GotoMatchingBrace":
 			WithActiveEditor (e => {
