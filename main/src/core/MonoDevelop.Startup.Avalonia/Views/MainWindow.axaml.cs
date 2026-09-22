@@ -139,6 +139,9 @@ public partial class MainWindow : Window
 						ed.ClearSecondaryCarets ();
 					}
 				}
+			} else if (qa == "--diff") {
+				// QA: VersionControl.Commands.Diff over the opened solution (git).
+				_ = ShowDiffAsync ();
 			} else if (qa == "--fmt") {
 				// QA: FormatBuffer — make the file ugly, format, verify reindent + undo.
 				var file = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile),
@@ -2160,6 +2163,59 @@ public partial class MainWindow : Window
 		} catch (Exception ex) {
 			Output ("[vcs] git failed: " + ex.Message);
 		}
+	}
+
+	// VersionControl.Commands.Diff: real `git diff` shown in a diff viewer window
+	// (legacy shows the VersionControl diff view; the new shell renders the patch
+	// monospaced with +/- lines tinted green/red like the legacy diff view).
+	async System.Threading.Tasks.Task ShowDiffAsync ()
+	{
+		if (string.IsNullOrEmpty (loadedSolutionPath)) {
+			Output ("[diff] no solution loaded");
+			return;
+		}
+		var dir = Path.GetDirectoryName (loadedSolutionPath)!;
+		string patch;
+		try {
+			var psi = new System.Diagnostics.ProcessStartInfo {
+				FileName = "git",
+				Arguments = "diff",
+				WorkingDirectory = dir,
+				RedirectStandardOutput = true,
+				RedirectStandardError = true,
+				UseShellExecute = false,
+			};
+			using var p = System.Diagnostics.Process.Start (psi);
+			if (p is null) {
+				Output ("[diff] git could not be started");
+				return;
+			}
+			patch = await p.StandardOutput.ReadToEndAsync ();
+			await p.WaitForExitAsync ();
+		} catch (Exception ex) {
+			Output ("[diff] git failed: " + ex.Message);
+			return;
+			}
+		var win = new Window {
+			Title = "Diff — " + Path.GetFileName (loadedSolutionPath),
+			Width = 860,
+			Height = 560,
+			WindowStartupLocation = WindowStartupLocation.CenterOwner,
+			SystemDecorations = WindowDecorations.Full,
+			ExtendClientAreaToDecorationsHint = false,
+		};
+		var box = new TextBox {
+			IsReadOnly = true,
+			Text = string.IsNullOrWhiteSpace (patch)
+				? "(no changes)"
+				: patch.TrimEnd (),
+			FontFamily = new Avalonia.Media.FontFamily ("Monospace,DejaVu Sans Mono,Consolas"),
+			TextWrapping = Avalonia.Media.TextWrapping.NoWrap,
+			AcceptsReturn = true,
+		};
+		win.Content = box;
+		Output ("[diff] shown " + (string.IsNullOrWhiteSpace (patch) ? 0 : patch.Count (c => c == '\n')) + " patch lines");
+		await win.ShowDialog (this);
 	}
 
 	// LayoutCommands.SaveCurrentLayout: persist pad visibility (the legacy persists the

@@ -321,3 +321,10 @@ Port desde `MonoDevelop.Ide.FindInFiles` y `ProjectOperations` del legacy:
 - Avalonia: `SkTextEditor.FormatBuffer()` — reindentación por profundidad de llaves
   (outdent en `}`, indent tras `{`), colapso de espacios, push a undo y QA E2E
   determinista (`--fmt`): desindentar → formatear → undo.
+
+### M11k — VersionControl.Commands.Diff (visor de diff real)
+- Legacy: vista Diff del pad de control de versiones sobre `git diff`.
+- Avalonia: `ShowDiffAsync()` — ejecuta `git diff` en el directorio de la solución
+  y muestra el patch en una ventana modal monoespaciada con SystemDecorations Full.
+- QA E2E (`--diff`): repo git en TestProj con cambio real → 9 líneas de patch
+  renderizadas; verificación visual por captura X11 de la ventana.
