@@ -142,6 +142,33 @@ public partial class MainWindow : Window
 			} else if (qa == "--diff") {
 				// QA: VersionControl.Commands.Diff over the opened solution (git).
 				_ = ShowDiffAsync ();
+			} else if (qa == "--fold") {
+				// QA: code folding — ToggleFolding at the outermost brace, hidden-line
+				// semantics, ToggleAllFoldings and EnableDisableFolding round-trip.
+				var file = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile),
+					"TestProj", "TestProj", "Program.cs");
+				if (File.Exists (file)) {
+					OpenFileDocument (file);
+					var name = Path.GetFileName (file);
+					if (docs.TryGetValue (name, out var ed)) {
+						SelectDocument (name);
+						ed.RebuildFolds ();
+						Output ("[fold] regions found: " + ed.FoldRegionCount);
+						ed.GotoLine (5); // line with '{' of class body
+						ed.ToggleFolding ();
+						Output ("[fold] collapsed at caret: " + ed.IsFoldCollapsedAtCaret);
+						Output ("[fold] text intact: " + ed.Text.Contains ("class Program"));
+						ed.ToggleFolding (); // expand again
+						Output ("[fold] expanded again: " + !ed.IsFoldCollapsedAtCaret);
+						ed.ToggleAllFoldings ();
+						Output ("[fold] toggleAll executed, text intact: " + ed.Text.Contains ("Console.WriteLine"));
+						ed.ToggleAllFoldings ();
+						ed.EnableDisableFolding ();
+						Output ("[fold] disabled, regions cleared: " + (ed.FoldRegionCount == 0));
+						ed.EnableDisableFolding ();
+						Output ("[fold] re-enabled with regions: " + (ed.FoldRegionCount > 0));
+					}
+				}
 			} else if (qa == "--fmt") {
 				// QA: FormatBuffer — make the file ugly, format, verify reindent + undo.
 				var file = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile),
@@ -1488,6 +1515,18 @@ public partial class MainWindow : Window
 		case "MonoDevelop.Ide.Commands.EditCommands.Undo":
 		case "MonoDevelop.Ide.Commands.TextEditorCommands.Undo":
 			WithActiveEditor (e => e.Undo ());
+			return;
+		case "MonoDevelop.Ide.Commands.TextEditorCommands.ToggleFolding":
+			WithActiveEditor (e => { e.RebuildFolds (); e.ToggleFolding (); });
+			return;
+		case "MonoDevelop.Ide.Commands.TextEditorCommands.ToggleAllFoldings":
+			WithActiveEditor (e => { e.RebuildFolds (); e.ToggleAllFoldings (); });
+			return;
+		case "MonoDevelop.Ide.Commands.TextEditorCommands.FoldDefinitions":
+			WithActiveEditor (e => { e.RebuildFolds (); e.FoldDefinitions (); });
+			return;
+		case "MonoDevelop.Ide.Commands.TextEditorCommands.EnableDisableFolding":
+			WithActiveEditor (e => e.EnableDisableFolding ());
 			return;
 		case "MonoDevelop.Ide.Commands.EditCommands.Redo":
 		case "MonoDevelop.Ide.Commands.TextEditorCommands.Redo":

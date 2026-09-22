@@ -328,3 +328,12 @@ Port desde `MonoDevelop.Ide.FindInFiles` y `ProjectOperations` del legacy:
   y muestra el patch en una ventana modal monoespaciada con SystemDecorations Full.
 - QA E2E (`--diff`): repo git en TestProj con cambio real → 9 líneas de patch
   renderizadas; verificación visual por captura X11 de la ventana.
+
+### M11l — Plegado de código (TextEditorCommands: folding)
+- Legacy: `SourceEditorView.IFoldable` (ToggleFolding/ToggleAllFoldings/FoldDefinitions/
+  EnableDisableFolding) sobre FoldSegments de Mono.TextEditor.
+- Avalonia: parser de regiones por balance de llaves en `SkTextEditor`
+  (`RebuildFolds`, colapso con marcador [+]/[−] en el gutter y resumen "… } // N lines"),
+  salto de líneas ocultas en render y navegación, y dispatch de los 4 comandos de menú.
+- QA E2E (`--fold`): 2 regiones detectadas en Program.cs; toggle colapsa/expande,
+  ToggleAll, EnableDisable limpia regiones y re-habilita — texto siempre intacto.

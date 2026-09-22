@@ -273,6 +273,7 @@ public class SkTextEditor : Control
 			lines.Add ("");
 		caretLine = Math.Clamp (caretLine, 0, lines.Count - 1);
 		caretCol = Math.Clamp (caretCol, 0, lines [caretLine].Length);
+		RebuildFolds ();
 		MarkDirty ();
 	}
 
@@ -602,6 +603,7 @@ public class SkTextEditor : Control
 		SetValue (TextProperty, joined);
 		if (!IsDirty)
 			IsDirty = true; // user edit → legacy modified marker on the tab
+		RebuildFolds ();
 		ShowCaret ();
 	}
 
@@ -946,6 +948,161 @@ public class SkTextEditor : Control
 
 	// ----- Bookmarks (legacy IBookmarkBuffer: SetBookmarked/NextBookmark/PrevBookmark) -----
 	readonly HashSet<int> bookmarkLines = new ();
+
+	// ----- Code folding (legacy IFoldable: ToggleFold/ToggleAllFolds/FoldDefinitions).
+	// Each fold is a brace-delimited block: foldStart = line with the opening brace,
+	// foldEnd = line with the matching closing brace. Collapsed folds render the
+	// legacy summary marker ("{ … }") on the start line and skip hidden lines.
+	readonly List<(int foldStart, int foldEnd)> foldRegions = new ();
+	readonly HashSet<int> collapsedFolds = new ();
+	bool foldingEnabled = true;
+
+	/// <summary>Number of foldable regions (for tests/status).</summary>
+	public int FoldRegionCount => foldRegions.Count;
+
+	/// <summary>True when the fold starting at the caret's line is collapsed.</summary>
+	public bool IsFoldCollapsedAtCaret => collapsedFolds.Contains (caretLine);
+
+	// Recomputes the fold regions from brace balance (like the legacy fold parser
+	// that rebuilds FoldSegments when the buffer changes).
+	public void RebuildFolds ()
+	{
+		foldRegions.Clear ();
+		if (!foldingEnabled)
+			return;
+		var stack = new Stack<int> ();
+		bool inBlockComment = false;
+		for (int i = 0; i < lines.Count; i++) {
+			var line = lines [i];
+			for (int c = 0; c < line.Length - 1; c++) {
+				if (!inBlockComment && line [c] == '/' && line [c + 1] == '*') {
+					inBlockComment = true;
+					c++;
+				} else if (inBlockComment && line [c] == '*' && line [c + 1] == '/') {
+					inBlockComment = false;
+					c++;
+				}
+			}
+			bool hasCode = line.Trim ().Length > 0;
+			foreach (char ch in line) {
+				if (ch == '{')
+					stack.Push (i);
+				else if (ch == '}' && stack.Count > 0) {
+					int start = stack.Pop ();
+					// Multi-line blocks only (the legacy ignores single-line folds).
+					if (i > start && hasCode)
+						foldRegions.Add ((start, i));
+				}
+			}
+		}
+		// Innermost region wins when several share a start line.
+		foldRegions.Sort ((a, b) => a.foldStart == b.foldStart
+			? b.foldEnd.CompareTo (a.foldEnd)
+			: a.foldStart.CompareTo (b.foldStart));
+		var seen = new HashSet<int> ();
+		for (int i = foldRegions.Count - 1; i >= 0; i--) {
+			if (!seen.Add (foldRegions [i].foldStart))
+				foldRegions.RemoveAt (i);
+		}
+		collapsedFolds.RemoveWhere (l => !foldRegions.Any (r => r.foldStart == l));
+		MarkDirty ();
+	}
+
+	// Lines hidden inside collapsed folds: a line is hidden when it falls strictly
+	// inside any collapsed region whose start line is itself visible.
+	bool IsLineHidden (int line)
+	{
+		foreach (var (start, end) in foldRegions) {
+			if (collapsedFolds.Contains (start) && line > start && line <= end)
+				return true;
+		}
+		return false;
+	}
+
+	int VisibleLineCount => foldRegions.Count == 0 || collapsedFolds.Count == 0
+		? lines.Count
+		: Enumerable.Range (0, lines.Count).Count (l => !IsLineHidden (l));
+
+	// Maps a rendered row (nth visible line) back to its buffer line index.
+	int RowToLine (int row)
+	{
+		if (collapsedFolds.Count == 0)
+			return row;
+		int hidden = 0;
+		for (int l = 0; l < lines.Count; l++) {
+			if (IsLineHidden (l)) {
+				hidden++;
+				continue;
+			}
+			if (l - hidden == row)
+				return l;
+		}
+		return lines.Count - 1;
+	}
+
+	// Maps a buffer line to its rendered row (-1 when hidden).
+	int LineToRow (int line)
+	{
+		int row = 0;
+		for (int l = 0; l < Math.Min (line, lines.Count); l++)
+			if (!IsLineHidden (l))
+				row++;
+		return IsLineHidden (line) ? -1 : row;
+	}
+
+	public void ToggleFolding ()
+	{
+		// Legacy FoldActions.ToggleFold: toggle the innermost fold at the caret.
+		int? best = null;
+		int bestEnd = int.MaxValue;
+		foreach (var (start, end) in foldRegions) {
+			if (caretLine >= start && caretLine <= end && end < bestEnd) {
+				best = start;
+				bestEnd = end;
+			}
+		}
+		if (best is int startLine) {
+			if (!collapsedFolds.Add (startLine))
+				collapsedFolds.Remove (startLine);
+		}
+		MarkDirty ();
+	}
+
+	public void ToggleAllFoldings ()
+	{
+		// Legacy FoldActions.ToggleAllFolds: collapse all unless any is collapsed.
+		if (collapsedFolds.Count > 0)
+			collapsedFolds.Clear ();
+		else
+			foreach (var (start, _) in foldRegions)
+				collapsedFolds.Add (start);
+		MarkDirty ();
+	}
+
+	public void FoldDefinitions ()
+	{
+		// Legacy: toggle state of member folds (blocks with lower indentation than
+		// the type body); the new shell approximates "definitions" as folds of depth
+		// 1+ from the outermost brace (methods inside a class).
+		bool anyCollapsed = collapsedFolds.Count > 0;
+		collapsedFolds.Clear ();
+		if (!anyCollapsed) {
+			foreach (var (start, end) in foldRegions)
+				collapsedFolds.Add (start);
+		}
+		MarkDirty ();
+	}
+
+	public void EnableDisableFolding ()
+	{
+		foldingEnabled = !foldingEnabled;
+		if (!foldingEnabled) {
+			collapsedFolds.Clear ();
+			foldRegions.Clear (); // no folding → no fold segments (legacy same)
+		} else
+			RebuildFolds ();
+		MarkDirty ();
+	}
 
 	public bool HasSelectionText => hasSelection && SelectedText.Length > 0;
 
@@ -1339,9 +1496,14 @@ public class SkTextEditor : Control
 		using var textPaint = new SKPaint { IsAntialias = true };
 		using var textFont = new SKFont (font.Typeface, (float)FontSize);
 
-		for (int i = firstLine; i < Math.Min (lines.Count, firstLine + visible); i++) {
-			float y = (i - (float)scrollLines) * lineH;
+		int drawn = 0;
+		for (int i = firstLine; i < Math.Min (lines.Count, firstLine + visible) && drawn < visible; i++) {
+			i = RowToLine (i); // skip folded (hidden) lines
+			if (i >= lines.Count)
+				break;
+			float y = (drawn - (float)scrollLines) * lineH;
 			float baseline = y + (lineH - (float)FontSize) / 2f + (float)FontSize * 0.85f;
+			drawn++;
 
 			// gutter: line number
 			textPaint.Color = gutterFg;
@@ -1357,6 +1519,22 @@ public class SkTextEditor : Control
 			if (i == caretLine) {
 				using var activePaint = new SKPaint { Color = gutterFg.WithAlpha (40) };
 				canvas.DrawRect (0, y, gutterW, lineH, activePaint);
+			}
+
+			// fold marker (legacy fold marker: [+] collapsed / [−] expanded) in gutter
+			bool hasFold = foldRegions.Any (r => r.foldStart == i);
+			if (hasFold && foldingEnabled) {
+				bool collapsed = collapsedFolds.Contains (i);
+				textPaint.Color = gutterFg;
+				canvas.DrawText (collapsed ? "+" : "−", gutterW - 22, baseline, textFont, textPaint);
+				if (collapsed) {
+					// legacy collapsed-fold summary: dim "… }" after the start line text
+					var endLine = foldRegions.First (r => r.foldStart == i).foldEnd;
+					var summary = "  { … }  // " + (endLine - i) + " lines";
+					textPaint.Color = gutterFg.WithAlpha (150);
+					float sx = gutterW + 4 + lines [i].Length * charW;
+					canvas.DrawText (summary, sx, baseline, textFont, textPaint);
+				}
 			}
 
 			// segments with basic highlighting
