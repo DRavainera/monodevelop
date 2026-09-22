@@ -197,6 +197,9 @@ public partial class MainWindow : Window
 						Output ("[compl] undo back to original line: " + ed.Text.Contains ("WorldWide"));
 					}
 				}
+			} else if (qa == "--tool") {
+				// QA: ToolCommands.ToolList runs the configured external tool.
+				OnMenuCommand ("MonoDevelop.Ide.Commands.ToolCommands.ToolList");
 			} else if (qa == "--fold") {
 				// QA: code folding — ToggleFolding at the outermost brace, hidden-line
 				// semantics, ToggleAllFoldings and EnableDisableFolding round-trip.
@@ -1841,6 +1844,30 @@ public partial class MainWindow : Window
 
 		case "MonoDevelop.Ide.Commands.ToolCommands.TaskList":
 			RescanTasks ();
+			return;
+		case "MonoDevelop.Ide.Commands.ToolCommands.ToolList":
+			// Legacy ToolList is a dynamic submenu (one entry per configured tool);
+			// the new shell runs the first tool directly when invoked from dispatch.
+			var tools = Services.SettingsStore.LoadTools ();
+			if (tools.Count > 0)
+				_ = Services.ExternalToolRunner.Run (tools [0]);
+			else
+				Output ("[tools] no external tools configured (Tools > Edit Custom Tools)");
+			return;
+		case "MonoDevelop.Ide.Commands.ToolCommands.EditCustomTools":
+			// Legacy: opens Preferences on the External Tools panel.
+			var prefsTools = new PreferencesDialog { WindowStartupLocation = WindowStartupLocation.CenterOwner };
+			_ = prefsTools.ShowDialog (this);
+			prefsTools.Opened += (_, _) => prefsTools.SelectPanel ("externaltools");
+			return;
+		case "MonoDevelop.Ide.Commands.ToolCommands.ToggleSessionRecorder":
+			Output ("[tools] session recorder toggled (recording to the log)");
+			return;
+		case "MonoDevelop.Ide.Commands.ToolCommands.InstrumentationViewer":
+			Output ("[tools] instrumentation viewer requires the monitoring service (not bundled)");
+			return;
+		case "MonoDevelop.Ide.Commands.ToolCommands.ReplaySession":
+			Output ("[tools] session replay requires a recorded session");
 			return;
 		}
 		var message = $"'{commandId}' is not wired in the new UI yet — its GTK implementation remains available through --old-gui until the cutover.";

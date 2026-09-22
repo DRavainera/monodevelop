@@ -376,3 +376,13 @@ Port desde `MonoDevelop.Ide.FindInFiles` y `ProjectOperations` del legacy:
   `ExpandCodeTemplate`, `SurroundSelectionWith` + `CaretRight(n)` para automatización.
 - QA E2E (`--compl`): candidato único 'World'→'WorldWide' insertado y deshecho;
   parameter info nula fuera de paréntesis; sugerencia conmutada.
+
+### M11q — ToolCommands (herramientas externas)
+- Legacy: `ToolListHandler` (submenú dinámico con una entrada por herramienta
+  configurada en MonoDevelop-tools.xml), `EditCustomToolsHandler` (abre
+  Preferencias en el panel External Tools), Instrumentation/SessionRecorder.
+- Avalonia: `ToolCommands.ToolList` ejecuta la primera herramienta configurada vía
+  `ExternalToolRunner` (macros ${SolutionDir} resueltas, salida al pad Output);
+  `EditCustomTools` abre Preferencias directamente en el panel "externaltools".
+- QA E2E (`--tool`): "List Solution Files" (ls -R ${SolutionDir}) ejecutada con
+  exit 0 y listado en el Output pad.
