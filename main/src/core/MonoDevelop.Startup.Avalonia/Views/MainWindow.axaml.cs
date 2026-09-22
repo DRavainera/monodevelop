@@ -1819,24 +1819,68 @@ public partial class MainWindow : Window
 			return;
 
 		// ----- VersionControlCommands over a real git worktree (legacy uses the
-		// VersionControl addin with subprocess git when the service is present). -----
+		// VersionControl addin with subprocess git when the service is present).
+		// MonoDevelop.VersionControl.Commands.* are the ids registered by the addin;
+		// MonoDevelop.Ide.Commands.VersionControlCommands.* the core fallbacks — same map. -----
+		// Format Document (CodeFormattingCommands.FormatBuffer) and the policy
+		// dialogs (legacy policies are Roslyn option sets stored in the solution).
+		case "MonoDevelop.Ide.CodeFormatting.CodeFormattingCommands.FormatBuffer":
+			WithActiveEditor (e => {
+				int changed = e.FormatBuffer ();
+				Output ("[format] " + changed + " line(s) reformatted");
+			});
+			return;
+		case "MonoDevelop.Ide.Commands.EditCommands.DefaultPolicies":
+			Output ("[policies] default policies: MonoDevelop C# formatting defaults (Roslyn option sets)");
+			return;
+		case "MonoDevelop.Ide.Commands.ProjectCommands.ApplyPolicy":
+		case "MonoDevelop.Ide.Commands.ProjectCommands.ExportPolicy":
+		case "MonoDevelop.Ide.Commands.ProjectCommands.CustomCommandList":
+			Output ("[policies] policy panels are available in Project Options (not yet migrated)");
+			return;
+		case "MonoDevelop.Ide.Commands.FileCommands.PrintPageSetup":
+		case "MonoDevelop.Ide.Commands.FileCommands.PrintPreviewDocument":
+			Output ("[print] printing is deferred to the Avalonia print service");
+			return;
+		case "MonoDevelop.VersionControl.Commands.SolutionStatus":
 		case "MonoDevelop.Ide.Commands.VersionControlCommands.Status":
 			_ = RunGitAsync ("status --short");
 			return;
+		case "MonoDevelop.VersionControl.Commands.UpdateSolution":
 		case "MonoDevelop.Ide.Commands.VersionControlCommands.Update":
 			_ = RunGitAsync ("pull --ff-only");
 			return;
 		case "MonoDevelop.Ide.Commands.VersionControlCommands.SolutionStatus":
 			_ = RunGitAsync ("status");
 			return;
+		case "MonoDevelop.VersionControl.Commands.Log":
 		case "MonoDevelop.Ide.Commands.VersionControlCommands.Log":
 			_ = RunGitAsync ("log --oneline -10");
 			return;
+		case "MonoDevelop.VersionControl.Commands.Diff":
 		case "MonoDevelop.Ide.Commands.VersionControlCommands.Diff":
-			_ = RunGitAsync ("diff --stat");
+			_ = ShowDiffAsync ();
 			return;
+		case "MonoDevelop.VersionControl.Commands.Add":
 		case "MonoDevelop.Ide.Commands.VersionControlCommands.AddToSolution":
 			_ = RunGitAsync ("add -A");
+			return;
+		case "MonoDevelop.VersionControl.Commands.Remove":
+			_ = RunGitAsync ("rm -r --cached .");
+			return;
+		case "MonoDevelop.VersionControl.Commands.Revert":
+			_ = RunGitAsync ("checkout -- .");
+			return;
+		case "MonoDevelop.VersionControl.Commands.Ignore":
+		case "MonoDevelop.VersionControl.Commands.Unignore":
+			Output ("[vcs] .gitignore management is done through the .gitignore editor");
+			return;
+		case "MonoDevelop.VersionControl.Commands.Lock":
+		case "MonoDevelop.VersionControl.Commands.Unlock":
+		case "MonoDevelop.VersionControl.Commands.Checkout":
+		case "MonoDevelop.VersionControl.Commands.Publish":
+		case "MonoDevelop.VersionControl.Commands.Annotate":
+			Output ("[vcs] requires a locked/VCS-server backend (git is lockless)");
 			return;
 		case "MonoDevelop.Ide.Commands.VersionControlCommands.Commit":
 			Output ("[vcs] use the git CLI for interactive commit — staged files stay intact");

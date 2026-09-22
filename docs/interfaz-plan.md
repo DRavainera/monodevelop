@@ -386,3 +386,15 @@ Port desde `MonoDevelop.Ide.FindInFiles` y `ProjectOperations` del legacy:
   `EditCustomTools` abre Preferencias directamente en el panel "externaltools".
 - QA E2E (`--tool`): "List Solution Files" (ls -R ${SolutionDir}) ejecutada con
   exit 0 y listado en el Output pad.
+
+### M11r — Cobertura completa del dispatch (141/141 ids de menú)
+- Formato: `CodeFormattingCommands.FormatBuffer` (id real del menú) ejecuta el
+  formateo y reporta líneas cambiadas.
+- VersionControl: los ids del addin (`MonoDevelop.VersionControl.Commands.*`) se
+  mapean a los mismos pipelines git — Diff/Log/Status/Update/Add/Remove/Revert;
+  Lock/Unlock/Checkout/Publish/Annotate informan que requieren backend con locks.
+- Políticas (DefaultPolicies/ApplyPolicy/ExportPolicy/CustomCommandList) y
+  impresión (PrintPageSetup/PrintPreviewDocument) reportan su estado honesto
+  en el Output pad en vez de caer al fallback.
+- Resultado: todos los 141 command-ids del menú tienen handler; el fallback
+  "not wired" queda sin casos alcanzables por menú.
