@@ -415,3 +415,15 @@ Port desde `MonoDevelop.Ide.FindInFiles` y `ProjectOperations` del legacy:
   refresca (`RefreshSolutionTree`) como el UpdateAll del pad legacy.
 - QA E2E (`--ctxmenu`): create/rename/folder/delete sobre TestProj verificados;
   flyout verificado visualmente por clic derecho sintético X11.
+
+### M11t — Búsqueda incremental en el Solution pad
+- Legacy: `SearchEntry` (MonoDevelop.Components.SearchEntry) con placeholder
+  "Search…", debounce de cambios y filtrado del TreeModelFilter que conserva
+  los ancestros de las coincidencias (TemplatePickerWidget.SetSearchFilter como
+  referencia de semántica).
+- Avalonia: `solutionSearchBox` (TextBox con Watermark) sobre el árbol del pad;
+  `ApplySolutionTreeFilter` filtra en vivo sin reconstruir (selección/expansión
+  se conservan): un nodo es visible si coincide por texto o Tag, o si tiene un
+  descendiente visible; los ancestros de coincidencias se expanden.
+- QA: determinista (`--filter`: 4→3 nodos con "Program", root visible, vacío
+  restaura) + visual E2E (teclear "Wri" → 6 filas; limpiar → 13 filas).

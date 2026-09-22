@@ -232,6 +232,22 @@ public partial class MainWindow : Window
 						Output ("[ctx] QA failed: " + ex.Message);
 					}
 				}
+			} else if (qa == "--filter") {
+				// QA: Solution pad incremental filter — non-matching nodes hide,
+				// matches and their ancestors stay and expand; empty restores all.
+				if (solutionTreeView is not null) {
+					int CountVisible () => solutionTreeView.Items.OfType<TreeViewItem> ()
+						.Sum (r => CountVisibleNodes (r));
+					int total = CountVisible ();
+					ApplySolutionTreeFilter ("Program");
+					int filtered = CountVisible ();
+					bool rootVisible = solutionTreeView.Items.OfType<TreeViewItem> ().First ().IsVisible;
+					Output ("[filter] nodes before: " + total);
+					Output ("[filter] nodes with 'Program': " + filtered + " (reduced: " + (filtered < total) + ")");
+					Output ("[filter] solution root stays visible: " + rootVisible);
+					ApplySolutionTreeFilter ("");
+					Output ("[filter] empty restores all: " + (CountVisible () >= total));
+				}
 			} else if (qa == "--fold") {
 				// QA: code folding — ToggleFolding at the outermost brace, hidden-line
 				// semantics, ToggleAllFoldings and EnableDisableFolding round-trip.
@@ -538,7 +554,20 @@ public partial class MainWindow : Window
 		solutionTreeView.DoubleTapped += OnSolutionOpen;
 		solutionTreeView.PointerReleased += OnSolutionPadContextMenu;
 
+		// Search box over the tree (legacy SearchEntry with "Search…" empty message
+		// and live filtering: matches stay, ancestors of matches stay expanded).
+		solutionSearchBox = new TextBox {
+			Watermark = "Search…",
+		};
+		solutionSearchBox.Bind (TextBox.ForegroundProperty, Application.Current.GetResourceObservable ("IdeFgBrush"));
+		solutionSearchBox.PropertyChanged += (s, e) => {
+			if (e.Property == TextBox.TextProperty)
+				ApplySolutionTreeFilter (solutionSearchBox.Text ?? "");
+		};
+
 		var solutionHost = new DockPanel ();
+		DockPanel.SetDock (solutionSearchBox, Dock.Top);
+		solutionHost.Children.Add (solutionSearchBox);
 		DockPanel.SetDock (solutionTreeView, Dock.Left);
 		solutionHost.Children.Add (solutionTreeView);
 		solutionHost.Children.Add (solutionTree);
@@ -862,6 +891,7 @@ public partial class MainWindow : Window
 
 	ListBox? solutionTree;
 	TreeView? solutionTreeView;
+	TextBox? solutionSearchBox;
 	string? loadedSolutionPath;
 	// Node path of the last context-menu invocation (legacy NodeCommandHandler dataItem).
 	string? contextNodePath;
@@ -898,6 +928,54 @@ public partial class MainWindow : Window
 	{
 		if (!string.IsNullOrEmpty (loadedSolutionPath) && File.Exists (loadedSolutionPath))
 			OpenSolutionInWindow (loadedSolutionPath);
+	}
+
+	// ----- Solution pad incremental search (legacy SearchEntry over the ProjectPad
+	// tree: a node is visible when it matches the filter or has a visible descendant;
+	// ancestors of matches are kept and expanded, like Gtk TreeModelFilter). -----
+
+	// QA helper: counts visible nodes (self + visible descendants).
+	int CountVisibleNodes (TreeViewItem node) =>
+		(node.IsVisible ? 1 : 0)
+		+ node.Items.OfType<TreeViewItem> ().Where (c => c.IsVisible).Sum (CountVisibleNodes);
+
+	// Applies the filter in place over the current tree (no rebuild → selection and
+	// expansion survive, matching the legacy Refilter behaviour).
+	void ApplySolutionTreeFilter (string filter)
+	{
+		if (solutionTreeView is null)
+			return;
+		var trimmed = filter.Trim ();
+		foreach (var root in solutionTreeView.Items.OfType<TreeViewItem> ())
+			FilterNode (root, trimmed);
+	}
+
+	// Returns true when the node (or any descendant) matches.
+	bool FilterNode (TreeViewItem node, string filter)
+	{
+		string NodeText (TreeViewItem n) =>
+			n.Header is StackPanel sp && sp.Children.OfType<TextBlock> ().FirstOrDefault () is { } tb
+				? tb.Text ?? ""
+				: n.Header?.ToString () ?? "";
+
+		bool selfMatch = filter.Length == 0
+			|| NodeText (node).IndexOf (filter, StringComparison.OrdinalIgnoreCase) >= 0
+			|| ((node.Tag as string) ?? "").IndexOf (filter, StringComparison.OrdinalIgnoreCase) >= 0;
+
+		bool anyChildVisible = false;
+		foreach (var child in node.Items.OfType<TreeViewItem> ()) {
+			if (FilterNode (child, filter)) {
+				anyChildVisible = true;
+				child.IsVisible = true;
+			} else {
+				child.IsVisible = false;
+			}
+		}
+		// Non-TreeViewItem children (headers, etc.) don't affect visibility.
+		node.IsVisible = selfMatch || anyChildVisible;
+		if (filter.Length > 0 && anyChildVisible)
+			node.IsExpanded = true; // ancestors of matches expand (legacy filter UX)
+		return node.IsVisible;
 	}
 
 	// Directory the context node maps to (project dir, folder node, or file's folder).
