@@ -436,3 +436,14 @@ Port desde `MonoDevelop.Ide.FindInFiles` y `ProjectOperations` del legacy:
   ProjectPad legacy.
 - Verificado por captura: el árbol ocupa la única columna y no hay contenido
   en la banda de la columna eliminada.
+
+### M11v — Fix: pads con contenido vacío (Properties/Bottom)
+- Causa raíz (auditoría visual por capturas): `PadHost.AddTab` no seleccionaba la
+  primera pestaña; los hosts instanciados desde XAML (RightPads, BottomPads)
+  quedaban con `SelectedId = null` y el área de contenido vacía hasta que algo
+  los seleccionaba explícitamente. El pad izquierdo funcionaba porque
+  `OpenSolutionInWindow` llama `Select("solution")`.
+- Fix: `AddTab` selecciona automáticamente la primera pestaña visible
+  (el comportamiento por defecto del DockItem del legacy).
+- Verificado por captura tras un build: el pad Properties muestra su contenido,
+  el pad inferior muestra Errors ("Build succeeded."), sin áreas vacías.

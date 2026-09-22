@@ -112,6 +112,10 @@ public class PadHost : Border
 		if (tabs.Any (t => t.Id == tab.Id))
 			return;
 		tabs.Add (tab);
+		// First tab added selects automatically so the pad never shows an empty
+		// content area at startup (legacy DockItem defaults to its first pad).
+		if (tabs.Count == 1 && tab.Visible)
+			Select (tab.Id);
 
 		// Pad tabs carry the pad icon + label, like the legacy DockItem tabstrip.
 		object content = tab.Label;
