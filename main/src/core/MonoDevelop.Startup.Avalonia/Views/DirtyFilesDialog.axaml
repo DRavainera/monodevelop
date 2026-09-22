@@ -1,0 +1,59 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="MonoDevelop.AvaloniaShell.Views.DirtyFilesDialog"
+        Title="Save Files"
+        Width="420" Height="300" MinWidth="320" MinHeight="220"
+        WindowStartupLocation="CenterOwner"
+        CanResize="True"
+        SystemDecorations="None"
+        ExtendClientAreaToDecorationsHint="True"
+        Background="{DynamicResource IdeWindowBgBrush}">
+
+  <Window.Styles>
+    <Style Selector="TextBlock">
+      <Setter Property="Foreground" Value="{DynamicResource IdeFgBrush}" />
+    </Style>
+    <Style Selector="TreeView">
+      <Setter Property="Background" Value="{DynamicResource IdeChromeBgBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource IdeBorderBrush}" />
+      <Setter Property="BorderThickness" Value="1" />
+    </Style>
+    <Style Selector="TreeViewItem">
+      <Setter Property="Foreground" Value="{DynamicResource IdeFgBrush}" />
+    </Style>
+    <Style Selector="Button">
+      <Setter Property="Foreground" Value="{DynamicResource IdeFgBrush}" />
+      <Setter Property="Background" Value="{DynamicResource IdeChromeBgBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource IdeBorderBrush}" />
+      <Setter Property="Padding" Value="12,5" />
+      <Setter Property="MinHeight" Value="28" />
+    </Style>
+    <Style Selector="Button:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource IdeHoverBgBrush}" />
+    </Style>
+  </Window.Styles>
+
+  <Grid RowDefinitions="Auto,Auto,*,Auto">
+    <!-- Custom chrome (Avalonia border, like the rest of the ported dialogs) -->
+    <Border Grid.Row="0" Background="{DynamicResource IdeChromeBgBrush}"
+            BorderBrush="{DynamicResource IdeBorderBrush}" BorderThickness="0,0,0,1">
+      <Grid ColumnDefinitions="*,Auto">
+        <TextBlock x:Name="TitleText" Text="Save Files" Margin="12,6" FontWeight="SemiBold" />
+        <Button Grid.Column="1" Classes="caption captionclose" Content="&#x2715;" Click="OnCancel" />
+      </Grid>
+    </Border>
+
+    <!-- Legacy description: "Select which files should be saved before ..." -->
+    <TextBlock Grid.Row="1" x:Name="DescriptionText" Margin="12,8,12,4" TextWrapping="Wrap"
+               Opacity="0.85" />
+
+    <TreeView Grid.Row="2" x:Name="FilesTree" Margin="12,4" />
+
+    <!-- Legacy action area order: Cancel, Quit/Close, Save and Quit/Close -->
+    <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Margin="12,4,12,10" Spacing="8">
+      <Button x:Name="CancelBtn" Content="Cancel" Click="OnCancel" />
+      <Button x:Name="QuitBtn" Content="Close" Click="OnQuit" />
+      <Button x:Name="SaveAndQuitBtn" Content="_Save and Close" Click="OnSaveAndQuit" />
+    </StackPanel>
+  </Grid>
+</Window>

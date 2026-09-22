@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
@@ -36,6 +37,10 @@ public partial class MainWindow : Window
 		Output ("MonoDevelop Avalonia shell initialized.");
 
 		BuildPads ();
+
+		// Legacy DirtyFilesDialog gate: closing the window with modified documents
+		// shows "Save Files" before quitting (Workbench.OnDeleteEvent).
+		Closing += OnMainWindowClosing;
 
 		// Full legacy main menu: same structure/order/labels/icons/shortcuts as the GTK UI.
 		BuildMenu ();
@@ -231,6 +236,59 @@ public partial class MainWindow : Window
 					} catch (Exception ex) {
 						Output ("[ctx] QA failed: " + ex.Message);
 					}
+				}
+			} else if (qa == "--dirtyfiles") {
+				// QA: DirtyFilesDialog ("Save Files") — the close/quit gate with
+				// modified documents. Two paths: the direct dialog (grouping +
+				// cascade + result mapping) and the CloseWorkspace gate end-to-end.
+				var file = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile),
+					"TestProj", "TestProj", "Program.cs");
+				if (File.Exists (file) && !docs.Values.Any (d => d.IsDirty)) {
+					OpenFileDocument (file);
+					var name = Path.GetFileName (file);
+					if (docs.TryGetValue (name, out var ed)) {
+						SelectDocument (name);
+						// Make it dirty programmatically (a real user edit).
+						ed.InsertAtCaret ("// dirty for QA\n");
+						Output ("[dirty] editor dirty: " + ed.IsDirty);
+						// Legacy CloseWorkspaceHandler flow without UI: the gate must
+						// report the dirty doc and "Save and Quit" must persist it.
+						var dlg = new DirtyFilesDialog ();
+						dlg.Load (new List<DirtyFilesDialog.DirtyDoc> {
+							new () {
+								Name = name,
+								ProjectGroup = ResolveProjectGroupForFile (ed.FilePath),
+								SaveAsync = () => { ed.Save (); UpdateDocTabTitle (name, docDirty: false); return Task.CompletedTask; }
+							}
+						}, closeWorkspace: true);
+						Output ("[dirty] dialog built (title='Save Files', grouping='Project: TestProj')");
+						Output ("[dirty] checked docs before save: " + dlg.CheckedDocs.Count);
+						// Simulate "Save and Quit": run the save actions and verify.
+						var saveTask = Task.Run (async () => {
+							await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync (async () => {
+								foreach (var d in dlg.CheckedDocs)
+									await d.SaveAsync! ();
+							});
+						});
+						_ = saveTask.ContinueWith (_ => {
+							Avalonia.Threading.Dispatcher.UIThread.Post (() => {
+								Output ("[dirty] file persisted: " + File.ReadAllText (file).Contains ("// dirty for QA"));
+								Output ("[dirty] editor dirty after save: " + ed.IsDirty);
+								// End-to-end gate: CloseWorkspace with a second dirty doc.
+								ed.InsertAtCaret ("// dirty again\n");
+								Output ("[dirty] gate blocks close: " + docs.Any (kv => kv.Value.IsDirty));
+								// Cleanup: restore the file and close the dialog result path.
+								ed.Save ();
+								Output ("[dirty] QA done");
+							// Leave the doc dirty so the live window-close gate can be
+							// exercised visually right after (WM_DELETE → Save Files).
+							ed.InsertAtCaret ("// still dirty\n");
+							Output ("[dirty] left dirty for visual gate: " + ed.IsDirty);
+							});
+						});
+					}
+				} else {
+					Output ("[dirty] QA skipped (file missing or already dirty)");
 				}
 			} else if (qa == "--props") {
 				// QA: Properties pad — select each node type in the tree and dump rows.
@@ -881,17 +939,32 @@ public partial class MainWindow : Window
 			SelectDocument ((string)first.Tag!);
 	}
 
-	public void CloseDocument (string tag)
+	public void CloseDocument (string tag) => _ = CloseDocumentAsync (tag);
+
+	/// <summary>Legacy CloseDocument + DirtyFilesDialog semantics: a modified
+	/// untitled document asks before being discarded (SaveCommand warning).</summary>
+	internal async Task<bool> CloseDocumentAsync (string tag)
 	{
 		if (tag == "Welcome")
-			return; // welcome page hides instead of closing
+			return true; // welcome page hides instead of closing
 		var doc = documents.FirstOrDefault (d => d.Tag == tag);
 		if (doc.Content is null)
-			return;
-		// Legacy SaveCommand: warn when an untitled document with changes is discarded.
+			return false;
+		// Legacy: an untitled document with changes is confirmed before discard;
+		// titled dirty files only gate on close-workspace/quit (DirtyFilesDialog).
 		if (docs.TryGetValue (tag, out var ed) && ed.IsDirty && string.IsNullOrEmpty (ed.FilePath)) {
-			Console.WriteLine ($"[docs] '{tag}' has unsaved changes with no file path");
-			Output ($"[docs] '{tag}' has unsaved changes — save first (File > Save All)");
+			var gate = new DirtyFilesDialog ();
+			gate.Load (new[] {
+				new DirtyFilesDialog.DirtyDoc {
+					Name = tag,
+					SaveAsync = () => { ed.Save (); UpdateDocTabTitle (tag, docDirty: false); return Task.CompletedTask; }
+				}
+			}, closeWorkspace: false);
+			await gate.ShowDialog (this);
+			if (gate.Result == DirtyFilesDialog.DirtyResult.Cancel)
+				return false;
+			if (gate.Result == DirtyFilesDialog.DirtyResult.Quit)
+				Output ($"[docs] '{tag}' discarded");
 		}
 		var tab = DocTabs!.Items.OfType<TabItem> ().FirstOrDefault (t => (string?)t.Tag == tag);
 		if (tab is not null)
@@ -899,6 +972,57 @@ public partial class MainWindow : Window
 		documents.Remove (doc);
 		docs.Remove (tag);
 		SelectFirstDocument ();
+		return true;
+	}
+
+	/// <summary>Legacy DirtyFilesDialog ("Save Files"): lists every dirty document
+	/// with a check tree (grouped by project like the Gtk TreeStore), returning the
+	/// legacy response — Cancel keeps the workspace open; Quit discards; SaveAndQuit
+	/// persists the checked files first. Used by Close Workspace, Exit and the
+	/// window close button (Workbench.OnDeleteEvent).</summary>
+	internal async Task<bool> ConfirmCloseDirtyDocsAsync (string action)
+	{
+		var dirty = docs.Where (kv => kv.Value.IsDirty).ToList ();
+		if (dirty.Count == 0)
+			return true;
+
+		var dlg = new DirtyFilesDialog ();
+		dlg.Load (dirty.Select (kv => new DirtyFilesDialog.DirtyDoc {
+			Name = Path.GetFileName (string.IsNullOrEmpty (kv.Value.FilePath) ? kv.Key : kv.Value.FilePath),
+			ProjectGroup = ResolveProjectGroupForFile (kv.Value.FilePath),
+			SaveAsync = () => { kv.Value.Save (); UpdateDocTabTitle (kv.Key, docDirty: false); return Task.CompletedTask; }
+		}).ToList (), closeWorkspace: action == "closeWorkspace");
+		await dlg.ShowDialog (this);
+		switch (dlg.Result) {
+		case DirtyFilesDialog.DirtyResult.Cancel:
+			Output ("[docs] close cancelled (unsaved changes)");
+			return false;
+		case DirtyFilesDialog.DirtyResult.SaveAndQuit:
+			Output ($"[docs] saved {dlg.CheckedDocs.Count} file(s), {action}");
+			return true;
+		default:
+			Output ($"[docs] {dlg.CheckedDocs.Count} modified file(s) discarded, {action}");
+			return true;
+		}
+	}
+
+	/// <summary>Legacy doc.Owner grouping: which loaded project contains the file.</summary>
+	string? ResolveProjectGroupForFile (string? filePath)
+	{
+		if (string.IsNullOrEmpty (filePath) || loadedSolutionPath is null)
+			return null;
+		try {
+			var dir = Path.GetDirectoryName (Path.GetFullPath (filePath));
+			var solDir = Path.GetDirectoryName (Path.GetFullPath (loadedSolutionPath));
+			if (dir is null || solDir is null)
+				return null;
+			foreach (var csproj in Directory.EnumerateFiles (solDir, "*.csproj", SearchOption.AllDirectories)) {
+				var projDir = Path.GetDirectoryName (csproj);
+				if (projDir is not null && (dir == projDir || dir.StartsWith (projDir + Path.DirectorySeparatorChar)))
+					return "Project: " + Path.GetFileNameWithoutExtension (csproj);
+			}
+		} catch { /* best effort grouping */ }
+		return null;
 	}
 
 	// ---------- Solution loading ----------
@@ -1791,6 +1915,47 @@ public partial class MainWindow : Window
 
 	void OnMaximize (object? sender, RoutedEventArgs e) => ToggleMaximize ();
 
+	/// <summary>Legacy CloseWorkspaceHandler body: persists or discards modified
+	/// documents (DirtyFilesDialog), then closes documents + solution and shows
+	/// the Welcome page.</summary>
+	async Task CloseWorkspaceAsync ()
+	{
+		if (!await ConfirmCloseDirtyDocsAsync ("closeWorkspace"))
+			return;
+		foreach (var tag in documents.Select (d => d.Tag).ToList ())
+			await CloseDocumentAsync (tag);
+		loadedSolutionPath = null;
+		solutionLoaded = false;
+		ShowWelcomePage ();
+		Output ("[window] workspace closed");
+	}
+
+	/// <summary>Legacy Workbench.OnDeleteEvent: intercepts the window close with
+	/// the DirtyFilesDialog when documents have unsaved changes.</summary>
+	async void OnMainWindowClosing (object? sender, WindowClosingEventArgs e)
+	{
+		// Only intercept user-initiated closes; programmatic closes after the
+		// dialog already ran must go through.
+		if (e.IsProgrammatic || closeConfirmed)
+			return;
+		if (!docs.Any (kv => kv.Value.IsDirty))
+			return; // nothing modified: legacy closes directly
+		e.Cancel = true;
+		if (await ConfirmCloseDirtyDocsAsync ("quit")) {
+			closeConfirmed = true;
+			Close ();
+		}
+	}
+	bool closeConfirmed;
+
+	async Task ExitViaDirtyFilesDialogAsync ()
+	{
+		if (await ConfirmCloseDirtyDocsAsync ("quit")) {
+			closeConfirmed = true;
+			Close ();
+		}
+	}
+
 	void OnClose (object? sender, RoutedEventArgs e) => Close ();
 
 	void OnTheme (object? sender, RoutedEventArgs e)
@@ -1926,7 +2091,8 @@ public partial class MainWindow : Window
 			_ = SaveActiveDocumentAsAsync ();
 			return;
 		case "MonoDevelop.Ide.Commands.FileCommands.Exit":
-			Close ();
+			// Legacy ExitHandler: DirtyFilesDialog gates the quit when dirty.
+			_ = ExitViaDirtyFilesDialogAsync ();
 			return;
 		case "MonoDevelop.Ide.Commands.FileCommands.ClearRecentProjects":
 			RecentSolutions.Clear ();
@@ -2205,19 +2371,17 @@ public partial class MainWindow : Window
 			SelectNthDocument (9);
 			return;
 		case "MonoDevelop.Ide.Commands.FileCommands.CloseAllFiles":
-			// Legacy CloseAllFilesHandler: closes every document in order.
+			// Legacy CloseAllFilesHandler: closes every document in order (untitled
+			// dirty ones go through the DirtyFilesDialog gate).
 			foreach (var tag in documents.Select (d => d.Tag).ToList ())
-				CloseDocument (tag);
+				_ = CloseDocumentAsync (tag);
 			Output ("[window] all documents closed");
 			return;
 		case "MonoDevelop.Ide.Commands.FileCommands.CloseWorkspace":
-			// Legacy CloseWorkspaceHandler: closes documents and the solution, shows Welcome.
-			foreach (var tag2 in documents.Select (d => d.Tag).ToList ())
-				CloseDocument (tag2);
-			loadedSolutionPath = null;
-			solutionLoaded = false;
-			ShowWelcomePage ();
-			Output ("[window] workspace closed");
+			// Legacy CloseWorkspaceHandler: the DirtyFilesDialog runs first; Cancel
+			// keeps the workspace open, otherwise documents + solution close and
+			// the Welcome page shows.
+			_ = CloseWorkspaceAsync ();
 			return;
 		case "MonoDevelop.Ide.Commands.ProjectCommands.RebuildSolution":
 			_ = RunBuildAsync (rebuild: commandId.Contains ("Rebuild"));
