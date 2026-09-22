@@ -232,6 +232,24 @@ public partial class MainWindow : Window
 						Output ("[ctx] QA failed: " + ex.Message);
 					}
 				}
+			} else if (qa == "--props") {
+				// QA: Properties pad — select each node type in the tree and dump rows.
+				var slnPath = Program.SolutionArg ?? "";
+				var proj = ResolveActiveProject ();
+				var file = Path.Combine (Path.GetDirectoryName (proj) ?? "", "Program.cs");
+				Output ("[props] --- Project file ---");
+				foreach (var r in GetPropertiesForNode ("ProjectFile", file))
+					Output ($"[props] {r.Category}/{r.Name} = {r.Value}");
+				if (proj is not null) {
+					Output ("[props] --- Project ---");
+					foreach (var r in GetPropertiesForNode ("Project", proj))
+						Output ($"[props] {r.Category}/{r.Name} = {r.Value}");
+				}
+				if (File.Exists (slnPath)) {
+					Output ("[props] --- Solution ---");
+					foreach (var r in GetPropertiesForNode ("Solution", slnPath))
+						Output ($"[props] {r.Category}/{r.Name} = {r.Value}");
+				}
 			} else if (qa == "--filter") {
 				// QA: Solution pad incremental filter — non-matching nodes hide,
 				// matches and their ancestors stay and expand; empty restores all.
@@ -528,7 +546,8 @@ public partial class MainWindow : Window
 	TextBox? outputTextBox;
 	TextBlock? errorsText;
 	TextBlock? tasksText;
-	TextBlock? propertiesText;
+	StackPanel? propertiesHeader;
+	StackPanel? propertiesList;
 
 	void BuildPads ()
 	{
@@ -547,6 +566,7 @@ public partial class MainWindow : Window
 		solutionTreeView.Bind (TreeView.ForegroundProperty, Application.Current.GetResourceObservable ("IdeFgBrush"));
 		solutionTreeView.DoubleTapped += OnSolutionOpen;
 		solutionTreeView.PointerReleased += OnSolutionPadContextMenu;
+		solutionTreeView.SelectionChanged += (_, _) => UpdatePropertiesPad ();
 
 		// Search box over the tree (legacy SearchEntry with "Search…" empty message
 		// and live filtering: matches stay, ancestors of matches stay expanded).
@@ -577,15 +597,18 @@ public partial class MainWindow : Window
 		helpList.Items.Add ("(documentation index)");
 		LeftPads.AddTab (new PadHost.PadTab { Id = "help", Label = "Help", Icon = "md-help-pad", Content = helpList, Visible = false });
 
-		// Properties pad (right, legacy layout).
-		propertiesText = new TextBlock {
-			Text = "Select an item to view its properties",
-			Padding = new Thickness (8),
-			Opacity = 0.7,
-			TextWrapping = TextWrapping.Wrap,
+		// Properties pad (right, legacy PropertyPad): a header with the object name
+		// and a two-column name/value grid built from per-node descriptors
+		// (ProjectFileDescriptor / SolutionItemDescriptor / WorkspaceItemDescriptor).
+		propertiesHeader = new StackPanel { Spacing = 1 };
+		SetPropertiesHeader ("No selection", "Select an item in the Solution pad");
+		propertiesList = new StackPanel { Spacing = 0 };
+		var propertiesHost = new ScrollViewer {
+			Content = new StackPanel {
+				Children = { propertiesHeader, propertiesList },
+			},
 		};
-		propertiesText.Bind (TextBlock.ForegroundProperty, Application.Current.GetResourceObservable ("IdeFgBrush"));
-		RightPads.AddTab (new PadHost.PadTab { Id = "properties", Label = "Properties", Icon = "md-properties-pad", Content = propertiesText });
+		RightPads.AddTab (new PadHost.PadTab { Id = "properties", Label = "Properties", Icon = "md-properties-pad", Content = propertiesHost });
 
 		// Toolbox pad (legacy ToolboxPad, right group, auto-hidden).
 		var toolboxList = new ListBox { Background = Brushes.Transparent };
@@ -1400,6 +1423,212 @@ public partial class MainWindow : Window
 			if (File.Exists (s)) return ("ProjectFile", s);
 		}
 		return ("None", null);
+	}
+
+	// ----- Properties pad (legacy PropertyPad + ProjectFileDescriptor /
+	// SolutionItemDescriptor / WorkspaceItemDescriptor): a name/value grid per
+	// selected node, rebuilt on every Solution pad selection change. -----
+
+	readonly record struct PropertyRow (string Category, string Name, string Value);
+
+	// Header labels are reused across updates (controls can't move parents in Avalonia).
+	TextBlock? propertiesTitleLabel;
+	TextBlock? propertiesSubtitleLabel;
+
+	void SetPropertiesHeader (string title, string subtitle)
+	{
+		if (propertiesHeader is null)
+			return;
+		if (propertiesTitleLabel is null) {
+			propertiesTitleLabel = new TextBlock {
+				FontWeight = FontWeight.SemiBold,
+				FontSize = 12,
+				Padding = new Thickness (8, 6, 8, 0),
+				TextTrimming = TextTrimming.CharacterEllipsis,
+			};
+			propertiesTitleLabel.Bind (TextBlock.ForegroundProperty, Application.Current!.GetResourceObservable ("IdeFgBrush"));
+			propertiesHeader.Children.Add (propertiesTitleLabel);
+			propertiesSubtitleLabel = new TextBlock {
+				FontSize = 11,
+				Opacity = 0.7,
+				Padding = new Thickness (8, 0, 8, 4),
+				TextTrimming = TextTrimming.CharacterEllipsis,
+			};
+			propertiesSubtitleLabel.Bind (TextBlock.ForegroundProperty, Application.Current.GetResourceObservable ("IdeFgBrush"));
+			propertiesHeader.Children.Add (propertiesSubtitleLabel);
+		}
+		propertiesTitleLabel.Text = title;
+		propertiesSubtitleLabel.Text = subtitle;
+		propertiesSubtitleLabel.IsVisible = !string.IsNullOrEmpty (subtitle);
+	}
+
+	// One grid row: label column + value column with the legacy table look.
+	static Border PropertyRowControl (string name, string value, bool zebra)
+	{
+		var grid = new Grid { ColumnDefinitions = ColumnDefinitions.Parse ("110,*") };
+		var nameTb = new TextBlock {
+			Text = name,
+			FontSize = 11,
+			Padding = new Thickness (8, 3),
+			VerticalAlignment = VerticalAlignment.Top,
+			Opacity = 0.75,
+			TextTrimming = TextTrimming.CharacterEllipsis,
+		};
+		nameTb.Bind (TextBlock.ForegroundProperty, Application.Current!.GetResourceObservable ("IdeFgBrush"));
+		var valueTb = new TextBlock {
+			Text = string.IsNullOrEmpty (value) ? "—" : value,
+			FontSize = 11,
+			Padding = new Thickness (4, 3, 8, 3),
+			TextWrapping = TextWrapping.Wrap,
+			Opacity = value.Length == 0 ? 0.5 : 1.0,
+		};
+		valueTb.Bind (TextBlock.ForegroundProperty, Application.Current.GetResourceObservable ("IdeFgBrush"));
+		Grid.SetColumn (nameTb, 0);
+		Grid.SetColumn (valueTb, 1);
+		grid.Children.Add (nameTb);
+		grid.Children.Add (valueTb);
+		IBrush? zebraBrush = null;
+		if (zebra)
+			zebraBrush = Application.Current!.TryGetResource ("IdeChromeBgBrush", Application.Current.ActualThemeVariant, out var res)
+				&& res is IBrush b ? b : null;
+		return new Border {
+			Child = grid,
+			Background = zebra ? zebraBrush : Brushes.Transparent,
+		};
+	}
+
+	// Category header row (legacy LocalizedCategory grouping).
+	static Control PropertyCategoryHeader (string category)
+	{
+		var tb = new TextBlock {
+			Text = category,
+			FontSize = 11,
+			FontWeight = FontWeight.SemiBold,
+			Padding = new Thickness (8, 6, 8, 2),
+			Opacity = 0.85,
+		};
+		tb.Bind (TextBlock.ForegroundProperty, Application.Current!.GetResourceObservable ("IdeAccentBrush"));
+		return tb;
+	}
+
+	// The descriptor table per node type (legacy ProjectFileDescriptor fields).
+	List<PropertyRow> GetPropertiesForNode (string nodeType, string path)
+	{
+		var rows = new List<PropertyRow> ();
+		switch (nodeType) {
+		case "ProjectFile":
+			var fi = new FileInfo (path);
+			rows.Add (new ("Misc", "Name", fi.Name));
+			rows.Add (new ("Misc", "Path", path));
+			rows.Add (new ("Misc", "Type", FileTypeDescription (fi.Extension)));
+			rows.Add (new ("Misc", "Size", fi.Length < 1024 ? $"{fi.Length} B" : $"{fi.Length / 1024.0:0.#} KB"));
+			rows.Add (new ("Misc", "Last changed", fi.LastWriteTime.ToString ("yyyy-MM-dd HH:mm")));
+			rows.Add (new ("Build", "Build action", fi.Extension.Equals (".cs", StringComparison.OrdinalIgnoreCase) ? "Compile" : "Content"));
+			rows.Add (new ("Build", "Copy to output", "Do not copy"));
+			rows.Add (new ("Build", "Custom tool", ""));
+			break;
+
+		case "ProjectFolder":
+			var di = new DirectoryInfo (path);
+			rows.Add (new ("Misc", "Name", di.Name));
+			rows.Add (new ("Misc", "Path", path));
+			int files = 0, dirs = 0;
+			try { files = di.EnumerateFiles ().Count (); dirs = di.EnumerateDirectories ().Count (); } catch { }
+			rows.Add (new ("Misc", "Contains", $"{files} file(s), {dirs} folder(s)"));
+			break;
+
+		case "Project":
+			rows.Add (new ("Misc", "Name", Path.GetFileNameWithoutExtension (path)));
+			rows.Add (new ("Misc", "File Path", path));
+			rows.Add (new ("Misc", "Root Directory", Path.GetDirectoryName (path) ?? ""));
+			rows.Add (new ("Misc", "File Format", "MSBuild .csproj (SDK style)"));
+			rows.Add (new ("Build", "Target framework", ReadCsprojFirstValue (path, "TargetFramework") ?? ""));
+			rows.Add (new ("Build", "Assembly name", ReadCsprojFirstValue (path, "AssemblyName") ?? Path.GetFileNameWithoutExtension (path)));
+			rows.Add (new ("Build", "Output type", ReadCsprojFirstValue (path, "OutputType") ?? "Library"));
+			break;
+
+		case "Solution":
+			rows.Add (new ("Misc", "Name", Path.GetFileNameWithoutExtension (path)));
+			rows.Add (new ("Misc", "File Path", path));
+			rows.Add (new ("Misc", "Root Directory", Path.GetDirectoryName (path) ?? ""));
+			rows.Add (new ("Misc", "File Format", "Visual Studio solution"));
+			int projectCount = 0;
+			try {
+				projectCount = File.ReadAllLines (path).Count (l => l.StartsWith ("Project(", StringComparison.Ordinal));
+			} catch { }
+			rows.Add (new ("Misc", "Projects", projectCount.ToString ()));
+			break;
+
+		case "ProjectReference":
+			var refName = path.StartsWith ("reference:", StringComparison.Ordinal) ? path ["reference:".Length..] : path;
+			rows.Add (new ("Misc", "Name", refName));
+			rows.Add (new ("Build", "Local Copy", "True"));
+			rows.Add (new ("Build", "Specific Version", "False"));
+			break;
+
+		case "References":
+			rows.Add (new ("Misc", "Name", "References"));
+			rows.Add (new ("Misc", "Path", path.StartsWith ("references:", StringComparison.Ordinal) ? path ["references:".Length..] : ""));
+			break;
+		}
+		return rows;
+	}
+
+	static string FileTypeDescription (string ext) => ext.ToLowerInvariant () switch {
+		".cs" => "C# source",
+		".csproj" => "MSBuild project",
+		".sln" => "Solution",
+		".xml" => "XML document",
+		".json" => "JSON document",
+		".md" => "Markdown",
+		".txt" => "Plain text",
+		".props" or ".targets" => "MSBuild import",
+		_ => ext.Length > 0 ? $"{ext [1..].ToUpperInvariant ()} file" : "File",
+	};
+
+	static string? ReadCsprojFirstValue (string csproj, string tag)
+	{
+		try {
+			var doc = System.Xml.Linq.XDocument.Load (csproj);
+			var ns = doc.Root?.Name.Namespace ?? System.Xml.Linq.XNamespace.None;
+			return doc.Descendants (ns + tag).FirstOrDefault ()?.Value;
+		} catch {
+			return null;
+		}
+	}
+
+	// Populates the Properties pad from the current Solution pad selection
+	// (legacy PropertyPad.PopulateGrid on selection change).
+	void UpdatePropertiesPad ()
+	{
+		if (propertiesHeader is null || propertiesList is null)
+			return;
+		var (nodeType, path) = SelectedNodeType ();
+		propertiesList.Children.Clear ();
+		if (nodeType == "None" || path is null) {
+			SetPropertiesHeader ("No selection", "Select an item in the Solution pad");
+			return;
+		}
+		var name = nodeType switch {
+			"Solution" or "Project" => Path.GetFileNameWithoutExtension (path),
+			"ProjectFolder" => Path.GetFileName (path),
+			"References" => "References",
+			_ => Path.GetFileName (path),
+		};
+		SetPropertiesHeader (name, nodeType);
+
+		var rows = GetPropertiesForNode (nodeType, path);
+		string? lastCategory = null;
+		bool zebra = false;
+		foreach (var row in rows) {
+			if (row.Category != lastCategory) {
+				propertiesList.Children.Add (PropertyCategoryHeader (row.Category));
+				lastCategory = row.Category;
+				zebra = false;
+			}
+			propertiesList.Children.Add (PropertyRowControl (row.Name, row.Value, zebra));
+			zebra = !zebra;
+		}
 	}
 
 	// Rename the file/folder node (context menu). Returns false when the command
