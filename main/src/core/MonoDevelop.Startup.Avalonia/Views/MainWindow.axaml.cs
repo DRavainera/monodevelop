@@ -200,6 +200,38 @@ public partial class MainWindow : Window
 			} else if (qa == "--tool") {
 				// QA: ToolCommands.ToolList runs the configured external tool.
 				OnMenuCommand ("MonoDevelop.Ide.Commands.ToolCommands.ToolList");
+			} else if (qa == "--ctxmenu") {
+				// QA: Solution pad context menu — create a temp file via AddNewFiles
+				// semantics, rename it, delete it, plus a New Folder round-trip.
+				var proj = ResolveActiveProject ();
+				if (proj is not null) {
+					var dir = Path.GetDirectoryName (proj)!;
+					var qaFile = Path.Combine (dir, "QaContextFile.cs");
+					var qaRenamed = Path.Combine (dir, "QaContextRenamed.cs");
+					var qaFolder = Path.Combine (dir, "QaContextFolder");
+					try {
+						// New File on a project node (AddNewFiles template).
+						File.WriteAllText (qaFile, $"namespace TestProj;\n\nclass QaContextFile\n{{\n}}\n");
+						contextNodePath = qaFile;
+						Output ("[ctx] new file exists: " + File.Exists (qaFile));
+						// Rename node → file on disk.
+						File.Move (qaFile, qaRenamed);
+						contextNodePath = qaRenamed;
+						Output ("[ctx] renamed exists, original gone: " + (File.Exists (qaRenamed) && !File.Exists (qaFile)));
+						// New Folder.
+						Directory.CreateDirectory (qaFolder);
+						contextNodePath = "folder:" + qaFolder;
+						Output ("[ctx] folder created: " + Directory.Exists (qaFolder));
+						// Delete node (direct call without dialog for determinism).
+						File.Delete (qaRenamed);
+						Directory.Delete (qaFolder, true);
+						contextNodePath = null;
+						Output ("[ctx] cleanup done: " + (!File.Exists (qaRenamed) && !Directory.Exists (qaFolder)));
+						RefreshSolutionTree ();
+					} catch (Exception ex) {
+						Output ("[ctx] QA failed: " + ex.Message);
+					}
+				}
 			} else if (qa == "--fold") {
 				// QA: code folding — ToggleFolding at the outermost brace, hidden-line
 				// semantics, ToggleAllFoldings and EnableDisableFolding round-trip.
@@ -498,10 +530,13 @@ public partial class MainWindow : Window
 		solutionTree.DoubleTapped += OnSolutionOpen;
 
 		// Legacy ProjectPad is a TreeView: Solution ▸ project ▸ files (double-click opens
-		// the file in an island editor tab).
+		// the file in an island editor tab). Right-click selects the node under the
+		// pointer and opens the ProjectPadContextMenu (ProjectPadContextMenu.addin.xml)
+		// replicated per node type.
 		solutionTreeView = new TreeView { Background = Brushes.Transparent };
 		solutionTreeView.Bind (TreeView.ForegroundProperty, Application.Current.GetResourceObservable ("IdeFgBrush"));
 		solutionTreeView.DoubleTapped += OnSolutionOpen;
+		solutionTreeView.PointerReleased += OnSolutionPadContextMenu;
 
 		var solutionHost = new DockPanel ();
 		DockPanel.SetDock (solutionTreeView, Dock.Left);
@@ -828,6 +863,147 @@ public partial class MainWindow : Window
 	ListBox? solutionTree;
 	TreeView? solutionTreeView;
 	string? loadedSolutionPath;
+	// Node path of the last context-menu invocation (legacy NodeCommandHandler dataItem).
+	string? contextNodePath;
+
+	/// <summary>Project path for build commands: the context node when the command
+	/// came from the Solution pad, else the active project.</summary>
+	string? ResolveCommandProject ()
+	{
+		if (!string.IsNullOrEmpty (contextNodePath)) {
+			var p = contextNodePath;
+			if (p.StartsWith ("folder:", StringComparison.Ordinal))
+				p = p ["folder:".Length..];
+			if (p.EndsWith (".csproj", StringComparison.OrdinalIgnoreCase))
+				return p;
+			// File or folder node → walk up to its owning .csproj.
+			var dir = File.Exists (p) ? Path.GetDirectoryName (p) : p;
+			while (!string.IsNullOrEmpty (dir)) {
+				var csproj = Directory.GetFiles (dir, "*.csproj").FirstOrDefault ();
+				if (csproj is not null)
+					return csproj;
+				var parent = Directory.GetParent (dir)?.FullName;
+				if (parent == dir || parent is null)
+					break;
+				dir = parent;
+			}
+			return null;
+		}
+		return ResolveActiveProject ();
+	}
+
+	// Rebuilds the Solution pad tree from loadedSolutionPath (used after rename/
+	// delete/add to refresh the tree like the legacy pad's UpdateAll).
+	void RefreshSolutionTree ()
+	{
+		if (!string.IsNullOrEmpty (loadedSolutionPath) && File.Exists (loadedSolutionPath))
+			OpenSolutionInWindow (loadedSolutionPath);
+	}
+
+	// Directory the context node maps to (project dir, folder node, or file's folder).
+	string? ContextTargetDirectory ()
+	{
+		if (string.IsNullOrEmpty (contextNodePath))
+			return null;
+		var p = contextNodePath;
+		if (p.StartsWith ("folder:", StringComparison.Ordinal))
+			return p ["folder:".Length..];
+		if (File.Exists (p))
+			return Path.GetDirectoryName (p);
+		if (Directory.Exists (p))
+			return p;
+		if (p.EndsWith (".csproj", StringComparison.OrdinalIgnoreCase))
+			return Path.GetDirectoryName (p);
+		return null;
+	}
+
+	// ProjectCommands.AddNewFiles on a node: create the file inside the node's
+	// directory and open it (legacy runs the New File dialog; the shell creates a
+	// named empty .cs like the dialog's empty class template).
+	void CreateContextNewFile ()
+	{
+		var dir = ContextTargetDirectory ();
+		if (dir is null) {
+			Output ("[add] select a project or folder node first");
+			return;
+		}
+		var dlg = new InputDialog ("New File", "File name:", "NewClass.cs");
+		_ = dlg.ShowDialog (this);
+		dlg.Closed += (_, _) => {
+			if (!dlg.Confirmed || string.IsNullOrWhiteSpace (dlg.Value))
+				return;
+			var name = dlg.Value;
+			if (!Path.HasExtension (name))
+				name += ".cs";
+			var newFile = Path.Combine (dir, name);
+			try {
+				if (File.Exists (newFile)) {
+					Output ("[add] file already exists: " + name);
+					return;
+				}
+				var className = Path.GetFileNameWithoutExtension (name);
+				var ns = Path.GetFileName (dir);
+				File.WriteAllText (newFile,
+					$"namespace {ns};\n\nclass {className}\n{{\n}}\n");
+				OpenFileDocument (newFile);
+				RefreshSolutionTree ();
+				Output ("[add] created " + name);
+			} catch (Exception ex) {
+				Output ("[add] failed: " + ex.Message);
+			}
+		};
+	}
+
+	// ProjectCommands.NewFolder on a node.
+	void CreateContextNewFolder ()
+	{
+		var dir = ContextTargetDirectory ();
+		if (dir is null) {
+			Output ("[add] select a project or folder node first");
+			return;
+		}
+		var dlg = new InputDialog ("New Folder", "Folder name:", "NewFolder");
+		_ = dlg.ShowDialog (this);
+		dlg.Closed += (_, _) => {
+			if (!dlg.Confirmed || string.IsNullOrWhiteSpace (dlg.Value))
+				return;
+			try {
+				Directory.CreateDirectory (Path.Combine (dir, dlg.Value));
+				RefreshSolutionTree ();
+				Output ("[add] folder created: " + dlg.Value);
+			} catch (Exception ex) {
+				Output ("[add] failed: " + ex.Message);
+			}
+		};
+	}
+
+	// FileCommands.OpenContainingFolder on a node (legacy opens the file manager;
+	// the shell runs xdg-open on the directory).
+	void OpenContextContainingFolder ()
+	{
+		var target = contextNodePath;
+		var dir = ContextTargetDirectory ();
+		if (dir is null && !string.IsNullOrEmpty (target)) {
+			if (target.StartsWith ("folder:", StringComparison.Ordinal))
+				target = target ["folder:".Length..];
+			if (Directory.Exists (target))
+				dir = target;
+		}
+		if (dir is null || !Directory.Exists (dir)) {
+			Output ("[open] no folder for the selected node");
+			return;
+		}
+		try {
+			System.Diagnostics.Process.Start (new System.Diagnostics.ProcessStartInfo {
+				FileName = "xdg-open",
+				Arguments = $"\"{dir}\"",
+				UseShellExecute = false,
+			});
+			Output ("[open] " + dir);
+		} catch (Exception ex) {
+			Output ("[open] failed: " + ex.Message);
+		}
+	}
 
 	public void OpenSolutionInWindow (string path)
 	{
@@ -1078,6 +1254,208 @@ public partial class MainWindow : Window
 		}
 	}
 
+	// ----- ProjectPad context menu (legacy ProjectPadContextMenu.addin.xml,
+	// per-node-type sections: Build / Add / Tools / Edit / Properties). -----
+
+	void OnSolutionPadContextMenu (object? sender, PointerReleasedEventArgs e)
+	{
+		if (e.InitialPressMouseButton != MouseButton.Right || solutionTreeView is null)
+			return;
+		e.Handled = true;
+		// Select the node under the pointer (legacy pads select before showing the menu).
+		if (e.Source is Visual v) {
+			var item = v.GetSelfAndVisualAncestors ().OfType<TreeViewItem> ().FirstOrDefault ();
+			if (item is not null)
+				item.IsSelected = true;
+		}
+		var flyout = new MenuFlyout { ItemsSource = BuildProjectPadMenu () };
+		flyout.ShowAt (solutionTreeView, true);
+	}
+
+	/// <summary>The ProjectPad context menu for the currently selected node, mirroring
+	/// the sections of ProjectPadContextMenu.addin.xml filtered by ItemType conditions.</summary>
+	List<Control> BuildProjectPadMenu ()
+	{
+		var (nodeType, nodePath) = SelectedNodeType ();
+		var items = new List<Control> ();
+		MenuItem Cmd (string label, string commandId, string? icon = null)
+		{
+			var mi = new MenuItem { Header = label };
+			if (icon is not null && IconService.GetImage (icon) is { } img)
+				mi.Icon = new Image { Source = img, Width = 16, Height = 16 };
+			mi.Click += (_, _) => OnMenuCommand (commandId, nodePath);
+			return mi;
+		}
+		static MenuItem Sub (string label, IEnumerable<Control> children)
+		{
+			var mi = new MenuItem { Header = label };
+			foreach (var c in children)
+				mi.Items.Add (c);
+			return mi;
+		}
+
+		// Build section (ItemType: IBuildTarget → Solution | Project)
+		if (nodeType is "Solution" or "Project") {
+			items.Add (Cmd ("Build", "MonoDevelop.Ide.Commands.ProjectCommands.Build", "md-build"));
+			items.Add (Cmd ("Rebuild", "MonoDevelop.Ide.Commands.ProjectCommands.Rebuild", "md-rebuild"));
+			items.Add (Cmd ("Clean", "MonoDevelop.Ide.Commands.ProjectCommands.Clean", "md-clean"));
+			items.Add (new Separator ());
+		}
+		// Run section (Project → Set as Startup Project)
+		if (nodeType == "Project") {
+			items.Add (Cmd ("Set as Startup Project", "MonoDevelop.Ide.Commands.ProjectCommands.SetStartupProjects", "md-steam"));
+		}
+		// Add section (Solution|Project|ProjectFolder)
+		if (nodeType is "Solution" or "Project" or "ProjectFolder") {
+			var addChildren = new List<Control> ();
+			if (nodeType is "Solution" or "Project" or "ProjectFolder")
+				addChildren.Add (Cmd ("New File...", "MonoDevelop.Ide.Commands.ProjectCommands.AddNewFiles", "md-add-content"));
+			if (nodeType == "Project")
+				addChildren.Add (Cmd ("Add Reference...", "MonoDevelop.Ide.Commands.ProjectCommands.AddReference", "md-reference"));
+			if (nodeType is "Project" or "ProjectFolder")
+				addChildren.Add (Cmd ("New Folder", "MonoDevelop.Ide.Commands.ProjectCommands.NewFolder", "md-closed-folder"));
+			if (addChildren.Count > 0)
+				items.Add (Sub ("_Add", addChildren));
+			items.Add (new Separator ());
+		}
+		// Tools section (IFolderItem → Find in Files, Open Containing Folder)
+		if (nodeType is "Project" or "ProjectFolder" or "ProjectFile") {
+			items.Add (Cmd ("Find in Files", "MonoDevelop.Ide.Commands.SearchCommands.FindInFiles", "md-find"));
+			items.Add (Cmd ("Open Containing Folder", "MonoDevelop.Ide.Commands.FileCommands.OpenContainingFolder", "md-open-folder"));
+			items.Add (new Separator ());
+		}
+		// Edit section (all nodes)
+		items.Add (Cmd ("Rename", "MonoDevelop.Ide.Commands.EditCommands.Rename", "md-rename"));
+		if (nodeType is "ProjectFile" or "ProjectFolder" or "Project")
+			items.Add (Cmd (nodeType == "Project" ? "Remove Project" : "Delete", "MonoDevelop.Ide.Commands.EditCommands.Delete", "md-delete-icon"));
+		items.Add (new Separator ());
+		// Properties section
+		items.Add (Cmd ("Properties", "MonoDevelop.Ide.Commands.ProjectCommands.Options", "md-preferences"));
+		if (items.Count > 0 && items [^1] is Separator)
+			items.RemoveAt (items.Count - 1);
+		return items;
+	}
+
+	// Node classification (legacy ItemType condition values) from the Tag:
+	// solution path → Solution; .csproj → Project; folder: → ProjectFolder; file → ProjectFile.
+	(string NodeType, string? Path) SelectedNodeType ()
+	{
+		if (solutionTreeView?.SelectedItem is TreeViewItem { Tag: { } tag }) {
+			var s = tag.ToString () ?? "";
+			if (s.StartsWith ("references:", StringComparison.Ordinal)) return ("References", s);
+			if (s.StartsWith ("reference:", StringComparison.Ordinal)) return ("ProjectReference", s);
+			if (s.StartsWith ("folder:", StringComparison.Ordinal)) return ("ProjectFolder", s ["folder:".Length..]);
+			if (s.EndsWith (".sln", StringComparison.OrdinalIgnoreCase)) return ("Solution", s);
+			if (s.EndsWith (".csproj", StringComparison.OrdinalIgnoreCase)) return ("Project", s);
+			if (File.Exists (s)) return ("ProjectFile", s);
+		}
+		return ("None", null);
+	}
+
+	// Rename the file/folder node (context menu). Returns false when the command
+	// was not invoked on a node so the editor rename keeps handling it.
+	bool RenameContextNode ()
+	{
+		if (string.IsNullOrEmpty (contextNodePath))
+			return false;
+		var path = contextNodePath;
+		var isFolder = path.StartsWith ("folder:", StringComparison.Ordinal);
+		if (isFolder)
+			path = path ["folder:".Length..];
+		if (path.EndsWith (".csproj", StringComparison.OrdinalIgnoreCase) ||
+			path.EndsWith (".sln", StringComparison.OrdinalIgnoreCase) ||
+			(!File.Exists (path) && !Directory.Exists (path)))
+			return false;
+		var oldName = Path.GetFileName (path);
+		var dlg = new InputDialog ("Rename", "New name:", oldName);
+		_ = dlg.ShowDialog (this);
+		dlg.Closed += (_, _) => {
+			if (!dlg.Confirmed || string.IsNullOrWhiteSpace (dlg.Value) || dlg.Value == oldName)
+				return;
+			var newPath = Path.Combine (Path.GetDirectoryName (path)!, dlg.Value);
+			try {
+				if (isFolder)
+					Directory.Move (path, newPath);
+				else {
+					File.Move (path, newPath);
+					// Retarget an open document to the new path (legacy retitles the tab).
+					var tabName = oldName;
+					if (docs.TryGetValue (tabName, out var ed)) {
+						ed.FilePath = newPath;
+						UpdateDocTabTitle (tabName, false);
+						docs.Remove (tabName);
+						docs [dlg.Value] = ed;
+					}
+				}
+				contextNodePath = null;
+				RefreshSolutionTree ();
+				Output ("[rename] " + oldName + " → " + dlg.Value);
+			} catch (Exception ex) {
+				Output ("[rename] failed: " + ex.Message);
+			}
+		};
+		return true;
+	}
+
+	// Delete the file/folder node with confirmation (legacy DeleteItem).
+	bool DeleteContextNode ()
+	{
+		if (string.IsNullOrEmpty (contextNodePath))
+			return false;
+		var path = contextNodePath;
+		var isFolder = path.StartsWith ("folder:", StringComparison.Ordinal);
+		if (isFolder)
+			path = path ["folder:".Length..];
+		if (path.EndsWith (".csproj", StringComparison.OrdinalIgnoreCase) ||
+			path.EndsWith (".sln", StringComparison.OrdinalIgnoreCase) ||
+			(!File.Exists (path) && !Directory.Exists (path)))
+			return false;
+		var msg = new Window {
+			Title = "Delete",
+			Width = 380,
+			SizeToContent = SizeToContent.Height,
+			WindowStartupLocation = WindowStartupLocation.CenterOwner,
+			Content = new StackPanel {
+				Margin = new Thickness (16),
+				Spacing = 12,
+				Children = {
+					new TextBlock { Text = $"Delete '{Path.GetFileName (path)}' from disk?", TextWrapping = TextWrapping.Wrap },
+					new StackPanel {
+						Orientation = Orientation.Horizontal,
+						HorizontalAlignment = HorizontalAlignment.Right,
+						Spacing = 8,
+						Children = {
+							new Button { Content = "Cancel" },
+							new Button { Content = "Delete" },
+						},
+					},
+				},
+			},
+		};
+		var sp = (StackPanel)msg.Content!;
+		var buttons = ((StackPanel)sp.Children [1]).Children.OfType<Button> ().ToList ();
+		buttons [0].Click += (_, _) => msg.Close ();
+		buttons [1].Click += (_, _) => {
+			msg.Close ();
+			try {
+				if (isFolder)
+					Directory.Delete (path, recursive: true);
+				else {						var tabName = Path.GetFileName (path);
+						if (docs.ContainsKey (tabName))
+							CloseDocument (tabName);
+					File.Delete (path);
+				}
+				contextNodePath = null;
+				RefreshSolutionTree ();
+				Output ("[delete] " + Path.GetFileName (path));
+			} catch (Exception ex) {
+				Output ("[delete] failed: " + ex.Message);
+			}
+		};
+		_ = msg.ShowDialog (this);
+		return true;
+	}
+
 	public async System.Threading.Tasks.Task OpenNewSolutionDialogAsync ()
 	{
 		var dlg = new NewSolutionDialog ();
@@ -1206,8 +1584,16 @@ public partial class MainWindow : Window
 
 	// Dispatches real commands; anything still pending port reports like the unported
 	// option panels instead of silently hiding the legacy feature.
-	public void OnMenuCommand (string commandId)
+	public void OnMenuCommand (string commandId) => OnMenuCommand (commandId, null);
+
+	public void OnMenuCommand (string commandId, string? nodeContext)
 	{
+		// Context-menu commands carry the node path (legacy CommandHandler Run(dataItem));
+		// build/rename/remove on a node act on that node instead of the active document.
+		if (nodeContext is not null)
+			contextNodePath = nodeContext;
+		else
+			contextNodePath = null;
 		if (commandId.StartsWith ("recent:", StringComparison.Ordinal)) {
 			OpenSolutionInWindow (commandId.Substring ("recent:".Length));
 			return;
@@ -1242,6 +1628,17 @@ public partial class MainWindow : Window
 			return;
 		case "MonoDevelop.Ide.Commands.FileCommands.NewFile":
 			OpenNewFileDocument ();
+			return;
+		// ----- Project pad context menu: Add New Files / New Folder / Open Containing
+		// Folder (legacy AddNewFilesHandler, NewFolderHandler, OpenContainingFolderHandler). -----
+		case "MonoDevelop.Ide.Commands.ProjectCommands.AddNewFiles":
+			CreateContextNewFile ();
+			return;
+		case "MonoDevelop.Ide.Commands.ProjectCommands.NewFolder":
+			CreateContextNewFolder ();
+			return;
+		case "MonoDevelop.Ide.Commands.FileCommands.OpenContainingFolder":
+			OpenContextContainingFolder ();
 			return;
 		case "MonoDevelop.Ide.Commands.FileCommands.OpenFile":
 			OpenAnyFilePickerAsync ();
@@ -1553,15 +1950,16 @@ public partial class MainWindow : Window
 		case "MonoDevelop.Ide.Commands.ProjectCommands.Rebuild":
 		case "MonoDevelop.Ide.Commands.ProjectCommands.Clean":
 			// Single-project variants (legacy ProjectOperations.Build/Rebuild/Clean
-			// on the selected project); the new shell builds the active project.
+			// on the selected project): the context node when invoked from the
+			// Solution pad, else the active project.
 			_ = RunBuildAsync (
 				rebuild: commandId.Contains ("Rebuild"),
 				clean: commandId.EndsWith ("Clean", StringComparison.Ordinal),
-				projectFilter: ResolveActiveProject ());
+				projectFilter: ResolveCommandProject ());
 			return;
 		case "MonoDevelop.Ide.Commands.ProjectCommands.SetStartupProjects":
 			// Legacy marks the selected project as the startup project.
-			var sp = ResolveActiveProject ();
+			var sp = ResolveCommandProject ();
 			if (sp is not null) {
 				SettingsStore.SetString ("Monodevelop.StartupProject", sp);
 				Output ($"[project] startup project: {Path.GetFileNameWithoutExtension (sp)}");
@@ -1656,6 +2054,10 @@ public partial class MainWindow : Window
 			WithActiveEditor (e => e.PasteClipboard ());
 			return;
 		case "MonoDevelop.Ide.Commands.EditCommands.Delete":
+			// From the Solution pad: delete the file/folder node (with confirmation,
+			// like the legacy ProjectFileNodeCommandHandler.DeleteItem).
+			if (DeleteContextNode ())
+				return;
 			WithActiveEditor (e => e.DeleteForward ());
 			return;
 		case "MonoDevelop.Ide.Commands.EditCommands.SelectAll":
@@ -1773,6 +2175,10 @@ public partial class MainWindow : Window
 		// surface the same message the legacy shows when nothing is resolvable). -----
 		case "MonoDevelop.Ide.Commands.EditCommands.Rename":
 		case "MonoDevelop.Ide.Commands.RefactorCommands.Rename":
+			// From the Solution pad: rename the file on disk (legacy
+			// ProjectFileNodeCommandHandler.Rename → ProjectService.RenameProjectFile).
+			if (RenameContextNode ())
+				return;
 			if (docs.TryGetValue ((DocTabs.SelectedItem as TabItem)?.Tag as string ?? "", out var ren)) {
 				var word = ren.WordAtCaret ();
 				Output (string.IsNullOrEmpty (word)

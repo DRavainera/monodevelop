@@ -398,3 +398,20 @@ Port desde `MonoDevelop.Ide.FindInFiles` y `ProjectOperations` del legacy:
   en el Output pad en vez de caer al fallback.
 - Resultado: todos los 141 command-ids del menú tienen handler; el fallback
   "not wired" queda sin casos alcanzables por menú.
+
+### M11s — Menú contextual del Solution pad (ProjectPadContextMenu.addin.xml)
+- Legacy: menú por tipo de nodo vía ItemType conditions — Build/Rebuild/Clean
+  (IBuildTarget), Set as Startup (Project), Add ▸ New File/Reference/New Folder
+  (Project|ProjectFolder), Tools ▸ Find in Files/Open Containing Folder,
+  Edit ▸ Rename/Delete, Properties.
+- Avalonia: `OnSolutionPadContextMenu` selecciona el nodo bajo el puntero y abre
+  un `MenuFlyout` construido por `BuildProjectPadMenu()` según `SelectedNodeType()`
+  (Solution/Project/ProjectFolder/ProjectFile/References). Los comandos llegan a
+  `OnMenuCommand(id, nodeContext)` con el path del nodo (`contextNodePath`),
+  de modo que Build/Rebuild/Clean actúan sobre el proyecto del nodo
+  (`ResolveCommandProject`), Rename renombra el archivo en disco retargeteando
+  el documento abierto, Delete borra con confirmación, AddNewFiles crea la
+  clase plantilla y abre el editor, NewFolder crea la carpeta — y el árbol se
+  refresca (`RefreshSolutionTree`) como el UpdateAll del pad legacy.
+- QA E2E (`--ctxmenu`): create/rename/folder/delete sobre TestProj verificados;
+  flyout verificado visualmente por clic derecho sintético X11.
