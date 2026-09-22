@@ -318,7 +318,31 @@ public class SkTextEditor : Control
 	{
 		base.OnKeyDown (e);
 		var ctrl = e.KeyModifiers.HasFlag (KeyModifiers.Control);
+		var altShift = e.KeyModifiers.HasFlag (KeyModifiers.Alt) && e.KeyModifiers.HasFlag (KeyModifiers.Shift);
 		switch (e.Key) {
+		case Key.OemPeriod when altShift:
+			// Legacy InsertNextMatchingCaret: Alt+Shift+.
+			InsertNextMatchingCaret ();
+			e.Handled = true;
+			return;
+		case Key.OemComma when altShift:
+			// Legacy RemoveLastSecondaryCaret: Alt+Shift+,
+			RemoveLastSecondaryCaret ();
+			e.Handled = true;
+			return;
+		case Key.A when altShift:
+			// Legacy InsertAllMatchingCarets: Alt+Shift+A
+			InsertAllMatchingCarets ();
+			e.Handled = true;
+			return;
+		case Key.Escape:
+			// Legacy: Escape collapses multi-caret back to the primary caret.
+			if (secondaryCarets.Count > 0) {
+				ClearSecondaryCarets ();
+				e.Handled = true;
+				return;
+			}
+			break;
 		case Key.X when ctrl:
 			CutSelection ();
 			e.Handled = true;
@@ -958,6 +982,145 @@ public class SkTextEditor : Control
 		GotoLine (prev);
 	}
 
+	// ----- Multi-caret (legacy TextEditorCommands.InsertNextMatchingCaret family:
+	// one primary caret plus secondary carets on the next/all word matches). -----
+
+	readonly List<(int line, int col)> secondaryCarets = new ();
+
+	/// <summary>All active carets, primary first.</summary>
+	public IReadOnlyList<(int line, int col)> Carets
+		=> new [] { (caretLine, caretCol) }.Concat (secondaryCarets).ToList ();
+
+	public bool HasSecondaryCarets => secondaryCarets.Count > 0;
+
+	/// <summary>Adds a caret at the next occurrence of the word at the caret
+	/// (legacy InsertNextMatchingCaret). False when there is nothing to match.</summary>
+	public bool InsertNextMatchingCaret ()
+	{
+		var word = WordAtCaret ();
+		if (string.IsNullOrEmpty (word))
+			return false;
+		// Search forward from the primary caret, wrapping the document once.
+		var text = string.Join ("\n", lines);
+		int pos = lines.Take (caretLine).Sum (l => l.Length + 1) + Math.Min (caretCol, lines [caretLine].Length);
+		int idx = text.IndexOf (word, Math.Min (pos + word.Length, text.Length), StringComparison.Ordinal);
+		if (idx < 0)
+			idx = text.IndexOf (word, StringComparison.Ordinal);
+		if (idx < 0 || (secondaryCarets.Count == 0 && idx == pos))
+			return false;
+		var (l, c) = OffsetToPosition (idx);
+		if (Carets.Any (ct => ct.line == l && ct.col == c))
+			return false;
+		secondaryCarets.Add ((l, c));
+		MarkDirty ();
+		return true;
+	}
+
+	/// <summary>Carets at every occurrence of the word at the caret
+	/// (legacy InsertAllMatchingCarets).</summary>
+	public int InsertAllMatchingCarets ()
+	{
+		var word = WordAtCaret ();
+		if (string.IsNullOrEmpty (word))
+			return 0;
+		secondaryCarets.Clear ();
+		int count = 0;
+		for (int i = 0; i < lines.Count; i++) {
+			int from = 0;
+			int idx;
+			while ((idx = lines [i].IndexOf (word, from, StringComparison.Ordinal)) >= 0) {
+				if (i == caretLine && idx == Math.Min (caretCol, lines [i].Length)) {
+					from = idx + word.Length;
+					continue; // the primary caret
+				}
+				secondaryCarets.Add ((i, idx));
+				count++;
+				from = idx + Math.Max (1, word.Length);
+			}
+		}
+		if (count > 0)
+			MarkDirty ();
+		return count;
+	}
+
+	public void RemoveLastSecondaryCaret ()
+	{
+		if (secondaryCarets.Count > 0) {
+			secondaryCarets.RemoveAt (secondaryCarets.Count - 1);
+			MarkDirty ();
+		}
+	}
+
+	public void RotatePrimaryCaretNext ()
+	{
+		if (secondaryCarets.Count == 0)
+			return;
+		var next = secondaryCarets [0];
+		secondaryCarets.RemoveAt (0);
+		secondaryCarets.Add ((caretLine, caretCol));
+		caretLine = next.line;
+		caretCol = next.col;
+		EnsureCaretVisible ();
+		MarkDirty ();
+	}
+
+	public void RotatePrimaryCaretPrevious ()
+	{
+		if (secondaryCarets.Count == 0)
+			return;
+		var last = secondaryCarets [^1];
+		secondaryCarets.RemoveAt (secondaryCarets.Count - 1);
+		secondaryCarets.Insert (0, (caretLine, caretCol));
+		caretLine = last.line;
+		caretCol = last.col;
+		EnsureCaretVisible ();
+		MarkDirty ();
+	}
+
+	public void MoveLastCaretDown ()
+	{
+		if (secondaryCarets.Count > 0) {
+			var (l, c) = secondaryCarets [^1];
+			if (l + 1 < lines.Count)
+				secondaryCarets [^1] = (l + 1, Math.Min (c, lines [l + 1].Length));
+		} else if (caretLine + 1 < lines.Count) {
+			caretLine++;
+			caretCol = Math.Min (caretCol, lines [caretLine].Length);
+		}
+		EnsureCaretVisible ();
+		MarkDirty ();
+	}
+
+	/// <summary>Inserts text at every caret (primary first, bottom-up so earlier
+	/// offsets stay valid), like the legacy MultiCaretInsertText.</summary>
+	public void InsertAtAllCarets (string text)
+	{
+		if (secondaryCarets.Count == 0) {
+			InsertAtCaret (text);
+			return;
+		}
+		var all = Carets.OrderByDescending (c => c.line).ThenByDescending (c => c.col).ToList ();
+		foreach (var (l, c) in all) {
+			var line = lines [l];
+			int col = Math.Min (c, line.Length);
+			lines [l] = line.Insert (col, text);
+			if (l == caretLine)
+				caretCol += text.Length;
+			for (int i = 0; i < secondaryCarets.Count; i++) {
+				var (sl, sc) = secondaryCarets [i];
+				if (sl == l && sc > col)
+					secondaryCarets [i] = (sl, sc + text.Length);
+			}
+		}
+		Commit ();
+	}
+
+	public void ClearSecondaryCarets ()
+	{
+		secondaryCarets.Clear ();
+		MarkDirty ();
+	}
+
 	// Returns the word under the caret (used by RefactorCommands.Rename).
 	public string WordAtCaret ()
 	{
@@ -1162,14 +1325,20 @@ public class SkTextEditor : Control
 			}
 		}
 
-		// caret
+		// carets — secondary carets render shorter (legacy InsertionCursor), primary last
 		if (caretVisible) {
+			using var caretPaint = new SKPaint { Color = caretColor, IsAntialias = false };
+			using var secPaint = new SKPaint { Color = caretColor.WithAlpha (140), IsAntialias = false };
+			foreach (var (sl, sc) in secondaryCarets) {
+				float cx = gutterW + 4 + sc * charW;
+				float cy = (sl - (float)scrollLines) * lineH;
+				if (cy >= -lineH && cy <= (float)Bounds.Height)
+					canvas.DrawRect (cx, Math.Max (0f, cy), 1.2f, Math.Min (lineH * 0.6f, (float)Bounds.Height - Math.Max (0f, cy)), secPaint);
+			}
 			float caretX = gutterW + 4 + caretCol * charW;
 			float caretY = (caretLine - (float)scrollLines) * lineH;
-			if (caretY >= -lineH && caretY <= (float)Bounds.Height) {
-				using var caretPaint = new SKPaint { Color = caretColor, IsAntialias = false };
+			if (caretY >= -lineH && caretY <= (float)Bounds.Height)
 				canvas.DrawRect (caretX, Math.Max (0f, caretY), 1.5f, Math.Min (lineH, (float)Bounds.Height - Math.Max (0f, caretY)), caretPaint);
-			}
 		}
 	}
 

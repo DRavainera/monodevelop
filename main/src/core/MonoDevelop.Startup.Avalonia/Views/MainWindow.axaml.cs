@@ -115,6 +115,30 @@ public partial class MainWindow : Window
 				// QA: single-project build (ProjectCommands.Build) via the command dispatch.
 				OnMenuCommand ("MonoDevelop.Ide.Commands.ProjectCommands.Build");
 				Output ("[buildone] dispatched ProjectCommands.Build");
+			} else if (qa == "--mcaret") {
+				// QA: multi-caret — add carets on every match, insert at all, undo.
+				var file = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile),
+					"TestProj", "TestProj", "Program.cs");
+				if (File.Exists (file)) {
+					OpenFileDocument (file);
+					var name = Path.GetFileName (file);
+					if (docs.TryGetValue (name, out var ed)) {
+						SelectDocument (name);
+						// Duplicate every 'Program' occurrence so the word has several matches.
+						ed.ReplaceAllInDocument ("Program", "Program Program");
+						ed.GotoLine (4); // 'class Program Program'
+						ed.GotoLineEnd (); // caret after the last 'Program'
+						int n = ed.InsertAllMatchingCarets ();
+						Output ($"[mcaret] primary + {n} secondary caret(s) on 'Program'");
+						ed.InsertAtAllCarets ("_X");
+						Output ($"[mcaret] after insert: 'Program_X' present: {ed.Text.Contains ("Program_X")}");
+						ed.Undo ();
+						Output ($"[mcaret] undo → 'Program' restored: {ed.Text.Contains ("Program") && !ed.Text.Contains ("Program_X")}");
+						ed.RotatePrimaryCaretNext ();
+						Output ($"[mcaret] rotate → primary caret at line {ed.CurrentLine + 1}");
+						ed.ClearSecondaryCarets ();
+					}
+				}
 			} else if (qa == "--run") {
 				_ = RunStartupProjectAsync ();
 			} else if (qa == "--goto") {
@@ -1511,6 +1535,32 @@ public partial class MainWindow : Window
 				if (!e.GotoMatchingBrace ())
 					Output ("[editor] no matching brace");
 			});
+			return;
+
+		// ----- TextEditorCommands multi-caret (legacy InsertNextMatchingCaret family) -----
+		case "MonoDevelop.Ide.Commands.TextEditorCommands.InsertNextMatchingCaret":
+			WithActiveEditor (e => {
+				if (!e.InsertNextMatchingCaret ())
+					Output ("[editor] no word at caret to match");
+			});
+			return;
+		case "MonoDevelop.Ide.Commands.TextEditorCommands.InsertAllMatchingCarets":
+			WithActiveEditor (e => {
+				int n = e.InsertAllMatchingCarets ();
+				Output (n > 0 ? $"[editor] {n + 1} carets on every match" : "[editor] no word at caret to match");
+			});
+			return;
+		case "MonoDevelop.Ide.Commands.TextEditorCommands.RemoveLastSecondaryCaret":
+			WithActiveEditor (e => e.RemoveLastSecondaryCaret ());
+			return;
+		case "MonoDevelop.Ide.Commands.TextEditorCommands.RotatePrimaryCaretNext":
+			WithActiveEditor (e => e.RotatePrimaryCaretNext ());
+			return;
+		case "MonoDevelop.Ide.Commands.TextEditorCommands.RotatePrimaryCaretPrevious":
+			WithActiveEditor (e => e.RotatePrimaryCaretPrevious ());
+			return;
+		case "MonoDevelop.Ide.Commands.TextEditorCommands.MoveLastCaretDown":
+			WithActiveEditor (e => e.MoveLastCaretDown ());
 			return;
 
 		// ----- RefactorCommands (legacy RenameRefactoring: requires a symbol model;

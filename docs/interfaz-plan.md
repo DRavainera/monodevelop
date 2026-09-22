@@ -311,3 +311,7 @@ Port desde `MonoDevelop.Ide.FindInFiles` y `ProjectOperations` del legacy:
 - ProjectCommands.Build/Rebuild/Clean sobre el proyecto activo (RunBuildAsync con projectFilter), SetStartupProjects persistido en Monodevelop.StartupProject.
 - ExportSolution (copia del árbol de la solución), ClearRecentFiles vía RecentSolutions.Clear + rebuild del menú File, InsertStandardHeader.
 - QA --buildone: dispatch del comando Build con MSBuild exit 0.
+
+### M11h — Multi-caret (familia InsertNextMatchingCaret)
+- SkTextEditor: carets secundarios, InsertNextMatchingCaret (Alt+Shift+.), InsertAllMatchingCarets (Alt+Shift+A), RemoveLastSecondaryCaret (Alt+Shift+,), RotatePrimaryCaretNext/Previous, MoveLastCaretDown, InsertAtAllCarets (bottom-up, desplazando carets en la misma línea), Escape colapsa a primario; render con carets secundarios más cortos (InsertionCursor legacy).
+- Dispatch de los 6 TextEditorCommands en MainWindow. QA --mcaret: all-matching + insert + undo + rotate verificados.
