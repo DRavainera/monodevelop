@@ -348,3 +348,12 @@ Port desde `MonoDevelop.Ide.FindInFiles` y `ProjectOperations` del legacy:
   en `Monodevelop.PadLayout`.
 - QA E2E (`--viewcmds`): 3 coincidencias → next/next/prev con saltos verificados;
   pads ocultos y restaurados.
+
+### M11n — MessageBubbleCommands (burbujas inline del editor)
+- Legacy: `MessageBubbleCommands.Toggle/ToggleIssues/HideIssues` con los tres estados
+  de `IdePreferences.ShowMessageBubbles` (Never/ForErrors/ForErrorsAndWarnings).
+- Avalonia: `SkTextEditor.SetBubbles/SetBubbleMode/ToggleBubbles` — marcador inline
+  "● CODE: message" (rojo error, ámbar warning) tras el texto de la línea afectada;
+  sincronización en vivo desde el parser de MSBuild (`ParseBuildMessage` coloca la
+  burbuja en el documento abierto en cuanto el error llega).
+- QA E2E (`--bubbles`): ciclo completo de los 3 estados verificado.

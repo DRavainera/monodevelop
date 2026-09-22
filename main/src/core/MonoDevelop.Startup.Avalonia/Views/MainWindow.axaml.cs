@@ -155,6 +155,28 @@ public partial class MainWindow : Window
 				Output ("[viewcmds] singleMode hides pads: " + !LeftPads.IsVisible);
 				OnMenuCommand ("MonoDevelop.Ide.Commands.ViewCommands.SideBySideMode");
 				Output ("[viewcmds] sideBySide restores pads: " + (LeftPads.IsVisible && padsWereVisible));
+			} else if (qa == "--bubbles") {
+				// QA: MessageBubbleCommands — set a bubble on line 6 of Program.cs,
+				// cycle the three modes, hide.
+				var file = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile),
+					"TestProj", "TestProj", "Program.cs");
+				if (File.Exists (file)) {
+					OpenFileDocument (file);
+					var name = Path.GetFileName (file);
+					if (docs.TryGetValue (name, out var ed)) {
+						SelectDocument (name);
+						ed.SetBubbles (new [] { (5, "CS0103: test bubble", true) });
+						ed.ToggleBubbles ();
+						Output ("[bubbles] mode after Toggle from ForErrors: " + ed.CurrentBubbleMode);
+						ed.ToggleBubbles ();
+						Output ("[bubbles] mode after Toggle again: " + ed.CurrentBubbleMode);
+						ed.SetBubbleMode (SkTextEditor.BubbleMode.ForErrors);
+						Output ("[bubbles] set back to ForErrors: " + (ed.CurrentBubbleMode == SkTextEditor.BubbleMode.ForErrors));
+						ed.SetBubbleMode (SkTextEditor.BubbleMode.Never);
+						Output ("[bubbles] hidden: " + (ed.CurrentBubbleMode == SkTextEditor.BubbleMode.Never));
+						ed.SetBubbleMode (SkTextEditor.BubbleMode.ForErrors);
+					}
+				}
 			} else if (qa == "--fold") {
 				// QA: code folding — ToggleFolding at the outermost brace, hidden-line
 				// semantics, ToggleAllFoldings and EnableDisableFolding round-trip.
@@ -1381,6 +1403,13 @@ public partial class MainWindow : Window
 		case "MonoDevelop.Ide.Commands.ViewCommands.ShowNext":
 			ShowNextResult ();
 			return;
+		case "MonoDevelop.Ide.Editor.MessageBubbleCommands.Toggle":
+		case "MonoDevelop.Ide.Editor.MessageBubbleCommands.ToggleIssues":
+			WithActiveEditor (e => e.ToggleBubbles ());
+			return;
+		case "MonoDevelop.Ide.Editor.MessageBubbleCommands.HideIssues":
+			WithActiveEditor (e => e.SetBubbleMode (SkTextEditor.BubbleMode.Never));
+			return;
 		case "MonoDevelop.Ide.Commands.ViewCommands.ShowPrevious":
 			ShowPreviousResult ();
 			return;
@@ -2215,6 +2244,15 @@ public partial class MainWindow : Window
 				int.Parse (match.Groups [3].Value), match.Groups [4].Value,
 				match.Groups [5].Value, match.Groups [6].Value));
 			SetErrors ($"{buildErrors.Count} problem(s) — last: {match.Groups [6].Value}");
+			// Live message bubble on the affected line of the open document
+			// (legacy MessageBubble appears as soon as the error is reported).
+			var errFile = Path.GetFileName (match.Groups [1].Value);
+			if (docs.TryGetValue (errFile, out var bubbleEd)) {
+				var entry = (int.Parse (match.Groups [2].Value) - 1, // 0-based line
+					$"{match.Groups [5].Value}: {match.Groups [6].Value}",
+					match.Groups [4].Value == "error");
+				bubbleEd.SetBubbles (new [] { entry });
+			}
 		}
 	}
 

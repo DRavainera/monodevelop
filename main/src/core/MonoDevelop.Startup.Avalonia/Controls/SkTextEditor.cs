@@ -1113,6 +1113,54 @@ public class SkTextEditor : Control
 		MarkDirty ();
 	}
 
+	// ----- Message bubbles (legacy MessageBubbleCommands: Never/ForErrors/
+	// ForErrorsAndWarnings). Inline markers rendered at the end of the affected
+	// line, like the legacy MessageBubble over the text view.
+	public enum BubbleMode { Never, ForErrors, ForErrorsAndWarnings }
+	BubbleMode bubbleMode = BubbleMode.ForErrors;
+	readonly Dictionary<int, (string text, bool isError)> lineBubbles = new ();
+
+	/// <summary>Sets the inline diagnostic markers (called from the Errors pad data).</summary>
+	public void SetBubbles (IEnumerable<(int line, string text, bool isError)> bubbles)
+	{
+		lineBubbles.Clear ();
+		foreach (var b in bubbles)
+			lineBubbles [b.line] = (b.text, b.isError);
+		MarkDirty ();
+	}
+
+	public void SetBubbleMode (BubbleMode mode)
+	{
+		bubbleMode = mode;
+		MarkDirty ();
+	}
+
+	public BubbleMode CurrentBubbleMode => bubbleMode;
+
+	// Toggles between the three legacy states.
+	public void ToggleBubbles ()
+	{
+		bubbleMode = bubbleMode switch {
+			BubbleMode.Never => BubbleMode.ForErrors,
+			BubbleMode.ForErrors => BubbleMode.ForErrorsAndWarnings,
+			_ => BubbleMode.Never,
+		};
+		MarkDirty ();
+	}
+
+	// Renders an error bubble after the line text (red) or warning bubble (amber).
+	void DrawBubbles (SKCanvas canvas, int line, float x, float baseline, SKFont font, SKPaint paint)
+	{
+		if (bubbleMode == BubbleMode.Never || !lineBubbles.TryGetValue (line, out var b))
+			return;
+		if (b.isError && bubbleMode == BubbleMode.Never)
+			return;
+		if (!b.isError && bubbleMode == BubbleMode.ForErrors)
+			return;
+		paint.Color = b.isError ? new SKColor (0xf1, 0x6a, 0x6a) : new SKColor (0xe5, 0xb5, 0x6a);
+		canvas.DrawText ("● " + b.text, x + 12, baseline, font, paint);
+	}
+
 	public bool HasSelectionText => hasSelection && SelectedText.Length > 0;
 
 	public void ToggleBookmark ()
@@ -1554,6 +1602,8 @@ public class SkTextEditor : Control
 				canvas.DrawText (seg.Text, x, baseline, textFont, textPaint);
 				x += seg.Text.Length * charW;
 			}
+			// inline message bubble (legacy MessageBubble) after the line text
+			DrawBubbles (canvas, i, x, baseline, textFont, textPaint);
 		}
 
 		// carets — secondary carets render shorter (legacy InsertionCursor), primary last
