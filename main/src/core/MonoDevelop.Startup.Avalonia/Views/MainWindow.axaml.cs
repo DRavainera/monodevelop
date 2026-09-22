@@ -139,6 +139,26 @@ public partial class MainWindow : Window
 						ed.ClearSecondaryCarets ();
 					}
 				}
+			} else if (qa == "--fmt") {
+				// QA: FormatBuffer — make the file ugly, format, verify reindent + undo.
+				var file = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile),
+					"TestProj", "TestProj", "Program.cs");
+				if (File.Exists (file)) {
+					OpenFileDocument (file);
+					var name = Path.GetFileName (file);
+					if (docs.TryGetValue (name, out var ed)) {
+						SelectDocument (name);
+						string[] linesOf () => ed.Text.Split ('\n');
+						ed.ReplaceAllInDocument ("    static void", "static void"); // strip indentation
+						Output ("[fmt] before: '" + linesOf () [6].TrimEnd () + "'");
+						int changed = ed.FormatBuffer ();
+						Output ("[fmt] after:  '" + linesOf () [6].TrimEnd () + "'");
+						Output ("[fmt] lines changed: " + changed);
+						Output ("[fmt] line 6 reindented to 4 spaces: " + linesOf () [6].StartsWith ("    static"));
+						ed.Undo ();
+						Output ("[fmt] undo restores stripped: " + linesOf () [6].StartsWith ("static"));
+					}
+				}
 			} else if (qa == "--run") {
 				_ = RunStartupProjectAsync ();
 			} else if (qa == "--goto") {

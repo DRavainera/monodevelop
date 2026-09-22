@@ -1121,6 +1121,50 @@ public class SkTextEditor : Control
 		MarkDirty ();
 	}
 
+	// ----- Code formatting (legacy MonoDevelop.CSharpFormatting: brace-driven
+	// reindent plus blank-line normalization; the new shell applies the structural
+	// pass that does not require the Roslyn workspace). -----
+
+	/// <summary>Reindents the whole buffer by brace depth and normalizes the
+	/// spacing around braces, mirroring the structural half of FormatBuffer.</summary>
+	public int FormatBuffer ()
+	{
+		PushUndo (string.Join ("\n", lines));
+		int indent = 0;
+		var outLines = new List<string> (lines.Count);
+		foreach (var raw in lines) {
+			var trimmed = raw.Trim ();
+			if (trimmed.Length == 0) {
+				outLines.Add ("");
+				continue;
+			}
+			// Closing braces outdent before the line, opening braces indent after.
+			if (trimmed.StartsWith ("}", StringComparison.Ordinal))
+				indent = Math.Max (0, indent - 1);
+			var body = trimmed;
+			// Normalize: collapse whitespace runs, space inside braces.
+			body = System.Text.RegularExpressions.Regex.Replace (body, "\\s+", " ");
+			body = body.Replace (" { ", " {").Replace ("{ ", "{ ").Replace (" }", " }");
+			outLines.Add (new string (' ', indent * 4) + body);
+			int opens = body.Count (c => c == '{');
+			int closes = body.Count (c => c == '}');
+			if (closes > opens)
+				indent = Math.Max (0, indent - (closes - opens));
+			indent += Math.Max (0, opens - closes);
+		}
+		int changed = 0;
+		for (int i = 0; i < Math.Min (lines.Count, outLines.Count); i++)
+			if (lines [i] != outLines [i])
+				changed++;
+		lines.Clear ();
+		lines.AddRange (outLines);
+		caretLine = Math.Clamp (caretLine, 0, lines.Count - 1);
+		caretCol = Math.Clamp (caretCol, 0, lines [caretLine].Length);
+		if (changed > 0)
+			Commit ();
+		return changed;
+	}
+
 	// Returns the word under the caret (used by RefactorCommands.Rename).
 	public string WordAtCaret ()
 	{

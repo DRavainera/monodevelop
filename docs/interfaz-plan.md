@@ -315,3 +315,9 @@ Port desde `MonoDevelop.Ide.FindInFiles` y `ProjectOperations` del legacy:
 ### M11h — Multi-caret (familia InsertNextMatchingCaret)
 - SkTextEditor: carets secundarios, InsertNextMatchingCaret (Alt+Shift+.), InsertAllMatchingCarets (Alt+Shift+A), RemoveLastSecondaryCaret (Alt+Shift+,), RotatePrimaryCaretNext/Previous, MoveLastCaretDown, InsertAtAllCarets (bottom-up, desplazando carets en la misma línea), Escape colapsa a primario; render con carets secundarios más cortos (InsertionCursor legacy).
 - Dispatch de los 6 TextEditorCommands en MainWindow. QA --mcaret: all-matching + insert + undo + rotate verificados.
+
+### M11j — FormatBuffer (menú Edit > Format > Format Document)
+- Legacy: `FormatBufferHandler` (MonoDevelop.CSharpFormatting) reindenta y normaliza.
+- Avalonia: `SkTextEditor.FormatBuffer()` — reindentación por profundidad de llaves
+  (outdent en `}`, indent tras `{`), colapso de espacios, push a undo y QA E2E
+  determinista (`--fmt`): desindentar → formatear → undo.
