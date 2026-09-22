@@ -1410,6 +1410,18 @@ public partial class MainWindow : Window
 		case "MonoDevelop.Ide.Editor.MessageBubbleCommands.HideIssues":
 			WithActiveEditor (e => e.SetBubbleMode (SkTextEditor.BubbleMode.Never));
 			return;
+		case "MonoDevelop.Ide.Commands.ViewCommands.ViewList":
+			// Legacy View List: check list of pads with their visibility — the new shell
+			// keeps them always visible in the Pads submenu, so this opens the same list.
+			Output ("[view] pads: Solution, Classes, Help, Properties, Errors, Tasks, Search Results, Output");
+			return;
+		case "MonoDevelop.Ide.Commands.ViewCommands.LayoutList":
+			Output ("[layout] saved layout: " + (SettingsStore.GetString ("Monodevelop.PadLayout") ?? "(none)"));
+			return;
+		case "MonoDevelop.Components.MainToolbar.Commands.NavigateTo":
+			// Legacy toolbar NavigateTo opens the Go To File/Type/Symbol dialog.
+			_ = new GoToDialog ().ShowDialog (this);
+			return;
 		case "MonoDevelop.Ide.Commands.ViewCommands.ShowPrevious":
 			ShowPreviousResult ();
 			return;
@@ -1589,15 +1601,21 @@ public partial class MainWindow : Window
 		case "MonoDevelop.Ide.Commands.TextEditorCommands.Undo":
 			WithActiveEditor (e => e.Undo ());
 			return;
+		// Legacy registers folding under EditCommands in some menus and under
+		// TextEditorCommands in others — accept both ids (same handler).
+		case "MonoDevelop.Ide.Commands.EditCommands.ToggleFolding":
 		case "MonoDevelop.Ide.Commands.TextEditorCommands.ToggleFolding":
 			WithActiveEditor (e => { e.RebuildFolds (); e.ToggleFolding (); });
 			return;
+		case "MonoDevelop.Ide.Commands.EditCommands.ToggleAllFoldings":
 		case "MonoDevelop.Ide.Commands.TextEditorCommands.ToggleAllFoldings":
 			WithActiveEditor (e => { e.RebuildFolds (); e.ToggleAllFoldings (); });
 			return;
+		case "MonoDevelop.Ide.Commands.EditCommands.FoldDefinitions":
 		case "MonoDevelop.Ide.Commands.TextEditorCommands.FoldDefinitions":
 			WithActiveEditor (e => { e.RebuildFolds (); e.FoldDefinitions (); });
 			return;
+		case "MonoDevelop.Ide.Commands.EditCommands.EnableDisableFolding":
 		case "MonoDevelop.Ide.Commands.TextEditorCommands.EnableDisableFolding":
 			WithActiveEditor (e => e.EnableDisableFolding ());
 			return;
@@ -1700,6 +1718,7 @@ public partial class MainWindow : Window
 
 		// ----- RefactorCommands (legacy RenameRefactoring: requires a symbol model;
 		// surface the same message the legacy shows when nothing is resolvable). -----
+		case "MonoDevelop.Ide.Commands.EditCommands.Rename":
 		case "MonoDevelop.Ide.Commands.RefactorCommands.Rename":
 			if (docs.TryGetValue ((DocTabs.SelectedItem as TabItem)?.Tag as string ?? "", out var ren)) {
 				var word = ren.WordAtCaret ();

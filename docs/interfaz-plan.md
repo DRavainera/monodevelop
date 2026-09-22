@@ -357,3 +357,11 @@ Port desde `MonoDevelop.Ide.FindInFiles` y `ProjectOperations` del legacy:
   sincronización en vivo desde el parser de MSBuild (`ParseBuildMessage` coloca la
   burbuja en el documento abierto en cuanto el error llega).
 - QA E2E (`--bubbles`): ciclo completo de los 3 estados verificado.
+
+### M11o — Alias de namespaces + ViewList/LayoutList/NavigateTo
+- Los mismos comandos legacy están registrados con ids distintos según el menú
+  (folding en EditCommands y TextEditorCommands, Rename en EditCommands y
+  RefactorCommands) — el dispatch acepta ambos ids.
+- ViewList/LayoutList reportan pads guardados y layout persistido;
+  NavigateTo (toolbar) abre el GoToDialog (Go To File/Type).
+- Inventario: 119/141 → ~127/141 ids de menú con wiring real.
