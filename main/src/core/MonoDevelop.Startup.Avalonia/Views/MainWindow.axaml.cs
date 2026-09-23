@@ -117,12 +117,61 @@ public partial class MainWindow : Window
 				Output ("[encodings] dialog closed");
 			} else if (qa == "--newconfig") {
 				// QA: New Configuration — name/platform combos with the legacy
-				// validation (empty/duplicate name → OK disabled); the dialog is
-				// left open for the visual check.
-				var dlg = new NewConfigurationDialog (new[] { "Debug", "Release" }, isSolution: true);
+				// validation; OK persists the config in the loaded .sln/.csproj.
+				var cfgs = loadedSolutionPath is null ? new[] { "Debug", "Release" } : Services.ConfigurationService.GetSolutionConfigurations (loadedSolutionPath);
+				var dlg = new NewConfigurationDialog (cfgs.Count == 0 ? new[] { "Debug", "Release" } : cfgs, isSolution: true);
 				Output ("[newconfig] dialog opened (OK initially " + (dlg.IsOkEnabledForQa ? "enabled" : "disabled") + ")");
 				dlg.ShowDialog (this);
-				Output ("[newconfig] accepted=" + dlg.Accepted + " name='" + dlg.ConfigName + "' children=" + dlg.CreateChildren);
+				if (dlg.Accepted && !string.IsNullOrEmpty (dlg.ConfigName) && loadedSolutionPath is not null) {
+					var namePart = dlg.ConfigName.Split ('|') [0];
+					var platPart = dlg.ConfigName.Contains ('|') ? dlg.ConfigName.Split ('|') [1] : Services.ConfigurationService.AnyCpuSolution;
+					try {
+						var created = Services.ConfigurationService.AddSolutionConfiguration (loadedSolutionPath, namePart, platPart, dlg.CreateChildren);
+						Output ("[newconfig] " + (created ? "created config in " + Path.GetFileName (loadedSolutionPath) : "config already exists"));
+						if (created)
+							OpenSolutionInWindow (loadedSolutionPath); // reload like ProjectOperations reload
+					} catch (Exception ex) {
+						Output ("[newconfig] persist failed: " + ex.Message);
+					}
+				} else {
+					Output ("[newconfig] accepted=" + dlg.Accepted + " name='" + dlg.ConfigName + "' children=" + dlg.CreateChildren);
+				}
+			} else if (qa == "--newconfig-real") {
+				// QA: full persistence path — creates "QAConfig" in the loaded
+				// solution and verifies the .sln/.csproj on disk.
+				if (loadedSolutionPath is null) {
+					Output ("[newconfig-real] no solution loaded");
+				} else {
+					try {
+						var created = Services.ConfigurationService.AddSolutionConfiguration (loadedSolutionPath, "QAConfig", Services.ConfigurationService.AnyCpuSolution, createChildren: true);
+						var slnText = File.ReadAllText (loadedSolutionPath);
+						var csprojs = Directory.GetFiles (Path.GetDirectoryName (loadedSolutionPath)!, "*.csproj", SearchOption.AllDirectories);
+						var inSln = slnText.Contains ("QAConfig|Any CPU", StringComparison.Ordinal);
+						var inProj = csprojs.All (p => File.ReadAllText (p).Contains ("'QAConfig|AnyCPU'", StringComparison.Ordinal));
+						Output ("[newconfig-real] created=" + created + " sln-entry=" + inSln + " csproj-entries=" + inProj + " (" + csprojs.Length + " projects)");
+						// Cleanup so the QA is repeatable.
+						if (created) {
+							var lines = File.ReadAllLines (loadedSolutionPath).Where (l => !l.Contains ("QAConfig")).ToList ();
+							File.WriteAllLines (loadedSolutionPath, lines);
+							foreach (var p in csprojs) {
+								var t = File.ReadAllText (p);
+								var cleaned = System.Text.RegularExpressions.Regex.Replace (t, @"\n\s*<PropertyGroup Condition="" '\$\(Configuration\)\|\$\(Platform\)' == 'QAConfig\|AnyCPU' "" />", "");
+								File.WriteAllText (p, cleaned);
+							}
+							Output ("[newconfig-real] cleaned up (repeatable)");
+						}
+					} catch (Exception ex) {
+						Output ("[newconfig-real] failed: " + ex.Message);
+					}
+				}
+			} else if (qa == "--openimport") {
+				// QA: File > Open import path over a loose .csproj (creates the
+				// wrapper .sln next to it when missing, then opens it).
+				var loose = Directory.GetFiles (Path.GetTempPath (), "QAImport*.csproj").FirstOrDefault () ?? CreateQaImportProject ();
+				Output ("[openimport] importing " + loose);
+				OpenFileOrProject (loose);
+				var sln = Path.Combine (Path.GetDirectoryName (loose)!, "QAImport.sln");
+				Output ("[openimport] wrapper-sln=" + File.Exists (sln) + " loaded=" + (loadedSolutionPath == sln));
 			} else if (qa == "--totd") {
 				// QA: Tip of the Day — tips loaded, random first tip, Next cycles,
 				// "don't show" persists the legacy preference (inverted).
@@ -1448,6 +1497,9 @@ public partial class MainWindow : Window
 				var fname = Path.GetFileName (f);
 				if (fname == Path.GetFileName (projectFileBeingLoaded))
 					continue;
+				// The wrapper .sln of an imported project is the tree root, not a file row.
+				if (fname.EndsWith (".sln", StringComparison.OrdinalIgnoreCase) || fname.EndsWith (".slnf", StringComparison.OrdinalIgnoreCase))
+					continue;
 				result.Add (new TreeViewItem {
 					Header = TreeHeader (FileIconId (fname), fname),
 					Tag = f,
@@ -2513,6 +2565,16 @@ public partial class MainWindow : Window
 			} else
 				Output ("[project] no project loaded");
 			return;
+		case "MonoDevelop.Ide.Commands.ProjectCommands.BuildSolution":
+			_ = RunBuildAsync (rebuild: false);
+			return;
+		case "MonoDevelop.Ide.Commands.ProjectCommands.RunCodeAnalysisSolution":
+		case "MonoDevelop.Ide.Commands.ProjectCommands.RunCodeAnalysisProject":
+			// Legacy runs the Roslyn analyzers and fills the Error pad; the shell
+			// surfaces the same diagnostics through the compiler build output.
+			Output ("[analysis] running build with analyzers on " + (commandId.EndsWith ("Solution") ? "solution" : ResolveCommandProject () ?? "active project"));
+			_ = RunBuildAsync (rebuild: false);
+			return;
 		case "MonoDevelop.Ide.Commands.ProjectCommands.ExportSolution":
 			// Legacy ExportSolution (VS exporter addin): copy the solution tree.
 			if (string.IsNullOrEmpty (loadedSolutionPath)) {
@@ -2836,9 +2898,16 @@ public partial class MainWindow : Window
 			Output ("[vcs] requires a locked/VCS-server backend (git is lockless)");
 			return;
 		case "MonoDevelop.Ide.Commands.VersionControlCommands.Commit":
-			Output ("[vcs] use the git CLI for interactive commit — staged files stay intact");
+			Output ("[vcs] use the git CLI for interactive commit — staged files stay intact");			return;
+		case "MonoDevelop.Ide.Commands.SearchCommands.FindNextSelection":
+			// Legacy FindNextSelection: uses the current editor selection as the
+			// search text and jumps to the next match.
+			if (docs.TryGetValue ((DocTabs.SelectedItem as TabItem)?.Tag as string ?? "", out var selEd) && selEd.SelectedText is { Length: > 0 } sel) {
+				RunFindInFiles (new FindInFilesDialog { SearchTextOverride = sel });
+				ShowNextResult ();
+			} else
+				Output ("[find] no selection in the active document");
 			return;
-
 		case "MonoDevelop.Ide.Commands.ToolCommands.TaskList":
 			RescanTasks ();
 			return;
@@ -3176,7 +3245,8 @@ public partial class MainWindow : Window
 
 	int newFileCounter = 1;
 
-	// FileCommands.OpenFile over any text file (not only solutions).
+	// FileCommands.OpenFile over any text file; .sln/.csproj import the project
+	// (legacy FileService.OpenFile → ProjectOperations switch on the file type).
 	async void OpenAnyFilePickerAsync ()
 	{
 		var files = await StorageProvider.OpenFilePickerAsync (new Avalonia.Platform.Storage.FilePickerOpenOptions {
@@ -3186,8 +3256,46 @@ public partial class MainWindow : Window
 		if (files.Count > 0) {
 		var path = files [0].Path.LocalPath;
 		if (!string.IsNullOrEmpty (path))
-			OpenFileDocument (path);
+			OpenFileOrProject (path);
 		}
+	}
+
+	// Creates a minimal throwaway project under %TMP% for the --openimport QA.
+	static string CreateQaImportProject ()
+	{
+		var dir = Path.Combine (Path.GetTempPath (), "QAImport", Guid.NewGuid ().ToString ("N"));
+		Directory.CreateDirectory (dir);
+		var path = Path.Combine (dir, "QAImport.csproj");
+		File.WriteAllText (path,
+			"<Project Sdk=\"Microsoft.NET.Sdk\">\n  <PropertyGroup>\n    <OutputType>Exe</OutputType>\n    <TargetFramework>net10.0</TargetFramework>\n  </PropertyGroup>\n</Project>");
+		return path;
+	}
+
+	/// <summary>Routes a picked path: .sln opens the solution, .csproj imports it
+	/// (creating a wrapper .sln like ProjectOperations.ImportProject), anything
+	/// else opens as a document tab.</summary>
+	public void OpenFileOrProject (string path)
+	{
+		var ext = Path.GetExtension (path).ToLowerInvariant ();
+		if (ext == ".sln" || ext == ".slnf") {
+			OpenSolutionInWindow (path);
+			return;
+		}
+		if (ext == ".csproj") {
+			// Import a loose project: create (or reuse) the wrapper solution next to it.
+			var slnPath = Path.Combine (Path.GetDirectoryName (path)!, Path.GetFileNameWithoutExtension (path) + ".sln");
+			try {
+				if (!File.Exists (slnPath)) {
+					Services.ConfigurationService.AddProjectToSolution (path, slnPath);
+					Output ("[open] imported project → created " + Path.GetFileName (slnPath));
+				}
+				OpenSolutionInWindow (slnPath);
+			} catch (Exception ex) {
+				Output ("[open] import failed: " + ex.Message);
+			}
+			return;
+		}
+		OpenFileDocument (path);
 	}
 
 	// FileCommands.SaveAs (legacy FileService.SaveAs): writes the active document to
