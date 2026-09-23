@@ -236,6 +236,9 @@ public class SkTextEditor : Control
 	public SkTextEditor ()
 	{
 		Focusable = true;
+		// Seed the line model: the TextProperty default ("") never fires
+		// OnPropertyChanged, so the model starts empty without this.
+		SetLines (Text ?? "");
 		blinkTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds (530) };
 		blinkTimer.Tick += (_, _) => {
 			if (IsFocused) {
@@ -646,28 +649,7 @@ public class SkTextEditor : Control
 		}
 		switch (e.Key) {
 		case Key.Back:
-			// Multi-caret: delete at every caret, bottom-up (legacy semantics).
-			foreach (var (l, c) in Carets
-				.OrderByDescending (x => x.line).ThenByDescending (x => x.col).ToList ()) {
-				if (c > 0) {
-					lines [l] = lines [l].Remove (c - 1, 1);
-					if (l == caretLine)
-						caretCol--;
-					else
-						ShiftSecondary (l, c, -1);
-				} else if (l > 0) {
-					if (l == caretLine)
-						caretCol = lines [l - 1].Length;
-					lines [l - 1] += lines [l];
-					lines.RemoveAt (l);
-					if (l == caretLine)
-						caretLine--;
-					else
-						ShiftSecondaryAfterLineRemoval (l);
-				}
-			}
-			caretCol = Math.Clamp (caretCol, 0, lines [caretLine].Length);
-			Commit ();
+			DeleteBackwardAtCarets ();
 			e.Handled = true;
 			break;
 		case Key.Delete:
@@ -1245,20 +1227,37 @@ public class SkTextEditor : Control
 
 	/// <summary>Programmatic Backspace (the Key.Back handler path without a key
 	/// event) — used by QA to exercise deletion deterministically.</summary>
-	public void BackspaceForQa ()
+	public void BackspaceForQa () => DeleteBackwardAtCarets ();
+
+	/// <summary>Backspace at every caret, bottom-up (the Key.Back handler path;
+	/// shared with QA and tests so the model has a single source of truth).</summary>
+	void DeleteBackwardAtCarets ()
 	{
-		if (caretCol > 0) {
-			var line = lines [caretLine];
-			lines [caretLine] = line.Remove (caretCol - 1, 1);
-			caretCol--;
-		} else if (caretLine > 0) {
-			caretCol = lines [caretLine - 1].Length;
-			lines [caretLine - 1] += lines [caretLine];
-			lines.RemoveAt (caretLine);
-			caretLine--;
-		} else {
-			return;
+		bool changed = false;
+		foreach (var (l, c) in Carets
+			.OrderByDescending (x => x.line).ThenByDescending (x => x.col).ToList ()) {
+			if (c > 0) {
+				lines [l] = lines [l].Remove (c - 1, 1);
+				if (l == caretLine)
+					caretCol--;
+				else
+					ShiftSecondary (l, c, -1);
+				changed = true;
+			} else if (l > 0) {
+				if (l == caretLine)
+					caretCol = lines [l - 1].Length;
+				lines [l - 1] += lines [l];
+				lines.RemoveAt (l);
+				if (l == caretLine)
+					caretLine--;
+				else
+					ShiftSecondaryAfterLineRemoval (l);
+				changed = true;
+			}
 		}
+		if (!changed)
+			return;
+		caretCol = Math.Clamp (caretCol, 0, lines [caretLine].Length);
 		Commit ();
 	}
 
@@ -1781,6 +1780,21 @@ public class SkTextEditor : Control
 		=> new [] { (caretLine, caretCol) }.Concat (secondaryCarets).ToList ();
 
 	public bool HasSecondaryCarets => secondaryCarets.Count > 0;
+
+	// ----- Test/QA accessors (the document model is testable without a running
+	// Avalonia platform; they expose state the public API cannot observe) -----
+	public int LineCountForTest => lines.Count;
+	public string LineTextForTest (int line) => lines [Math.Clamp (line, 0, lines.Count - 1)];
+	public int CurrentLineForTest => caretLine;
+	public int CurrentColumnForTest => caretCol;
+
+	public void AddSecondaryCaretForTest (int line, int col)
+	{
+		line = Math.Clamp (line, 0, lines.Count - 1);
+		col = Math.Clamp (col, 0, lines [line].Length);
+		if (!secondaryCarets.Contains ((line, col)))
+			secondaryCarets.Add ((line, col));
+	}
 
 	/// <summary>Adds a caret at the next occurrence of the word at the caret
 	/// (legacy InsertNextMatchingCaret). False when there is nothing to match.</summary>

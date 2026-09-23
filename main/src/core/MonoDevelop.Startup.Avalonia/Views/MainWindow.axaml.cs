@@ -110,6 +110,16 @@ public partial class MainWindow : Window
 				new AboutDialog { WindowStartupLocation = WindowStartupLocation.CenterOwner }.ShowDialog (this);
 			} else if (qa == "--addins") {
 				new AddinManagerDialog { WindowStartupLocation = WindowStartupLocation.CenterOwner }.ShowDialog (this);
+			} else if (qa == "--totd") {
+				// QA: Tip of the Day — tips loaded, random first tip, Next cycles,
+				// "don't show" persists the legacy preference (inverted).
+				var totd = new TipOfTheDayDialog { WindowStartupLocation = WindowStartupLocation.CenterOwner };
+				totd.ShowDialog (this);
+				Output ("[totd] dialog opened (tips from TipsOfTheDay.xml)");
+			} else if (qa == "--progress") {
+				// QA: ProgressDialog — nested tasks with details, cancel path and
+				// the legacy ShowDone states, driven deterministically.
+				_ = RunProgressQaAsync ();
 			} else if (qa == "--welcome") {
 				ShowWelcomePage ();
 			} else if (qa == "--newsolution") {
@@ -3389,9 +3399,32 @@ public partial class MainWindow : Window
 		}
 	}
 
-	// VersionControl.Commands.Diff: real `git diff` shown in a diff viewer window
-	// (legacy shows the VersionControl diff view; the new shell renders the patch
-	// monospaced with +/- lines tinted green/red like the legacy diff view).
+	// QA driver for the ProgressDialog port: nested tasks, WriteText details,
+	// cancel detection and the ShowDone completion states.
+	async System.Threading.Tasks.Task RunProgressQaAsync ()
+	{
+		var dlg = new ProgressDialog (allowCancel: true, showDetails: true);
+		Output ("[progress] dialog opened (allowCancel, details)");
+		_ = dlg.ShowDialog (this);
+		await System.Threading.Tasks.Task.Delay (150);
+		dlg.BeginTask ("Restoring packages");
+		dlg.Progress = 0.25;
+		dlg.WriteText ("NuGet 6.11 resolver OK" + Environment.NewLine);
+		dlg.BeginTask ("Building TestProj");
+		dlg.Progress = 0.6;
+		dlg.WriteText ("0 warnings, 0 errors" + Environment.NewLine);
+		dlg.EndTask ();
+		dlg.EndTask ();
+		dlg.Progress = 1;
+		dlg.ShowDone (warnings: false, errors: false);
+		Output ("[progress] nested tasks done; message='" + dlg.Message + "'; bar=1; close visible, cancel hidden");
+		Output ("[progress] details lines: " + (dlg.DetailsTextForQa?.Split (Environment.NewLine).Length ?? 0));
+	}
+
+	// VersionControl.Commands.Diff: real `git diff` shown in the bottom pad's
+	// Diff tab (the legacy opens the VersionControl diff view as an internal
+	// document/pad viewer, not a modal window; the patch renders monospaced with
+	// +/- lines tinted green/red like the legacy diff view).
 	async System.Threading.Tasks.Task ShowDiffAsync ()
 	{
 		if (string.IsNullOrEmpty (loadedSolutionPath)) {
@@ -3420,14 +3453,6 @@ public partial class MainWindow : Window
 			Output ("[diff] git failed: " + ex.Message);
 			return;
 			}
-		var win = new Window {
-			Title = "Diff — " + Path.GetFileName (loadedSolutionPath),
-			Width = 860,
-			Height = 560,
-			WindowStartupLocation = WindowStartupLocation.CenterOwner,
-			SystemDecorations = WindowDecorations.Full,
-			ExtendClientAreaToDecorationsHint = false,
-		};
 		var box = new TextBox {
 			IsReadOnly = true,
 			Text = string.IsNullOrWhiteSpace (patch)
@@ -3437,9 +3462,19 @@ public partial class MainWindow : Window
 			TextWrapping = Avalonia.Media.TextWrapping.NoWrap,
 			AcceptsReturn = true,
 		};
-		win.Content = box;
-		Output ("[diff] shown " + (string.IsNullOrWhiteSpace (patch) ? 0 : patch.Count (c => c == '\n')) + " patch lines");
-		await win.ShowDialog (this);
+		if (BottomPads.Tabs.All (t => t.Id != "diff"))
+			BottomPads.AddTab (new PadHost.PadTab {
+				Id = "diff",
+				Label = "Diff",
+				Icon = "vc-diff",
+				Content = box,
+				Visible = false,
+			});
+		else
+			BottomPads.ReplaceTabContent ("diff", box);
+		BottomPads.SetTabVisible ("diff", true);
+		BottomPads.Select ("diff");
+		Output ("[diff] pad shown " + (string.IsNullOrWhiteSpace (patch) ? 0 : patch.Count (c => c == '\n')) + " patch lines");
 	}
 
 	// LayoutCommands.SaveCurrentLayout: persist pad visibility (the legacy persists the

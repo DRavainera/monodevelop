@@ -33,6 +33,14 @@ public static class UserPreferences
 		}
 	}
 
+	/// <summary>Boolean preference helper ("True"/"False", like the legacy
+	/// PropertyService). Values other than True (case-insensitive) are false.</summary>
+	public static bool GetBool (string key, bool defaultValue = false)
+		=> bool.TryParse (Get (key), out var v) ? v : defaultValue;
+
+	public static void SetBool (string key, bool value)
+		=> Set (key, value ? "True" : "False");
+
 	public static void Set (string key, string? value)
 	{
 		try {
