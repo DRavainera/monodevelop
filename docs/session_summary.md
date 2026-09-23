@@ -459,7 +459,25 @@ net10.0) documentado en detalle en `docs/interfaz-plan.md` § M11v–M11y:
 `build/net10run/MonoDevelop.dll` es el IDE GTK legacy (muere en remoting) — no
 usarlo para probar la UI Avalonia.
 
-**Siguientes en la cadena**: TipOfTheDay, SelectEncodingsDialog (Preferences >
-Encodings), NewConfigurationDialog/NewLayoutDialog, ProgressDialog,
-AttachToProcessDialog (Debugger), semántica Roslyn real para completion/tooltip
-(actualmente palabras del documento + keywords).
+**Siguientes en la cadena**: SelectEncodingsDialog (Preferences > Encodings),
+NewConfigurationDialog/NewLayoutDialog, AttachToProcessDialog (Debugger),
+semántica Roslyn real para completion/tooltip (actualmente palabras del
+documento + keywords).
+
+## 2026-09-22 (b) — M11z: tests xunit del editor + Diff en pad + TipOfTheDay/ProgressDialog
+
+- **Tests** (`main/tests/AvaloniaShell.Editor.Tests`, `dotnet test`, 16 en
+  verde): modelo del editor — líneas, carets, backspace multi-caret, undo/redo,
+  dirty. Encontró 2 bugs reales: `BackspaceForQa` single-caret vs handler
+  multi-caret (unificados en `DeleteBackwardAtCarets`) y modelo vacío al
+  construir (default de TextProperty no dispara OnPropertyChanged; el ctor
+  ahora siembra `SetLines`). README del shell actualizado con la tabla de hooks.
+- **Diff**: de ventana modal con borde OS → pestaña "Diff" en el pad inferior
+  (icono `vc-diff`), reemplazo de contenido en cada ejecución y auto-selección,
+  como el visor interno del legacy. Verificado con 14 líneas de patch reales.
+- **TipOfTheDayDialog**: tips del XML legacy, primer tip aleatorio, Next cicla,
+  checkbox persiste la preferencia invertida (GetBool/SetBool nuevos).
+- **ProgressDialog**: barra + Cancel/Close + expander Details con log de tareas
+  indentado (BeginTask/EndTask/WriteText) + ShowDone con los 3 estados finales;
+  `--totd` y `--progress` los ejercitan de forma determinista. Capturas
+  verificadas. Commit `b9b2fd0e42`.

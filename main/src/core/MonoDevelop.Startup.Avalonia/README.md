@@ -151,6 +151,8 @@ documento sucio a propósito para poder probar el diálogo visualmente
 | `--compl` | Complete Word / plantillas / surround | `[compl]` |
 | `--ctxmenu` | Menú contextual del Solution pad | `[ctx]` |
 | `--filter` | Búsqueda incremental del Solution pad | `[filter]` |
+| `--totd` | Tip of the Day (tips del XML legacy) | `[totd]` |
+| `--progress` | ProgressDialog (tareas anidadas + ShowDone) | `[progress]` |
 
 QA visual: los hooks se complementan con capturas X11 (`magick x:<win>`) para
 comparar la UI contra la legacy GTK en vivo (ver bitácoras en

@@ -526,3 +526,37 @@ Port desde `MonoDevelop.Ide.FindInFiles` y `ProjectOperations` del legacy:
   (nuevos), `Controls/SkTextEditor.cs`, `Views/MainWindow.axaml.cs`,
   `Program.cs`.
 - Commit `c4fd345c44`.
+
+### M11z — Tests del modelo del editor + Diff en pad inferior + TipOfTheDay y ProgressDialog
+- **Tests xunit (`tests/AvaloniaShell.Editor.Tests`, `dotnet test`)**: 16 tests
+  sobre el modelo del `SkTextEditor` — división/normalización de líneas
+  (`\r\n`→`\n`, línea final vacía), movimiento de caret (GotoLine/GotoLineEnd/
+  CaretRight), Backspace de un caret (borra carácter, une línea previa),
+  **backspace multi-caret** (borra en todos los carets bottom-up, une líneas
+  cuando los carets están al inicio), insert en todos los carets,
+  colapso al primario, undo/redo y dirty tracking. Encontró y corrigió 2 bugs
+  reales: `BackspaceForQa` era single-caret mientras el handler `Key.Back` era
+  multi-caret (unificados en `DeleteBackwardAtCarets`, una sola fuente de
+  verdad) y el modelo nacía vacío porque el default de TextProperty nunca
+  disparaba `OnPropertyChanged` (el constructor ahora siembra `SetLines(Text)`).
+  Accesores de test: `LineCountForTest`/`LineTextForTest`/`CurrentLineForTest`/
+  `CurrentColumnForTest`/`AddSecondaryCaretForTest`.
+- **Diff en pad inferior** (antes ventana modal con borde OS): el `git diff`
+  se muestra ahora como pestaña "Diff" del pad inferior (icono legacy
+  `vc-diff`), comportamiento del visor interno del legacy; en ejecuciones
+  siguientes el contenido se reemplaza (`ReplaceTabContent`) y la pestaña se
+  selecciona. Verificado: `[diff] pad shown 14 patch lines` + captura del pad.
+- **TipOfTheDayDialog** (port de `TipOfTheDayWindow`): icono info +
+  "Did you know...?", tips del `TipsOfTheDay.xml` legacy (39 entradas, buscado
+  como PropertyService.DataPath), primer tip aleatorio, Next cicla, checkbox
+  "Don't show tips at startup" que persiste la preferencia legacy (invertida)
+  vía nuevos `UserPreferences.GetBool/SetBool`. Chrome Avalonia.
+- **ProgressDialog** (port de `ProgressDialog`): label de mensaje, barra,
+  intercambio Cancel→Close, expander "Details" con el log de tareas indentado
+  (`BeginTask`/`EndTask`/`WriteText`, 2 espacios por nivel) y los 3 estados
+  finales de `ShowDone` (errors/warnings/success); cancelación vía
+  `CancellationTokenSource` (guarda `Cancelled`).
+- QA: `--totd` y `--progress` (diálogo + tareas anidadas + ShowDone con
+  verificación de mensaje/barra/visibilidad de botones) + capturas (estado
+  completado del progress, tip ciclado, pestaña Diff en el pad).
+- Commit `b9b2fd0e42`.
