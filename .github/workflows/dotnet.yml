@@ -29,6 +29,17 @@ jobs:
       uses: actions/setup-dotnet@v4
       with:
         dotnet-version: 10.0.x
+    # Root global.json pins 10.0.401 with rollForward=disable; keep the
+    # installed SDK in sync before building.
+    - name: Enforce pinned SDK (global.json)
+      run: dotnet --version && dotnet --list-sdks
+    # Avalonia shell (main/src/core/MonoDevelop.Startup.Avalonia): build the
+    # shell and run its editor-model tests as a merge gate for the migration
+    # chain (every chain commit must keep this green).
+    - name: Build Avalonia shell
+      run: dotnet build main/src/core/MonoDevelop.Startup.Avalonia/MonoDevelop.Startup.Avalonia.csproj -v q
+    - name: Test Avalonia shell (editor model)
+      run: dotnet test main/tests/AvaloniaShell.Editor.Tests/AvaloniaShell.Editor.Tests.csproj -v normal
     - name: Restore dependencies
       run: dotnet restore
     - name: Build

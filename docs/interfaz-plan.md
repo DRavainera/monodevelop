@@ -37,7 +37,7 @@ Se trata de la migración de la UI de la aplicación que actualmente es Gtk#/Mon
 Estado de avance (2026-09-08):
 - **MSB3644 resuelto** (root cause de builds limpios): `TargetFrameworkRootPath` → paquete `microsoft.netframework.referenceassemblies.net472\1.0.3\build\` en `msbuild/MonoDevelop.AfterCommon.props`. Sweep `rm -rf obj` + rebuild offline: **24/24 proyectos de M1 verdes reales** (ver `docs/migration-phase-net8.md` M1).
 - **Addin repo**: `addins.monodevelop.com` dado de baja → `https://lastexitcode.com/monodevelop-addins/{version}/main.mrep` cableado en `AddinSetupService`/`Runtime`.
-- **M4 arrancado**: prototipo `main/src/core/MonoDevelop.Startup.Avalonia` (Avalonia 12.1.2, net8.0) compila offline y arranca headless sin excepción. Los generators de Avalonia 12 requieren Roslyn ≥4.14 → SDK 10.0.401 instalado y pineado **solo** en ese directorio (`global.json`); raíz y `main/` siguen pinnenados a **8.0.424** con `rollForward: disable` (legacy intacto).
+- **M4 arrancado**: prototipo `main/src/core/MonoDevelop.Startup.Avalonia` (Avalonia 12.1.2, net8.0) compila offline y arranca headless sin excepción. Los generators de Avalonia 12 requieren Roslyn ≥4.14 → SDK 10.0.401; la **raíz del repo está pineada a 10.0.401** (`global.json` con `rollForward: disable`) — nota histórica: durante la fase net8 hubo un pineo transitorio a 8.0.424, ya retirado.
 
 ## Fases
 

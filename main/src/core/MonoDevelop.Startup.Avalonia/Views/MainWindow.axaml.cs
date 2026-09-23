@@ -110,6 +110,19 @@ public partial class MainWindow : Window
 				new AboutDialog { WindowStartupLocation = WindowStartupLocation.CenterOwner }.ShowDialog (this);
 			} else if (qa == "--addins") {
 				new AddinManagerDialog { WindowStartupLocation = WindowStartupLocation.CenterOwner }.ShowDialog (this);
+			} else if (qa == "--encodings") {
+				// QA: Select Encodings — dual list populated from the BCL, Add/
+				// Remove/Up/Down and persistence to ConversionEncodings.
+				new SelectEncodingsDialog { WindowStartupLocation = WindowStartupLocation.CenterOwner }.ShowDialog (this);
+				Output ("[encodings] dialog closed");
+			} else if (qa == "--newconfig") {
+				// QA: New Configuration — name/platform combos with the legacy
+				// validation (empty/duplicate name → OK disabled); the dialog is
+				// left open for the visual check.
+				var dlg = new NewConfigurationDialog (new[] { "Debug", "Release" }, isSolution: true);
+				Output ("[newconfig] dialog opened (OK initially " + (dlg.IsOkEnabledForQa ? "enabled" : "disabled") + ")");
+				dlg.ShowDialog (this);
+				Output ("[newconfig] accepted=" + dlg.Accepted + " name='" + dlg.ConfigName + "' children=" + dlg.CreateChildren);
 			} else if (qa == "--totd") {
 				// QA: Tip of the Day — tips loaded, random first tip, Next cycles,
 				// "don't show" persists the legacy preference (inverted).
@@ -3453,15 +3466,7 @@ public partial class MainWindow : Window
 			Output ("[diff] git failed: " + ex.Message);
 			return;
 			}
-		var box = new TextBox {
-			IsReadOnly = true,
-			Text = string.IsNullOrWhiteSpace (patch)
-				? "(no changes)"
-				: patch.TrimEnd (),
-			FontFamily = new Avalonia.Media.FontFamily ("Monospace,DejaVu Sans Mono,Consolas"),
-			TextWrapping = Avalonia.Media.TextWrapping.NoWrap,
-			AcceptsReturn = true,
-		};
+		var box = BuildDiffView (string.IsNullOrWhiteSpace (patch) ? "(no changes)" : patch.TrimEnd ());
 		if (BottomPads.Tabs.All (t => t.Id != "diff"))
 			BottomPads.AddTab (new PadHost.PadTab {
 				Id = "diff",
@@ -3475,6 +3480,47 @@ public partial class MainWindow : Window
 		BottomPads.SetTabVisible ("diff", true);
 		BottomPads.Select ("diff");
 		Output ("[diff] pad shown " + (string.IsNullOrWhiteSpace (patch) ? 0 : patch.Count (c => c == '\n')) + " patch lines");
+	}
+
+	// Legacy DiffWidget renders added lines green and removed lines red (with
+	// the header/hunk lines dimmed); the pad viewer replicates that with a
+	// SelectableTextBlock of colored runs, monospaced like the legacy view.
+	Control BuildDiffView (string patch)
+	{
+		bool dark = Application.Current?.ActualThemeVariant == Avalonia.Styling.ThemeVariant.Dark;
+		var addColor = dark ? Avalonia.Media.Color.Parse ("#81c884") : Avalonia.Media.Color.Parse ("#0a7a0a");
+		var delColor = dark ? Avalonia.Media.Color.Parse ("#e08a8a") : Avalonia.Media.Color.Parse ("#b02020");
+		var headColor = dark ? Avalonia.Media.Color.Parse ("#8a9ab0") : Avalonia.Media.Color.Parse ("#556688");
+		var fg = Application.Current?.TryGetResource ("IdeFgBrush", Application.Current.ActualThemeVariant, out var f) == true && f is Avalonia.Media.IBrush fb
+			? fb : Avalonia.Media.Brushes.Gray;
+
+		var text = new Avalonia.Controls.TextBlock {
+			FontFamily = new Avalonia.Media.FontFamily ("Monospace,DejaVu Sans Mono,Consolas"),
+			TextWrapping = Avalonia.Media.TextWrapping.NoWrap,
+		};
+		bool first = true;
+		foreach (var line in patch.Split ('\n')) {
+			if (!first)
+				text.Inlines!.Add (new Avalonia.Controls.Documents.Run (Environment.NewLine));
+			first = false;
+			var run = new Avalonia.Controls.Documents.Run (line);
+			if (line.StartsWith ("+++", StringComparison.Ordinal) || line.StartsWith ("---", StringComparison.Ordinal) || line.StartsWith ("diff", StringComparison.Ordinal) || line.StartsWith ("index ", StringComparison.Ordinal))
+				run.Foreground = new Avalonia.Media.SolidColorBrush (headColor);
+			else if (line.StartsWith ("@@", StringComparison.Ordinal))
+				run.Foreground = new Avalonia.Media.SolidColorBrush (headColor);
+			else if (line.StartsWith ("+", StringComparison.Ordinal))
+				run.Foreground = new Avalonia.Media.SolidColorBrush (addColor);
+			else if (line.StartsWith ("-", StringComparison.Ordinal))
+				run.Foreground = new Avalonia.Media.SolidColorBrush (delColor);
+			else
+				run.Foreground = fg;
+			text.Inlines!.Add (run);
+		}
+		var scroll = new ScrollViewer {
+			Content = text,
+			Padding = new Avalonia.Thickness (8, 6),
+		};
+		return scroll;
 	}
 
 	// LayoutCommands.SaveCurrentLayout: persist pad visibility (the legacy persists the

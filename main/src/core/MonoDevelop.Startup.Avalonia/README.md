@@ -12,8 +12,8 @@ automatizada que ejercitan cada módulo migrado.
 ## Cómo ejecutar
 
 ```bash
-# Build (el generador XAML de Avalonia 12 requiere Roslyn ≥ 4.14 → SDK 10;
-# el global.json de ESTE directorio lo pinea — la raíz del repo sigue en 8.0.424)
+# Build (la raíz del repo pinea el SDK 10.0.401 en su global.json, que ya
+# satisface el requisito de Roslyn ≥ 4.14 de los generators de Avalonia 12)
 cd main/src/core/MonoDevelop.Startup.Avalonia
 ~/.dotnet/dotnet build -v q
 
