@@ -423,3 +423,43 @@ Dejar en verde el build del núcleo de MonoDevelop en Linux usando `dotnet msbui
 - **Fix**: si el destino termina en `.exe` y no existe, se usa el apphost sin extensión del mismo directorio si está presente.
 
 **Pendientes restantes**: migración profunda de identidad de tipos (errores MEF tolerados), y AvaloniaUI 12 en espera de señal explícita del usuario.
+
+## 2026-09-22 — UI Avalonia: migración en cadena M11v → M11y (pads, diálogos y editor)
+
+Bucle de migración Gtk → Avalonia (`main/src/core/MonoDevelop.Startup.Avalonia`,
+net10.0) documentado en detalle en `docs/interfaz-plan.md` § M11v–M11y:
+
+- **M11v (b98f6f5b57)** — `PadHost.AddTab` auto-selecciona la primera pestaña:
+  los pads RightPads/BottomPads nacían con contenido vacío (`SelectedId=null`).
+- **M11w (846703135a)** — Properties pad con **datos reales del nodo
+  seleccionado** (descriptores del PropertyGrid legacy: Solution/Project/
+  ProjectFolder/ProjectFile leen el `.sln`/`.csproj` en disco; repuebla con la
+  selección del árbol; fix de filas duplicadas por controles reutilizados).
+  QA `--props` (23 filas) + captura.
+- **M11x (cc2024c15c)** — **DirtyFilesDialog ("Save Files")**: gate de cierre
+  con documentos modificados, portado del legacy (checkboxes con cascada y
+  tri-state, agrupación "Project: X", Save and Quit/Close · Quit/Close ·
+  Cancel). Cableado en CloseDocument/Close Workspace/Exit/cierre de ventana
+  (`Window.Closing` ≡ `OnDeleteEvent`). QA determinista `--dirtyfiles` + E2E
+  real con WM_DELETE (bloquea el cierre) y E2E del botón (guarda y cierra).
+- **M11y (c4fd345c44)** — **Editor**: (1) fix de líneas fantasma/duplicadas —
+  cada frame se renderiza en un WriteableBitmap NUEVO (el compositor seguía
+  leyendo el bitmap en mutación al teclear); (2) Backspace/Delete multi-caret y
+  eliminación del flag `applyingCommit` (se quedaba pegado y tragaba refreshes);
+  (3) **CompletionPopup** (port CompletionListWindowGtk: `.` y Ctrl+Space,
+  iconos element-*, filtrado en vivo, navegación, Enter/Tab/Escape) con commit
+  E2E verificado (`Console.` → popup → `WriteLine` insertado); (4)
+  **EditorTooltipPopup** (port TooltipProvider: hover 500 ms con firma de la
+  declaración, icono legacy, posición PointToScreen); (5) cursor I-beam, editor
+  pad abierto sin pestañas y QA `--editqa` no destructivo (restaura el archivo).
+
+**Build/run**: el binario vivo es
+`src/core/MonoDevelop.Startup.Avalonia/bin/Debug/net10.0/MonoDevelop.AvaloniaShell.dll`
+(`~/.dotnet/dotnet … --sln=… [--skip-welcome|--editqa|--props|--dirtyfiles]`);
+`build/net10run/MonoDevelop.dll` es el IDE GTK legacy (muere en remoting) — no
+usarlo para probar la UI Avalonia.
+
+**Siguientes en la cadena**: TipOfTheDay, SelectEncodingsDialog (Preferences >
+Encodings), NewConfigurationDialog/NewLayoutDialog, ProgressDialog,
+AttachToProcessDialog (Debugger), semántica Roslyn real para completion/tooltip
+(actualmente palabras del documento + keywords).

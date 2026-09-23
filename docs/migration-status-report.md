@@ -222,6 +222,33 @@ Detalle de cada cambio en `docs/security-audit-report.md` → Bitácora → Camb
 
 **Plan de parcheo de seguridad (Fases 1–4): COMPLETADO.** Deuda documentada para revisión posterior junto con el resto de pendientes de migración: los `BinaryFormatter` no-remoting (`xwt/TransferDataSource.cs`, `guiunit/BinarySerializableConstraint.cs`), el bump de `NuGet.Client` 5.4.0 → ≥ 5.11.6 (CVE-2024-0057, binarios vendidos en `external/nuget-binary/`), y la verificación de firma de paquetes de addin.
 
+## 8.7 Progreso de la UI Avalonia (bucle de migración por módulos, 2026-09-22)
+
+El bucle de migración Gtk → Avalonia continúa por módulos (detalle por hito en
+`docs/interfaz-plan.md` § M5–M11y; registro de sesión en `docs/session_summary.md`):
+
+- **Paridad de pads**: Properties pad con datos reales por nodo
+  (descriptores del PropertyGrid legacy) repoblado al seleccionar en el Solution
+  pad; PadHost auto-selecciona la primera pestaña (sin contenidos vacíos);
+  búsqueda incremental en el Solution pad con expansión de ancestros; menú
+  contextual por tipo de nodo (Add/Rename/Remove/Build reales sobre disco).
+- **Paridad de diálogos**: DirtyFilesDialog ("Save Files") como gate de cierre
+  con documentos modificados, cableado en los 4 puntos del legacy y verificado
+  E2E (bloquea el cierre de ventana con WM_DELETE).
+- **Editor (SkTextEditor, SkiaSharp)**: render estable (frame nuevo por render —
+  el bitmap presentado nunca se muta: eliminados los fantasmas/líneas
+  duplicadas), Backspace/Delete multi-caret, intellisense (CompletionPopup con
+  `.`/Ctrl+Space y commit verificado E2E), hover tooltip (EditorTooltipPopup con
+  firma de la declaración), cursor I-beam y pad del editor vivo sin pestañas.
+- **QA por módulo**: hooks deterministas (`--props`, `--dirtyfiles`, `--editqa`)
+  + verificación visual por capturas X11 contra la UI Gtk de referencia. Los QA
+  del editor restauran el archivo original (no dejan residuo en el proyecto del
+  usuario).
+
+Nota operativa: el binario de la UI Avalonia es
+`src/core/MonoDevelop.Startup.Avalonia/bin/Debug/net10.0/MonoDevelop.AvaloniaShell.dll`;
+`build/net10run/MonoDevelop.dll` es el IDE GTK legacy.
+
 ## 9. Conclusión
 
 La migración avanza por el camino correcto: se redujo la dependencia de Mono/Gtk# en la base técnica, se dejó la toolchain funcionando con .NET 10 y se aisló el problema principal de infraestructura. La base ya no está en un punto de bloqueo “mecánico” simple; el siguiente paso real es la normalización del árbol de build heredado y la separación definitiva de la capa de UI y plataforma.

@@ -103,7 +103,7 @@ Requisitos adicionales al plan base, con estado y evidencia:
 | 3 | Pestañas del panel central estilo isla (navegador) | **HECHO** (M4) | `TabItem.island` en `App.axaml` (esquinas redondeadas, hover, activa fundida con el documento) |
 | 4 | Soporte nativo Wayland y X11 | **HECHO** (M4) | `Avalonia.Desktop` + `UsePlatformDetect`, sin GTK; verificado en X11 |
 | 5 | Temas claro y oscuro consistentes | **HECHO** (M4) | `ThemeDictionaries` (paleta `Ide*`) + cambio en runtime (menú View) |
-| 6 | Mono.Cairo → SkiaSharp | **EN CURSO (M5)** | `SkTextEditor` (Avalonia) renderiza vía SkiaSharp (WriteableBitmap + SKSurface) con gutter, caret, edición y resaltado C# consciente del tema; ref base para sustituir el dibujo Cairo de Mono.TextEditor |
+| 6 | Mono.Cairo → SkiaSharp | **EN CURSO (M5/M11y)** | `SkTextEditor` (Avalonia) renderiza vía SkiaSharp (frame nuevo por render + SKSurface) con gutter, caret, multi-caret, folding, burbujas, intellisense (CompletionPopup) y hover tooltip (EditorTooltipPopup); ref base para sustituir el dibujo Cairo de Mono.TextEditor |
 | 7 | Módulos Mono.* sin reemplazo: fork del repo (solo módulos afectados), port a .NET 10, quitar Gtk, rebranding `Mono.* → DotNet.*`, submódulo en `main/external/*` | EN CURSO | los 15 submódulos ya están forkeados a `DRavainera` y enlazados (commit 14b2bacaa4) con rama `net10`; port/renombre módulo a módulo según se toque en M5/M6 |
 | 8 | Xwt y módulos dependientes de Gtk o Mac-only: evaluar reemplazo o modificación | PENDIENTE | `xwt` forkeado; decisión por módulo cuando el cutover lo requiera |
 | 9 | Rediseño iconos PNG (MonoDevelop.Ide/icons/) estilo Fluent respetando tamaño y transparencias | EN CURSO | PNG ya integrados en la nueva UI vía `IconService` (menú principal, secciones de Preferences); redibujo uno a uno continúa con QA visual |
@@ -447,3 +447,82 @@ Port desde `MonoDevelop.Ide.FindInFiles` y `ProjectOperations` del legacy:
   (el comportamiento por defecto del DockItem del legacy).
 - Verificado por captura tras un build: el pad Properties muestra su contenido,
   el pad inferior muestra Errors ("Build succeeded."), sin áreas vacías.
+
+### M11w — Properties pad conectado al Solution pad (PropertyGrid legacy)
+- Legacy: el `PropertyPad` (`MonoDevelop.DesignerSupport`) usa *descriptores* por
+  tipo de nodo — `SolutionItemDescriptor` (Name/FilePath/RootDirectory/FileFormat),
+  `ProjectFileDescriptor` (Name/Path/Type/BuildAction…) y descriptor de workspace
+  para soluciones — y se repuebla al cambiar la selección vía
+  `DesignerSupport.Service.UpdateSelection`.
+- Avalonia: descriptores por clasificación de nodo (Solution / Project /
+  ProjectFolder / ProjectFile) que leen datos reales del `.sln`/`.csproj` en
+  disco; cabecera (nombre + tipo) y filas agrupadas en secciones Misc/Build
+  (Target framework, Assembly name, Output type, etc.).
+- La selección en el árbol del Solution pad (`SelectionChanged`) repuebla el pad
+  al vuelo; el contenido se reconstruye limpio en cada cambio (fix del bug de
+  controles reutilizados que duplicaba filas).
+- QA: hook determinista `--props` (solución → proyecto → archivo, 23 filas
+  verificadas, 0 excepciones) + verificación visual por captura.
+- Commit `846703135a`.
+
+### M11x — DirtyFilesDialog ("Save Files")
+- Legacy: `MonoDevelop.Ide.Gui.Dialogs.DirtyFilesDialog` es el gate obligatorio
+  al cerrar solución/salir con documentos modificados (`Workbench.OnDeleteEvent`,
+  `DockWindow`, `FileTabCommands`): TreeStore con checkbox por documento,
+  agrupados bajo "Project: {name}", cascada de checks padre→hijos y recálculo
+  tri-state hijos→padre (`NewCheckStatus`/`ToggleChildren`), y 3 acciones:
+  **Save and Quit/Close**, **Quit/Close** y **Cancel**.
+- Avalonia: `DirtyFilesDialog.axaml` con chrome Avalonia (sin decoraciones del
+  OS); `Load(docs, closeWorkspace)` con agrupación, cascada con guard
+  anti-recursión y tri-state (null = mixed); `Result` con los 3 valores legacy;
+  `CheckedDocs` expone qué persistir.
+- Cableado en los 4 puntos del legacy: **CloseDocument** (untitled dirty →
+  confirmación), **File > Close Workspace**, **File > Exit** y **el botón de
+  cerrar la ventana** (`Window.Closing` con `e.Cancel` como `OnDeleteEvent`).
+- QA triple: determinista (`--dirtyfiles`, 7 aserciones: dirty → diálogo con
+  grupo "Project: TestProj" → Save and Quit persiste en disco → dirty=False →
+  gate activo); E2E real (WM_DELETE con documento sucio **bloquea el cierre** y
+  muestra el diálogo); E2E del botón ("Save and Close" → guardó y cerró la app
+  con el archivo persistido).
+- Commit `cc2024c15c`.
+
+### M11y — Editor: fixes de render + intellisense + hover tooltip (code completion legacy)
+- **Fantasma/líneas duplicadas (causa raíz)**: el compositor de Avalonia puede
+  seguir leyendo el bitmap del frame anterior mientras `Render` se re-ejecuta al
+  teclear; pintar sobre esa misma memoria (WriteableBitmap reutilizado) emborrona
+  el frame viejo bajo el nuevo. Fix: cada frame se renderiza en un
+  **WriteableBitmap nuevo** (el bitmap presentado nunca se muta; el anterior se
+  libera una frame después vía `pendingDispose`).
+- **Backspace sin efecto**: el flag `applyingCommit` se quedaba pegado en `true`
+  cuando `SetValue` era no-op (valor igual) y tragaba el refresh externo
+  (`SetLines`); eliminado — la comparación por valor absorbe el eco. Además el
+  Backspace/Delete solo operaban el caret primario con carets secundarios
+  residuales congelados (las barras `|` visibles): ahora aplican a **todos los
+  carets** bottom-up (semántica multi-caret legacy) y un clic normal colapsa al
+  caret primario (solo Alt+Shift añade).
+- **CompletionPopup** (port de `CompletionListWindowGtk`): ventana borderless
+  con lista de entries (icono legacy `element-*` + texto + descripción), filtro
+  mientras se teclea, navegación Up/Down/PageUp/PageDown (paso 8 del legacy),
+  commit Enter/Tab/clic, cancelación Escape/focus-loss. Trigger: `.` y
+  **Ctrl+Space** (`TextEditorCommands.ShowCompletionWindow`). Fuente de datos:
+  palabras del documento + keywords C# (el legacy agrega palabras del documento
+  cuando no hay modelo de lenguaje).
+- **EditorTooltipPopup** (port del pipeline `TooltipProvider`): hover 500 ms
+  (HOVER_TIME) sobre una palabra muestra tooltip borderless con icono, la
+  firma/declaración de la palabra (búsqueda de declaración en el documento) y la
+  línea; posición por `PointToScreen` (la coordenada editor-relative debe
+  traducirse a pantalla: el popup es top-level).
+- **Otros fixes**: cursor I-beam en el área de edición (`StandardCursorType.Ibeam`
+  en las dos rutas de apertura de MainWindow); el pad del editor permanece
+  abierto sin pestañas (placeholder "No open documents"); `ShowTooltipForQa`
+  permite QA visual del tooltip sin puntero real.
+- QA determinista `--editqa` (todo verde, restaura el archivo original al final
+  para no dejar residuo): insert/backspace elimina carácter; hover info de
+  "Main" → `Main (method)`; popup visible tras `Console.` → commit →
+  `Console.WriteLine` insertado; items `Write*` ≥ 1; editor pad vivo con 1
+  pestaña. Verificación visual: captura con tooltip renderizado y editor limpio
+  (sin fantasmas ni carets residuales).
+- Archivos: `Controls/CompletionPopup.cs` y `Controls/EditorTooltipPopup.cs`
+  (nuevos), `Controls/SkTextEditor.cs`, `Views/MainWindow.axaml.cs`,
+  `Program.cs`.
+- Commit `c4fd345c44`.
