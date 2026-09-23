@@ -560,3 +560,41 @@ Port desde `MonoDevelop.Ide.FindInFiles` y `ProjectOperations` del legacy:
   verificación de mensaje/barra/visibilidad de botones) + capturas (estado
   completado del progress, tip ciclado, pestaña Diff en el pad).
 - Commit `b9b2fd0e42`.
+
+### M13 — Configs reales + import de proyectos + comandos restantes
+
+**Nuevo `Services/ConfigurationService.cs`** (persistencia como el
+ProjectService legacy):
+- `GetSolutionConfigurations` lee `GlobalSection(SolutionConfigurationPlatforms)`
+  del .sln (claves `Name|Platform` → nombres puros).
+- `AddSolutionConfiguration` escribe la config en el .sln
+  (`Name|Any CPU` en SolutionConfigurationPlatforms + entradas
+  `ActiveCfg`/`Build.0` por GUID de proyecto en ProjectConfigurationPlatforms) y,
+  con `createChildren`, añade en cada .csproj el
+  `<PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Name|AnyCPU' " />`
+  (mapeo AnyCPU del legacy). Devuelve false si ya existe.
+- `AddProjectToSolution` crea el .sln wrapper de un .csproj suelto
+  (Format Version 12.00, GUID C#, Debug/Release con ActiveCfg/Build.0) — el
+  equivalente a `ProjectOperations.ImportProject`.
+
+**NewConfigurationDialog persiste de verdad**: al aceptar con solución cargada
+crea la config en .sln + .csproj y recarga el árbol
+(el QA `--newconfig-real` crea "QAConfig", verifica en disco
+`sln-entry=True csproj-entries=True` y limpia para repetibilidad).
+
+**File > Open... importa proyectos**: `OpenFileOrProject` enruta
+.sln/.slnf → abrir solución, .csproj → importar (crea wrapper .sln si no
+existe) y abre, resto → pestaña de documento
+(el QA `--openimport` genera un proyecto temporal y verifica
+`wrapper-sln=True loaded=True`; captura del árbol importado).
+El wrapper .sln ya no aparece como archivo dentro del árbol (el legacy lo oculta).
+
+**Comandos restantes cableados** (el menú ya no tiene "not wired" de Project/Search):
+`ProjectCommands.BuildSolution` (build completo), `RunCodeAnalysisSolution/Project`
+(build con analíticos, mensaje en Output) y `SearchCommands.FindNextSelection`
+(selección actual → Find in Files + ShowNextResult, como el legacy).
+
+- QA: `--newconfig-real`, `--openimport` + captura visual del proyecto importado
+  (árbol + References + Properties "Visual Studio solution / Projects 1").
+- Tests: 16/16 en verde como gate pre-commit.
+- Commit `(M13)`.

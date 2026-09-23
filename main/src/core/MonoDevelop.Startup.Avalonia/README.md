@@ -153,10 +153,23 @@ documento sucio a propósito para poder probar el diálogo visualmente
 | `--filter` | Búsqueda incremental del Solution pad | `[filter]` |
 | `--totd` | Tip of the Day (tips del XML legacy) | `[totd]` |
 | `--progress` | ProgressDialog (tareas anidadas + ShowDone) | `[progress]` |
+| `--newconfig-real` | NewConfiguration persiste en .sln/.csproj y limpia | `[newconfig-real]` |
+| `--openimport` | File>Open importa un .csproj suelto (wrapper .sln) | `[openimport]` |
 
 QA visual: los hooks se complementan con capturas X11 (`magick x:<win>`) para
 comparar la UI contra la legacy GTK en vivo (ver bitácoras en
 `docs/interfaz-plan.md`).
+
+### Configuraciones e importación
+
+- `Services/ConfigurationService.cs` persiste configuraciones donde las guarda
+  el legacy: `GlobalSection(SolutionConfigurationPlatforms)` + mapeos por GUID
+  en el .sln, y `<PropertyGroup Condition=" '$(Configuration)|$(Platform)'" />`
+  en cada .csproj ("Any CPU" ⇄ "AnyCPU"). El New Configuration dialog crea la
+  config real y recarga el árbol.
+- File > Open enruta `.sln`/`.slnf` → solución, `.csproj` → importación
+  (crea el `.sln` wrapper con `AddProjectToSolution`, como
+  `ProjectOperations.ImportProject`), resto → pestaña de documento.
 
 ## Estado del bucle de migración
 

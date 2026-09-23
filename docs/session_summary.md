@@ -481,3 +481,17 @@ documento + keywords).
   indentado (BeginTask/EndTask/WriteText) + ShowDone con los 3 estados finales;
   `--totd` y `--progress` los ejercitan de forma determinista. Capturas
   verificadas. Commit `b9b2fd0e42`.
+
+## 2026-09-23 — M13: configs reales (.sln/.csproj) + File>Open importa proyectos
+
+- `Services/ConfigurationService.cs`: lectura/escritura de configuraciones como
+  el ProjectService legacy (SolutionConfigurationPlatforms + ProjectConfigurationPlatforms
+  por GUID en .sln; PropertyGroup Condition 'Name|AnyCPU' en .csproj; Any CPU⇄AnyCPU).
+- NewConfigurationDialog persiste la config real y recarga el árbol
+  (QA `--newconfig-real`: created=True sln-entry=True csproj-entries=True + cleanup).
+- File > Open enruta .sln/.csproj/documentos; el .csproj suelto se importa creando
+  el .sln wrapper (`AddProjectToSolution`) — QA `--openimport` + captura del árbol.
+- El .sln wrapper ya no se lista como archivo del proyecto en el Solution pad.
+- Cableados los últimos comandos sueltos: BuildSolution, RunCodeAnalysis×2,
+  FindNextSelection. Tests 16/16 (gate pre-commit).
+- Docs: M13 en interfaz-plan.md + sección de configs en el README del shell.
