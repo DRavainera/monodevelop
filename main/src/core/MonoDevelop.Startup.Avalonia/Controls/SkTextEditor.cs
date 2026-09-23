@@ -39,7 +39,8 @@ public class SkTextEditor : Control
 	// CPU raster buffer: Skia draws straight into the memory of an Avalonia
 	// WriteableBitmap, which is then presented via DrawImage. This is the
 	// supported interop path in Avalonia 12 (no internal lease APIs needed).
-	WriteableBitmap? buffer;
+	WriteableBitmap? front; // freshly-rendered frame presented to the compositor
+	WriteableBitmap? pendingDispose; // previous frame, released one frame later
 	int bufferW, bufferH;
 	bool dirty = true;
 	bool caretVisible = true;
@@ -245,6 +246,69 @@ public class SkTextEditor : Control
 		blinkTimer.Start ();
 	}
 
+	// ----- Legacy hover tooltip pipeline (TooltipProvider.GetItem + ShowTooltipWindow)
+	// A borderless popup with the signature/description of the word under the mouse.
+	EditorTooltipPopup? hoverPopup;
+	Point hoverPoint;
+	readonly DispatcherTimer hoverTimer = new () { Interval = TimeSpan.FromMilliseconds (500) }; // legacy HOVER_TIME
+	bool hoverDismissed; // pointer moved within the same hover: don't re-show instantly
+
+	/// <summary>Owner window for the popups (set by MainWindow).</summary>
+	public Window? PopupOwner { get; set; }
+
+	void OnHoverTimer (object? sender, EventArgs e)
+	{
+		hoverTimer.Stop ();
+		if (hoverDismissed || PopupOwner is null || !IsPointerOver)
+			return;
+		var info = GetHoverInfo (hoverPoint);
+		if (info is null)
+			return;
+		hoverPopup ??= new EditorTooltipPopup ();
+		// Screen coordinates: the popup is a top-level window, so the editor-relative
+		// point must be translated through PointToScreen (showing it at parent.Position
+		// + point landed on the wrong pad when the editor is offset).
+		var screenPt = this.PointToScreen (hoverPoint);
+		hoverPopup.ShowAtScreen (PopupOwner, screenPt, info.Value.Header, info.Value.Description, info.Value.Icon);
+	}
+
+	/// <summary>Word under an editor-relative point (legacy GetItem: offset → word).</summary>
+	public (string Word, int Line, int Col) WordAtPoint (Point p)
+	{
+		double charW = FontSize * 0.6;
+		int col = Math.Max (0, (int)((p.X - GutterWidth ()) / charW));
+		int line = Math.Clamp ((int)(p.Y / LineHeight + scrollLines), 0, lines.Count - 1);
+		var text = lines [line];
+		if (col >= text.Length)
+			return ("", line, col);
+		int s = col, e2 = col;
+		while (s > 0 && (char.IsLetterOrDigit (text [s - 1]) || text [s - 1] == '_'))
+			s--;
+		while (e2 < text.Length && (char.IsLetterOrDigit (text [e2]) || text [e2] == '_'))
+			e2++;
+		return (text.Substring (s, e2 - s), line, s);
+	}
+
+	void OnPointerLeaveForHover ()
+	{
+		hoverTimer.Stop ();
+		hoverPopup?.HideTooltip ();
+		hoverDismissed = false;
+	}
+
+	protected override void OnPointerEntered (PointerEventArgs e)
+	{
+		base.OnPointerEntered (e);
+		if (!dragging)
+			hoverDismissed = false;
+	}
+
+	protected override void OnPointerExited (PointerEventArgs e)
+	{
+		base.OnPointerExited (e);
+		OnPointerLeaveForHover ();
+	}
+
 	void MarkDirty ()
 	{
 		dirty = true;
@@ -277,14 +341,91 @@ public class SkTextEditor : Control
 
 	void SetLines (string text)
 	{
+		var next = text.Replace ("\r\n", "\n").Split ('\n').ToList ();
+		if (next.Count == 0)
+			next.Add ("");
+		// Ignore echo of our own Commit (SetValue with the joined buffer): the split
+		// text equals the current model, so only external changes (file open, undo,
+		// SaveFile refresh) rebuild it. Value comparison is safer than a flag, which
+		// sticks when SetValue is a no-op (same value) and swallows the next load.
+		if (next.Count == lines.Count && next.SequenceEqual (lines))
+			return;
 		lines.Clear ();
-		lines.AddRange (text.Replace ("\r\n", "\n").Split ('\n'));
-		if (lines.Count == 0)
-			lines.Add ("");
+		lines.AddRange (next);
 		caretLine = Math.Clamp (caretLine, 0, lines.Count - 1);
 		caretCol = Math.Clamp (caretCol, 0, lines [caretLine].Length);
 		RebuildFolds ();
 		MarkDirty ();
+	}
+
+	/// <summary>Signature/description for the word under an editor-relative point
+	/// (the legacy TooltipItem): scans the document for declarations of that word.</summary>
+	public (string Header, string Description, string Icon)? GetHoverInfo (Point p)
+	{
+		var (word, line, col) = WordAtPoint (p);
+		if (word.Length == 0)
+			return null;
+		return DescribeWord (word, line);
+	}
+
+	(string, string, string) DescribeWord (string word, int fromLine)
+	{
+		// Find a declaration-like occurrence: "Type name", "Type name =", "name("
+		string? decl = null;
+		int declLine = -1;
+		for (int i = 0; i < lines.Count && decl is null; i++) {
+			var l = lines [i];
+			int idx = 0;
+			while ((idx = l.IndexOf (word, idx, StringComparison.Ordinal)) >= 0) {
+				bool wordBoundaryLeft = idx == 0 || !(char.IsLetterOrDigit (l [idx - 1]) || l [idx - 1] == '_');
+				int after = idx + word.Length;
+				bool wordBoundaryRight = after >= l.Length || !(char.IsLetterOrDigit (l [after]) || l [after] == '_');
+				if (wordBoundaryLeft && wordBoundaryRight) {
+					var trimmed = l.TrimStart ();
+					bool isDecl =
+						(after < l.Length && (l [after] == '(' || l [after] == '=' || l [after] == ';')) ||
+						trimmed.StartsWith ("public ") || trimmed.StartsWith ("private ") ||
+						trimmed.StartsWith ("protected ") || trimmed.StartsWith ("internal ") ||
+						trimmed.StartsWith ("static ") || trimmed.StartsWith ("class ") ||
+						trimmed.StartsWith ("void ") || trimmed.StartsWith ("var ") ||
+						trimmed.StartsWith ("int ") || trimmed.StartsWith ("string ");
+					if (isDecl) {
+						decl = l.Trim ();
+						declLine = i + 1;
+						break;
+					}
+				}
+				idx = after;
+			}
+		}
+		// Classify for the legacy element icon.
+		string icon = "element-other-declaration-16";
+		string kind = "word";
+		var kw = new HashSet<string> (Keywords.Split (' '));
+		if (kw.Contains (word)) {
+			icon = "element-keyword-16";
+			kind = "keyword";
+		} else if (decl is not null) {
+			var d = decl;
+			if (d.Contains ("class ") || d.Contains ("struct ") || d.Contains ("interface ") || d.Contains ("enum ")) {
+				icon = "element-class-16";
+				kind = "type";
+			} else if (System.Text.RegularExpressions.Regex.IsMatch (d, @"\w+\s*\(")) {
+				icon = "element-method-16";
+				kind = "method";
+			} else if (d.Contains ("=" ) && !d.Contains ("(")) {
+				icon = "element-field-16";
+				kind = "field";
+			} else if (d.Contains ("{ get") || d.Contains ("{ get;")) {
+				icon = "element-property-16";
+				kind = "property";
+			}
+		}
+		string header = word + (kind != "word" ? "  (" + kind + ")" : "");
+		string desc = decl is not null
+			? decl + (declLine > 0 ? "\nline " + declLine : "")
+			: "No declaration found in this document.";
+		return (header, desc, icon);
 	}
 
 	#region Metrics
@@ -313,7 +454,107 @@ public class SkTextEditor : Control
 
 	#endregion
 
-	#region Input
+	// ----- Completion popup wiring (legacy CompletionWindowManager: the window
+	// opens on '.' or Ctrl+Space, filters while typing, commits on Enter/Tab/click
+	// and cancels on Escape/focus loss) -----
+	CompletionPopup? completionPopup;
+	bool completionPopupCommitWired;
+	string completionPrefix = "";
+
+	/// <summary>Completion entries: document words + C# keywords with their legacy
+	/// element icons (the legacy data source aggregates document words when no
+	/// language model is available).</summary>
+	public IEnumerable<CompletionPopup.Item> GetCompletionItems ()
+	{
+		var kw = new HashSet<string> (Keywords.Split (' '));
+		foreach (var w in DocumentWords ())
+			yield return new CompletionPopup.Item (w, "element-field-16", "document word", "");
+		foreach (var k in kw)
+			yield return new CompletionPopup.Item (k, "element-keyword-16", "C# keyword", "keyword");
+	}
+
+	void ShowCompletionAtCaret ()
+	{
+		if (PopupOwner is null)
+			return;
+		completionPrefix = WordPrefixBeforeCaret ();
+		completionPopup ??= new CompletionPopup ();
+		if (!completionPopupCommitWired) {
+			completionPopup.Committing += CommitCompletion;
+			completionPopupCommitWired = true;
+		}
+		completionPopup.ShowItems (GetCompletionItems (), completionPrefix);
+		if (completionPopup.ItemCount == 0)
+			return;
+		// Position under the caret (legacy CodeCompletionContext).
+		double charW = FontSize * 0.6;
+		var topLeft = this.PointToScreen (new Point (
+			GutterWidth () + 4 + (caretCol - completionPrefix.Length) * charW,
+			(caretLine - scrollLines + 1) * LineHeight));
+		completionPopup.Position = topLeft;
+		completionPopup.Show (PopupOwner);
+	}
+
+	void UpdateCompletionFilter ()
+	{
+		if (completionPopup is { IsVisible: true }) {
+			completionPrefix = WordPrefixBeforeCaret ();
+			completionPopup.ShowItems (GetCompletionItems (), completionPrefix);
+			if (completionPopup.ItemCount == 0)
+				completionPopup.Hide ();
+		}
+	}
+
+	void CommitCompletion (object? sender, EventArgs e)
+	{
+		var popup = sender as CompletionPopup;
+		var word = popup?.SelectedText;
+		if (string.IsNullOrEmpty (word))
+			return;
+		// Replace the typed prefix with the selected entry (legacy completion commit).
+		var line = lines [caretLine];
+		int end = Math.Min (caretCol, line.Length);
+		int start = end - completionPrefix.Length;
+		if (start < 0)
+			start = end;
+		lines [caretLine] = line.Substring (0, start) + word + line.Substring (end);
+		caretCol = start + word.Length;
+		Commit ();
+	}
+
+	bool HandleCompletionKey (KeyEventArgs e)
+	{
+		if (completionPopup is not { IsVisible: true })
+			return false;
+		switch (e.Key) {
+		case Key.Down:
+			completionPopup.MoveSelection (1);
+			e.Handled = true;
+			return true;
+		case Key.Up:
+			completionPopup.MoveSelection (-1);
+			e.Handled = true;
+			return true;
+		case Key.PageDown:
+			completionPopup.PageMove (1);
+			e.Handled = true;
+			return true;
+		case Key.PageUp:
+			completionPopup.PageMove (-1);
+			e.Handled = true;
+			return true;
+		case Key.Enter:
+		case Key.Tab:
+			completionPopup.RequestCommit ();
+			e.Handled = true;
+			return true;
+		case Key.Escape:
+			completionPopup.RequestCancel ();
+			e.Handled = true;
+			return true;
+		}
+		return false;
+	}
 
 	protected override void OnTextInput (TextInputEventArgs e)
 	{
@@ -322,14 +563,28 @@ public class SkTextEditor : Control
 		if (string.IsNullOrEmpty (text))
 			return;
 		InsertText (text);
+		// Legacy trigger: '.' opens the completion window; typing filters it.
+		if (text == ".")
+			ShowCompletionAtCaret ();
+		else
+			UpdateCompletionFilter ();
 		e.Handled = true;
 	}
 
 	protected override void OnKeyDown (KeyEventArgs e)
 	{
 		base.OnKeyDown (e);
+		// Completion popup swallows navigation keys first (legacy CompletionController).
+		if (HandleCompletionKey (e))
+			return;
 		var ctrl = e.KeyModifiers.HasFlag (KeyModifiers.Control);
 		var altShift = e.KeyModifiers.HasFlag (KeyModifiers.Alt) && e.KeyModifiers.HasFlag (KeyModifiers.Shift);
+		// Legacy ShowCompletionWindow: Ctrl+Space opens the completion list.
+		if (ctrl && e.Key == Key.Space) {
+			ShowCompletionAtCaret ();
+			e.Handled = true;
+			return;
+		}
 		switch (e.Key) {
 		case Key.OemPeriod when altShift:
 			// Legacy InsertNextMatchingCaret: Alt+Shift+.
@@ -391,16 +646,27 @@ public class SkTextEditor : Control
 		}
 		switch (e.Key) {
 		case Key.Back:
-			if (caretCol > 0) {
-				var line = lines [caretLine];
-				lines [caretLine] = line.Remove (caretCol - 1, 1);
-				caretCol--;
-			} else if (caretLine > 0) {
-				caretCol = lines [caretLine - 1].Length;
-				lines [caretLine - 1] += lines [caretLine];
-				lines.RemoveAt (caretLine);
-				caretLine--;
+			// Multi-caret: delete at every caret, bottom-up (legacy semantics).
+			foreach (var (l, c) in Carets
+				.OrderByDescending (x => x.line).ThenByDescending (x => x.col).ToList ()) {
+				if (c > 0) {
+					lines [l] = lines [l].Remove (c - 1, 1);
+					if (l == caretLine)
+						caretCol--;
+					else
+						ShiftSecondary (l, c, -1);
+				} else if (l > 0) {
+					if (l == caretLine)
+						caretCol = lines [l - 1].Length;
+					lines [l - 1] += lines [l];
+					lines.RemoveAt (l);
+					if (l == caretLine)
+						caretLine--;
+					else
+						ShiftSecondaryAfterLineRemoval (l);
+				}
 			}
+			caretCol = Math.Clamp (caretCol, 0, lines [caretLine].Length);
 			Commit ();
 			e.Handled = true;
 			break;
@@ -539,6 +805,10 @@ public class SkTextEditor : Control
 		Focus ();
 		var pt = e.GetCurrentPoint (this);
 		if (pt.Properties.IsLeftButtonPressed) {
+			// Legacy: a plain mouse click collapses multi-caret back to the primary
+			// caret (only Alt+Shift+Click adds one via InsertNextMatchingCaret).
+			if (!e.KeyModifiers.HasFlag (KeyModifiers.Alt))
+				secondaryCarets.Clear ();
 			double charW = FontSize * 0.6;
 			int col = Math.Max (0, (int)((pt.Position.X - GutterWidth ()) / charW));
 			int line = (int)(pt.Position.Y / LineHeight + scrollLines);
@@ -556,9 +826,28 @@ public class SkTextEditor : Control
 	protected override void OnPointerMoved (PointerEventArgs e)
 	{
 		base.OnPointerMoved (e);
+		var pt = e.GetPosition (this);
+		// Hover tooltip: restart the timer on every move (legacy tooltip pipeline).
+		if (!dragging) {
+			var word = WordAtPoint (pt).Word;
+			bool sameSpot = hoverPopup?.IsVisible == true &&
+				Math.Abs (pt.X - hoverPoint.X) < FontSize * 0.6 && Math.Abs (pt.Y - hoverPoint.Y) < LineHeight;
+			if (!sameSpot) {
+				hoverPopup?.HideTooltip ();
+				hoverDismissed = hoverPopup?.IsVisible == true;
+				hoverPoint = pt;
+				if (word.Length > 0) {
+					hoverTimer.Stop ();
+					hoverTimer.Tick -= OnHoverTimer;
+					hoverTimer.Tick += OnHoverTimer;
+					hoverTimer.Start ();
+				} else {
+					hoverDismissed = false;
+				}
+			}
+		}
 		if (!dragging)
 			return;
-		var pt = e.GetPosition (this);
 		double charW = FontSize * 0.6;
 		int col = Math.Max (0, (int)((pt.X - GutterWidth ()) / charW));
 		int line = (int)(pt.Y / LineHeight + scrollLines);
@@ -576,17 +865,36 @@ public class SkTextEditor : Control
 
 	void InsertText (string text)
 	{
-		foreach (var ch in text) {
-			if (ch == '\n') {
-				var tail = lines [caretLine].Substring (caretCol);
-				lines [caretLine] = lines [caretLine].Substring (0, caretCol);
-				lines.Insert (caretLine + 1, tail);
-				caretLine++;
-				caretCol = 0;
-			} else {
-				var line = lines [caretLine];
-				lines [caretLine] = line.Insert (caretCol, ch.ToString ());
-				caretCol++;
+		// Legacy multi-caret editing: the same keystroke applies to every caret
+		// (primary last so it keeps its position semantics). With a single caret
+		// this is the plain path.
+		var all = Carets
+			.OrderByDescending (c => c.line)
+			.ThenByDescending (c => c.col)
+			.ToList (); // bottom-up so line inserts don't shift pending carets
+		foreach (var (l, c) in all) {
+			int line = l, col = c;
+			foreach (var ch in text) {
+				if (ch == '\n') {
+					var tail = lines [line].Substring (col);
+					lines [line] = lines [line].Substring (0, col);
+					lines.Insert (line + 1, tail);
+					line++;
+					col = 0;
+				} else {
+					var l2 = lines [line];
+					lines [line] = l2.Insert (col, ch.ToString ());
+					col++;
+				}
+			}
+			if ((line, col) == (caretLine, caretCol))
+				(caretLine, caretCol) = (line, col);
+			else {
+				int idx = secondaryCarets.FindIndex (s => s.line == l && s.col == c);
+				if (idx >= 0)
+					secondaryCarets [idx] = (line, col);
+				else if (all.Count == 1)
+					(caretLine, caretCol) = (line, col);
 			}
 		}
 		Commit ();
@@ -934,6 +1242,95 @@ public class SkTextEditor : Control
 	}
 
 	public void InsertAtCaret (string text) => InsertText (text);
+
+	/// <summary>Programmatic Backspace (the Key.Back handler path without a key
+	/// event) — used by QA to exercise deletion deterministically.</summary>
+	public void BackspaceForQa ()
+	{
+		if (caretCol > 0) {
+			var line = lines [caretLine];
+			lines [caretLine] = line.Remove (caretCol - 1, 1);
+			caretCol--;
+		} else if (caretLine > 0) {
+			caretCol = lines [caretLine - 1].Length;
+			lines [caretLine - 1] += lines [caretLine];
+			lines.RemoveAt (caretLine);
+			caretLine--;
+		} else {
+			return;
+		}
+		Commit ();
+	}
+
+	/// <summary>Collapse to a single caret at the primary position (legacy: a
+	/// plain click or Escape ends multi-caret editing).</summary>
+	public void CollapseToPrimaryCaret () => secondaryCarets.Clear ();
+
+	// Multi-caret bookkeeping after an edit at (line, col).
+	void ShiftSecondary (int line, int col, int delta)
+	{
+		int idx = secondaryCarets.FindIndex (s => s.line == line && s.col == col);
+		if (idx >= 0)
+			secondaryCarets [idx] = (line, col + delta);
+	}
+
+	void ShiftSecondaryAfterLineRemoval (int removedLine)
+	{
+		for (int i = 0; i < secondaryCarets.Count; i++) {
+			var (l, c) = secondaryCarets [i];
+			if (l == removedLine)
+				secondaryCarets [i] = (removedLine - 1, c);
+			else if (l > removedLine)
+				secondaryCarets [i] = (l - 1, c);
+		}
+	}
+
+	/// <summary>QA pipeline: opens the completion popup exactly as the '.' trigger.
+	/// Assumes the caret sits right after a '.'.</summary>
+	public void TriggerCompletionForQa ()
+	{
+		ShowCompletionAtCaret ();
+	}
+
+	public bool IsCompletionOpenForQa => completionPopup is { IsVisible: true } && completionPopup.ItemCount > 0;
+
+	/// <summary>QA pipeline: commits the currently selected completion entry.</summary>
+	public void CommitCompletionForQa ()
+	{
+		if (completionPopup is { IsVisible: true })
+			completionPopup.RequestCommit ();
+	}
+
+	/// <summary>Hover info for a word without pointer coordinates (QA + tests).</summary>
+	public (string Header, string Description, string Icon)? GetHoverInfoFor (string word)
+	{
+		if (string.IsNullOrEmpty (word))
+			return null;
+		var (header, desc, icon) = DescribeWord (word, caretLine);
+		return (header, desc, icon);
+	}
+
+	/// <summary>Shows the hover tooltip over the first occurrence of a word (QA
+	/// visual path — the same popup the pointer pipeline displays).</summary>
+	public void ShowTooltipForQa (string word)
+	{
+		if (PopupOwner is null)
+			return;
+		for (int i = 0; i < lines.Count; i++) {
+			int col = lines [i].IndexOf (word, StringComparison.Ordinal);
+			if (col < 0)
+				continue;
+			// The word's center point in editor coordinates, then to screen pixels
+			// (the popup is a top-level window positioned in screen space).
+			var pt = new Point (
+				GutterWidth () + 4 + (col + word.Length / 2.0) * FontSize * 0.6,
+				(i - scrollLines + 0.5) * LineHeight);
+			var (header, desc, icon) = DescribeWord (word, i);
+			hoverPopup ??= new EditorTooltipPopup ();
+			hoverPopup.ShowAtScreen (PopupOwner, this.PointToScreen (pt), header, desc, icon);
+			return;
+		}
+	}
 
 	// ----- Zoom (legacy TextEditor.Options.ZoomIn/Out/Reset) -----
 	public const double BaseFontSize = 12.0;
@@ -1671,8 +2068,6 @@ public class SkTextEditor : Control
 		MarkDirty ();
 	}
 
-	#endregion
-
 	#region Rendering
 
 	float GutterWidth () => (float)FontSize * 0.6f * (lines.Count.ToString ().Length + 1) + 10;
@@ -1681,25 +2076,33 @@ public class SkTextEditor : Control
 	{
 		int w = Math.Max (1, (int)Math.Ceiling (Bounds.Width));
 		int h = Math.Max (1, (int)Math.Ceiling (Bounds.Height));
-		if (dirty || buffer is null || bufferW != w || bufferH != h) {
-			if (buffer is null || bufferW != w || bufferH != h) {
-				buffer?.Dispose ();
-				buffer = new WriteableBitmap (new PixelSize (w, h), new Vector (96, 96), PixelFormats.Bgra8888, AlphaFormat.Opaque);
-				bufferW = w;
-				bufferH = h;
+		if (dirty || front is null || bufferW != w || bufferH != h) {
+			// Render each frame into a FRESH bitmap: the compositor may still read
+			// the previous frame's bitmap while Avalonia re-runs Render (typing
+			// invalidates faster than the compositor consumes), and repainting that
+			// shared memory smeared the old frame under the new one — the ghost/
+			// duplicated-line artifacts. A new bitmap per frame is immutable from
+			// the compositor's point of view; the old one is released after.
+			var next = new WriteableBitmap (new PixelSize (w, h), new Vector (96, 96), PixelFormats.Bgra8888, AlphaFormat.Opaque);
+			using (var fb = next.Lock ()) {
+				var info = new SKImageInfo (w, h, SKColorType.Bgra8888, SKAlphaType.Opaque);
+				using (var surface = SKSurface.Create (info, fb.Address, fb.RowBytes)) {
+					if (surface is null)
+						Console.WriteLine ("[skeditor] SKSurface.Create returned null");
+					else
+						Draw (surface.Canvas);
+				}
 			}
-			using var fb = buffer.Lock ();
-			var info = new SKImageInfo (w, h, SKColorType.Bgra8888, SKAlphaType.Opaque);
-			using (var surface = SKSurface.Create (info, fb.Address, fb.RowBytes)) {
-				if (surface is null)
-					Console.WriteLine ("[skeditor] SKSurface.Create returned null");
-				else
-					Draw (surface.Canvas);
-			}
+			var old = front;
+			front = next;
+			bufferW = w;
+			bufferH = h;
 			dirty = false;
+			pendingDispose?.Dispose (); // release the frame from two renders ago
+			pendingDispose = old; // the just-replaced frame may still be in flight
 		}
-		if (buffer is not null)
-			context.DrawImage (buffer, new Rect (0, 0, Bounds.Width, Bounds.Height));
+		if (front is not null)
+			context.DrawImage (front, new Rect (0, 0, Bounds.Width, Bounds.Height));
 	}
 
 	void Draw (SKCanvas canvas)
@@ -1732,8 +2135,10 @@ public class SkTextEditor : Control
 		using var textFont = new SKFont (font.Typeface, (float)FontSize);
 
 		int drawn = 0;
-		for (int i = firstLine; i < Math.Min (lines.Count, firstLine + visible) && drawn < visible; i++) {
-			i = RowToLine (i); // skip folded (hidden) lines
+		int line = firstLine;
+		while (line < lines.Count && drawn < visible) {
+			int i = RowToLine (line); // skip folded (hidden) lines
+			line++;
 			if (i >= lines.Count)
 				break;
 			float y = (drawn - (float)scrollLines) * lineH;
@@ -1769,6 +2174,18 @@ public class SkTextEditor : Control
 					textPaint.Color = gutterFg.WithAlpha (150);
 					float sx = gutterW + 4 + lines [i].Length * charW;
 					canvas.DrawText (summary, sx, baseline, textFont, textPaint);
+				}
+			}
+
+			// selection highlight behind the text (legacy #3a5098 selection band)
+			if (hasSelection) {
+				var (selStart, selEnd) = SelectionOrder ();
+				var (sLine, sCol, eLine, eCol) = SelectionRange ();
+				if (i >= sLine && i <= eLine) {
+					int c0 = i == sLine ? sCol : 0;
+					int c1 = i == eLine ? eCol : lines [i].Length;
+					using var selPaint = new SKPaint { Color = new SKColor (0x3a, 0x50, 0x98, 160), IsAntialias = false };
+					canvas.DrawRect (gutterW + 4 + c0 * charW, y, Math.Max (2, (c1 - c0) * charW), lineH, selPaint);
 				}
 			}
 

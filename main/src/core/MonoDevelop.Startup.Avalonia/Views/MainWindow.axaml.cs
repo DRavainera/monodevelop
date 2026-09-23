@@ -42,6 +42,10 @@ public partial class MainWindow : Window
 		// shows "Save Files" before quitting (Workbench.OnDeleteEvent).
 		Closing += OnMainWindowClosing;
 
+		// Tab clicks swap the mounted document in DocContent (and show the empty
+		// host when the selection is cleared).
+		DocTabs.SelectionChanged += OnDocSelectionChanged;
+
 		// Full legacy main menu: same structure/order/labels/icons/shortcuts as the GTK UI.
 		BuildMenu ();
 
@@ -235,6 +239,51 @@ public partial class MainWindow : Window
 						RefreshSolutionTree ();
 					} catch (Exception ex) {
 						Output ("[ctx] QA failed: " + ex.Message);
+					}
+				}
+			} else if (qa == "--editqa") {
+				// QA: SkTextEditor core regressions — backspace deletion, hover info
+				// and the completion popup. Runs without synthetic input.
+				var file = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile),
+					"TestProj", "TestProj", "Program.cs");
+				if (File.Exists (file)) {
+					var original = File.ReadAllText (file); // QA restores this at the end
+					OpenFileDocument (file);
+					var name = Path.GetFileName (file);
+					if (docs.TryGetValue (name, out var ed)) {
+						SelectDocument (name);
+						// 1) Backspace removes a character (regression: it stayed).
+						var before = ed.Text;
+						int lastLen = before.Length;
+						ed.GotoLineEnd ();
+						ed.InsertAtCaret ("X");
+						bool grew = ed.Text.Length == lastLen + 1;
+						ed.BackspaceForQa ();
+						Output ("[editqa] insert grew: " + grew + "; backspace removed char: " + (ed.Text.Length == lastLen));
+						// 2) Hover info on a known word ("Main").
+						var hover = ed.GetHoverInfoFor ("Main");
+						Output ("[editqa] hover info on Main: " + (hover != null) + " header='" + (hover?.Header ?? "") + "'");
+						// 3) Completion popup: full pipeline — show at caret after typing
+						// "Console.", then commit the first entry (writes "WriteLine").
+						ed.InsertAtCaret ("Console.");
+						ed.TriggerCompletionForQa ();
+						Output ("[editqa] completion popup visible: " + ed.IsCompletionOpenForQa);
+						ed.CommitCompletionForQa ();
+						Output ("[editqa] committed: " + ed.Text.Contains ("Console.WriteLine"));
+						var items = ed.GetCompletionItems ()
+							.Where (i => i.Text.StartsWith ("Write", StringComparison.Ordinal)).ToList ();
+						Output ("[editqa] completion items Write*: " + items.Count + " (expects WriteLine>0)");
+						// 4) Editor pad alive (tab count > 0 after the open).
+						Output ("[editqa] editor pad alive with " + DocTabs!.Items.Count + " tab(s)");
+						// Restore: reload the pristine file so the QA never leaves
+						// residue in the user's project (ed or disk).
+						ed.Text = original;
+						ed.IsDirty = false;
+						Output ("[editqa] restored text: " + (ed.Text == original));
+						Avalonia.Threading.Dispatcher.UIThread.Post (() => {
+							ed.ShowTooltipForQa ("Main");
+							Output ("[editqa] done");
+						}, Avalonia.Threading.DispatcherPriority.ApplicationIdle);
 					}
 				}
 			} else if (qa == "--dirtyfiles") {
@@ -903,9 +952,10 @@ public partial class MainWindow : Window
 		};
 		DocTabs!.Items.Add (tab);
 
-		DocTabs.SelectionChanged += OnDocSelectionChanged;
-		if (select)
-			SelectDocument (tag);
+		if (select) {
+			DocTabs.SelectedItem = tab; // SelectionChanged mounts the content
+			return;
+		}
 	}
 
 	void OnDocSelectionChanged (object? sender, SelectionChangedEventArgs e)
@@ -918,6 +968,8 @@ public partial class MainWindow : Window
 				if (doc.Content is Controls.SkTextEditor ed && !string.IsNullOrEmpty (ed.FilePath))
 					StatusText!.Text = ed.FilePath;
 			}
+		} else {
+			ShowEmptyEditorHost (); // legacy: editor pad stays open with no tabs
 		}
 	}
 
@@ -937,6 +989,29 @@ public partial class MainWindow : Window
 		var first = DocTabs!.Items.OfType<TabItem> ().FirstOrDefault (t => t.IsVisible);
 		if (first is not null)
 			SelectDocument ((string)first.Tag!);
+		else
+			ShowEmptyEditorHost (); // legacy: the editor pad stays open with no tabs
+	}
+
+	/// <summary>Legacy workbench behavior: the editor pad remains visible with an
+	/// empty content area when the last tab closes (no collapse).</summary>
+	void ShowEmptyEditorHost ()
+	{
+		if (DocContent is null)
+			return;
+		DocContent.Children.Clear ();
+		var empty = new TextBlock {
+			Text = "No open documents — open a file from the Solution pad or File > Open",
+			HorizontalAlignment = HorizontalAlignment.Center,
+			VerticalAlignment = VerticalAlignment.Center,
+			Opacity = 0.55,
+			TextWrapping = TextWrapping.Wrap,
+			TextAlignment = TextAlignment.Center,
+			Margin = new Thickness (24, 0),
+		};
+		empty.Bind (TextBlock.ForegroundProperty, Application.Current!.GetResourceObservable ("IdeFgBrush"));
+		DocContent.Children.Add (empty);
+		StatusText!.Text = "";
 	}
 
 	public void CloseDocument (string tag) => _ = CloseDocumentAsync (tag);
@@ -1232,6 +1307,8 @@ public partial class MainWindow : Window
 			var (title, projects) = loaded.Value;
 			solutionLoaded = true;
 			loadedSolutionPath = path;
+			// The solution-open flow must not re-show the welcome overlay afterwards.
+			welcomeVisible = false;
 
 			// Solution pad = legacy ProjectPad TreeView (Solution ▸ Projects ▸ files).
 			if (solutionTreeView is not null) {
@@ -1380,6 +1457,8 @@ public partial class MainWindow : Window
 	public void OpenFileDocument (string path)
 	{
 		var tag = Path.GetFileName (path);
+		if (welcomeVisible)
+			HideWelcomePage (); // legacy: opening a document dismisses the welcome overlay
 		if (documents.Any (d => d.Tag == tag)) {
 			SelectDocument (tag);
 			return;
@@ -1389,6 +1468,8 @@ public partial class MainWindow : Window
 				FilePath = path,
 				IsDirty = false,
 				Background = Brushes.Transparent,
+				PopupOwner = this,
+				Cursor = new Avalonia.Input.Cursor (Avalonia.Input.StandardCursorType.Ibeam),
 			};
 			editor.Text = File.ReadAllText (path);
 			editor.IsDirty = false;
@@ -3057,11 +3138,12 @@ public partial class MainWindow : Window
 	void OpenNewFileDocument ()
 	{
 		var name = $"new{newFileCounter}.cs";
-		newFileCounter++;
-		var editor = new Controls.SkTextEditor {
+		newFileCounter++;		var editor = new Controls.SkTextEditor {
 			FilePath = "",
 			IsDirty = false,
 			Background = Brushes.Transparent,
+			PopupOwner = this,
+			Cursor = new Avalonia.Input.Cursor (Avalonia.Input.StandardCursorType.Ibeam),
 		};
 		editor.Text = "";
 		AttachEditorContextMenu (editor);
