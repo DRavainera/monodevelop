@@ -192,6 +192,40 @@ public partial class MainWindow : Window
 						Output ("[bmkpad] cleared rows=" + bookmarksList.Items.Count);
 					}
 				}
+			} else if (qa == "--bkpad") {
+				// QA: Breakpoints pad — toggle breakpoints, pad rows, enable/disable,
+				// persistence into .userprefs, gutter navigation and cleanup.
+				var file = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile), "TestProj", "TestProj", "Program.cs");
+				if (!File.Exists (file) || loadedSolutionPath is null) {
+					Output ("[bkpad] no test file/solution");
+				} else {
+					OpenFileDocument (file);
+					var name = Path.GetFileName (file);
+					if (docs.TryGetValue (name, out var ed)) {
+						SelectDocument (name);
+						SetPadVisible ("breakpoints", true);
+						ed.GotoLine (6); ed.ToggleBreakpoint (); // line 7 (1-based)
+						ed.GotoLine (8); ed.ToggleBreakpoint (); // line 9
+						PersistBreakpoints (); RefreshBreakpointsPad ();
+						Output ("[bkpad] rows=" + (breakpointsList!.Items.Count) + " first=" + (((breakpointsList.Items [0] as ListBoxItem)?.Content as StackPanel)?.Children.OfType<TextBlock> ().FirstOrDefault ()?.Text ?? "?"));
+						var userprefs = File.ReadAllText (loadedSolutionPath.Substring (0, loadedSolutionPath.Length - 4) + ".userprefs");
+						Output ("[bkpad] persisted-xml=" + userprefs.Contains ("MonoDevelop.Ide.DebuggingService.Breakpoints") + " lines=" + userprefs.Contains ("line=\"7\"") + "&" + userprefs.Contains ("line=\"9\""));
+						ed.ToggleBreakpointEnabled (8);
+						PersistBreakpoints (); RefreshBreakpointsPad ();
+						Output ("[bkpad] disabled-row=" + (((breakpointsList.Items [1] as ListBoxItem)?.Content as StackPanel)?.Children.OfType<TextBlock> ().FirstOrDefault ()?.Text ?? "?"));
+					ed.NextBreakpoint ();
+					Output ("[bkpad] NextBreakpoint → line " + (ed.CurrentLine + 1));
+					// Cleanup (QA repeatable): drop the store entries — unless --keepbps
+					// was passed, which leaves them for visual capture runs.
+					if (!Environment.GetCommandLineArgs ().Contains ("--keepbps")) {
+						ed.ClearBreakpoints ();
+						PersistBreakpoints (); RefreshBreakpointsPad ();
+						Output ("[bkpad] cleared rows=" + breakpointsList.Items.Count);
+					} else {
+						Output ("[bkpad] kept for capture rows=" + breakpointsList.Items.Count);
+					}
+					}
+				}
 			} else if (qa == "--newconfig-real") {
 				// QA: full persistence path — creates "QAConfig" in the loaded
 				// solution and verifies the .sln/.csproj on disk.
@@ -794,6 +828,7 @@ public partial class MainWindow : Window
 	StackPanel? propertiesHeader;
 	StackPanel? propertiesList;
 	ListBox? bookmarksList;
+	ListBox? breakpointsList;
 
 	void BuildPads ()
 	{
@@ -938,7 +973,19 @@ public partial class MainWindow : Window
 				docs.TryGetValue ((DocTabs.SelectedItem as TabItem)?.Tag as string ?? "", out var ed))
 				ed.GotoLine (line);
 		};
+		// Context menu like the legacy SourceEditor bookmark pad: Prev/Next navigate
+		// around the selection, Remove drops the bookmark, Remove All clears.
+		bookmarksList.ContextMenu = BuildBookmarksMenu ();
 		DebugPads.AddTab (new PadHost.PadTab { Id = "bookmarks", Label = "Bookmarks", Icon = "md-bookmark-toggle", Content = bookmarksList, Visible = false });
+
+		// Breakpoints pad (legacy BreakpointPad: icon+file+line rows, toggle from the
+		// gutter, Go To/Enable/Disable/Remove in the context menu). Rows are rebuilt
+		// from every open editor's breakpoint set.
+		breakpointsList = new ListBox { Background = Brushes.Transparent };
+		breakpointsList.Bind (ListBox.ForegroundProperty, Application.Current.GetResourceObservable ("IdeFgBrush"));
+		breakpointsList.DoubleTapped += (_, _) => GoToSelectedBreakpoint ();
+		breakpointsList.ContextMenu = BuildBreakpointsMenu ();
+		DebugPads.AddTab (new PadHost.PadTab { Id = "breakpoints", Label = "Breakpoints", Icon = "md-breakpoint", Content = breakpointsList, Visible = false });
 
 		// Hide buttons feed the restore strip at the bottom edge (legacy pin/hide).
 		LeftPads.Hidden += (_, _) => UpdateRestoreStrip ();
@@ -1142,6 +1189,137 @@ public partial class MainWindow : Window
 			SelectDocument ((string)first.Tag!);
 		else
 			ShowEmptyEditorHost (); // legacy: the editor pad stays open with no tabs
+	}
+
+	// Legacy SourceEditor bookmark pad menu: navigation + removal.
+	ContextMenu BuildBookmarksMenu () => BookmarksMenu (
+		("Previous Bookmark", "md-bookmark-prev", () => WithActiveEditor (e => e.PrevBookmark ())),
+		("Next Bookmark", "md-bookmark-next", () => WithActiveEditor (e => e.NextBookmark ())),
+		("Remove Bookmark", null, RemoveSelectedBookmark),
+		("Remove All Bookmarks", "md-bookmark-clear-all", () => { WithActiveEditor (e => e.ClearBookmarks ()); RefreshBookmarksPad (); }));
+
+	ContextMenu BookmarksMenu (params (string Label, string? Icon, Action Act) [] items)
+	{
+		var menu = new ContextMenu ();
+		foreach (var (label, icon, act) in items) {
+			var panel = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
+			if (icon is not null && IconService.GetImage (icon) is { } img)
+				panel.Children.Add (new Image { Source = img, Width = 16, Height = 16 });
+			panel.Children.Add (new TextBlock { Text = label, FontSize = 12 });
+			var mi = new MenuItem { Header = panel };
+			mi.Click += (_, _) => act ();
+			menu.Items.Add (mi);
+		}
+		return menu;
+	}
+
+	void RemoveSelectedBookmark ()
+	{
+		if (bookmarksList?.SelectedItem is not ListBoxItem { Tag: int line } ||
+			!docs.TryGetValue ((DocTabs.SelectedItem as TabItem)?.Tag as string ?? "", out var ed))
+			return;
+		// Toggle removes when the mark exists at that line (legacy SetBookmarked false).
+		ed.GotoLine (line);
+		if (ed.BookmarkLines.Contains (line))
+			ed.ToggleBookmark ();
+		RefreshBookmarksPad ();
+	}
+
+	// Legacy BreakpointPad menu subset: Go to / Enable-Disable / Remove / Clear all.
+	ContextMenu BuildBreakpointsMenu () => BookmarksMenu (
+		("Go to Breakpoint", null, GoToSelectedBreakpoint),
+		("Enable/Disable Breakpoint", "md-breakpoint", ToggleSelectedBreakpointEnabled),
+		("Remove Breakpoint", null, RemoveSelectedBreakpoint),
+		("Clear All Breakpoints", "md-breakpoint-disable-all", () => { foreach (var ed in docs.Values) ed.ClearBreakpoints (); PersistBreakpoints (); RefreshBreakpointsPad (); }));
+
+	(Controls.SkTextEditor? Editor, int Line) SelectedBreakpoint ()
+	{
+		if (breakpointsList?.SelectedItem is ListBoxItem { Tag: string key }) {
+			var parts = key.Split ('|');
+			if (parts.Length == 2 && int.TryParse (parts [1], out var line) && docs.TryGetValue (parts [0], out var ed))
+				return (ed, line);
+		}
+		return (null, -1);
+	}
+
+	void GoToSelectedBreakpoint ()
+	{
+		var (ed, line) = SelectedBreakpoint ();
+		if (ed is null || line < 0)
+			return;
+		var tag = docs.FirstOrDefault (k => k.Value == ed).Key;
+		if (tag is not null)
+			SelectDocument (tag);
+		ed.GotoLine (line);
+	}
+
+	void ToggleSelectedBreakpointEnabled ()
+	{
+		var (ed, line) = SelectedBreakpoint ();
+		if (ed is null)
+			return;
+		ed.ToggleBreakpointEnabled (line);
+		PersistBreakpoints ();
+		RefreshBreakpointsPad ();
+	}
+
+	void RemoveSelectedBreakpoint ()
+	{
+		var (ed, line) = SelectedBreakpoint ();
+		if (ed is null)
+			return;
+		ed.RemoveBreakpoint (line);
+		PersistBreakpoints ();
+		RefreshBreakpointsPad ();
+	}
+
+	// BreakpointPad refresh: rows across every open document (icon + file:line),
+	// with the disabled state like the legacy md-breakpoint-disabled stock.
+	public void RefreshBreakpointsPad ()
+	{
+		var list = breakpointsList;
+		if (list is null)
+			return;
+		list.Items.Clear ();
+		var any = false;
+		foreach (var (tag, ed) in docs.OrderBy (d => d.Key, StringComparer.OrdinalIgnoreCase)) {
+			foreach (var (line, enabled) in ed.BreakpointLines.OrderBy (b => b.Key)) {
+				any = true;
+				var panel = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
+				if (IconService.GetImage (enabled ? "md-breakpoint" : "md-breakpoint-disabled") is { } img)
+					panel.Children.Add (new Image { Source = img, Width = 16, Height = 16 });
+				panel.Children.Add (new TextBlock {
+					Text = $"{Path.GetFileName (tag)}:{line + 1}" + (enabled ? "" : "  (disabled)"),
+					FontSize = 11.5,
+				});
+				list.Items.Add (new ListBoxItem { Tag = tag + "|" + line, Content = panel });
+			}
+		}
+		if (!any)
+			list.Items.Add (new ListBoxItem { Content = new TextBlock { Text = "No breakpoints", FontSize = 11.5, Opacity = 0.6 } });
+	}
+
+	// DebuggingService.OnStoreUserPrefs: persist the whole store into the
+	// <sln>.userprefs Breakpoints element when any editor's store changes.
+	void PersistBreakpoints ()
+	{
+		if (string.IsNullOrEmpty (loadedSolutionPath))
+			return;
+		var all = new List<Services.BreakpointEntry> ();
+		foreach (var ed in docs.Values.Where (d => !string.IsNullOrEmpty (d.FilePath)))
+			foreach (var (line, enabled) in ed.BreakpointLines)
+				all.Add (new Services.BreakpointEntry (ed.FilePath, line + 1, enabled)); // 1-based like Mono.Debugging
+		try {
+			Services.BreakpointService.Save (loadedSolutionPath, all);
+		} catch (Exception ex) {
+			Output ("[breakpoints] persist failed: " + ex.Message);
+		}
+	}
+
+	void OnEditorBreakpointsChanged (object? sender, EventArgs e)
+	{
+		PersistBreakpoints ();
+		RefreshBreakpointsPad ();
 	}
 
 	// Bookmarks pad: one row per bookmark of the active document, like the legacy
@@ -1658,6 +1836,15 @@ public partial class MainWindow : Window
 				if (e.Property == Controls.SkTextEditor.IsDirtyProperty)
 					UpdateDocTabTitle (tag, docDirty: editor.IsDirty);
 			};
+			editor.BreakpointsChanged += OnEditorBreakpointsChanged;
+			// Restore the persisted breakpoints of this file (DebuggingService load path).
+			if (!string.IsNullOrEmpty (loadedSolutionPath)) {
+				var stored = Services.BreakpointService.Load (loadedSolutionPath)
+					.Where (b => Path.GetFullPath (b.FileName) == Path.GetFullPath (path))
+					.Select (b => new KeyValuePair<int, bool> (b.Line - 1, b.Enabled)); // 0-based internally
+				if (stored.Any ())
+					editor.SetBreakpoints (stored);
+			}
 			AttachEditorContextMenu (editor);
 			AddDocument (tag, editor);
 		} catch (Exception ex) {
@@ -2412,6 +2599,32 @@ public partial class MainWindow : Window
 			return;
 		case "MonoDevelop.Ide.Commands.ViewCommands.ShowWelcomePage":
 			ShowWelcomePage ();
+			return;
+
+		// ----- DebugCommands breakpoints (legacy BreakpointPad + DebuggingService) -----
+		case "MonoDevelop.Debugger.DebugCommands.ToggleBreakpoint":
+			WithActiveEditor (e => e.ToggleBreakpoint ());
+			return;
+		case "MonoDevelop.Debugger.DebugCommands.NextBreakpoint":
+			WithActiveEditor (e => e.NextBreakpoint ());
+			return;
+		case "MonoDevelop.Debugger.DebugCommands.PrevBreakpoint":
+			WithActiveEditor (e => e.PrevBreakpoint ());
+			return;
+		case "MonoDevelop.Debugger.DebugCommands.ClearAllBreakpoints":
+			foreach (var edBp in docs.Values)
+				edBp.ClearBreakpoints ();
+			PersistBreakpoints ();
+			RefreshBreakpointsPad ();
+			return;
+		case "MonoDevelop.Debugger.DebugCommands.EnableDisableBreakpoint":
+			// Legacy toggles the breakpoint at the caret; fall back to the pad selection.
+			if (docs.TryGetValue ((DocTabs.SelectedItem as TabItem)?.Tag as string ?? "", out var edTgl) && edTgl.BreakpointLines.ContainsKey (edTgl.CurrentLine))
+				edTgl.ToggleBreakpointEnabled (edTgl.CurrentLine);
+			else
+				ToggleSelectedBreakpointEnabled ();
+			PersistBreakpoints ();
+			RefreshBreakpointsPad ();
 			return;
 
 		// FileCommands.Save / FileCommands.SaveAll (legacy FileService.SaveAll): writes
@@ -3527,9 +3740,14 @@ public partial class MainWindow : Window
 		if (projectFilter is not null)
 			projs = projs.Where (p => Path.GetFullPath (p) == Path.GetFullPath (projectFilter));
 		var failed = false;
+		// Legacy ProjectOperations build the active configuration (SelectActiveConfiguration).
+		var config = !string.IsNullOrEmpty (loadedSolutionPath) && File.Exists (loadedSolutionPath)
+			? Services.ConfigurationService.GetActiveConfiguration (loadedSolutionPath)
+			: activeConfiguration;
+		Output ($"[build] configuration {config}");
 		foreach (var proj in projs.ToList ()) {
 			Output ($"[build] project {Path.GetFileName (proj)}");
-			await RunProcessAsync ("dotnet", $"{target} \"{proj}\"");
+			await RunProcessAsync ("dotnet", $"{target} -c \"{config}\" \"{proj}\"");
 			if (runningProc is { HasExited: true } p && p.ExitCode != 0)
 				failed = true;
 		}
@@ -3549,8 +3767,11 @@ public partial class MainWindow : Window
 			Output ("[run] no runnable project found");
 			return;
 		}
-		Output ("[run] dotnet run — " + Path.GetFileName (proj));
-		await RunProcessAsync ("dotnet", $"run --project \"{proj}\"");
+		var runConfig = !string.IsNullOrEmpty (loadedSolutionPath) && File.Exists (loadedSolutionPath)
+			? Services.ConfigurationService.GetActiveConfiguration (loadedSolutionPath)
+			: activeConfiguration;
+		Output ($"[run] dotnet run -c {runConfig} — " + Path.GetFileName (proj));
+		await RunProcessAsync ("dotnet", $"run -c \"{runConfig}\" --project \"{proj}\"");
 	}
 
 	void StopBuildOrRun ()

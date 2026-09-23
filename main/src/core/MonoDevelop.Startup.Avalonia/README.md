@@ -157,7 +157,8 @@ documento sucio a propósito para poder probar el diálogo visualmente
 | `--openimport` | File>Open importa un .csproj suelto (wrapper .sln) | `[openimport]` |
 | `--activeconfig` | Active Configuration: persistencia en .userprefs + switch | `[activeconfig]` |
 | `--newproject` | New Project en modo add-to-solution (temp, no destructivo) | `[newproject]` |
-| `--bmkpad` | Pad Bookmarks: toggle/navegación/listado | `[bmkpad]` |
+| `--bmkpad` | Pad Bookmarks: toggle/navegación/listado + menú contextual | `[bmkpad]` |
+| `--bkpad` | Pad Breakpoints: toggle/persistencia .userprefs/navegación (con `--keepbps` deja el estado para capturas) | `[bkpad]` |
 
 QA visual: los hooks se complementan con capturas X11 (`magick x:<win>`) para
 comparar la UI contra la legacy GTK en vivo (ver bitácoras en
@@ -182,6 +183,17 @@ comparar la UI contra la legacy GTK en vivo (ver bitácoras en
   proyecto (GUID + mappings ActiveCfg/Build.0) en el .sln y recarga el árbol.
 - **Pad Bookmarks** (zona debug): lista los bookmarks del documento activo;
   doble clic salta a la línea; se refresca al toggle/clear/cambio de documento.
+  Menú contextual: Previous/Next Bookmark, Remove bookmark y Remove All
+  Bookmarks (semántica del pad del SourceEditor legacy).
+- **Breakpoints** (`Services/BreakpointService.cs`): el pad Breakpoints (zona
+  debug, icono `md-breakpoint`) lista `Archivo:línea` de todos los documentos
+  con marcadores rojos/grises en el gutter (toggle por clic) y menú Go to /
+  Enable-Disable / Remove / Clear All. Persiste en `<sln>.userprefs` bajo
+  `MonoDevelop.Ide.DebuggingService.Breakpoints` con el formato XML de
+  Mono.Debugging (`<Breakpoint file relfile line column [enabled]>`, líneas
+  1-based) y se restauran al abrir cada documento. Build y Run usan la
+  configuración activa: `dotnet build -c "<config>"` y
+  `dotnet run -c "<config>"`.
 
 ## Estado del bucle de migración
 

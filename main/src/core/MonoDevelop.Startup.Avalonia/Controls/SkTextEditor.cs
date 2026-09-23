@@ -1741,6 +1741,76 @@ public class SkTextEditor : Control
 	/// (the legacy pad lists the store's marks per document).</summary>
 	public IReadOnlyCollection<int> BookmarkLines => bookmarkLines;
 
+	// ----- Breakpoints (Mono.Debugging BreakpointStore parity: toggle at line,
+	// enable/disable per entry, gutter marker like the legacy red circle) -----
+	readonly Dictionary<int, bool> breakpointLines = new (); // line → enabled
+
+	/// <summary>Raised on any breakpoint change so MainWindow can persist the store.</summary>
+	public event EventHandler? BreakpointsChanged;
+
+	public IReadOnlyDictionary<int, bool> BreakpointLines => breakpointLines;
+
+	public void ToggleBreakpoint ()
+	{
+		if (!breakpointLines.Remove (caretLine))
+			breakpointLines [caretLine] = true;
+		MarkDirty ();
+		BreakpointsChanged?.Invoke (this, EventArgs.Empty);
+	}
+
+	public void ToggleBreakpointEnabled (int line)
+	{
+		if (breakpointLines.TryGetValue (line, out var en))
+			breakpointLines [line] = !en;
+		MarkDirty ();
+		BreakpointsChanged?.Invoke (this, EventArgs.Empty);
+	}
+
+	public void RemoveBreakpoint (int line)
+	{
+		if (breakpointLines.Remove (line)) {
+			MarkDirty ();
+			BreakpointsChanged?.Invoke (this, EventArgs.Empty);
+		}
+	}
+
+	public void ClearBreakpoints ()
+	{
+		if (breakpointLines.Count == 0)
+			return;
+		breakpointLines.Clear ();
+		MarkDirty ();
+		BreakpointsChanged?.Invoke (this, EventArgs.Empty);
+	}
+
+	public void SetBreakpoints (IEnumerable<KeyValuePair<int, bool>> lines)
+	{
+		breakpointLines.Clear ();
+		foreach (var (l, en) in lines)
+			breakpointLines [l] = en;
+		MarkDirty ();
+	}
+
+	public void NextBreakpoint ()
+	{
+		if (breakpointLines.Count == 0)
+			return;
+		var next = breakpointLines.Keys.Where (l => l > caretLine).OrderBy (l => l).FirstOrDefault (-1);
+		if (next < 0)
+			next = breakpointLines.Keys.Min ();
+		GotoLine (next);
+	}
+
+	public void PrevBreakpoint ()
+	{
+		if (breakpointLines.Count == 0)
+			return;
+		var prev = breakpointLines.Keys.Where (l => l < caretLine).OrderByDescending (l => l).FirstOrDefault (-1);
+		if (prev < 0)
+			prev = breakpointLines.Keys.Max ();
+		GotoLine (prev);
+	}
+
 	public void ToggleBookmark ()
 	{
 		if (!bookmarkLines.Add (caretLine))
@@ -2172,6 +2242,17 @@ public class SkTextEditor : Control
 				canvas.DrawRect (gutterW - 14, y + lineH / 2 - 5, 10, 10, bmPaint);
 				using var bmLine = new SKPaint { Color = new SKColor (0x2f, 0x78, 0xc8).WithAlpha (70), IsAntialias = false };
 				canvas.DrawRect (0, y, (float)Bounds.Width, lineH, bmLine);
+			}
+			// breakpoint marker (legacy gutter breakpoint-15: red circle, hollow when
+			// disabled like CellRendererImage stock md-breakpoint/md-breakpoint-disabled)
+			if (breakpointLines.TryGetValue (i, out var bpEnabled)) {
+				using var bpPaint = new SKPaint {
+					Color = bpEnabled ? new SKColor (0xd6, 0x33, 0x2c) : new SKColor (0x66, 0x66, 0x66),
+					IsAntialias = true,
+					Style = bpEnabled ? SKPaintStyle.Fill : SKPaintStyle.Stroke,
+					StrokeWidth = 1.6f,
+				};
+				canvas.DrawCircle (gutterW - 9, y + lineH / 2, 4.6f, bpPaint);
 			}
 			// caret line highlight in gutter
 			if (i == caretLine) {

@@ -507,3 +507,17 @@ documento + keywords).
 - Pad Bookmarks en la zona debug (filas por bookmark, doble clic salta,
   refresco en toggle/clear/cambio de doc; QA --bmkpad + captura).
 - Tests 16/16. Docs + README actualizados.
+
+## 2026-09-23 (c) — M15: pad Breakpoints con persistencia + Bookmarks contextual + build/run con config activa
+
+- Pad Breakpoints en la zona debug (filas icono+`Archivo:línea`, menú Go to/
+  Enable-Disable/Remove/Clear All) y gutter markers rojos/grises con toggle por
+  clic en SkTextEditor.
+- Persistencia real en `<sln>.userprefs` bajo
+  `MonoDevelop.Ide.DebuggingService.Breakpoints` (formato Mono.Debugging,
+  líneas 1-based); restauración al abrir cada documento.
+- Pad Bookmarks: menú contextual Previous/Next/Remove/Remove All.
+- Build (`dotnet build -c "<config>"`) y Run (`dotnet run -c "<config>"`) usan
+  la Active Configuration persistida.
+- QA `--bkpad` (filas, XML, enable/disable, navegación, cleanup) + `--keepbps`
+  para capturas. Tests 16/16. Docs + README actualizados.

@@ -629,3 +629,39 @@ MainToolbarController):**
   Clear deja la fila "No bookmarks…"; captura del pad en la zona debug.
 
 - Tests 16/16 en verde como gate pre-commit. Commit `(M14)`.
+
+### M15 — Pad Breakpoints con persistencia real + menú/navegación en Bookmarks + build/run con la config activa
+
+**Pad Breakpoints (port de BreakpointPad del addin Debugger):**
+- Nueva pestaña en la zona debug (icono legacy `md-breakpoint`): una fila por
+  breakpoint de todos los documentos abiertos — icono `md-breakpoint` /
+  `md-breakpoint-disabled` + `Archivo:línea` (con sufijo ` (disabled)`), el
+  equivalente a las columnas FileName/Enabled del pad GTK.
+- Gutter markers en SkTextEditor: círculo rojo relleno (habilitado) o contorno
+  gris (deshabilitado) como los stock `md-breakpoint`/`md-breakpoint-disabled`;
+  clic en el margen hace toggle (semántica del gutter legacy).
+- Menú contextual del pad: Go to Breakpoint, Enable/Disable, Remove y Clear All,
+  despachados por los command ids legacy de `MonoDevelop.Debugger.DebugCommands`.
+- **Persistencia real**: `Services/BreakpointService.cs` replica el formato
+  `BreakpointStore.Save/Load` de Mono.Debugging — elementos `<Breakpoint
+  file=… relfile=… line=… (1-based) enabled=…/>` dentro de
+  `<MonoDevelop.Ide.DebuggingService.Breakpoints>` en el `<Properties>` de
+  `<sln>.userprefs`; los breakpoints se restauran al (re)abrir cada documento
+  (camino de carga del DebuggingService legacy).
+
+**Menú contextual + navegación en el pad Bookmarks:**
+- Clic derecho sobre el pad: Previous/Next Bookmark, Remove bookmark y
+  Remove All Bookmarks, con la semántica del pad del SourceEditor legacy; el
+  pad sigue refrescándose en toggle/clear/cambio de documento.
+
+**Build/Run con la Active Configuration real (ProjectOperations):**
+- Build por proyecto ahora ejecuta `dotnet build -c "<config>"` y Run ejecuta
+  `dotnet run -c "<config>" --project`, con la config activa persistida en
+  .userprefs (QA `--buildone`: `[build] configuration Debug`).
+
+- QA: `--bkpad` (filas del pad `rows=2 first=Program.cs:7`, XML persistido
+  `lines=True&True`, enable/disable `disabled-row=Program.cs:9  (disabled)`,
+  navegación `NextBreakpoint → line 7`, cleanup repetible) y `--keepbps` para
+  dejar los breakpoints puestos en capturas visuales del pad.
+- Tests: 16/16 en verde como gate pre-commit.
+- Commit `(M15)`.
