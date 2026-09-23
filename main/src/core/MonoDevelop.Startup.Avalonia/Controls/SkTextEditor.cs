@@ -1737,6 +1737,10 @@ public class SkTextEditor : Control
 
 	public bool HasSelectionText => hasSelection && SelectedText.Length > 0;
 
+	/// <summary>Bookmarked lines (0-based) for the Bookmarks pad
+	/// (the legacy pad lists the store's marks per document).</summary>
+	public IReadOnlyCollection<int> BookmarkLines => bookmarkLines;
+
 	public void ToggleBookmark ()
 	{
 		if (!bookmarkLines.Add (caretLine))

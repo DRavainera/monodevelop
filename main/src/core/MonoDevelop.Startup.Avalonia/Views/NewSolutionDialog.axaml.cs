@@ -26,16 +26,30 @@ public partial class NewSolutionDialog : Window
 		("shared", "Shared Project",
 			"A project for sharing source files between multiple projects via implicit linking.",
 			"solution-32", "solution-32"),
-	};
+	};	public string? SelectedTemplateId { get; private set; }
 
-	public string? SelectedTemplateId { get; private set; }
+	/// <summary>QA hook: --newproject uses a throwaway temp location.</summary>
+	string? forcedLocation;
+
+	/// <summary>When true (solution already open) the created project is added to
+	/// it (legacy AddSolutionItem flow) instead of opening a new solution.</summary>
+	public bool AddToOpenSolution {
+		get => AddToSolutionCheck?.IsChecked == true;
+		set {
+			if (AddToSolutionCheck is not null)
+				AddToSolutionCheck.IsChecked = value;
+		}
+	}
 	public string? SolutionNameValue => SolutionName?.Text;
 	public string? LocationValue => LocationBox?.Text;
 
 	public NewSolutionDialog () : this (null) { }
 
 	// QA hook: --newsolution=<templateId> preselects a template.
-	public NewSolutionDialog (string? preselectTemplate)
+	public NewSolutionDialog (string? preselectTemplate) : this (preselectTemplate, null) { }
+
+	// QA hook: --newproject=<template> creates in a temp dir (non-destructive).
+	public NewSolutionDialog (string? preselectTemplate, string? forcedLocation)
 	{
 		InitializeComponent ();
 		IconConsole.Source = IconService.GetImage ("project-console-32");
@@ -43,9 +57,14 @@ public partial class NewSolutionDialog : Window
 		IconTest.Source = IconService.GetImage ("file-unit-test-32");
 		IconShared.Source = IconService.GetImage ("solution-32");
 
+		this.forcedLocation = forcedLocation;
 		var idx = Array.FindIndex (Templates, t => t.Tag == preselectTemplate);
 		TemplateList.SelectedIndex = idx >= 0 ? idx : 0;
-		LocationBox.Text = Environment.GetFolderPath (Environment.SpecialFolder.UserProfile);
+		LocationBox.Text = forcedLocation ?? Environment.GetFolderPath (Environment.SpecialFolder.UserProfile);
+		// With a solution open, "Add to solution" is the default (like the GTK dialog
+		// radio group 'Add to solution' when a workspace is open).
+		if (AddToSolutionCheck is not null)
+			AddToSolutionCheck.IsChecked = forcedLocation is not null;
 	}
 
 	void OnCategorySelected (object? sender, SelectionChangedEventArgs e) { }
@@ -61,6 +80,13 @@ public partial class NewSolutionDialog : Window
 		SelectedTemplateId = t.Tag;
 	}
 
+	protected override void OnOpened (EventArgs e)
+	{
+		base.OnOpened (e);
+		if (AutoCreateForQa)
+			OnCreate (this, new RoutedEventArgs ());
+	}
+
 	void OnCreate (object? sender, RoutedEventArgs e)
 	{
 		var template = SelectedTemplateId ?? "console";
@@ -73,11 +99,12 @@ public partial class NewSolutionDialog : Window
 			var dir = CreateDirectoryCheck?.IsChecked == true ? Path.Combine (location, name) : location;
 			Directory.CreateDirectory (dir);
 			var slnPath = Path.Combine (dir, name + ".sln");
+			var projDir = Path.Combine (dir, name);
 
 			// dotnet CLI scaffolding (same tool the legacy templates wrap) run hidden.
 			var psi = new System.Diagnostics.ProcessStartInfo {
 				FileName = "dotnet",
-				Arguments = $"new {template} -n {name} -o \"{Path.Combine (dir, name)}\"",
+				Arguments = $"new {template} -n {name} -o \"{projDir}\"",
 				RedirectStandardOutput = true,
 				RedirectStandardError = true,
 				UseShellExecute = false,
@@ -85,6 +112,16 @@ public partial class NewSolutionDialog : Window
 			};
 			using var p = System.Diagnostics.Process.Start (psi);
 			p?.WaitForExit (60000);
+
+			// Add-to-solution mode: only the project is created; MainWindow wires it
+			// into the loaded .sln (legacy ProjectOperations.AddSolutionItem).
+			var createdProj = Directory.GetFiles (projDir, "*.csproj").FirstOrDefault ();
+			if (AddToOpenSolution) {
+				CreatedProjectPath = createdProj;
+				CreatedSolutionPath = null;
+				Close ();
+				return;
+			}
 
 			// Fallback: minimal valid .sln if dotnet CLI is unavailable/failed.
 			if (!File.Exists (slnPath)) {
@@ -108,6 +145,14 @@ public partial class NewSolutionDialog : Window
 	}
 
 	public string? CreatedSolutionPath { get; private set; }
+
+	/// <summary>Path of the .csproj created when the dialog ran in "add to open
+	/// solution" mode (MainWindow wires it into the loaded .sln).</summary>
+	public string? CreatedProjectPath { get; private set; }
+
+	/// <summary>QA auto-create: fires OnCreate as soon as the dialog opens
+	/// (deterministic --newproject without synthetic input).</summary>
+	public bool AutoCreateForQa { get; set; }
 
 	void OnCancel (object? sender, RoutedEventArgs e)
 	{

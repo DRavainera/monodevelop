@@ -495,3 +495,15 @@ documento + keywords).
 - Cableados los últimos comandos sueltos: BuildSolution, RunCodeAnalysis×2,
   FindNextSelection. Tests 16/16 (gate pre-commit).
 - Docs: M13 en interfaz-plan.md + sección de configs en el README del shell.
+
+## 2026-09-23 (b) — M14: Active Configuration real + New Project a la solución + pad Bookmarks
+
+- Config activa persistida en .userprefs (formato legacy exacto); toolbar combo
+  y menú Project > Active Configuration dinámicos desde el .sln cargado
+  (QA --activeconfig: persist+switch+verify+restore).
+- New Solution dialog: "Add to open solution" + AppendProjectToSolution
+  (GUID, mappings por config, sección creada si falta; QA --newproject con
+  AutoCreateForQa no destructivo).
+- Pad Bookmarks en la zona debug (filas por bookmark, doble clic salta,
+  refresco en toggle/clear/cambio de doc; QA --bmkpad + captura).
+- Tests 16/16. Docs + README actualizados.

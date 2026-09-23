@@ -598,3 +598,34 @@ El wrapper .sln ya no aparece como archivo dentro del árbol (el legacy lo ocult
   (árbol + References + Properties "Visual Studio solution / Projects 1").
 - Tests: 16/16 en verde como gate pre-commit.
 - Commit `(M13)`.
+
+### M14 — Active Configuration real + New Project añade a la solución + pad Bookmarks
+
+**Active Configuration (legacy SelectActiveConfigurationHandler +
+MainToolbarController):**
+- `ConfigurationService.Get/SetActiveConfiguration` persiste la config activa en
+  `<sln>.userprefs` con el formato legacy exacto
+  (`<MonoDevelop.Ide.Workspace><Property name="ActiveConfiguration" value="…"/>`).
+- El combo de la toolbar se llena con las configs reales del .sln al abrir la
+  solución y muestra la persistida; cambiarlo guarda y refresca el menú
+  (QA: switch Debug→Release→persisted=True→combo=Release→restaurado a Debug).
+- Project > Active Configuration es ahora dinámico: un ítem checkeable por config
+  real (`SelectActiveConfiguration:<name>`), ya no el Debug/Release hardcodeado.
+
+**New Project añade a la solución abierta (legacy AddSolutionItem):**
+- El diálogo gana el check "Add to open solution" (default ON con solución
+  abierta, como el radio del GTK) y `CreatedProjectPath`.
+- `ConfigurationService.AppendProjectToSolution` inserta el Project entry con
+  GUID nuevo + mappings ActiveCfg/Build.0 por cada config del .sln (crea la
+  sección ProjectConfigurationPlatforms si el .sln no la tiene) y recarga el árbol.
+- QA `--newproject` con AutoCreateForQa: `created=True sln-entry=True
+  mappings=True` + captura del diálogo pre-rellenado.
+
+**Pad Bookmarks (port del pad del SourceEditor addin):**
+- Nueva pestaña en la zona debug (icono legacy `md-bookmark-toggle`): una fila
+  por bookmark del documento activo (`línea: texto`), doble clic salta a la línea
+  (GotoLine), refresco al cambiar de documento y al toggle/clear.
+- QA `--bmkpad`: rows=2 con el texto de línea correcto, NextBookmark navega,
+  Clear deja la fila "No bookmarks…"; captura del pad en la zona debug.
+
+- Tests 16/16 en verde como gate pre-commit. Commit `(M14)`.

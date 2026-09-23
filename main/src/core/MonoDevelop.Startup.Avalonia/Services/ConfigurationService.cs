@@ -156,6 +156,58 @@ public static class ConfigurationService
 		return true;
 	}
 
+	/// <summary>Active configuration persisted like the legacy RootWorkspace:
+	/// the &lt;sln&gt;.userprefs 'Workspace' data item ActiveConfiguration property.
+	/// Reading falls back to the first available configuration.</summary>
+	public static string GetActiveConfiguration (string slnPath)
+	{
+		var configs = GetSolutionConfigurations (slnPath);
+		var prefs = slnPath.Substring (0, slnPath.Length - Path.GetExtension (slnPath).Length) + ".userprefs";
+		if (File.Exists (prefs)) {
+			try {
+				var doc = System.Xml.Linq.XDocument.Load (prefs);
+				var stored = doc.Descendants ("Property")
+					.Where (p => (string?)p.Attribute ("name") == "ActiveConfiguration")
+					.Select (p => (string?)p.Attribute ("value"))
+					.FirstOrDefault ();
+				if (stored is not null && configs.Contains (stored, StringComparer.OrdinalIgnoreCase))
+					return configs.First (c => c.Equals (stored, StringComparison.OrdinalIgnoreCase));
+			} catch { /* corrupt prefs: fall through to the default */ }
+		}
+		return configs.Count > 0 ? configs [0] : "Debug";
+	}
+
+	/// <summary>Stores the active configuration in &lt;sln&gt;.userprefs with the
+	/// legacy shape (&lt;Properties&gt;&lt;MonoDevelop.Ide.Workspace&gt;&lt;Property
+	/// name="ActiveConfiguration" value="…" /&gt;).</summary>
+	public static void SetActiveConfiguration (string slnPath, string configuration)
+	{
+		var prefs = slnPath.Substring (0, slnPath.Length - Path.GetExtension (slnPath).Length) + ".userprefs";
+		System.Xml.Linq.XDocument doc;
+		if (File.Exists (prefs)) {
+			try {
+				doc = System.Xml.Linq.XDocument.Load (prefs);
+			} catch {
+				doc = new System.Xml.Linq.XDocument (new System.Xml.Linq.XElement ("Properties"));
+			}
+		} else
+			doc = new System.Xml.Linq.XDocument (new System.Xml.Linq.XElement ("Properties"));
+		var root = doc.Root!;
+		var ws = root.Element ("MonoDevelop.Ide.Workspace");
+		if (ws is null) {
+			ws = new System.Xml.Linq.XElement ("MonoDevelop.Ide.Workspace");
+			root.Add (ws);
+		}
+		var prop = ws.Elements ("Property").FirstOrDefault (p => (string?)p.Attribute ("name") == "ActiveConfiguration");
+		if (prop is null) {
+			prop = new System.Xml.Linq.XElement ("Property");
+			prop.SetAttributeValue ("name", "ActiveConfiguration");
+			ws.Add (prop);
+		}
+		prop.SetAttributeValue ("value", configuration);
+		doc.Save (prefs);
+	}
+
 	static int FindSectionEnd (List<string> lines, string sectionStart)
 	{
 		bool inside = false;
@@ -167,6 +219,48 @@ public static class ConfigurationService
 				return i;
 		}
 		return -1;
+	}
+
+	/// <summary>Adds an existing .csproj into an existing .sln (legacy
+	/// ProjectOperations.AddSolutionItem): Project entry with a fresh GUID plus the
+	/// Debug/Release ActiveCfg/Build.0 mappings per configuration.</summary>
+	public static void AppendProjectToSolution (string csprojPath, string slnPath)
+	{
+		var guid = Guid.NewGuid ().ToString ("B").ToUpperInvariant ();
+		var projName = Path.GetFileNameWithoutExtension (csprojPath);
+		var projRel = Path.GetRelativePath (Path.GetDirectoryName (slnPath)!, csprojPath).Replace ('\\', '/');
+		var lines = File.ReadAllLines (slnPath).ToList ();
+		int firstEndProject = lines.FindIndex (l => l.Trim () == "EndProject");
+		if (firstEndProject < 0)
+			throw new InvalidOperationException ("Malformed solution (no EndProject)");
+		lines.Insert (firstEndProject + 1, $"Project(\"{{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}}\") = \"{projName}\", \"{projRel}\", \"{guid}\"");
+		lines.Insert (firstEndProject + 2, "EndProject");
+
+		var g = guid.Trim ('{', '}');
+		var block = new List<string> ();
+		var solConfigs = GetSolutionConfigurations (slnPath);
+		foreach (var cfg in solConfigs.Count > 0 ? solConfigs : new List<string> { "Debug", "Release" }) {
+			block.Add ($"\t\t{g}.{cfg}|AnyCPU.ActiveCfg = {cfg}|AnyCPU");
+			block.Add ($"\t\t{g}.{cfg}|AnyCPU.Build.0 = {cfg}|AnyCPU");
+		}
+		int prjCfg = lines.FindIndex (l => l.Trim ().StartsWith ("GlobalSection(ProjectConfigurationPlatforms", StringComparison.Ordinal));
+		if (prjCfg >= 0) {
+			int endSection = prjCfg + 1;
+			while (endSection < lines.Count && !lines [endSection].Trim ().StartsWith ("EndGlobalSection", StringComparison.Ordinal))
+				endSection++;
+			lines.InsertRange (endSection, block);
+		} else {
+			// Solutions without per-project mappings (hand-written slns): add the section.
+			int global = lines.FindIndex (l => l.Trim () == "Global");
+			if (global < 0)
+				throw new InvalidOperationException ("Malformed solution (no Global)");
+			lines.InsertRange (global + 1, new List<string> {
+				"\tGlobalSection(ProjectConfigurationPlatforms) = postSolution",
+			});
+			lines.InsertRange (global + 2, block);
+			lines.Insert (global + 2 + block.Count, "\tEndGlobalSection");
+		}
+		File.WriteAllLines (slnPath, lines, System.Text.Encoding.UTF8);
 	}
 
 	/// <summary>Imports a loose .csproj as a new .sln next to it (legacy

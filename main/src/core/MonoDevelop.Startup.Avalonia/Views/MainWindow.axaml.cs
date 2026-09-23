@@ -72,6 +72,8 @@ public partial class MainWindow : Window
 		RunConfigCombo!.PlaceholderText = "Default";
 		foreach (var rc in new[] { "Default", "Debug", "Release" })
 			RunConfigCombo.Items.Add (rc);
+		// Default toolbar configs (the legacy combo shows the workspace configs when
+		// a solution opens — see RefreshConfigurationSelectors).
 		ConfigCombo!.Items.Add ("Debug");
 		ConfigCombo.Items.Add ("Release");
 		ConfigCombo.SelectedIndex = 0;
@@ -82,7 +84,7 @@ public partial class MainWindow : Window
 		// The placement convention (mac left, Windows/Linux right) is handled in
 		// OnOpened by re-parenting the caption buttons to the requested side; the
 		// XAML default places them on the right, matching Linux and Windows.
-		Opened += (s, e) => {
+		Opened += async (s, e) => {
 			if (IsMac)
 				MoveCaptionButtonsLeft ();
 			ApplyThemeVariant (Application.Current?.ActualThemeVariant ?? ThemeVariant.Dark);
@@ -135,6 +137,60 @@ public partial class MainWindow : Window
 					}
 				} else {
 					Output ("[newconfig] accepted=" + dlg.Accepted + " name='" + dlg.ConfigName + "' children=" + dlg.CreateChildren);
+				}
+			} else if (qa == "--activeconfig") {
+				// QA: Active Configuration — persisted value read back from .userprefs,
+				// switch via the menu command, verify persistence, restore Debug.
+				if (loadedSolutionPath is null) {
+					Output ("[activeconfig] no solution loaded");
+				} else {
+					var initial = Services.ConfigurationService.GetActiveConfiguration (loadedSolutionPath);
+					Output ("[activeconfig] initial=" + initial + " combo=" + (ConfigCombo?.SelectedItem as string ?? "?"));
+					OnMenuCommand ("MonoDevelop.Ide.Commands.ProjectCommands.SelectActiveConfiguration:Release");
+					var after = Services.ConfigurationService.GetActiveConfiguration (loadedSolutionPath);
+					Output ("[activeconfig] after-switch=" + after + " persisted=" + File.ReadAllText (loadedSolutionPath.Substring (0, loadedSolutionPath.Length - 4) + ".userprefs").Contains ("Release") + " combo=" + (ConfigCombo?.SelectedItem as string ?? "?"));
+					OnMenuCommand ("MonoDevelop.Ide.Commands.ProjectCommands.SelectActiveConfiguration:Debug");
+					Output ("[activeconfig] restored=" + Services.ConfigurationService.GetActiveConfiguration (loadedSolutionPath));
+				}
+			} else if (qa == "--newproject") {
+				// QA: New Project dialog in add-to-solution mode — creates a console
+				// project in a temp dir, wires it into the loaded .sln, reloads the tree.
+				if (loadedSolutionPath is null) {
+					Output ("[newproject] no solution loaded");
+				} else {
+					var tmpDir = Path.Combine (Path.GetTempPath (), "QAProj", Guid.NewGuid ().ToString ("N"));
+					var dlg = new NewSolutionDialog ("console", tmpDir) { AddToOpenSolution = true, AutoCreateForQa = true };
+					dlg.SolutionName!.Text = "QAAdded";
+					await dlg.ShowDialog (this);
+					var projPath = dlg.CreatedProjectPath;
+					if (projPath is not null)
+						Services.ConfigurationService.AppendProjectToSolution (projPath, loadedSolutionPath);
+					var slnText = File.ReadAllText (loadedSolutionPath);
+					Output ("[newproject] created=" + (projPath is not null) + " sln-entry=" + slnText.Contains ("QAAdded") + " mappings=" + slnText.Contains (".Debug|AnyCPU.Build.0"));
+					OpenSolutionInWindow (loadedSolutionPath);
+				}
+			} else if (qa == "--bmkpad") {
+				// QA: Bookmarks pad — toggle two bookmarks, open the pad, list rows,
+				// navigate Next and verify the pad refresh.
+				var file = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile), "TestProj", "TestProj", "Program.cs");
+				if (!File.Exists (file)) {
+					Output ("[bmkpad] no test file");
+				} else {
+					OpenFileDocument (file);
+					var name = Path.GetFileName (file);
+					if (docs.TryGetValue (name, out var ed)) {
+						SelectDocument (name);
+						SetPadVisible ("bookmarks", true);
+						ed.GotoLine (2); ed.ToggleBookmark ();
+						ed.GotoLine (6); ed.ToggleBookmark ();
+						RefreshBookmarksPad ();
+						Output ("[bmkpad] rows=" + bookmarksList!.Items.Count + " first=" + ((bookmarksList.Items [0] as ListBoxItem)?.Content as TextBlock)?.Text);
+						ed.NextBookmark ();
+						Output ("[bmkpad] NextBookmark → line " + (ed.CurrentLine + 1));
+						ed.ClearBookmarks ();
+						RefreshBookmarksPad ();
+						Output ("[bmkpad] cleared rows=" + bookmarksList.Items.Count);
+					}
 				}
 			} else if (qa == "--newconfig-real") {
 				// QA: full persistence path — creates "QAConfig" in the loaded
@@ -666,6 +722,16 @@ public partial class MainWindow : Window
 		MainMenu!.Items.Clear ();
 		Services.KeyboardShortcutRegistry.Reset ();
 		var recents = RecentSolutions.GetAll ().Select (r => r.Path).ToList ();
+		// Project > Active Configuration mirrors the loaded solution configs with the
+		// active one checked (legacy SelectActiveConfigurationHandler.Update).
+		if (!string.IsNullOrEmpty (loadedSolutionPath) && File.Exists (loadedSolutionPath)) {
+			var cfgs = Services.ConfigurationService.GetSolutionConfigurations (loadedSolutionPath);
+			MenuService.DynamicActiveConfigs = cfgs.ToArray ();
+			MenuService.DynamicActiveConfig = activeConfiguration;
+		} else {
+			MenuService.DynamicActiveConfigs = null;
+			MenuService.DynamicActiveConfig = null;
+		}
 		var entries = MenuService.BuildMainMenu (recents);
 		MenuService.ApplyShortcuts (entries);
 		UpdatePadChecks (entries);
@@ -727,6 +793,7 @@ public partial class MainWindow : Window
 	TextBlock? tasksText;
 	StackPanel? propertiesHeader;
 	StackPanel? propertiesList;
+	ListBox? bookmarksList;
 
 	void BuildPads ()
 	{
@@ -862,6 +929,17 @@ public partial class MainWindow : Window
 		threads.Bind (ListBox.ForegroundProperty, Application.Current.GetResourceObservable ("IdeFgBrush"));
 		DebugPads.AddTab (new PadHost.PadTab { Id = "threads", Label = "Threads", Icon = "md-view-debug-threads", Content = threads, Visible = false });
 
+		// Bookmarks pad (the legacy pad lists the open document's bookmarks; double
+		// click jumps to the line — the same jump the gutter marker click does).
+		bookmarksList = new ListBox { Background = Brushes.Transparent };
+		bookmarksList.Bind (ListBox.ForegroundProperty, Application.Current.GetResourceObservable ("IdeFgBrush"));
+		bookmarksList.DoubleTapped += (_, _) => {
+			if (bookmarksList.SelectedItem is ListBoxItem { Tag: int line } &&
+				docs.TryGetValue ((DocTabs.SelectedItem as TabItem)?.Tag as string ?? "", out var ed))
+				ed.GotoLine (line);
+		};
+		DebugPads.AddTab (new PadHost.PadTab { Id = "bookmarks", Label = "Bookmarks", Icon = "md-bookmark-toggle", Content = bookmarksList, Visible = false });
+
 		// Hide buttons feed the restore strip at the bottom edge (legacy pin/hide).
 		LeftPads.Hidden += (_, _) => UpdateRestoreStrip ();
 		RightPads.Hidden += (_, _) => UpdateRestoreStrip ();
@@ -919,7 +997,7 @@ public partial class MainWindow : Window
 		"solution" or "classes" or "help" => (LeftPads, LeftPads.Tabs.FirstOrDefault (t => t.Id == padId)),
 		"toolbox" or "properties" or "documentoutline" or "unittests" => (RightPads, RightPads.Tabs.FirstOrDefault (t => t.Id == padId)),
 		"output" or "errors" or "tasks" or "codeissues" or "searchresults" => (BottomPads, BottomPads.Tabs.FirstOrDefault (t => t.Id == padId)),
-		"callstack" or "locals" or "watch" or "breakpoints" or "threads" => (DebugPads, DebugPads.Tabs.FirstOrDefault (t => t.Id == padId)),
+		"callstack" or "locals" or "watch" or "breakpoints" or "threads" or "bookmarks" => (DebugPads, DebugPads.Tabs.FirstOrDefault (t => t.Id == padId)),
 		_ => (null, null),
 	};
 
@@ -1047,6 +1125,7 @@ public partial class MainWindow : Window
 
 	public void SelectDocument (string tag)
 	{
+		RefreshBookmarksPad ();
 		foreach (var item in DocTabs!.Items.OfType<TabItem> ()) {
 			if ((string?)item.Tag == tag) {
 				DocTabs.SelectedItem = item;
@@ -1063,6 +1142,31 @@ public partial class MainWindow : Window
 			SelectDocument ((string)first.Tag!);
 		else
 			ShowEmptyEditorHost (); // legacy: the editor pad stays open with no tabs
+	}
+
+	// Bookmarks pad: one row per bookmark of the active document, like the legacy
+	// Bookmarks pad (label = line number + text; double click → GotoLine).
+	public void RefreshBookmarksPad ()
+	{
+		var list = bookmarksList;
+		if (list is null)
+			return;
+		list.Items.Clear ();
+		if (docs.TryGetValue ((DocTabs.SelectedItem as TabItem)?.Tag as string ?? "", out var ed)) {
+			foreach (var line in ed.BookmarkLines.OrderBy (l => l)) {
+				var text = ed.LineTextForTest (line).Trim ();
+				list.Items.Add (new ListBoxItem {
+					Tag = line,
+					Content = new TextBlock {
+						Text = $"{(line + 1),4}: {text}",
+						FontSize = 11.5,
+						TextTrimming = TextTrimming.CharacterEllipsis,
+					},
+				});
+			}
+		}
+		if (list.Items.Count == 0)
+			list.Items.Add (new ListBoxItem { Content = new TextBlock { Text = "No bookmarks in the active document", FontSize = 11.5, Opacity = 0.6 } });
 	}
 
 	/// <summary>Legacy workbench behavior: the editor pad remains visible with an
@@ -1419,6 +1523,7 @@ public partial class MainWindow : Window
 			HideWelcomePage ();
 			welcomePage?.UpdateProjectBar (title);
 			LeftPads.Select ("solution");
+			RefreshConfigurationSelectors (); // toolbar combo + Project > Active Configuration
 			BuildMenu (); // refresh File > Recent Solutions
 			Output ("Loaded " + Path.GetFileName (path));
 		} catch (Exception ex) {
@@ -2018,8 +2123,18 @@ public partial class MainWindow : Window
 	public async System.Threading.Tasks.Task OpenNewSolutionDialogAsync ()
 	{
 		var dlg = new NewSolutionDialog ();
+		// With a solution open the dialog defaults to add-to-solution (legacy radio).
+		dlg.AddToOpenSolution = !string.IsNullOrEmpty (loadedSolutionPath);
 		await dlg.ShowDialog (this);
 		try {
+			if (!string.IsNullOrEmpty (dlg.CreatedProjectPath) && !string.IsNullOrEmpty (loadedSolutionPath)) {
+				// Legacy ProjectOperations.AddSolutionItem: project entry + GUID + config
+				// mappings in the .sln, then reload the tree.
+				Services.ConfigurationService.AppendProjectToSolution (dlg.CreatedProjectPath, loadedSolutionPath);
+				Output ("[newproject] added " + Path.GetFileName (dlg.CreatedProjectPath) + " to " + Path.GetFileName (loadedSolutionPath));
+				OpenSolutionInWindow (loadedSolutionPath);
+				return;
+			}
 			if (!string.IsNullOrEmpty (dlg.CreatedSolutionPath)) {
 				Output ("Solution created: " + dlg.CreatedSolutionPath);
 				OpenSolutionInWindow (dlg.CreatedSolutionPath);
@@ -2165,7 +2280,47 @@ public partial class MainWindow : Window
 		if (sender is not ComboBox cb || cb.SelectedItem is not string sel)
 			return;
 		var name = cb == ConfigCombo ? "configuration" : cb == RunConfigCombo ? "run configuration" : "runtime";
+		// Active configuration: persisted in <sln>.userprefs like RootWorkspace
+		// (WorkspaceUserData.ActiveConfiguration) and echoed to the Project menu.
+		if (cb == ConfigCombo && !suppressConfigSync && !string.IsNullOrEmpty (loadedSolutionPath)) {
+			try {
+				Services.ConfigurationService.SetActiveConfiguration (loadedSolutionPath, sel);
+				activeConfiguration = sel;
+				Output ($"[toolbar] {name} → {sel} (saved to {Path.GetFileName (loadedSolutionPath)})");
+			} catch (Exception ex) {
+				Output ($"[toolbar] {name} → {sel} (persist failed: {ex.Message})");
+			}
+			BuildMenu ();
+			return;
+		}
 		Output ($"[toolbar] {name} → {sel}");
+	}
+
+	bool suppressConfigSync;
+	string activeConfiguration = "Debug";
+
+	/// <summary>Fills the toolbar configuration combo and the Project &gt; Active
+	/// Configuration submenu from the loaded .sln, selecting the configuration
+	/// persisted in .userprefs (legacy MainToolbarController + SelectActiveConfigurationHandler).</summary>
+	public void RefreshConfigurationSelectors ()
+	{
+		if (string.IsNullOrEmpty (loadedSolutionPath) || !File.Exists (loadedSolutionPath))
+			return;
+		var configs = Services.ConfigurationService.GetSolutionConfigurations (loadedSolutionPath);
+		if (configs.Count == 0)
+			return;
+		var active = Services.ConfigurationService.GetActiveConfiguration (loadedSolutionPath);
+		activeConfiguration = active;
+		suppressConfigSync = true;
+		try {
+			ConfigCombo!.Items.Clear ();
+			foreach (var c in configs)
+				ConfigCombo.Items.Add (c);
+			ConfigCombo.SelectedItem = configs.Contains (active) ? active : configs [0];
+		} finally {
+			suppressConfigSync = false;
+		}
+		BuildMenu ();
 	}
 
 	// ----- Menu actions surfaced for MenuService -----
@@ -2475,6 +2630,7 @@ public partial class MainWindow : Window
 		// ----- SearchCommands bookmarks (legacy ViewCommandHandlers → IBookmarkBuffer) -----
 		case "MonoDevelop.Ide.Commands.SearchCommands.ToggleBookmark":
 			WithActiveEditor (e => e.ToggleBookmark ());
+			RefreshBookmarksPad ();
 			return;
 		case "MonoDevelop.Ide.Commands.SearchCommands.NextBookmark":
 			WithActiveEditor (e => e.NextBookmark ());
@@ -2484,6 +2640,7 @@ public partial class MainWindow : Window
 			return;
 		case "MonoDevelop.Ide.Commands.SearchCommands.ClearBookmarks":
 			WithActiveEditor (e => e.ClearBookmarks ());
+			RefreshBookmarksPad ();
 			return;
 		case "MonoDevelop.Ide.Commands.SearchCommands.UseSelectionForFind":
 			// Legacy: prefill the search with the current selection.
@@ -2567,6 +2724,22 @@ public partial class MainWindow : Window
 			return;
 		case "MonoDevelop.Ide.Commands.ProjectCommands.BuildSolution":
 			_ = RunBuildAsync (rebuild: false);
+			return;
+		case string id when id.StartsWith ("MonoDevelop.Ide.Commands.ProjectCommands.SelectActiveConfiguration:", StringComparison.Ordinal):
+			// Legacy SelectActiveConfigurationHandler.Run: set + persist + refresh.
+			var cfgName = id.Substring (id.IndexOf (':') + 1);
+			if (!string.IsNullOrEmpty (loadedSolutionPath)) {
+				try {
+					Services.ConfigurationService.SetActiveConfiguration (loadedSolutionPath, cfgName);
+					activeConfiguration = cfgName;
+					suppressConfigSync = true;
+					try { ConfigCombo!.SelectedItem = cfgName; } finally { suppressConfigSync = false; }
+					BuildMenu ();
+					Output ($"[config] active configuration → {cfgName}");
+				} catch (Exception ex) {
+					Output ($"[config] select failed: {ex.Message}");
+				}
+			}
 			return;
 		case "MonoDevelop.Ide.Commands.ProjectCommands.RunCodeAnalysisSolution":
 		case "MonoDevelop.Ide.Commands.ProjectCommands.RunCodeAnalysisProject":

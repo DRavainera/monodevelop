@@ -310,6 +310,26 @@ public static class MenuService
 	};
 
 	// ---------- Project ----------
+	// Project > Active Configuration: one check item per solution configuration
+	// (legacy SelectActiveConfigurationHandler; MainWindow substitutes the dynamic
+	// children with the real configs and checked state on every BuildMenu).
+	internal static string[]? DynamicActiveConfigs;
+	internal static string? DynamicActiveConfig;
+
+	static List<MenuEntry> ActiveConfigChildren ()
+	{
+		if (DynamicActiveConfigs is { Length: > 0 }) {
+			var children = new List<MenuEntry> ();
+			foreach (var c in DynamicActiveConfigs)
+				children.Add (Item (
+					c,
+					isChecked: c == DynamicActiveConfig,
+					click: Command ("MonoDevelop.Ide.Commands.ProjectCommands.SelectActiveConfiguration:" + c)));
+			return children;
+		}
+		return new List<MenuEntry> { Item ("Debug", isChecked: true), Item ("Release", disabled: true) };
+	}
+
 	static MenuEntry BuildProject () => new () {
 		Label = "_Project",
 		Children = {
@@ -320,7 +340,7 @@ public static class MenuService
 			Item ("Run Code Analysis on Solution", click: Command ("MonoDevelop.Ide.Commands.ProjectCommands.RunCodeAnalysisSolution")),
 			Item ("Run Code Analysis on Project", click: Command ("MonoDevelop.Ide.Commands.ProjectCommands.RunCodeAnalysisProject")),
 			Sep (),
-			Sub ("Active Configuration", new List<MenuEntry> { Item ("Debug", isChecked: true), Item ("Release", disabled: true) }, autoHide: true),
+			Sub ("Active Configuration", ActiveConfigChildren (), autoHide: true),
 			Sep (),
 			Item ("Apply Policy...", click: Command ("MonoDevelop.Ide.Commands.ProjectCommands.ApplyPolicy")),
 			Item ("Export Policy...", click: Command ("MonoDevelop.Ide.Commands.ProjectCommands.ExportPolicy")),

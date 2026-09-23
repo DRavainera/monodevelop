@@ -68,6 +68,8 @@
         <TextBox x:Name="LocationBox" />
         <CheckBox x:Name="CreateDirectoryCheck" Content="Create a directory for the solution"
                   IsChecked="True" Foreground="{DynamicResource IdeFgBrush}" />
+        <CheckBox x:Name="AddToSolutionCheck" Content="Add to open solution"
+                  Foreground="{DynamicResource IdeFgBrush}" />
         <CheckBox x:Name="GitCheck" Content="Use git for version control"
                   Foreground="{DynamicResource IdeFgBrush}" />
       </StackPanel>

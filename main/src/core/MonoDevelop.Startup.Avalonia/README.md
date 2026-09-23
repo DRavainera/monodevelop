@@ -155,6 +155,9 @@ documento sucio a propósito para poder probar el diálogo visualmente
 | `--progress` | ProgressDialog (tareas anidadas + ShowDone) | `[progress]` |
 | `--newconfig-real` | NewConfiguration persiste en .sln/.csproj y limpia | `[newconfig-real]` |
 | `--openimport` | File>Open importa un .csproj suelto (wrapper .sln) | `[openimport]` |
+| `--activeconfig` | Active Configuration: persistencia en .userprefs + switch | `[activeconfig]` |
+| `--newproject` | New Project en modo add-to-solution (temp, no destructivo) | `[newproject]` |
+| `--bmkpad` | Pad Bookmarks: toggle/navegación/listado | `[bmkpad]` |
 
 QA visual: los hooks se complementan con capturas X11 (`magick x:<win>`) para
 comparar la UI contra la legacy GTK en vivo (ver bitácoras en
@@ -170,6 +173,15 @@ comparar la UI contra la legacy GTK en vivo (ver bitácoras en
 - File > Open enruta `.sln`/`.slnf` → solución, `.csproj` → importación
   (crea el `.sln` wrapper con `AddProjectToSolution`, como
   `ProjectOperations.ImportProject`), resto → pestaña de documento.
+- **Configuración activa**: `Get/SetActiveConfiguration` persiste en
+  `<sln>.userprefs` (`MonoDevelop.Ide.Workspace/ActiveConfiguration`, formato
+  legacy); alimenta el combo de la toolbar y el menú Project > Active
+  Configuration (dinámico desde el .sln).
+- **New Project añade a la solución**: con solución abierta el diálogo de Nueva
+  Solución marca "Add to open solution" y `AppendProjectToSolution` inserta el
+  proyecto (GUID + mappings ActiveCfg/Build.0) en el .sln y recarga el árbol.
+- **Pad Bookmarks** (zona debug): lista los bookmarks del documento activo;
+  doble clic salta a la línea; se refresca al toggle/clear/cambio de documento.
 
 ## Estado del bucle de migración
 
