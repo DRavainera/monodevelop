@@ -204,15 +204,30 @@ public partial class MainWindow : Window
 					if (docs.TryGetValue (name, out var ed)) {
 						SelectDocument (name);
 						SetPadVisible ("breakpoints", true);
+						// Start from an empty store so the QA is repeatable even right after
+						// a --keepbps run (the restored breakpoints would flip off).
+						if (ed.BreakpointLines.Count > 0) {
+							ed.ClearBreakpoints ();
+							PersistBreakpoints ();
+						}
 						ed.GotoLine (6); ed.ToggleBreakpoint (); // line 7 (1-based)
 						ed.GotoLine (8); ed.ToggleBreakpoint (); // line 9
 						PersistBreakpoints (); RefreshBreakpointsPad ();
-						Output ("[bkpad] rows=" + (breakpointsList!.Items.Count) + " first=" + (((breakpointsList.Items [0] as ListBoxItem)?.Content as StackPanel)?.Children.OfType<TextBlock> ().FirstOrDefault ()?.Text ?? "?"));
+						Output ("[bkpad] rows=" + lastBreakpointRowTexts.Count + " first=" + lastBreakpointRowTexts.ElementAtOrDefault (0));
+						// Deferred probe: measure the pad list AFTER a layout pass so the
+						// reported bounds are the final on-screen ones (deterministic QA crops).
+						Avalonia.Threading.Dispatcher.UIThread.Post (new Action (() => {
+							var list = breakpointsList!;
+							var realized = list.GetRealizedContainers ()?.ToList ();
+							var tl = list.GetTransformedBounds ();
+							Output ("[bpprobe] items=" + list.Items.Count + " realized=" + (realized?.Count ?? -1)
+								+ " bounds=" + list.Bounds + " transformed=" + (tl?.Bounds.ToString () ?? "null"));
+						}), Avalonia.Threading.DispatcherPriority.Background);
 						var userprefs = File.ReadAllText (loadedSolutionPath.Substring (0, loadedSolutionPath.Length - 4) + ".userprefs");
 						Output ("[bkpad] persisted-xml=" + userprefs.Contains ("MonoDevelop.Ide.DebuggingService.Breakpoints") + " lines=" + userprefs.Contains ("line=\"7\"") + "&" + userprefs.Contains ("line=\"9\""));
 						ed.ToggleBreakpointEnabled (8);
 						PersistBreakpoints (); RefreshBreakpointsPad ();
-						Output ("[bkpad] disabled-row=" + (((breakpointsList.Items [1] as ListBoxItem)?.Content as StackPanel)?.Children.OfType<TextBlock> ().FirstOrDefault ()?.Text ?? "?"));
+						Output ("[bkpad] disabled-row=" + lastBreakpointRowTexts.ElementAtOrDefault (1));
 					ed.NextBreakpoint ();
 					Output ("[bkpad] NextBreakpoint → line " + (ed.CurrentLine + 1));
 					// Cleanup (QA repeatable): drop the store entries — unless --keepbps
@@ -836,7 +851,6 @@ public partial class MainWindow : Window
 		LeftPads.Id = "left"; LeftPads.Title = "Solution";
 		RightPads.Id = "right"; RightPads.Title = "Properties";
 		BottomPads.Id = "bottom"; BottomPads.Title = "Output";
-		DebugPads.Id = "debug"; DebugPads.Title = "Call Stack";
 
 		// Solution pad (legacy ProjectPad): tree of the loaded solution.
 		// Legacy ProjectPad is a TreeView: Solution ▸ project ▸ files (double-click opens
@@ -942,27 +956,24 @@ public partial class MainWindow : Window
 		searchResults.Bind (ListBox.ForegroundProperty, Application.Current.GetResourceObservable ("IdeFgBrush"));
 		BottomPads.AddTab (new PadHost.PadTab { Id = "searchresults", Label = "Search Results", Icon = "gtk-find", Content = searchResults, Visible = false });
 
-		// Debugger pads (legacy defaultPlacement Bottom, right sub-dock like the GTK
-		// "MonoDevelop.Debugger.StackTracePad/Center Bottom" split).
+		// Debugger pads (legacy defaultPlacement Bottom): placeholders for the pads
+		// that get real content with the debugging phase — single bottom dock, the
+		// legacy right sub-dock group was dropped during the 4-pad rework.
 		var callStack = new ListBox { Background = Brushes.Transparent };
 		callStack.Bind (ListBox.ForegroundProperty, Application.Current.GetResourceObservable ("IdeFgBrush"));
-		DebugPads.AddTab (new PadHost.PadTab { Id = "callstack", Label = "Call Stack", Icon = "md-view-debug-call-stack", Content = callStack, Visible = false });
+		BottomPads.AddTab (new PadHost.PadTab { Id = "callstack", Label = "Call Stack", Icon = "md-view-debug-call-stack", Content = callStack, Visible = false });
 
 		var locals = new ListBox { Background = Brushes.Transparent };
 		locals.Bind (ListBox.ForegroundProperty, Application.Current.GetResourceObservable ("IdeFgBrush"));
-		DebugPads.AddTab (new PadHost.PadTab { Id = "locals", Label = "Locals", Icon = "md-view-debug-locals", Content = locals, Visible = false });
+		BottomPads.AddTab (new PadHost.PadTab { Id = "locals", Label = "Locals", Icon = "md-view-debug-locals", Content = locals, Visible = false });
 
 		var watch = new ListBox { Background = Brushes.Transparent };
 		watch.Bind (ListBox.ForegroundProperty, Application.Current.GetResourceObservable ("IdeFgBrush"));
-		DebugPads.AddTab (new PadHost.PadTab { Id = "watch", Label = "Watch", Icon = "md-view-debug-watch", Content = watch, Visible = false });
-
-		var breakpoints = new ListBox { Background = Brushes.Transparent };
-		breakpoints.Bind (ListBox.ForegroundProperty, Application.Current.GetResourceObservable ("IdeFgBrush"));
-		DebugPads.AddTab (new PadHost.PadTab { Id = "breakpoints", Label = "Breakpoints", Icon = "md-view-debug-breakpoints", Content = breakpoints, Visible = false });
+		BottomPads.AddTab (new PadHost.PadTab { Id = "watch", Label = "Watch", Icon = "md-view-debug-watch", Content = watch, Visible = false });
 
 		var threads = new ListBox { Background = Brushes.Transparent };
 		threads.Bind (ListBox.ForegroundProperty, Application.Current.GetResourceObservable ("IdeFgBrush"));
-		DebugPads.AddTab (new PadHost.PadTab { Id = "threads", Label = "Threads", Icon = "md-view-debug-threads", Content = threads, Visible = false });
+		BottomPads.AddTab (new PadHost.PadTab { Id = "threads", Label = "Threads", Icon = "md-view-debug-threads", Content = threads, Visible = false });
 
 		// Bookmarks pad (the legacy pad lists the open document's bookmarks; double
 		// click jumps to the line — the same jump the gutter marker click does).
@@ -976,7 +987,7 @@ public partial class MainWindow : Window
 		// Context menu like the legacy SourceEditor bookmark pad: Prev/Next navigate
 		// around the selection, Remove drops the bookmark, Remove All clears.
 		bookmarksList.ContextMenu = BuildBookmarksMenu ();
-		DebugPads.AddTab (new PadHost.PadTab { Id = "bookmarks", Label = "Bookmarks", Icon = "md-bookmark-toggle", Content = bookmarksList, Visible = false });
+		BottomPads.AddTab (new PadHost.PadTab { Id = "bookmarks", Label = "Bookmarks", Icon = "md-bookmark-toggle", Content = bookmarksList, Visible = false });
 
 		// Breakpoints pad (legacy BreakpointPad: icon+file+line rows, toggle from the
 		// gutter, Go To/Enable/Disable/Remove in the context menu). Rows are rebuilt
@@ -985,7 +996,7 @@ public partial class MainWindow : Window
 		breakpointsList.Bind (ListBox.ForegroundProperty, Application.Current.GetResourceObservable ("IdeFgBrush"));
 		breakpointsList.DoubleTapped += (_, _) => GoToSelectedBreakpoint ();
 		breakpointsList.ContextMenu = BuildBreakpointsMenu ();
-		DebugPads.AddTab (new PadHost.PadTab { Id = "breakpoints", Label = "Breakpoints", Icon = "md-breakpoint", Content = breakpointsList, Visible = false });
+		BottomPads.AddTab (new PadHost.PadTab { Id = "breakpoints", Label = "Breakpoints", Icon = "md-breakpoint", Content = breakpointsList, Visible = false });
 
 		// Hide buttons feed the restore strip at the bottom edge (legacy pin/hide).
 		LeftPads.Hidden += (_, _) => UpdateRestoreStrip ();
@@ -1021,7 +1032,6 @@ public partial class MainWindow : Window
 			return;
 		if (visible) {
 			host.IsVisible = true;
-			DebugPads.IsVisible |= host == DebugPads;
 			host.SetTabVisible (padId, true);
 			host.Select (padId);
 		} else {
@@ -1043,8 +1053,9 @@ public partial class MainWindow : Window
 	(PadHost? host, PadHost.PadTab? tab) FindPad (string padId) => padId switch {
 		"solution" or "classes" or "help" => (LeftPads, LeftPads.Tabs.FirstOrDefault (t => t.Id == padId)),
 		"toolbox" or "properties" or "documentoutline" or "unittests" => (RightPads, RightPads.Tabs.FirstOrDefault (t => t.Id == padId)),
-		"output" or "errors" or "tasks" or "codeissues" or "searchresults" => (BottomPads, BottomPads.Tabs.FirstOrDefault (t => t.Id == padId)),
-		"callstack" or "locals" or "watch" or "breakpoints" or "threads" or "bookmarks" => (DebugPads, DebugPads.Tabs.FirstOrDefault (t => t.Id == padId)),
+		"output" or "errors" or "tasks" or "codeissues" or "searchresults"
+			or "callstack" or "locals" or "watch" or "breakpoints" or "threads" or "bookmarks"
+			=> (BottomPads, BottomPads.Tabs.FirstOrDefault (t => t.Id == padId)),
 		_ => (null, null),
 	};
 
@@ -1055,7 +1066,6 @@ public partial class MainWindow : Window
 			"left" => LeftPads,
 			"right" => RightPads,
 			"bottom" => BottomPads,
-			"debug" => DebugPads,
 			_ => null,
 		};
 		if (pad is null) return;
@@ -1282,22 +1292,32 @@ public partial class MainWindow : Window
 			return;
 		list.Items.Clear ();
 		var any = false;
+		lastBreakpointRowTexts.Clear ();
 		foreach (var (tag, ed) in docs.OrderBy (d => d.Key, StringComparer.OrdinalIgnoreCase)) {
 			foreach (var (line, enabled) in ed.BreakpointLines.OrderBy (b => b.Key)) {
 				any = true;
 				var panel = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
 				if (IconService.GetImage (enabled ? "md-breakpoint" : "md-breakpoint-disabled") is { } img)
 					panel.Children.Add (new Image { Source = img, Width = 16, Height = 16 });
+				var rowText = $"{Path.GetFileName (tag)}:{line + 1}" + (enabled ? "" : "  (disabled)");
+				lastBreakpointRowTexts.Add (rowText);
 				panel.Children.Add (new TextBlock {
-					Text = $"{Path.GetFileName (tag)}:{line + 1}" + (enabled ? "" : "  (disabled)"),
+					Text = rowText,
 					FontSize = 11.5,
 				});
 				list.Items.Add (new ListBoxItem { Tag = tag + "|" + line, Content = panel });
 			}
 		}
-		if (!any)
+		if (!any) {
+			lastBreakpointRowTexts.Add ("No breakpoints");
 			list.Items.Add (new ListBoxItem { Content = new TextBlock { Text = "No breakpoints", FontSize = 11.5, Opacity = 0.6 } });
+		}
 	}
+
+	// Mirror of the pad row texts from the last RefreshBreakpointsPad: lets the QA
+	// hooks assert on the pad content without indexing the live Avalonia Items
+	// collection (Clear+Add races the ListBox container realization).
+	readonly List<string> lastBreakpointRowTexts = new ();
 
 	// DebuggingService.OnStoreUserPrefs: persist the whole store into the
 	// <sln>.userprefs Breakpoints element when any editor's store changes.

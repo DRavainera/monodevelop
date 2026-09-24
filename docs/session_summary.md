@@ -524,12 +524,18 @@ documento + keywords).
 
 ## 2026-09-23 (d) — M15b: build unificada en main/build + --old-gui + fix popup GTK
 
-- Un solo proyecto: el shell Avalonia compila a `main/build/avalonia/<tfm>`
-  (multi-target net10.0;net10.0-windows, Exe en windows para consola) y entra
-  en Main.sln con mapeos de las 8 configs; la solución valida en verde.
-- `--old-gui`: el binario Avalonia reenvía la invocación a la UI GTK legacy
-  (runtime en main/build), heredando argumentos y exit code; verificado en
-  X11 (ventana NORMAL titulada, sin popup).
+- Un solo proyecto y una sola carpeta: las DLLs Avalonia compilan directo a
+  `main/build/` junto a todo el runtime GTK (net10run stageado ahí; conflicto
+  de MonoRoslynCompat/Mono.Addins viejos resuelto stageando el runtime), y
+  entra en Main.sln con mapeos de las 8 configs; la solución valida en verde.
+- `--old-gui` SOLO en AvaloniaShell: reenvía a la UI GTK legacy de la misma
+  carpeta con MONODEVELOP_LEGACY_UI=1 (solo el relay lo pone); el GTK directo
+  se rechaza con exit 2. Verificado en X11 (ventana NORMAL titulada, sin
+  popup).
+- 4 pads: edición + Solution + Properties + un pad inferior con TODOS los
+  tabs de debug (Call Stack/Locals/Watch/Threads/Bookmarks/Breakpoints);
+  DebugPads (inferior-derecha) eliminado — y con ello el tab breakpoints
+  duplicado que dejaba el pad sin filas.
 - Fix: el popup fatal "No se pudo iniciar MonoDevelop (Remoting channels…)",
   causado por AutoTestService.Start con EnableAutomatedTesting=True sobre el
   stub de remoting, ahora degrada a aviso en consola y el IDE arranca.

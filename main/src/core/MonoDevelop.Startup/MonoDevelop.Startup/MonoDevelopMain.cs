@@ -115,6 +115,15 @@ namespace MonoDevelop.Startup
 		[STAThread]
 		public static int Main (string[] args)
 		{
+			// The GTK UI is hidden legacy compatibility during the 9.x branch: it must
+			// only start through the Avalonia shell entrypoint, whose --old-gui relay
+			// sets MONODEVELOP_LEGACY_UI=1 for this child process. A direct launch of
+			// MonoDevelop.dll is refused instead of showing the old UI by surprise;
+			// no command line flag gates this (only the relay enables it).
+			if (Environment.GetEnvironmentVariable ("MONODEVELOP_LEGACY_UI") != "1") {
+				Console.Error.WriteLine ("The legacy GTK UI is hidden. Start MonoDevelop with MonoDevelop.AvaloniaShell.dll (add --old-gui for the legacy GTK UI).");
+				return 2;
+			}
 			var ctx = AssemblyLoadContext.Default;
 			ctx.Resolving += (_, name) => {
 				if (name.Name == "System.ComponentModel.Composition") {

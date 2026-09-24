@@ -665,24 +665,44 @@ MainToolbarController):**
   dejar los breakpoints puestos en capturas visuales del pad.
 - Tests: 16/16 en verde como gate pre-commit.
 - Commit `(M15)`.
+- Captura de la paridad visual: `docs/img/breakpoints-pad.png` (pad
+  Breakpoints con `● Program.cs:7` e `◎ Program.cs:9 (disabled)` en el pad
+  inferior de ancho completo).
 
 ### M15b — Un proyecto, una build: salida unificada en main/build + --old-gui
 
 **Unificación del árbol de build (no hay "proyecto Avalonia" ni "proyecto
 legacy": es un solo proyecto cuya UI legacy GTK# queda oculta como
 compatibilidad durante la rama 9.x y solo se muestra con `--old-gui`):**
-- El shell Avalonia compila ahora a `main/build/avalonia/<tfm>/`
+- Las DLLs Avalonia y las del runtime GTK conviven en la MISMA carpeta
+  `main/build/` (deps/runtimeconfig separados por ensamblado, sin
+  subcarpetas): el shell Avalonia compila directo a `main/build/`
   (multi-target `net10.0;net10.0-windows`; el TFM windows es `Exe` para abrir
-  consola de diagnóstico en Windows) junto a la salida GTK en `main/build/bin`
-  y el runtime staging `main/build/net10run` — un único árbol `main/build`.
+  consola de diagnóstico en Windows) y el runtime GTK (`MonoDevelop.dll` +
+  todo net10run) se stagea a esa misma carpeta. El conflicto inicial
+  (`MonoRoslynCompat.dll`/`Mono.Addins*` viejos en build/ contra los del
+  runtime) se resolvió stageando siempre los bins del runtime encima.
 - `MonoDevelop.Startup.Avalonia` entra en `Main.sln` (GUID propio, mapeos
   ActiveCfg/Build.0 para las 8 configuraciones) y la solución completa valida
   (`msbuild Main.sln -t:ValidateSolutionConfiguration` en verde).
-- **`--old-gui`**: el binario Avalonia es el único punto de entrada; con ese
-  parámetro relanza la UI GTK legacy (busca `net10run/MonoDevelop.dll` o
-  `bin/net10.0/MonoDevelop.dll` subiendo desde su propio directorio, hereda el
-  resto de argumentos y propaga el exit code). Verificado en vivo: ventana GTK
+- **`--old-gui` SOLO existe en `MonoDevelop.AvaloniaShell.dll`**: con ese
+  parámetro relanza la UI GTK legacy (`MonoDevelop.dll`, misma carpeta
+  `main/build`), hereda el resto de argumentos y propaga el exit code. El
+  GTK no acepta `--old-gui`: se le pasa la variable de entorno
+  `MONODEVELOP_LEGACY_UI=1` que SOLO el relay establece — un lanzamiento
+  directo de `MonoDevelop.dll` se rechaza con exit 2 y el aviso "The legacy
+  GTK UI is hidden. Start MonoDevelop with MonoDevelop.AvaloniaShell.dll
+  (add --old-gui for the legacy GTK UI).". Verificado en vivo: ventana GTK
   NORMAL 1920x1009 titulada "MonoDevelop", sin diálogo de error.
+
+**4 pads exactos (rework del layout):** edición central + Solution (izq.) +
+Properties (der.) + UN pad inferior con todos los tabs del grupo debug
+(Call Stack, Locals, Watch, Threads, Bookmarks, Breakpoints) junto a Output,
+Errors, Tasks, Code Issues y Search Results. El pad inferior-derecha
+(DebugPads) se eliminó del AXAML y del code-behind; esto destapó además el
+bug por el que el pad Breakpoints no mostraba filas: había un tab
+"breakpoints" duplicado (un ListBox vacío añadido antes que el real; AddTab
+ignora IDs repetidos) — solo queda el real.
 
 **Fix del popup fatal del arranque GTK legacy:** el diálogo "No se pudo iniciar
 MonoDevelop — Remoting channels were removed…" mataba el arranque cuando

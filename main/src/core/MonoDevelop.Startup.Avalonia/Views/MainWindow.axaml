@@ -84,8 +84,8 @@
         </DockPanel>
       </Border>
 
-      <!-- Right pads: Properties / Errors / Tasks / Output-ish tabs live here in the
-           legacy layout's "right dock group"; bottom row hosts the Output pad. -->
+      <!-- Right pads: Properties / Toolbox / Document Outline / Unit Tests (the
+           legacy layout's "right dock group"). -->
       <controls:PadHost x:Name="RightPads" Grid.Row="0" Grid.Column="2" Width="240" />
 
       <GridSplitter Grid.Row="0" Grid.Column="1" Width="3" HorizontalAlignment="Left"
@@ -93,12 +93,11 @@
       <GridSplitter Grid.Row="0" Grid.Column="2" Width="3" HorizontalAlignment="Left"
                     Background="Transparent" ResizeDirection="Columns" />
 
-      <!-- Bottom docks (legacy bottom group: Output | Errors | Tasks | Code Issues,
-           and the debugger pads Call Stack / Locals in a right sub-dock) -->
-      <Grid Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3" ColumnDefinitions="*,300" Height="170">
-        <controls:PadHost x:Name="BottomPads" Grid.Column="0" />
-        <controls:PadHost x:Name="DebugPads" Grid.Column="1" IsVisible="False" />
-      </Grid>
+      <!-- Bottom dock (legacy bottom group): Output | Errors | Tasks | Code Issues
+           | Search Results | Call Stack | Locals | Watch | Threads | Bookmarks |
+           Breakpoints — a single bottom pad host, 4 docks total (left, center,
+           right, bottom). -->
+      <controls:PadHost x:Name="BottomPads" Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3" Height="170" />
     </Grid>
 
     <!-- Welcome page overlay: covers the whole workbench (pads included) like the

@@ -31,28 +31,25 @@ internal static class Program
 	static string [] StripOldGui (string [] args)
 		=> args.Where (a => a != "--old-gui").ToArray ();
 
-	// Runs the GTK legacy UI (main/build/net10run or main/build/bin/net10.0) as a
-	// child process and forwards its exit code, so the Avalonia binary is the only
-	// entrypoint users need to know about.
+	// Runs the GTK legacy UI (MonoDevelop.dll, staged in the same main/build tree
+	// as this Avalonia shell) as a child process and forwards its exit code, so the
+	// Avalonia binary is the only entrypoint users need to know about.
 	static int LaunchLegacyGtk (string [] args)
 	{
 		string? gtkDll = null;
 		var dir = AppContext.BaseDirectory;
 		for (int i = 0; i < 6 && dir is not null && gtkDll is null; i++) {
-			foreach (var candidate in new [] {
-				Path.Combine (dir, "net10run", "MonoDevelop.dll"),
-				Path.Combine (dir, "bin", "net10.0", "MonoDevelop.dll"),
-				Path.Combine (dir, "MonoDevelop.dll"),
-			}) {
-				if (File.Exists (candidate)) {
-					gtkDll = candidate;
-					break;
-				}
+			// Single build tree: the GTK MonoDevelop.dll is staged in the SAME main/build
+			// directory as this Avalonia shell.
+			var candidate = Path.Combine (dir, "MonoDevelop.dll");
+			if (File.Exists (candidate)) {
+				gtkDll = candidate;
+				break;
 			}
 			dir = Path.GetDirectoryName (dir);
 		}
 		if (gtkDll is null) {
-			Console.Error.WriteLine ("--old-gui: legacy GTK runtime not found next to the Avalonia build (looked for net10run/MonoDevelop.dll and bin/net10.0/MonoDevelop.dll under main/build).");
+			Console.Error.WriteLine ("--old-gui: legacy GTK runtime not found next to the Avalonia build (looked for MonoDevelop.dll under main/build).");
 			return 1;
 		}
 		var dotnet = Environment.ProcessPath;
@@ -63,6 +60,10 @@ internal static class Program
 			UseShellExecute = false,
 		};
 		psi.ArgumentList.Add (gtkDll);
+		// The GTK MonoDevelop.dll refuses to start on its own (hidden legacy UI
+		// guard keyed on MONODEVELOP_LEGACY_UI): only this relay, invoked with
+		// --old-gui, sets that environment variable for the child process.
+		psi.EnvironmentVariables ["MONODEVELOP_LEGACY_UI"] = "1";
 		foreach (var a in StripOldGui (args))
 			psi.ArgumentList.Add (a);
 		using var proc = Process.Start (psi);
