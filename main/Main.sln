@@ -16,6 +16,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MonoDevelop.Ide", "src\core
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MonoDevelop.Startup", "src\core\MonoDevelop.Startup\MonoDevelop.Startup.csproj", "{DA8EDEA6-7DA8-435D-B1A0-F3A0CA07F424}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MonoDevelop.Startup.Avalonia", "src\core\MonoDevelop.Startup.Avalonia\MonoDevelop.Startup.Avalonia.csproj", "{B2841FAA-17B3-418C-AACA-7A2EAF6EEE41}"
+EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Mono.Debugging", "external\debugger-libs\Mono.Debugging\Mono.Debugging.csproj", "{90C99ADB-7D4B-4EB4-98C2-40BD1B14C7D2}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "MonoDevelop.Projects.Format.MSBuild", "MonoDevelop.Projects.Format.MSBuild", "{8F48ECA6-CFFF-4EBF-BC92-817199EDE9AF}"
@@ -541,6 +543,22 @@ Global
 		{27096E7F-C91C-4AC6-B289-6897A701DF21}.ReleaseMac|Any CPU.Build.0 = ReleaseMac|Any CPU
 		{27096E7F-C91C-4AC6-B289-6897A701DF21}.ReleaseWin32|Any CPU.ActiveCfg = ReleaseWin32|Any CPU
 		{27096E7F-C91C-4AC6-B289-6897A701DF21}.ReleaseWin32|Any CPU.Build.0 = ReleaseWin32|Any CPU
+		{B2841FAA-17B3-418C-AACA-7A2EAF6EEE41}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B2841FAA-17B3-418C-AACA-7A2EAF6EEE41}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B2841FAA-17B3-418C-AACA-7A2EAF6EEE41}.DebugLinux|Any CPU.ActiveCfg = DebugLinux|Any CPU
+		{B2841FAA-17B3-418C-AACA-7A2EAF6EEE41}.DebugLinux|Any CPU.Build.0 = DebugLinux|Any CPU
+		{B2841FAA-17B3-418C-AACA-7A2EAF6EEE41}.DebugMac|Any CPU.ActiveCfg = DebugMac|Any CPU
+		{B2841FAA-17B3-418C-AACA-7A2EAF6EEE41}.DebugMac|Any CPU.Build.0 = DebugMac|Any CPU
+		{B2841FAA-17B3-418C-AACA-7A2EAF6EEE41}.DebugWin32|Any CPU.ActiveCfg = DebugWin32|Any CPU
+		{B2841FAA-17B3-418C-AACA-7A2EAF6EEE41}.DebugWin32|Any CPU.Build.0 = DebugWin32|Any CPU
+		{B2841FAA-17B3-418C-AACA-7A2EAF6EEE41}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B2841FAA-17B3-418C-AACA-7A2EAF6EEE41}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B2841FAA-17B3-418C-AACA-7A2EAF6EEE41}.ReleaseLinux|Any CPU.ActiveCfg = ReleaseLinux|Any CPU
+		{B2841FAA-17B3-418C-AACA-7A2EAF6EEE41}.ReleaseLinux|Any CPU.Build.0 = ReleaseLinux|Any CPU
+		{B2841FAA-17B3-418C-AACA-7A2EAF6EEE41}.ReleaseMac|Any CPU.ActiveCfg = ReleaseMac|Any CPU
+		{B2841FAA-17B3-418C-AACA-7A2EAF6EEE41}.ReleaseMac|Any CPU.Build.0 = ReleaseMac|Any CPU
+		{B2841FAA-17B3-418C-AACA-7A2EAF6EEE41}.ReleaseWin32|Any CPU.ActiveCfg = ReleaseWin32|Any CPU
+		{B2841FAA-17B3-418C-AACA-7A2EAF6EEE41}.ReleaseWin32|Any CPU.Build.0 = ReleaseWin32|Any CPU
 		{DA8EDEA6-7DA8-435D-B1A0-F3A0CA07F424}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{DA8EDEA6-7DA8-435D-B1A0-F3A0CA07F424}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{DA8EDEA6-7DA8-435D-B1A0-F3A0CA07F424}.DebugLinux|Any CPU.ActiveCfg = Debug|x86

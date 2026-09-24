@@ -1,4 +1,6 @@
 using System;
+using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using Avalonia;
 
@@ -9,12 +11,65 @@ internal static class Program
 	// Initialization code. Don't use any Avalonia, third-party APIs or any
 	// SynchronizationContext-reliant code before AppMain is called.
 	[STAThread]
-	public static void Main (string [] args)
+	public static int Main (string [] args)
 	{
+		// Legacy GTK UI compatibility switch: there is a single project with a
+		// single build tree (main/build); the GTK# UI is kept as hidden legacy
+		// compatibility during the 9.x branch and only shows up with --old-gui,
+		// which relays this invocation to the GTK (net10.0) runtime staged next
+		// to the Avalonia shell.
+		if (args.Any (a => a == "--old-gui"))
+			return LaunchLegacyGtk (args);
+
 		// UI language from the legacy preference (same MonoDevelopProperties.xml the
 		// GTK UI reads), applied before any string is built.
 		MonoDevelop.AvaloniaShell.Services.GettextService.Initialize ();
-		BuildAvaloniaApp ().StartWithClassicDesktopLifetime (args);
+		BuildAvaloniaApp ().StartWithClassicDesktopLifetime (StripOldGui (args));
+		return 0;
+	}
+
+	static string [] StripOldGui (string [] args)
+		=> args.Where (a => a != "--old-gui").ToArray ();
+
+	// Runs the GTK legacy UI (main/build/net10run or main/build/bin/net10.0) as a
+	// child process and forwards its exit code, so the Avalonia binary is the only
+	// entrypoint users need to know about.
+	static int LaunchLegacyGtk (string [] args)
+	{
+		string? gtkDll = null;
+		var dir = AppContext.BaseDirectory;
+		for (int i = 0; i < 6 && dir is not null && gtkDll is null; i++) {
+			foreach (var candidate in new [] {
+				Path.Combine (dir, "net10run", "MonoDevelop.dll"),
+				Path.Combine (dir, "bin", "net10.0", "MonoDevelop.dll"),
+				Path.Combine (dir, "MonoDevelop.dll"),
+			}) {
+				if (File.Exists (candidate)) {
+					gtkDll = candidate;
+					break;
+				}
+			}
+			dir = Path.GetDirectoryName (dir);
+		}
+		if (gtkDll is null) {
+			Console.Error.WriteLine ("--old-gui: legacy GTK runtime not found next to the Avalonia build (looked for net10run/MonoDevelop.dll and bin/net10.0/MonoDevelop.dll under main/build).");
+			return 1;
+		}
+		var dotnet = Environment.ProcessPath;
+		if (string.IsNullOrEmpty (dotnet))
+			dotnet = "dotnet";
+		var psi = new ProcessStartInfo {
+			FileName = dotnet,
+			UseShellExecute = false,
+		};
+		psi.ArgumentList.Add (gtkDll);
+		foreach (var a in StripOldGui (args))
+			psi.ArgumentList.Add (a);
+		using var proc = Process.Start (psi);
+		if (proc is null)
+			return 1;
+		proc.WaitForExit ();
+		return proc.ExitCode;
 	}
 
 	// QA hooks: --about | --prefs | --addins open the corresponding dialog at startup

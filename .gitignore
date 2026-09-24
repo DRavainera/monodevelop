@@ -9,6 +9,7 @@
 obj/
 /main/build/bin
 /main/build/net10run
+/main/build/avalonia
 /main/build/lib
 /main/build/AddIns
 /main/build/data/

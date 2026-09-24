@@ -17,8 +17,14 @@ automatizada que ejercitan cada módulo migrado.
 cd main/src/core/MonoDevelop.Startup.Avalonia
 ~/.dotnet/dotnet build -v q
 
-# Run (binario real del shell Avalonia)
-~/.dotnet/dotnet src/core/MonoDevelop.Startup.Avalonia/bin/Debug/net10.0/MonoDevelop.AvaloniaShell.dll
+# Run (binario real del shell Avalonia — salida unificada en main/build/avalonia;
+# el proyecto también compila como parte de main/Main.sln)
+~/.dotnet/dotnet build/avalonia/net10.0/MonoDevelop.AvaloniaShell.dll
+
+# UI legacy GTK# (compatibilidad oculta durante la rama 9.x): un solo proyecto y
+# un solo árbol de build; --old-gui reenvía la invocación al runtime GTK de
+# main/build propagando argumentos y exit code
+~/.dotnet/dotnet build/avalonia/net10.0/MonoDevelop.AvaloniaShell.dll --old-gui
 ```
 
 Opciones de línea de comandos:
@@ -92,7 +98,7 @@ Cada hook abre la app, ejercita un módulo de forma determinista y loguea
 `[tag] ...` en stdout. Patrón general:
 
 ```bash
-~/.dotnet/dotnet src/core/MonoDevelop.Startup.Avalonia/bin/Debug/net10.0/MonoDevelop.AvaloniaShell.dll \
+~/.dotnet/dotnet build/avalonia/net10.0/MonoDevelop.AvaloniaShell.dll \
   --sln=/ruta/TestProj.sln --<hook> 2>&1 | grep -E "\[<tag>\]"
 ```
 

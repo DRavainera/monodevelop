@@ -98,23 +98,35 @@ namespace MonoDevelop.Components.AutoTest
 				MonoDevelop.Core.Execution.RemotingService.RegisterRemotingChannel ();
 				// MONO_AUTOTEST_CLIENT now carries a textual URL to the remote client object
 				// instead of a base64-serialized ObjRef (a BinaryFormatter deserialization surface).
-				IAutoTestClient client = (IAutoTestClient) RemotingCompat.GetObject (typeof (IAutoTestClient), sref);
+				// The remoting transport is gone (see RemotingCompat); degrade to a sessionless
+				// IDE instead of killing startup with a fatal dialog.
+				try {
+					IAutoTestClient client = (IAutoTestClient) RemotingCompat.GetObject (typeof (IAutoTestClient), sref);
 
-				// Initialize as much as we can before connecting back to the client
-				Ide.IdeApp.Workbench.EnsureLayout ();
-				Runtime.Preferences.EnableUpdaterForCurrentSession = false;
+					// Initialize as much as we can before connecting back to the client
+					Ide.IdeApp.Workbench.EnsureLayout ();
+					Runtime.Preferences.EnableUpdaterForCurrentSession = false;
 
-				client.Connect (manager.AttachClient (client));
+					client.Connect (manager.AttachClient (client));
+				} catch (Exception ex) {
+					Console.WriteLine ("AutoTest client connect unavailable (remoting removed, deferred to the message-bus rework): " + ex.Message);
+				}
 			}
 			if (publishServer && !manager.IsClientConnected) {
-				MonoDevelop.Core.Execution.RemotingService.RegisterRemotingChannel ();
 				// Publish the manager and expose it via a textual URL. The reference file
 				// used to contain a base64-serialized ObjRef (a BinaryFormatter deserialization
 				// surface); it now contains the marshaled URL so the peer can connect with
 				// Activator.GetObject instead of deserializing an ObjRef.
-				sref = MonoDevelop.Core.Execution.RemotingService.GetMarshaledUrl (AutoTestServiceObjectUri);
-				File.WriteAllText (SessionReferenceFile, sref);
-				Runtime.Preferences.EnableUpdaterForCurrentSession = false;
+				// The remoting transport is gone, so publishing is not possible yet: log and
+				// continue the startup instead of surfacing a fatal error dialog.
+				try {
+					MonoDevelop.Core.Execution.RemotingService.RegisterRemotingChannel ();
+					sref = MonoDevelop.Core.Execution.RemotingService.GetMarshaledUrl (AutoTestServiceObjectUri);
+					File.WriteAllText (SessionReferenceFile, sref);
+					Runtime.Preferences.EnableUpdaterForCurrentSession = false;
+				} catch (Exception ex) {
+					Console.WriteLine ("AutoTest server publish skipped (remoting removed, deferred to the message-bus rework): " + ex.Message);
+				}
 			}
 		}
 

@@ -665,3 +665,30 @@ MainToolbarController):**
   dejar los breakpoints puestos en capturas visuales del pad.
 - Tests: 16/16 en verde como gate pre-commit.
 - Commit `(M15)`.
+
+### M15b — Un proyecto, una build: salida unificada en main/build + --old-gui
+
+**Unificación del árbol de build (no hay "proyecto Avalonia" ni "proyecto
+legacy": es un solo proyecto cuya UI legacy GTK# queda oculta como
+compatibilidad durante la rama 9.x y solo se muestra con `--old-gui`):**
+- El shell Avalonia compila ahora a `main/build/avalonia/<tfm>/`
+  (multi-target `net10.0;net10.0-windows`; el TFM windows es `Exe` para abrir
+  consola de diagnóstico en Windows) junto a la salida GTK en `main/build/bin`
+  y el runtime staging `main/build/net10run` — un único árbol `main/build`.
+- `MonoDevelop.Startup.Avalonia` entra en `Main.sln` (GUID propio, mapeos
+  ActiveCfg/Build.0 para las 8 configuraciones) y la solución completa valida
+  (`msbuild Main.sln -t:ValidateSolutionConfiguration` en verde).
+- **`--old-gui`**: el binario Avalonia es el único punto de entrada; con ese
+  parámetro relanza la UI GTK legacy (busca `net10run/MonoDevelop.dll` o
+  `bin/net10.0/MonoDevelop.dll` subiendo desde su propio directorio, hereda el
+  resto de argumentos y propaga el exit code). Verificado en vivo: ventana GTK
+  NORMAL 1920x1009 titulada "MonoDevelop", sin diálogo de error.
+
+**Fix del popup fatal del arranque GTK legacy:** el diálogo "No se pudo iniciar
+MonoDevelop — Remoting channels were removed…" mataba el arranque cuando
+`MonoDevelop.EnableAutomatedTesting=True` (persistido en
+MonoDevelopProperties.xml): `AutoTestService.Start(publishServer: true)` llama
+al stub `RemotingService.GetMarshaledUrl` (remoting eliminado en .NET 10) y la
+excepción subía hasta el handler fatal. Ahora el inicio y la publicación del
+servidor AutoTest degradan con aviso en consola y la sesión continúa sin
+autotest remoto (el transporte se rehará sobre el message bus en su fase).
