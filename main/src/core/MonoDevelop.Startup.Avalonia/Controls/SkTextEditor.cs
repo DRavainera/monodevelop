@@ -819,6 +819,17 @@ public class SkTextEditor : Control
 		Focus ();
 		var pt = e.GetCurrentPoint (this);
 		if (pt.Properties.IsLeftButtonPressed) {
+			// Legacy left margin: a click on the gutter marker strip toggles the
+			// breakpoint of that line (Mono.TextEditor ActionTextArea
+			// "left margin click"). The strip is the icon column next to the line
+			// numbers; the rest of the gutter keeps its click-to-move-caret role.
+			if (pt.Position.X <= GutterIconStripWidth ()) {
+				int gutterLine = Math.Clamp ((int)(pt.Position.Y / LineHeight + scrollLines), 0, lines.Count - 1);
+				caretLine = gutterLine;
+				ToggleBreakpoint ();
+				e.Handled = true;
+				return;
+			}
 			// Legacy: a plain mouse click collapses multi-caret back to the primary
 			// caret (only Alt+Shift+Click adds one via InsertNextMatchingCaret).
 			if (!e.KeyModifiers.HasFlag (KeyModifiers.Alt))
@@ -1599,6 +1610,20 @@ public class SkTextEditor : Control
 		canvas.DrawText ("● " + b.text, x + 12, baseline, font, paint);
 	}
 
+	// ----- Debug data tip (legacy TextEditor inline value bubble): while paused,
+	// MainWindow sets the value of the variable on the stopped line and it renders
+	// as a green inline bubble like VS's DataTip.
+	(int line, string text)? dataTip;
+
+	/// <summary>Shows the inline data tip on a line (0-based); null clears it.</summary>
+	public void SetDataTip (int? line0Based, string? text)
+	{
+		dataTip = line0Based is int l && text is not null ? (l, text) : null;
+		MarkDirty ();
+	}
+
+	public (int Line, string Text)? CurrentDataTip => dataTip;
+
 	// ----- Completion (legacy TextEditorCommands.ShowCompletionWindow = "Complete Word",
 	// ShowParameterCompletionWindow = parameter info, ToggleCompletionSuggestionMode,
 	// ShowCodeTemplateWindow, ShowCodeSurroundingsWindow). -----
@@ -1821,6 +1846,15 @@ public class SkTextEditor : Control
 
 	public BreakpointOptions? GetBreakpointOptions (int line)
 		=> breakpointOptions.TryGetValue (line, out var o) ? o : null;
+
+	/// <summary>Legacy left-margin click path: toggles the breakpoint of a line
+	/// through the exact code a gutter click runs (Mono.TextEditor ActionTextArea
+	/// "left margin hit test"), including BreakpointsChanged + persistence hooks.</summary>
+	public void ToggleBreakpointAtGutter (int line0Based)
+	{
+		caretLine = Math.Clamp (line0Based, 0, lines.Count - 1);
+		ToggleBreakpoint ();
+	}
 
 	public void ToggleBreakpoint ()
 	{
@@ -2240,6 +2274,11 @@ public class SkTextEditor : Control
 
 	float GutterWidth () => (float)FontSize * 0.6f * (lines.Count.ToString ().Length + 1) + 10;
 
+	/// <summary>Width of the clickable breakpoint strip: the red circle sits at
+	/// gutterW - 9, so the strip is the last 18px of the gutter (like the legacy
+	/// left margin icon column).</summary>
+	float GutterIconStripWidth () => Math.Max (0, GutterWidth () - 18);
+
 	public override void Render (DrawingContext context)
 	{
 		int w = Math.Max (1, (int)Math.Ceiling (Bounds.Width));
@@ -2384,6 +2423,16 @@ public class SkTextEditor : Control
 			}
 			// inline message bubble (legacy MessageBubble) after the line text
 			DrawBubbles (canvas, i, x, baseline, textFont, textPaint);
+			// debug data tip (legacy inline value bubble) after the bubbles
+			if (dataTip is { } tip && tip.line == i) {
+				using var tipBg = new SKPaint { Color = new SKColor (0x2a, 0x4d, 0x2e), IsAntialias = false };
+				float tw = tip.text.Length * charW + 14;
+				canvas.DrawRect (x + 10, y + 1, tw, lineH - 2, tipBg);
+				using var tipBorder = new SKPaint { Color = new SKColor (0x4e, 0x8f, 0x55), IsAntialias = false };
+				canvas.DrawRect (x + 10, y + 1, tw, lineH - 2, tipBorder);
+				textPaint.Color = new SKColor (0xa6, 0xd9, 0xaa);
+				canvas.DrawText (tip.text, x + 17, baseline, textFont, textPaint);
+			}
 		}
 
 		// carets — secondary carets render shorter (legacy InsertionCursor), primary last

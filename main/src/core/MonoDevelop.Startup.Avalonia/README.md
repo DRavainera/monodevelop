@@ -175,6 +175,10 @@ documento sucio a propósito para poder probar el diálogo visualmente
 | `--step` | Stepping: Step Over desde el bp, highlight movido, pads refrescados | `[step]` |
 | `--tree` | Locals como árbol expandible (variablesReference, hijos lazy) | `[tree]` |
 | `--imm` | Immediate pad: evaluate en el frame + resultado en Output | `[immediate]`/`[imm]` |
+| `--gutterbp` | Clic en el gutter = toggle bp (como legacy) + data tip inline al pausar | `[gutterbp]` |
+| `--frame` | Call Stack: seleccionar frame muestra SUS locals (scopes por frameId) | `[frame]` |
+| `--immcompl` | Immediate: autocompletado de miembros tras `.` (DAP), commit Tab/Enter | `[immcompl]` |
+| `--persistqa` | Sesión de debug persistida: cerrar/reabrir solución restaura bps+watches+config | `[persist]` |
 
 QA visual: los hooks se complementan con capturas X11 (`magick x:<win>`) para
 comparar la UI contra la legacy GTK en vivo (ver bitácoras en
@@ -244,6 +248,27 @@ comparar la UI contra la legacy GTK en vivo (ver bitácoras en
   expresiones en cada stop.
 - **Immediate pad**: expresiones contra el proceso detenido (Enter o Run);
   el resultado queda en el Output (`[immediate] <expr> = <valor>`).
+- **Autocompletado del Immediate**: al teclear `expr.` el prefijo se evalúa
+  por DAP y sus miembros llenan un popup (`nombre  valor`); Down/Up mueven,
+  Tab/Enter/doble clic confirman (`expr.<miembro>`), Esc oculta.
+- **Breakpoint con clic en el gutter**: la franja de iconos del gutter (los
+  últimos 18px, donde vive el círculo rojo) hace toggle del bp de la línea
+  (Mono.TextEditor ActionTextArea "left margin click"); el resto del gutter
+  mueve el caret como siempre.
+- **Data tip inline**: al pausar, una burbuja verde en la línea parada muestra
+  el primer identificador evaluable con su valor (`greeting = "hello"`,
+  evaluate DAP en el frame actual); se limpia en Continue/Step/Stop.
+- **Cambio de frame en el Call Stack**: seleccionar un frame recarga los
+  Locals con los scopes de ESE frame (`scopes` con frameId → variables), como
+  el StackFrame pad legacy; doble clic navega al código.
+- **Persistencia de la sesión de debug**: breakpoints, watches y config
+  activa viven en `<sln>.userprefs` — los breakpoints con el formato
+  Mono.Debugging (`Services/BreakpointService.cs`) y los watches con la clave
+  legacy `MonoDevelop.Ide.DebuggingService.PinnedWatches`
+  (`Services/WatchService.cs`; solo la expresión — el PinnedWatchStore legacy
+  serializa además la ubicación del pin, que el pad del shell no usa). Se
+  restauran al reabrir la solución (los breakpoints al reabrir cada
+  documento, como el legacy).
 
 ## Estado del bucle de migración
 

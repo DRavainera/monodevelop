@@ -604,3 +604,35 @@ documento + keywords).
   (locals 0/null); los QAs usan la línea de Console.WriteLine y esperan
   CurrentFrameId antes de evaluar (sin frame → scope estático).
 - Tests 16/16.
+
+## 2026-09-25 (b) — M16d: gutter bp, data tip, cambio de frame, completado del Immediate, persistencia de debug
+
+- Breakpoint con clic en el gutter: la franja de iconos (últimos 18px del
+  gutter) hace toggle del bp de la línea, como el left margin del legacy;
+  `ToggleBreakpointAtGutter` expone la misma ruta. QA `--gutterbp` verde
+  (toggle on/off + persistencia + burbuja).
+- Data tip inline: al pausar, burbuja verde en la línea parada con el primer
+  identificador evaluable (`greeting = "hello"`); limpia en Continue/Step/
+  Stop. Hallazgo: la primera palabra de la línea puede ser un tipo (Console)
+  que no evalúa — se prueban hasta 5 identificadores en orden.
+- Call Stack con cambio de frame: seleccionar un frame recarga los Locals con
+  los scopes de ESE frameId (`GetLocalsForFrameAsync`), como el StackFrame
+  legacy. Fixture ampliado (`Main` → `Double(list.Count)`) para tener 2
+  frames gestionados. QA `--frame`: `Double() | Main()`, selección del 2º →
+  `locals of Main() — 3 rows`.
+- Autocompletado de miembros en el Immediate: `expr.` evalúa el prefijo por
+  DAP y lista sus miembros en un popup (Tab/Enter/doble clic confirman, Esc
+  oculta). Fix del handler DoubleTapped acumulativo del popup (rebind -=/+=).
+  QA `--immcompl`: 13 miembros de List<int>, commit `list.Count`,
+  `[immediate] list.Count = 3`.
+- Persistencia de la sesión de debug: breakpoints (ya existía) + watches +
+  config activa en `<sln>.userprefs`. Nuevo `WatchService` con la clave
+  legacy `MonoDevelop.Ide.DebuggingService.PinnedWatches` (solo
+  `expression`; el legacy también serializa la ubicación del pin, que el pad
+  del shell no usa). Carga al abrir solución, persiste en add/remove y al
+  cerrar el workspace. QA `--persistqa`: cerrar/reabrir → watches y bp
+  restaurados, config intacta.
+- Nota de entorno: builds que fallan con "pdb is being used by another
+  process" (contienda entre TFMs del mismo build) se resuelven con
+  `dotnet build-server shutdown` y `-m:1`.
+- Tests 16/16.

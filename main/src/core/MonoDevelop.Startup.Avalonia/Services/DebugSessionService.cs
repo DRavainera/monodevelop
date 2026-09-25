@@ -244,6 +244,23 @@ public sealed class DebugSessionService : IDisposable
 		return await GetVariablesAsync (localsRef);
 	}
 
+	/// <summary>Locals of ANY frame (Call Stack frame switch: selecting a frame
+	/// shows its scope). Falls back to the first frame when frameId is null.</summary>
+	public async Task<DebugVariable []> GetLocalsForFrameAsync (int? frameId = null)
+	{
+		if (!IsActive)
+			return Array.Empty<DebugVariable> ();
+		var fid = frameId ?? CurrentFrameId;
+		if (fid is null)
+			return Array.Empty<DebugVariable> ();
+		var scopes = await RequestAsync ("scopes", new Dictionary<string, object> { ["frameId"] = fid.Value });
+		var scopeList = scopes? ["body"]? ["scopes"] as JsonArray;
+		if (scopeList is null || scopeList.Count == 0)
+			return Array.Empty<DebugVariable> ();
+		var localsRef = scopeList [0]? ["variablesReference"]?.GetValue<int> () ?? 0;
+		return await GetVariablesAsync (localsRef);
+	}
+
 	public async Task<DebugVariable []> GetVariablesAsync (int variablesReference)
 	{
 		if (variablesReference <= 0)

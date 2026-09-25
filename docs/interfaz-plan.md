@@ -877,3 +877,52 @@ asignación ocurre ANTES de ejecutarla (bp en `int answer = 42;` ⇒
 answer=0); los QAs usan la línea de Console.WriteLine y esperan
 `CurrentFrameId` antes de evaluar — evaluar sin frame cae al scope estático
 (answer=0/1).
+
+## M16d — Gutter breakpoints, data tip inline, cambio de frame, autocompletado del Immediate y persistencia de la sesión de debug
+
+**Breakpoint con clic en el gutter (toggle como el legacy):** la franja de
+iconos del gutter (los últimos 18px, donde se dibuja el círculo rojo) es
+clicable en `SkTextEditor.OnPointerPressed` — el clic sobre ella hace toggle
+del breakpoint de esa línea (Mono.TextEditor ActionTextArea "left margin
+click"), mueve el caret y consume el evento; el resto del gutter conserva su
+rol de mover el caret. `ToggleBreakpointAtGutter(line0)` expone la misma ruta
+para QA/servicios. QA `--gutterbp`: dos clics (on→off) + tercero on,
+persistencia en .userprefs (`line="13"`), burbuja roja en la línea.
+
+**Data tip inline (valor de la variable al pausar):** al detenerse,
+`ShowDataTipForFrame` evalúa los identificadores de la línea parada (hasta 5,
+en orden — el primero puede ser un tipo como `Console` que ningún scope
+resuelve, igual que el tooltip legacy solo resuelve lo evaluable por el frame
+actual) y muestra el primer valor resuelto como burbuja verde inline en la
+propia línea (`bg 0x2a4d2e`, borde `0x4e8f55`, texto `0xa6d9aa`), como el
+DataTip de VS. Se limpia en Continue/Step/Stop. QA `--gutterbp`:
+`datatip=line=13 'greeting = "hello"'`.
+
+**Call Stack con cambio de frame:** la selección de un frame en el pad
+(`SelectionChanged`) recarga el árbol de Locals con LOS scopes de ESE frame
+(`DebugSessionService.GetLocalsForFrameAsync(frameId)` → `scopes` con
+`frameId` → primer scope → `variables`), como el StackFrame pad legacy; el
+doble clic sigue navegando al código fuente. QA `--frame` con bp dentro de
+`TestProj.Double` (fixture ampliado: `Main` llama a `Double(list.Count)`):
+`stack=2 frames: Double() | Main()` y al seleccionar el 2º frame
+`[frame] locals of Main() — 3 rows` (answer/greeting/list de Main).
+
+**Autocompletado de miembros en el Immediate:** al teclear `expr.`, el
+prefijo se evalúa por DAP y sus miembros (`GetVariablesAsync` del
+variablesReference) llenan un popup bajo el input (`nombre  valor`,
+SelectedIndex=0, doble clic confirma); Down/Up mueven, Tab/Enter confirman
+(reemplaza tras el último `.` y coloca el caret), Esc oculta. El commit
+evaluable queda demostrado en el QA `--immcompl`: popup con 13 miembros de
+`List<int>`, Tab → `list.Count`, Output `[immediate] list.Count = 3`.
+
+**Persistencia de la sesión de debug (breakpoints + watches + config
+activa):** los breakpoints ya persistían; ahora los watches también —
+`WatchService` espeja el patrón de `BreakpointService` con la clave legacy
+`MonoDevelop.Ide.DebuggingService.PinnedWatches` en el `<sln>.userprefs`
+(el PinnedWatchStore legacy serializa también la ubicación del pin, que el
+pad Watch del shell no necesita: solo viaja `expression`). Se cargan al abrir
+la solución (el pad se rellena en el próximo stop), se persisten en cada
+add/remove y al cerrar el workspace. La config activa ya persistía
+(`MonoDevelop.Ide.Workspace/ActiveConfiguration`) y `RefreshConfigurationSelectors`
+la restaura al abrir. QA `--persistqa`: cierra y reabre la solución →
+`watch-exprs=answer + 1 restored-pad=True`, `bp@13=True`, `config=Debug`.

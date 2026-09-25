@@ -491,11 +491,160 @@ public partial class MainWindow : Window
 						await RunImmediateAsync (expr);
 					}
 					debugSession!.Terminate ();
-					ClearExecutionLineHighlight ();
-					if (docs.TryGetValue (name, out var ed2)) { ed2.ClearBreakpoints (); PersistBreakpoints (); }
-					Output ("[imm] done");
-				}
-			} else if (qa == "--attachreal") {
+					ClearExecutionLineHighlight ();						if (docs.TryGetValue (name, out var ed2)) { ed2.ClearBreakpoints (); PersistBreakpoints (); }
+						Output ("[imm] done");
+					}
+				} else if (qa == "--gutterbp") {
+					// QA: gutter breakpoint toggle + inline data tip — the same code path
+					// a click on the icon strip runs (ToggleBreakpointAtGutter), then a
+					// debug stop shows the green value bubble on the paused line.
+					var file = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile), "TestProj", "TestProj", "Program.cs");
+					OpenFileDocument (file);
+					var name = Path.GetFileName (file);
+					if (docs.TryGetValue (name, out var ed)) {
+						SelectDocument (name);
+						if (ed.BreakpointLines.Count > 0) { ed.ClearBreakpoints (); PersistBreakpoints (); }
+						ed.ToggleBreakpointAtGutter (12); // line 13: the gutter-click path
+						Output ("[gutterbp] gutter-click toggle → bp@13=" + (ed.BreakpointLines.ContainsKey (12) ? "True" : "False"));
+						ed.ToggleBreakpointAtGutter (12);
+						Output ("[gutterbp] second click removes → bp@13=" + (ed.BreakpointLines.ContainsKey (12) ? "True" : "False"));
+						ed.ToggleBreakpointAtGutter (12); // leave it on for the debug run
+						PersistBreakpoints ();
+						Output ("[gutterbp] stored=" + File.ReadAllText (loadedSolutionPath!.Substring (0, loadedSolutionPath.Length - 4) + ".userprefs").Contains ("line=\"13\""));
+					}
+					_ = RunStartupProjectAsync (debug: true);
+					var deadlineG = DateTime.UtcNow.AddSeconds (60);
+					while (DateTime.UtcNow < deadlineG && debugSession?.LastStop is null)
+						await Task.Delay (300);
+					if (debugSession?.LastStop is null) {
+						Output ("[gutterbp] no stop within timeout");
+					} else {
+						// ShowDataTipForFrame runs async on the stopped event; give it a beat.
+						await Task.Delay (1200);
+						var tip = docs.TryGetValue (name, out var edT) ? edT.CurrentDataTip : null;
+						Output ("[gutterbp] datatip=" + (tip is null ? "none" : $"line={tip?.Line + 1} '{tip?.Text}'"));
+						Output ("[gutterbp] bubble-red@13=" + docs [name].BreakpointLines.ContainsKey (12));
+						debugSession!.Terminate ();
+						ClearExecutionLineHighlight ();
+						if (docs.TryGetValue (name, out var edG)) { edG.ClearBreakpoints (); PersistBreakpoints (); }
+						Output ("[gutterbp] done");
+					}
+				} else if (qa == "--frame") {
+					// QA: Call Stack frame switching — a bp inside TestProj's Double (int)
+					// stops with Main on the stack (2 managed frames); selecting the 2nd
+					// frame reloads the Locals tree from ITS scopes (GetLocalsForFrameAsync).
+					var file = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile), "TestProj", "TestProj", "Program.cs");
+					OpenFileDocument (file);
+					var name = Path.GetFileName (file);
+					if (docs.TryGetValue (name, out var ed)) {
+						SelectDocument (name);
+						if (ed.BreakpointLines.Count > 0) { ed.ClearBreakpoints (); PersistBreakpoints (); }
+						ed.GotoLine (17); ed.ToggleBreakpoint (); // line 18: return x * 2 (inside Double)
+						PersistBreakpoints ();
+					}
+					_ = RunStartupProjectAsync (debug: true);
+					var deadlineF = DateTime.UtcNow.AddSeconds (60);
+					while (DateTime.UtcNow < deadlineF && debugSession?.LastStop is null)
+						await Task.Delay (300);
+					if (debugSession?.LastStop is null) {
+						Output ("[frame] no stop within timeout");
+					} else {
+						var sessF = debugSession!;
+						while (DateTime.UtcNow < deadlineF && sessF.CurrentFrameId is null)
+							await Task.Delay (100);
+						BottomPads.Select ("callstack");
+						await RefreshDebugPadsAsync ();
+						var frames = callStackList!.Items.OfType<ListBoxItem> ().Select (i => i.Tag).OfType<DebugFrame> ().ToList ();
+						Output ("[frame] stack=" + frames.Count + " frames: " + string.Join (" | ", frames.Take (3).Select (f => f.Method)));
+						if (frames.Count >= 2) {
+							callStackList.SelectedIndex = 1; // fires ShowFrameLocalsAsync
+							await Task.Delay (1000);
+							Output ("[frame] after-select locals-roots=" + (localsList?.Items.Count ?? -1));
+							Output ("[frame] pad=" + BottomPads.Tabs.First (t => t.Id == "locals").Visible);
+						}
+						sessF.Terminate ();
+						ClearExecutionLineHighlight ();
+						if (docs.TryGetValue (name, out var edF)) { edF.ClearBreakpoints (); PersistBreakpoints (); }
+						Output ("[frame] done");
+					}
+				} else if (qa == "--immcompl") {
+					// QA: Immediate member completion — type "list.", the popup fills from
+					// the DAP children of the evaluated prefix, Tab commits list.Count.
+					var file = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile), "TestProj", "TestProj", "Program.cs");
+					OpenFileDocument (file);
+					var name = Path.GetFileName (file);
+					if (docs.TryGetValue (name, out var ed)) {
+						SelectDocument (name);
+						if (ed.BreakpointLines.Count > 0) { ed.ClearBreakpoints (); PersistBreakpoints (); }
+						ed.GotoLine (12); ed.ToggleBreakpoint ();
+						PersistBreakpoints ();
+					}
+					_ = RunStartupProjectAsync (debug: true);
+					var deadlineI = DateTime.UtcNow.AddSeconds (60);
+					while (DateTime.UtcNow < deadlineI && debugSession?.LastStop is null)
+						await Task.Delay (300);
+					if (debugSession?.LastStop is null) {
+						Output ("[immcompl] no stop within timeout");
+					} else {
+						var sessI = debugSession!;
+						while (DateTime.UtcNow < deadlineI && sessI.CurrentFrameId is null)
+							await Task.Delay (100);
+						SetPadVisible ("immediate", true);
+						BottomPads.Select ("immediate");
+						immediateInput!.Text = "list.";
+						immediateInput.CaretIndex = immediateInput.Text.Length;
+						await ImmediateMemberCompletionAsync ();
+						var members = immediatePopupList?.Items.OfType<ListBoxItem> ().Select (i => i.Tag as string ?? "").ToList () ?? new List<string> ();
+						Output ("[immcompl] popup=" + (immediatePopup?.IsOpen == true) + " members=" + members.Count + " has-Count=" + members.Contains ("Count"));
+						immediatePopupList!.SelectedIndex = members.IndexOf ("Count");
+						CommitImmediateCompletion ();
+						Output ("[immcompl] committed='" + immediateInput.Text + "'");
+						await RunImmediateAsync (immediateInput.Text);
+						sessI.Terminate ();
+						ClearExecutionLineHighlight ();
+						if (docs.TryGetValue (name, out var edI)) { edI.ClearBreakpoints (); PersistBreakpoints (); }
+						Output ("[immcompl] done");
+					}
+				} else if (qa == "--persistqa") {
+					// QA: debug-session persistence — set a watch + a breakpoint (both
+					// flow into <sln>.userprefs), reopen the solution and verify they
+					// come back; the active configuration was already restored above.
+					if (loadedSolutionPath is null) {
+						Output ("[persist] no solution loaded");
+					} else {
+						var file = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile), "TestProj", "TestProj", "Program.cs");
+						OpenFileDocument (file);
+						var name = Path.GetFileName (file);
+						var edP = docs [name];
+						SelectDocument (name);
+						if (edP.BreakpointLines.Count > 0) { edP.ClearBreakpoints (); PersistBreakpoints (); }
+						watchExpressions.Clear ();
+						watchExpressions.Add ("answer + 1");
+						PersistWatches ();
+						edP.GotoLine (12); edP.ToggleBreakpoint ();
+						PersistBreakpoints ();
+						Output ("[persist] pre-reopen watches=" + string.Join (",", Services.WatchService.Load (loadedSolutionPath)));
+						Output ("[persist] pre-reopen config=" + Services.ConfigurationService.GetActiveConfiguration (loadedSolutionPath));
+						// Close and reopen the solution (CloseWorkspace → OpenSolution),
+						// then reopen the file — breakpoints restore from .userprefs on
+						// document open, like the legacy DebuggingService load path.
+						await CloseWorkspaceAsync ();
+						OpenSolutionInWindow (Program.SolutionArg ?? loadedSolutionPath ?? "");
+						await Task.Delay (800);
+						OpenFileDocument (file);
+						await Task.Delay (400);
+						var watched = watchExpressions;
+						var restored = Services.WatchService.Load (loadedSolutionPath!);
+						var bp13 = docs.TryGetValue ("Program.cs", out var edR) && edR.BreakpointLines.ContainsKey (12);
+						Output ("[persist] post-reopen watch-exprs=" + string.Join (",", restored) + " restored-pad=" + watched.Contains ("answer + 1"));
+						Output ("[persist] post-reopen bp@13=" + (bp13 ? "True" : "False") + " config=" + Services.ConfigurationService.GetActiveConfiguration (loadedSolutionPath!));
+						// Cleanup so the QA is repeatable.
+						watchExpressions.Clear ();
+						PersistWatches ();
+						if (docs.TryGetValue ("Program.cs", out var edC)) { edC.ClearBreakpoints (); PersistBreakpoints (); }
+						Output ("[persist] done");
+					}
+				} else if (qa == "--attachreal") {
 				// QA: real DAP attach — launches a long-lived .NET process, attaches
 				// the session to its PID through the pad flow (AttachAsync), verifies
 				// attach + real threads, then detaches (process must survive) and
@@ -1316,25 +1465,32 @@ public partial class MainWindow : Window
 		// Legacy Watch pad menu: Add Watch / Remove Watch; rows re-evaluate on stop.
 		watchList.ContextMenu = BookmarksMenu (
 			("Add Watch", null, AddWatchExpression),
-			("Remove Watch", null, RemoveSelectedWatch));				VariableNode.Loader = LoadVariableChildren;
-
-			// Immediate pad: execute expressions against the stopped process, like
-		// the legacy Immediate window; results land in the Output pad.
-			var immediateHost = new DockPanel { LastChildFill = true };
-			var immediateGo = new Button { Content = "Run", Padding = new Thickness (10, 3) };
-			DockPanel.SetDock (immediateGo, Dock.Right);
-			immediateHost.Children.Add (immediateGo);
-			immediateInput = new TextBox { Watermark = "Expression (e.g. answer + 1)", FontSize = 12, VerticalContentAlignment = VerticalAlignment.Center };
-			immediateInput.KeyDown += (_, e) => {
-				if (e.Key == Key.Enter) { RunImmediate (); e.Handled = true; }
-			};
-			immediateGo.Click += (_, _) => RunImmediate ();
-			immediateHost.Children.Add (immediateInput);
-			BottomPads.AddTab (new PadHost.PadTab { Id = "immediate", Label = "Immediate", Icon = "md-command-window", Content = immediateHost, Visible = false });
+			("Remove Watch", null, RemoveSelectedWatch));
 		BottomPads.AddTab (new PadHost.PadTab { Id = "watch", Label = "Watch", Icon = "md-view-debug-watch", Content = watchList, Visible = false });
+		VariableNode.Loader = LoadVariableChildren;
+
+		// Immediate pad: execute expressions against the stopped process, like the
+		// legacy Immediate window; results land in the Output pad. Typing a '.'
+		// completes the members of the object (DAP evaluate of the prefix).
+		var immediateHost = new DockPanel { LastChildFill = true };
+		var immediateGo = new Button { Content = "Run", Padding = new Thickness (10, 3) };
+		DockPanel.SetDock (immediateGo, Dock.Right);
+		immediateHost.Children.Add (immediateGo);
+		immediateInput = new TextBox { Watermark = "Expression (e.g. answer + 1)", FontSize = 12, VerticalContentAlignment = VerticalAlignment.Center };
+		immediateInput.KeyDown += ImmediateInputKeyDown;
+		immediateInput.TextChanged += (_, _) => _ = ImmediateMemberCompletionCore ();
+		immediateGo.Click += (_, _) => RunImmediate ();
+		immediateHost.Children.Add (immediateInput);
+		BottomPads.AddTab (new PadHost.PadTab { Id = "immediate", Label = "Immediate", Icon = "md-command-window", Content = immediateHost, Visible = false });
 
 		callStackList = new ListBox { Background = Brushes.Transparent };
 		callStackList.Bind (ListBox.ForegroundProperty, Application.Current.GetResourceObservable ("IdeFgBrush"));
+		// Frame switching (legacy StackFrame pad): selecting a frame shows ITS
+		// locals in the Locals tree; double click navigates to the source line.
+		callStackList.SelectionChanged += (_, _) => {
+			if (callStackList.SelectedItem is ListBoxItem { Tag: DebugFrame fr2 } && debugSession is { IsActive: true } sess2)
+				_ = ShowFrameLocalsAsync (sess2, fr2);
+		};
 		callStackList.DoubleTapped += (_, _) => {
 			if (callStackList.SelectedItem is ListBoxItem { Tag: DebugFrame fr } && File.Exists (fr.File))
 				OpenFileDocumentAtLine (fr.File, fr.Line);
@@ -1766,6 +1922,19 @@ public partial class MainWindow : Window
 
 	// DebuggingService.OnStoreUserPrefs: persist the whole store into the
 	// <sln>.userprefs Breakpoints element when any editor's store changes.
+	/// <summary>Watch-expression persistence to <sln>.userprefs (legacy
+	/// DebuggingService PinnedWatches user prefs) whenever the watch list mutates.
+	void PersistWatches ()
+	{
+		if (string.IsNullOrEmpty (loadedSolutionPath))
+			return;
+		try {
+			Services.WatchService.Save (loadedSolutionPath, watchExpressions);
+		} catch (Exception ex) {
+			Output ("[watch] persist failed: " + ex.Message);
+		}
+	}
+
 	void PersistBreakpoints ()
 	{
 		if (string.IsNullOrEmpty (loadedSolutionPath))
@@ -2160,6 +2329,13 @@ public partial class MainWindow : Window
 				solutionTreeView.Items.Add (root);
 			}
 			RecentSolutions.Add (path);
+
+			// Restore the persisted watch expressions (legacy PinnedWatches user
+			// prefs load path); the Watch pad re-fills them on the next stop.
+			watchExpressions.Clear ();
+			foreach (var w in Services.WatchService.Load (path))
+				watchExpressions.Add (w);
+			PersistWatches ();
 
 			// Legacy behavior: opening a solution hides the welcome page and updates
 			// its project bar message.
@@ -2858,6 +3034,7 @@ public partial class MainWindow : Window
 			return;
 		foreach (var tag in documents.Select (d => d.Tag).ToList ())
 			await CloseDocumentAsync (tag);
+		PersistWatches (); // last watch state before the solution path goes away
 		loadedSolutionPath = null;
 		solutionLoaded = false;
 		ShowWelcomePage ();
@@ -4372,9 +4549,41 @@ public partial class MainWindow : Window
 			currentDebugFile = Path.GetFullPath (frame.File);
 			currentDebugLine = frame.Line;
 			HighlightExecutionLine ();
+			ShowDataTipForFrame (frame);
 			Output ($"[debug] stopped ({stop.Reason}) at {Path.GetFileName (frame.File)}:{frame.Line}");
 		}
 		_ = RefreshDebugPadsAsync ();
+	}
+
+	// Legacy inline DataTip: evaluate the identifiers of the stopped line and
+	// render the first resolvable value as a green inline bubble on that line
+	// (cleared on continue/stop). The first word may be a type or keyword
+	// (e.g. "Console.WriteLine(...)") that no scope resolves — like the legacy
+	// tooltip, which only resolves what the current frame can evaluate, each
+	// identifier is tried until one evaluates without error. Best effort.
+	async void ShowDataTipForFrame (Services.DebugFrame frame)
+	{
+		if (!docs.TryGetValue (Path.GetFileName (frame.File), out var ed))
+			return;
+		ed.SetDataTip (frame.Line - 1, null);
+		if (debugSession is not { IsActive: true } sess)
+			return;
+		var lineText = ed.LineTextForTest (frame.Line - 1);
+		var words = System.Text.RegularExpressions.Regex.Matches (lineText ?? "", "[A-Za-z_][A-Za-z0-9_]*")
+			.Select (m => m.Value).Distinct ().Take (5);
+		foreach (var word in words) {
+			var ev = await sess.EvaluateAsync (word, sess.CurrentFrameId);
+			if (ev.Error is null) {
+				ed.SetDataTip (frame.Line - 1, $"{word} = {ev.Value}");
+				return;
+			}
+		}
+	}
+
+	void ClearDataTips ()
+	{
+		foreach (var (_, ed) in docs)
+			ed.SetDataTip (null, null);
 	}
 
 	void HighlightExecutionLine ()
@@ -4463,8 +4672,10 @@ public partial class MainWindow : Window
 		await dlg.ShowDialog (this);
 		if (dlg.Confirmed) {
 			var expr = dlg.Value.Trim ();
-			if (expr.Length > 0 && !watchExpressions.Contains (expr))
+			if (expr.Length > 0 && !watchExpressions.Contains (expr)) {
 				watchExpressions.Add (expr);
+				PersistWatches ();
+			}
 		}
 		await RefreshWatchPadAsync ();
 	}
@@ -4473,7 +4684,8 @@ public partial class MainWindow : Window
 	{
 		if (watchList?.SelectedItem is VariableNode node && node.Display is { Length: > 0 } d) {
 			var name = d.Split ('=') [0].Trim ();
-			watchExpressions.Remove (name);
+			if (watchExpressions.Remove (name))
+				PersistWatches ();
 		}
 		_ = RefreshWatchPadAsync ();
 	}
@@ -4567,6 +4779,7 @@ public partial class MainWindow : Window
 		if (debugSession is { IsActive: true } s && debugPaused) {
 			debugPaused = false;
 			ClearExecutionLineHighlight ();
+			ClearDataTips ();
 			_ = s.ContinueAsync ();
 			Output ("[debug] continue");
 		}
@@ -4576,6 +4789,7 @@ public partial class MainWindow : Window
 	// print "expr = value" in the Output pad (not paused → honest message).
 	void RunImmediate ()
 	{
+		HideImmediateCompletion ();
 		var expr = immediateInput?.Text?.Trim ();
 		if (string.IsNullOrEmpty (expr))
 			return;
@@ -4584,6 +4798,115 @@ public partial class MainWindow : Window
 			return;
 		}
 		_ = RunImmediateAsync (expr);
+	}
+
+	// Member completion for the Immediate input: typing "expr." evaluates the
+	// prefix over DAP and lists its members in a popup under the input; Tab/
+	// Enter (when selected) or a click commits "expr.<member>". Esc hides it.
+	Popup? immediatePopup;
+	ListBox? immediatePopupList;
+	string immediatePrefix = "";
+
+	void ImmediateInputKeyDown (object? sender, KeyEventArgs e)
+	{
+		if (immediatePopup is { IsVisible: true } && immediatePopupList is { Items.Count: > 0 }) {
+			switch (e.Key) {
+				case Key.Down:
+					immediatePopupList.SelectedIndex = Math.Min (immediatePopupList.Items.Count - 1, immediatePopupList.SelectedIndex + 1);
+					e.Handled = true;
+					return;
+				case Key.Up:
+					immediatePopupList.SelectedIndex = Math.Max (0, immediatePopupList.SelectedIndex - 1);
+					e.Handled = true;
+					return;
+				case Key.Escape:
+					HideImmediateCompletion ();
+					e.Handled = true;
+					return;
+				case Key.Tab:
+					CommitImmediateCompletion ();
+					e.Handled = true;
+					return;
+				case Key.Enter:
+					if (immediatePopupList.SelectedItem is not null) {
+						CommitImmediateCompletion ();
+						e.Handled = true;
+						return;
+					}
+					break;
+			}
+		}
+		if (e.Key == Key.Enter)
+			RunImmediate ();
+	}
+
+	public async System.Threading.Tasks.Task ImmediateMemberCompletionAsync () => await ImmediateMemberCompletionCore ();
+
+	async System.Threading.Tasks.Task ImmediateMemberCompletionCore ()
+	{
+		var text = immediateInput?.Text ?? "";
+		var caret = immediateInput?.CaretIndex ?? 0;
+		var upto = text.Substring (0, Math.Min (caret, text.Length));
+		int dot = upto.LastIndexOf ('.');
+		if (dot < 0 || debugSession is not { IsActive: true } sess || !debugPaused) {
+			HideImmediateCompletion ();
+			return;
+		}
+		var prefix = upto.Substring (0, dot);
+		if (prefix.Length == 0) {
+			HideImmediateCompletion ();
+			return;
+		}
+		var target = prefix.EndsWith (".", StringComparison.Ordinal) ? prefix.TrimEnd ('.') : prefix;
+		var ev = await sess.EvaluateAsync (target, sess.CurrentFrameId);
+		if (ev.Error is not null || !ev.HasChildren) {
+			HideImmediateCompletion ();
+			return;
+		}
+		var members = await sess.GetVariablesAsync (ev.VariablesReference);
+		if (members.Length == 0) {
+			HideImmediateCompletion ();
+			return;
+		}
+		immediatePrefix = prefix + ".";
+		immediatePopup ??= new Popup { PlacementTarget = immediateInput };
+		immediatePopupList ??= new ListBox { MaxHeight = 160, MinWidth = 240 };
+		immediatePopupList.Items.Clear ();
+		foreach (var m in members)
+			immediatePopupList.Items.Add (new ListBoxItem {
+				Tag = m.Name,
+				Content = new TextBlock { Text = $"{m.Name}  {m.Value}", FontSize = 11.5 },
+			});
+		immediatePopupList.SelectedIndex = 0;
+		// Rebind instead of re-subscribing: a plain += would stack a handler on
+		// every completion popup (double-commit on the second click).
+		immediatePopupList.DoubleTapped -= CommitImmediateCompletionHandler;
+		immediatePopupList.DoubleTapped += CommitImmediateCompletionHandler;
+		immediatePopup.Child = immediatePopupList;
+		immediatePopup.IsOpen = true;
+	}
+
+	void CommitImmediateCompletionHandler (object? sender, Avalonia.Input.TappedEventArgs e) => CommitImmediateCompletion ();
+
+	void CommitImmediateCompletion ()
+	{
+		if (immediatePopupList?.SelectedItem is ListBoxItem { Tag: string member } && immediateInput is not null) {
+			var caret = immediateInput.CaretIndex;
+			var text = immediateInput.Text ?? "";
+			var head = text.Substring (0, Math.Min (caret, text.Length));
+			int dot = head.LastIndexOf ('.');
+			var tail = caret < text.Length ? text.Substring (caret) : "";
+			var replaced = head.Substring (0, dot + 1) + member + tail;
+			immediateInput.Text = replaced;
+			immediateInput.CaretIndex = dot + 1 + member.Length;
+		}
+		HideImmediateCompletion ();
+	}
+
+	void HideImmediateCompletion ()
+	{
+		if (immediatePopup is { IsOpen: true })
+			immediatePopup.IsOpen = false;
 	}
 
 	async System.Threading.Tasks.Task RunImmediateAsync (string expr)
@@ -4605,6 +4928,7 @@ public partial class MainWindow : Window
 		if (debugSession is { IsActive: true } s && debugPaused) {
 			debugPaused = false;
 			ClearExecutionLineHighlight ();
+			ClearDataTips ();
 			switch (which) {
 				case "into": _ = s.StepIntoAsync (); break;
 				case "out": _ = s.StepOutAsync (); break;
@@ -4622,6 +4946,7 @@ public partial class MainWindow : Window
 		}
 		debugPaused = false;
 		ClearExecutionLineHighlight ();
+		ClearDataTips ();
 	}
 
 	// Legacy AttachToProcessHandler: pick a running process and debug it. The
@@ -4687,6 +5012,16 @@ public partial class MainWindow : Window
 				});
 		}
 		Output ("[threads] call stack of thread " + threadId + " — " + frames.Length + " frames");
+	}
+
+	// Legacy StackFrame selection: the Locals tree shows the selected frame's
+	// scope (scopes by frameId), like clicking a frame in the legacy Call Stack.
+	async System.Threading.Tasks.Task ShowFrameLocalsAsync (Services.DebugSessionService session, Services.DebugFrame frame)
+	{
+		var locals = await session.GetLocalsForFrameAsync (frame.Id);
+		FillVariableList (localsList, locals, "No locals");
+		SetPadVisible ("locals", true);
+		Output ("[frame] locals of " + frame.Method + " — " + locals.Length + " rows");
 	}
 
 	void StopBuildOrRun ()
