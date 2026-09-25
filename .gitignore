@@ -7,12 +7,7 @@
 
 #build stuff
 obj/
-/main/build
-/main/build/*.dll
-/main/build/*.pdb
-/main/build/*.deps.json
-/main/build/*.runtimeconfig.json
-/main/build/*.exe
+/main/build/*
 /main/build/Addins
 /main/build/bin
 /main/build/net10run

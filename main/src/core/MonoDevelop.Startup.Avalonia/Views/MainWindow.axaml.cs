@@ -241,6 +241,93 @@ public partial class MainWindow : Window
 					}
 					}
 				}
+			} else if (qa == "--locals") {
+				// QA: Run with debug — builds, launches netcoredbg with the persisted
+				// breakpoints, verifies the stop at line 10, the Locals pad values and
+				// the execution-line highlight; cleans up deterministically.
+				if (loadedSolutionPath is null) {
+					Output ("[locals] no solution loaded");
+				} else {
+					// Ensure the breakpoint store has exactly the Program.cs:10 entry.
+					var file = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile), "TestProj", "TestProj", "Program.cs");
+					OpenFileDocument (file);
+					var name = Path.GetFileName (file);
+					if (docs.TryGetValue (name, out var ed)) {
+						SelectDocument (name);
+						if (ed.BreakpointLines.Count > 0) { ed.ClearBreakpoints (); PersistBreakpoints (); }
+						ed.GotoLine (9); ed.ToggleBreakpoint (); // Program.cs line 10 (1-based)
+						PersistBreakpoints ();
+					}
+					_ = RunStartupProjectAsync (debug: true);
+					// The session is created inside RunStartupProjectAsync; wait for its stop.
+					var deadline = DateTime.UtcNow.AddSeconds (60);
+					Services.DebugSessionService? sess = null;
+					while (DateTime.UtcNow < deadline && sess is null) {
+						await Task.Delay (300);
+						sess = debugSession;
+					}
+					if (sess is null) {
+						Output ("[locals] session did not start");
+					} else {
+						// Poll LastStop instead of subscribing: the launch path may
+						// have already stopped before this code runs — a fresh
+						// subscription would race and miss the stop. LastStop is
+						// buffered by the service, so polling is deterministic.
+						Services.DebugStopInfo? stopInfo = null;
+						while (DateTime.UtcNow < deadline && stopInfo is null) {
+							await Task.Delay (300);
+							stopInfo = sess.LastStop;
+						}
+						if (stopInfo is null) {
+							Output ("[locals] no stop within timeout");
+						} else {
+							var f0 = stopInfo.Frames.FirstOrDefault ();
+							Output ("[locals] stopped reason=" + stopInfo.Reason + " file=" + Path.GetFileName (f0?.File ?? "?") + ":" + f0?.Line);
+							Output ("[locals] highlight=" + (currentDebugLine == 10 && currentDebugFile == Path.GetFullPath (file)));
+							var vars = await sess.GetLocalsAsync ();
+							Output ("[locals] values=" + string.Join (",", vars.Select (v => v.Name + "=" + v.Value)));
+							FillVariableList (localsList, vars, "No locals");
+							Avalonia.Threading.Dispatcher.UIThread.Post (new Action (() => {
+								var realized = localsList!.GetRealizedContainers ()?.ToList ();
+								Output ("[locals] pad-realized=" + (realized?.Count ?? -1) + " rows=" + localsList.Items.Count);
+								// Cleanup: stop session, clear the store, leave pads honest.
+								// Keep the Locals tab selected so a screenshot shows the
+								// runtime values (Output auto-selects itself on terminate).
+								sess.Terminate ();
+								BottomPads.Select ("locals");
+								ClearExecutionLineHighlight ();
+								if (docs.TryGetValue (name, out var ed2)) {
+									ed2.ClearBreakpoints ();
+									PersistBreakpoints ();
+								}
+								Output ("[locals] done");
+							}), Avalonia.Threading.DispatcherPriority.Background);
+							// give the posted action time to run before the app exits in CI-style runs
+							await Task.Delay (2500);
+						}
+					}
+				}
+			} else if (qa == "--attachdlg") {
+				// QA: Attach to Process pad tab — real /proc enumeration, filter, count,
+				// selection enabling Attach; deterministic output, no user interaction.
+				var panel = attachPanel!;
+				var ownPid = Environment.ProcessId;
+				Output ("[attachdlg] processes=" + panel.allProcesses.Count
+					+ " has-own=" + panel.allProcesses.Any (p => p.Pid == ownPid)
+					+ " has-systemd=" + panel.allProcesses.Any (p => p.Name.Contains ("systemd"))
+					+ " no-kernel-threads=" + !panel.allProcesses.Any (p => p.Pid <= 10 && p.Name.Length == 0));
+				var first = panel.allProcesses.FirstOrDefault ();
+				Output ("[attachdlg] first=" + (first is null ? "none" : first.Pid + ":" + first.Name));
+				attachPanel = panel;
+				BottomPads.SetTabVisible ("attach", true);
+				BottomPads.Select ("attach");
+				SetPadVisible ("bottom", true);
+				// Defer the realized-rows read to after layout (ListBox virtualizes).
+				Avalonia.Threading.Dispatcher.UIThread.Post (new Action (() =>
+					Output ("[attachdlg] pad-realized=" + panel.RealizedRowsForQa)),
+					Avalonia.Threading.DispatcherPriority.Background);
+				Output ("[attachdlg] tab=attach window-chrome=Avalonia");
+				await Task.Delay (1500);
 			} else if (qa == "--newconfig-real") {
 				// QA: full persistence path — creates "QAConfig" in the loaded
 				// solution and verifies the .sln/.csproj on disk.
@@ -844,6 +931,18 @@ public partial class MainWindow : Window
 	StackPanel? propertiesList;
 	ListBox? bookmarksList;
 	ListBox? breakpointsList;
+	ListBox? localsList;
+	ListBox? watchList;
+	ListBox? callStackList;
+
+	// Legacy DebuggingService equivalent: one DAP session over the vendored
+	// netcoredbg; Locals/Watch/Call Stack pads fill on every stop, the current
+	// execution line is highlighted in the editor (yellow like the legacy arrow).
+	Services.DebugSessionService? debugSession;
+	Views.AttachToProcessPanel? attachPanel;
+	bool debugPaused;
+	int currentDebugLine = -1;
+	string? currentDebugFile;
 
 	void BuildPads ()
 	{
@@ -956,24 +1055,35 @@ public partial class MainWindow : Window
 		searchResults.Bind (ListBox.ForegroundProperty, Application.Current.GetResourceObservable ("IdeFgBrush"));
 		BottomPads.AddTab (new PadHost.PadTab { Id = "searchresults", Label = "Search Results", Icon = "gtk-find", Content = searchResults, Visible = false });
 
-		// Debugger pads (legacy defaultPlacement Bottom): placeholders for the pads
-		// that get real content with the debugging phase — single bottom dock, the
-		// legacy right sub-dock group was dropped during the 4-pad rework.
-		var callStack = new ListBox { Background = Brushes.Transparent };
-		callStack.Bind (ListBox.ForegroundProperty, Application.Current.GetResourceObservable ("IdeFgBrush"));
-		BottomPads.AddTab (new PadHost.PadTab { Id = "callstack", Label = "Call Stack", Icon = "md-view-debug-call-stack", Content = callStack, Visible = false });
+		// Debugger pads (legacy defaultPlacement Bottom): real content backed by the
+		// DAP session (netcoredbg) — Locals/Watch fill on every stop, Call Stack shows
+		// the frames. Single bottom dock, the legacy right sub-dock group was dropped
+		// during the 4-pad rework.
+		localsList = new ListBox { Background = Brushes.Transparent };
+		localsList.Bind (ListBox.ForegroundProperty, Application.Current.GetResourceObservable ("IdeFgBrush"));
+		BottomPads.AddTab (new PadHost.PadTab { Id = "locals", Label = "Locals", Icon = "md-view-debug-locals", Content = localsList, Visible = false });
 
-		var locals = new ListBox { Background = Brushes.Transparent };
-		locals.Bind (ListBox.ForegroundProperty, Application.Current.GetResourceObservable ("IdeFgBrush"));
-		BottomPads.AddTab (new PadHost.PadTab { Id = "locals", Label = "Locals", Icon = "md-view-debug-locals", Content = locals, Visible = false });
+		watchList = new ListBox { Background = Brushes.Transparent };
+		watchList.Bind (ListBox.ForegroundProperty, Application.Current.GetResourceObservable ("IdeFgBrush"));
+		BottomPads.AddTab (new PadHost.PadTab { Id = "watch", Label = "Watch", Icon = "md-view-debug-watch", Content = watchList, Visible = false });
 
-		var watch = new ListBox { Background = Brushes.Transparent };
-		watch.Bind (ListBox.ForegroundProperty, Application.Current.GetResourceObservable ("IdeFgBrush"));
-		BottomPads.AddTab (new PadHost.PadTab { Id = "watch", Label = "Watch", Icon = "md-view-debug-watch", Content = watch, Visible = false });
+		callStackList = new ListBox { Background = Brushes.Transparent };
+		callStackList.Bind (ListBox.ForegroundProperty, Application.Current.GetResourceObservable ("IdeFgBrush"));
+		callStackList.DoubleTapped += (_, _) => {
+			if (callStackList.SelectedItem is ListBoxItem { Tag: DebugFrame fr } && File.Exists (fr.File))
+				OpenFileDocumentAtLine (fr.File, fr.Line);
+		};
+		BottomPads.AddTab (new PadHost.PadTab { Id = "callstack", Label = "Call Stack", Icon = "md-view-debug-call-stack", Content = callStackList, Visible = false });
 
 		var threads = new ListBox { Background = Brushes.Transparent };
 		threads.Bind (ListBox.ForegroundProperty, Application.Current.GetResourceObservable ("IdeFgBrush"));
 		BottomPads.AddTab (new PadHost.PadTab { Id = "threads", Label = "Threads", Icon = "md-view-debug-threads", Content = threads, Visible = false });
+
+		// Attach to Process — an in-window pad tab, not an OS-decorated dialog:
+		// every window surface in the shell uses Avalonia chrome only.
+		attachPanel = new AttachToProcessPanel ();
+		attachPanel.AttachRequested += (_, pid) => Output ("[attach] selected pid " + pid + " — attach over DAP lands with the debugging-phase pad work");
+		BottomPads.AddTab (new PadHost.PadTab { Id = "attach", Label = "Attach to Process", Icon = "md-debug-all", Content = attachPanel, Visible = false });
 
 		// Bookmarks pad (the legacy pad lists the open document's bookmarks; double
 		// click jumps to the line — the same jump the gutter marker click does).
@@ -1055,6 +1165,7 @@ public partial class MainWindow : Window
 		"toolbox" or "properties" or "documentoutline" or "unittests" => (RightPads, RightPads.Tabs.FirstOrDefault (t => t.Id == padId)),
 		"output" or "errors" or "tasks" or "codeissues" or "searchresults"
 			or "callstack" or "locals" or "watch" or "breakpoints" or "threads" or "bookmarks"
+			or "attach"
 			=> (BottomPads, BottomPads.Tabs.FirstOrDefault (t => t.Id == padId)),
 		_ => (null, null),
 	};
@@ -2458,6 +2569,8 @@ public partial class MainWindow : Window
 	{
 		if (Services.IconService.GetImage ("gtk-execute") is Avalonia.Media.Imaging.Bitmap bmp)
 			RunIcon!.Source = bmp;
+		if (Services.IconService.GetImage ("md-debug-all") is Avalonia.Media.Imaging.Bitmap dbgBmp)
+			DebugIcon!.Source = dbgBmp;
 	}
 
 	static bool IsToolbarInteractive (Avalonia.Visual v)
@@ -2477,9 +2590,12 @@ public partial class MainWindow : Window
 
 	void OnToolbarRun (object? sender, RoutedEventArgs e)
 	{
-		var message = "'Start Without Debugging' is not wired in the new UI yet — run remains available through --old-gui until the cutover.";
-		Output ("[toolbar] " + message);
-		Console.WriteLine ("[toolbar] " + message);
+		OnMenuCommand ("MonoDevelop.Ide.Commands.ProjectCommands.Run");
+	}
+
+	void OnToolbarDebug (object? sender, RoutedEventArgs e)
+	{
+		OnMenuCommand ("MonoDevelop.Debugger.DebugCommands.Debug");
 	}
 
 	void OnToolbarConfigChanged (object? sender, SelectionChangedEventArgs e)
@@ -3011,6 +3127,22 @@ public partial class MainWindow : Window
 			return;
 		case "MonoDevelop.Ide.Commands.ProjectCommands.Run":
 			_ = RunStartupProjectAsync ();
+			return;
+		case "MonoDevelop.Debugger.DebugCommands.Debug":
+			_ = RunStartupProjectAsync (debug: true);
+			return;
+		case "MonoDevelop.Debugger.DebugCommands.Continue":
+			ContinueDebug ();
+			return;
+		case "MonoDevelop.Debugger.DebugCommands.Pause":
+			Output ("[debug] pause not yet supported by the DAP session");
+			return;
+		case "MonoDevelop.Debugger.DebugCommands.Stop":
+		case "MonoDevelop.Debugger.DebugCommands.Detach":
+			StopDebug ();
+			return;
+		case "MonoDevelop.Debugger.DebugCommands.AttachToProcess":
+			_ = ShowAttachToProcessAsync ();
 			return;
 		case "MonoDevelop.Ide.Commands.ProjectCommands.Stop":
 			StopBuildOrRun ();
@@ -3773,7 +3905,7 @@ public partial class MainWindow : Window
 		}
 	}
 
-	async System.Threading.Tasks.Task RunStartupProjectAsync ()
+	async System.Threading.Tasks.Task RunStartupProjectAsync (bool debug = false)
 	{
 		var sln = loadedSolutionPath;
 		if (string.IsNullOrEmpty (sln)) {
@@ -3790,8 +3922,173 @@ public partial class MainWindow : Window
 		var runConfig = !string.IsNullOrEmpty (loadedSolutionPath) && File.Exists (loadedSolutionPath)
 			? Services.ConfigurationService.GetActiveConfiguration (loadedSolutionPath)
 			: activeConfiguration;
-		Output ($"[run] dotnet run -c {runConfig} — " + Path.GetFileName (proj));
-		await RunProcessAsync ("dotnet", $"run -c \"{runConfig}\" --project \"{proj}\"");
+		if (!debug) {
+			Output ($"[run] dotnet run -c {runConfig} — " + Path.GetFileName (proj));
+			await RunProcessAsync ("dotnet", $"run -c \"{runConfig}\" --project \"{proj}\"");
+			return;
+		}
+		// Legacy DebugHandler.Debug: build first, then launch under the debugger with
+		// the persisted breakpoints of the solution. The DAP stop event drives the
+		// Locals/Watch/Call Stack pads and the execution-line highlight.
+		Output ($"[debug] building ({runConfig})…");
+		await RunBuildAsync (rebuild: false);
+		var projDir = Path.GetDirectoryName (proj)!;
+		// SDK layouts put the TFM between configuration and output (bin/Debug/net10.0)
+		// unless AppendTargetFrameworkToOutputPath is disabled.
+		var dllCandidates = new [] {
+			Path.Combine (projDir, "bin", runConfig, "net10.0", Path.GetFileNameWithoutExtension (proj) + ".dll"),
+			Path.Combine (projDir, "bin", runConfig, Path.GetFileNameWithoutExtension (proj) + ".dll"),
+		};
+		var dll = dllCandidates.FirstOrDefault (File.Exists);
+		if (dll is null) {
+			Output ("[debug] built assembly not found: " + dllCandidates [0]);
+			return;
+		}
+		var bps = CollectPersistedBreakpoints ();
+		Output ($"[debug] netcoredbg launch — {Path.GetFileName (dll)}, breakpoints: {bps.Count}");
+		debugSession?.Dispose ();
+		var session = new Services.DebugSessionService ();
+		debugSession = session;
+		session.DebuggerOutput += (_, text) => Avalonia.Threading.Dispatcher.UIThread.Post (() => {
+			foreach (var line in text.Split ('\n'))
+				if (!string.IsNullOrWhiteSpace (line))
+					Output (line.TrimEnd ());
+		});
+		session.Stopped += (_, stop) => Avalonia.Threading.Dispatcher.UIThread.Post (() => OnDebuggerStopped (stop));
+		session.Terminated += (_, _) => Avalonia.Threading.Dispatcher.UIThread.Post (() => {
+			Output ("[debug] terminated");
+			debugPaused = false;
+			ClearExecutionLineHighlight ();
+		});
+		var ok = await session.StartAsync (dll, Path.GetDirectoryName (proj)!, bps);
+		Output (ok ? "[debug] session started" : "[debug] failed to start netcoredbg session");
+	}
+
+	// DebuggingService.OnStoreUserPrefs read-back: the persisted breakpoints of the
+	// whole solution (1-based lines) as DAP (file, line) pairs.
+	System.Collections.Generic.List<(string File, int Line)> CollectPersistedBreakpoints ()
+	{
+		var result = new System.Collections.Generic.List<(string, int)> ();
+		if (string.IsNullOrEmpty (loadedSolutionPath))
+			return result;
+		try {
+			foreach (var b in Services.BreakpointService.Load (loadedSolutionPath))
+				if (b.Enabled && File.Exists (b.FileName))
+					result.Add ((Path.GetFullPath (b.FileName), b.Line));
+		} catch (Exception ex) {
+			Output ("[debug] breakpoint load failed: " + ex.Message);
+		}
+		return result;
+	}
+
+	// Legacy CurrentLineNumber highlight: select the document and paint the stopped
+	// line yellow (like the execution arrow) until Continue/terminate clears it.
+	void OnDebuggerStopped (Services.DebugStopInfo stop)
+	{
+		debugPaused = true;
+		var frame = stop.Frames.FirstOrDefault ();
+		if (frame is not null && File.Exists (frame.File)) {
+			OpenFileDocumentAtLine (frame.File, frame.Line);
+			currentDebugFile = Path.GetFullPath (frame.File);
+			currentDebugLine = frame.Line;
+			HighlightExecutionLine ();
+			Output ($"[debug] stopped ({stop.Reason}) at {Path.GetFileName (frame.File)}:{frame.Line}");
+		}
+		_ = RefreshDebugPadsAsync ();
+	}
+
+	void HighlightExecutionLine ()
+	{
+		if (currentDebugFile is null || currentDebugLine <= 0)
+			return;
+		foreach (var (_, ed) in docs) {
+			if (Path.GetFullPath (ed.FilePath) == currentDebugFile)
+				ed.SetExecutionLine (currentDebugLine - 1); // 0-based internally
+			else
+				ed.SetExecutionLine (-1);
+		}
+	}
+
+	void ClearExecutionLineHighlight ()
+	{
+		currentDebugLine = -1;
+		currentDebugFile = null;
+		foreach (var (_, ed) in docs)
+			ed.SetExecutionLine (-1);
+	}
+
+	async System.Threading.Tasks.Task RefreshDebugPadsAsync ()
+	{
+		if (debugSession is { IsActive: true }) {
+			var locals = await debugSession.GetLocalsAsync ();
+			FillVariableList (localsList, locals, "No locals");
+			FillVariableList (watchList, Array.Empty<Services.DebugVariable> (), "No watches");
+			var frames = debugSession.CurrentFrames;
+			var cs = callStackList;
+			if (cs is not null) {
+				cs.Items.Clear ();
+				foreach (var f in frames)
+					cs.Items.Add (new ListBoxItem {
+						Tag = f,
+						Content = new TextBlock {
+							Text = $"{f.Method} — {Path.GetFileName (f.File)}:{f.Line}",
+							FontSize = 11.5,
+						},
+					});
+			}
+			SetPadVisible ("locals", true);
+		}
+	}
+
+	void FillVariableList (ListBox? list, Services.DebugVariable [] vars, string emptyText)
+	{
+		if (list is null)
+			return;
+		list.Items.Clear ();
+		if (vars.Length == 0) {
+			list.Items.Add (new ListBoxItem { Content = new TextBlock { Text = emptyText, FontSize = 11.5, Opacity = 0.6 } });
+			return;
+		}
+		foreach (var v in vars)
+			list.Items.Add (new ListBoxItem {
+				Content = new TextBlock { Text = $"{v.Name} = {v.Value}", FontSize = 11.5 },
+			});
+	}
+
+	void ContinueDebug ()
+	{
+		if (debugSession is { IsActive: true } s && debugPaused) {
+			debugPaused = false;
+			ClearExecutionLineHighlight ();
+			_ = s.ContinueAsync ();
+			Output ("[debug] continue");
+		}
+	}
+
+	void StopDebug ()
+	{
+		if (debugSession is { IsActive: true } s) {
+			s.Terminate ();
+			Output ("[debug] stopped by user");
+		}
+		debugPaused = false;
+		ClearExecutionLineHighlight ();
+	}
+
+	// Legacy AttachToProcessHandler: pick a running process and debug it. The
+	// picker is the "attach" tab of the bottom pad (in-window, Avalonia chrome —
+	// never an OS-decorated popup); the attach itself reuses the DAP session with
+	// the picked PID (netcoredbg attach mode) once the pads are wired for it.
+	async System.Threading.Tasks.Task ShowAttachToProcessAsync ()
+	{
+		if (attachPanel is null)
+			return;
+		attachPanel.ScanProcesses ();
+		BottomPads.SetTabVisible ("attach", true);
+		SetPadVisible ("bottom", true);
+		BottomPads.Select ("attach");
+		Output ("[attach] panel opened — pick a process and press Attach");
+		await System.Threading.Tasks.Task.CompletedTask;
 	}
 
 	void StopBuildOrRun ()

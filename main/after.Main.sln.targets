@@ -1,0 +1,47 @@
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+
+	<!--
+	Unified runtime staging (runs after every project build driven by Main.sln):
+
+	Everything the IDE needs to run lives in main/build — the Avalonia shell
+	compiles there directly and the GTK runtime (MonoDevelop.dll + its
+	dependencies, originally staged from build/net10run) lives in the same
+	folder. This target keeps it from going stale:
+
+	  1. If build/net10run still exists (local dev machines), sync every file
+	     from it into build/ EXCEPT the assemblies that must come from the
+	     build itself (Avalonia*.*, the AvaloniaShell output) — build wins.
+	  2. The freshly built MonoDevelop.dll (the GTK entrypoint guard) is
+	     copied from build/bin/net10.0 into build/.
+
+	The target is idempotent and cheap: SkipUnchangedFiles on both copies.
+	-->
+
+	<Target Name="StageUnifiedRuntime"
+	        AfterTargets="Build"
+	        Condition="'$(MSBuildProjectExtension)' == '.csproj' and
+		           ('$(MSBuildProjectName)' == 'MonoDevelop.Startup' or
+			    '$(MSBuildProjectName)' == 'MonoDevelop.Startup.Avalonia' or
+			    '$(MSBuildProjectName)' == 'MonoDevelop.Ide')">
+
+		<ItemGroup>
+			<_RuntimeFiles Include="$(MSBuildThisFileDirectory)build\net10run\**\*" />
+			<_AvaloniaOwned Include="$(MSBuildThisFileDirectory)build\Avalonia*.*" />
+			<_AvaloniaOwned Include="$(MSBuildThisFileDirectory)build\MonoDevelop.AvaloniaShell.*" />
+			<_StagingFiles Include="@(_RuntimeFiles)" Exclude="@(_AvaloniaOwned)" />
+		</ItemGroup>
+
+		<Copy SourceFiles="@(_StagingFiles)"
+		      DestinationFiles="@(_StagingFiles->'$(MSBuildThisFileDirectory)build\%(RecursiveDir)%(Filename)%(Extension)')"
+		      SkipUnchangedFiles="true"
+		      Condition="Exists('$(MSBuildThisFileDirectory)build\net10run')" />
+
+		<Copy SourceFiles="$(MSBuildThisFileDirectory)build\bin\net10.0\MonoDevelop.dll"
+		      DestinationFiles="$(MSBuildThisFileDirectory)build\MonoDevelop.dll"
+		      SkipUnchangedFiles="true"
+		      Condition="Exists('$(MSBuildThisFileDirectory)build\bin\net10.0\MonoDevelop.dll')" />
+
+		<Message Importance="low" Text="[StageUnifiedRuntime] unified runtime staged into main/build (from $(MSBuildProjectName))" />
+	</Target>
+
+</Project>

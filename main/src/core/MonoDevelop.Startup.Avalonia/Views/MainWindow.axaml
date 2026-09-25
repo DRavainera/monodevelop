@@ -34,6 +34,10 @@
                 Click="OnToolbarRun" ToolTip.Tip="Start Without Debugging (Ctrl F5)">
           <Image x:Name="RunIcon" Width="16" Height="16" />
         </Button>
+        <Button x:Name="DebugButton" Width="28" Height="22" Margin="0,0,8,0"
+                Click="OnToolbarDebug" ToolTip.Tip="Start Debugging (F5)">
+          <Image x:Name="DebugIcon" Width="16" Height="16" />
+        </Button>
         <ComboBox x:Name="RunConfigCombo" Width="150" Height="22" FontSize="12"
                   ToolTip.Tip="Run configuration" SelectionChanged="OnToolbarConfigChanged" />
         <ComboBox x:Name="ConfigCombo" Width="150" Height="22" FontSize="12" Margin="8,0"

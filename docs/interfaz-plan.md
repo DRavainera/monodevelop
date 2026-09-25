@@ -712,3 +712,75 @@ al stub `RemotingService.GetMarshaledUrl` (remoting eliminado en .NET 10) y la
 excepción subía hasta el handler fatal. Ahora el inicio y la publicación del
 servidor AutoTest degradan con aviso en consola y la sesión continúa sin
 autotest remoto (el transporte se rehará sobre el message bus en su fase).
+
+## M16 — Debugger: Locals/Watch con valores en runtime (netcoredbg DAP), Attach to Process y Run con debug
+
+**netcoredbg como submodule (regla: cero DLLs binarios externos):** fork de
+[Samsung/netcoredbg](https://github.com/Samsung/netcoredbg) →
+`DRavainera/netcoredbg`, agregado como submodule `main/external/netcoredbg`
+(.gitmodules, igual que debugger-libs/libgit2). Se compila desde fuente con
+cmake+clang (Makefiles: el generador ninja no tolera el `DEPENDS .../*.cs`
+glob literal de ManagedPart); el binario queda en
+`main/external/netcoredbg/build/src/netcoredbg` junto a su parte managed
+(ManagedPart.dll, Microsoft.CodeAnalysis.*). Los DLL que habían sido
+copiados a `main/build/netcoredbg/` fueron BORRADOS; `.gitignore` pierde las
+excepciones viejas. El SDK que el build de netcoredbg descarga a
+`main/external/netcoredbg/.dotnet/` queda ignorado por el `.gitignore` del
+propio submodule. Smoke test DAP de punta a punta con TestProj: launch →
+setBreakpoints(10) → stopped → Locals (`answer=42,greeting=null`). El
+adaptador exige `source.path` en setBreakpoints (sin él responde
+`key 'path' not found` y el breakpoint no se aplica).
+
+**DebugSessionService (`Services/DebugSessionService.cs`):** cliente DAP por
+stdio (initialize → launch → setBreakpoints → configurationDone), eventos
+stopped/terminated/output como C# events + `LastStop` bufferado (el launch y
+el QA corrían en paralelo: un suscriptor tardío perdía el stop — ahora el
+polling de `LastStop` es determinista). Stack/scopes/variables bajo demanda;
+`FindNetcoredbg` resuelve el binario del submodule caminando hacia arriba
+desde `AppContext.BaseDirectory`.
+
+**Pads Locals/Watch reales:** los tabs Locals y Watch del pad inferior se
+llenan en cada stop con los scopes/variables del frame 0 (`FillVariableList`
+con `Name = Value`, placeholder honesto si no hay sesión). `SetExecutionLine`
+en `SkTextEditor` pinta la línea de ejecución (fondo amarillo) y el gutter
+con el marcador; `ClearExecutionLineHighlight` al continuar/terminar. El bot
+ón Debug (icono bicho, junto al Run) y los comandos Debug/Continue/Stop del
+menú Run comparten la sesión; Debug respeta los breakpoints persistidos en
+.userprefs (los carga del store).
+
+**QA `--locals` (determinista):** carga la solución, abre Program.cs, pone
+breakpoint en la línea 10, lanza Debug (DAP) y verifica: `[debug] stopped
+(breakpoint) at Program.cs:10` → `[locals] stopped reason=breakpoint
+file=Program.cs:10` → `[locals] highlight=True` → `[locals]
+values=answer=42,greeting=null` → `[locals] pad-realized=2 rows=2` → cleanup
+(terminate + store limpio) → re-selecciona el tab Locals para capturas.
+Captura en repo: `docs/img/locals-pad.png`.
+
+**Attach to Process como TAB del pad (nada de ventanas con borde de OS):**
+`AttachToProcessDialog` (Window con SystemDecorations por defecto) fue
+REHECHO como `AttachToProcessPanel` (UserControl) dentro del pad inferior:
+tab "Attach to Process" (icono `md-debug-all`) con filtro, Refresh, contador
+"N of M processes", Close/Attach. Regla de la casa recordada: JAMÁS ventanas
+con borde del sistema operativo — todo chrome es Avalonia
+(`SystemDecorations=None` en las 15+ ventanas del shell). Enumeración real
+de /proc como el NetCoreProcessAttacher legacy (cmdline/comm, skip kernels/
+self, estado Sleeping/Running/… del /proc/<pid>/stat). El comando
+Run > Attach to Process abre el tab (ScanProcesses + Select). QA
+`--attachdlg`: `processes=603 has-own=False has-systemd=True
+no-kernel-threads=True` + `pad-realized=1` + `tab=attach
+window-chrome=Avalonia`. Captura: `docs/img/attach-to-process-pad.png`.
+
+**Staging automático del runtime GTK tras compilar Main.sln:**
+`main/after.Main.sln.targets` (enganchado desde `main/Directory.Build.targets`
+cuando la sln termina de compilar) ejecuta el target `StageUnifiedRuntime`:
+si `build/net10run` existe, copia a `main/build` solo lo más nuevo
+(MonoDevelop.dll/Core/Ide/Startup recién compilados, MonoRoslynCompat,
+Mono.Addins*, configs) — el runtime GTK de la carpeta unificada ya no se
+desincroniza de la compilación. `main/data/options/TipsOfTheDay.xml` se
+agregó al árbol fuente (la Welcome Page GTK lo necesita para la sección
+"Did you know?"; sin él el overlay crasheaba y el GTK caía al abrir).
+
+**Welcome Page del GTK legacy en vivo:** con TipsOfTheDay.xml en su sitio el
+arranque GTK muestra la welcome page real (logo, Solutions recientes, New/
+Open) — verificado en X11 con capturas; era el último bloqueo del arranque
+limpio del `--old-gui`.

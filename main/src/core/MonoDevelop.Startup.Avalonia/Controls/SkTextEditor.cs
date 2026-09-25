@@ -1745,6 +1745,16 @@ public class SkTextEditor : Control
 	// enable/disable per entry, gutter marker like the legacy red circle) -----
 	readonly Dictionary<int, bool> breakpointLines = new (); // line → enabled
 
+	// Current execution line (DebuggingService yellow arrow): -1 when not paused.
+	int executionLine = -1;
+
+	/// <summary>Sets/clears the execution-line highlight (0-based; -1 clears it).</summary>
+	public void SetExecutionLine (int line0Based)
+	{
+		executionLine = line0Based;
+		MarkDirty ();
+	}
+
 	/// <summary>Raised on any breakpoint change so MainWindow can persist the store.</summary>
 	public event EventHandler? BreakpointsChanged;
 
@@ -2286,6 +2296,12 @@ public class SkTextEditor : Control
 					using var selPaint = new SKPaint { Color = new SKColor (0x3a, 0x50, 0x98, 160), IsAntialias = false };
 					canvas.DrawRect (gutterW + 4 + c0 * charW, y, Math.Max (2, (c1 - c0) * charW), lineH, selPaint);
 				}
+			}
+
+			// execution line highlight (legacy CurrentLineNumber yellow arrow line)
+			if (i == executionLine) {
+				using var execPaint = new SKPaint { Color = new SKColor (0xe6, 0xd8, 0x3a, 90), IsAntialias = false };
+				canvas.DrawRect (gutterW, y, (float)Bounds.Width - gutterW, lineH, execPaint);
 			}
 
 			// segments with basic highlighting

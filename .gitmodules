@@ -52,3 +52,6 @@
 	path = main/external/vs-editor-api
 	url = https://github.com/DRavainera/vs-editor-api.git
 	branch = net10
+[submodule "main/external/netcoredbg"]
+	path = main/external/netcoredbg
+	url = https://github.com/DRavainera/netcoredbg.git

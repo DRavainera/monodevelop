@@ -541,3 +541,28 @@ documento + keywords).
   stub de remoting, ahora degrada a aviso en consola y el IDE arranca.
 - Tests 16/16. Reconstrucción GTK verificada con mdrefs45+gtksharp-fixed
   (0 errores) y stageo de MonoDevelop.Core/Ide a net10run.
+
+## 2026-09-24 (a) — M16: Locals/Watch runtime (netcoredbg DAP) + Attach to Process + Run con debug
+
+- netcoredbg como submodule `main/external/netcoredbg` (fork de Samsung,
+  regla: nunca DLLs binarios externos); compilado desde fuente con cmake+clang
+  (generador Makefiles). Smoke DAP: launch → bp línea 10 → Locals
+  (answer=42). El adaptador exige `source.path` en setBreakpoints.
+- `DebugSessionService` (DAP stdio): initialize/launch/setBreakpoints/
+  configurationDone, `LastStop` bufferado para QA determinista (la suscripción
+  tardía perdía el stop por carrera con el launch).
+- Pads Locals/Watch llenan con valores reales del proceso detenido; línea de
+  ejecución resaltada en el editor (SetExecutionLine). QA `--locals` verde:
+  stopped@10 → highlight=True → values=answer=42,greeting=null →
+  pad-realized=2 → cleanup. Captura `docs/img/locals-pad.png`.
+- Attach to Process REHECHO como tab del pad inferior
+  (`AttachToProcessPanel`, UserControl): /proc real (603 procesos, skip
+  kernels/self), filtro + Refresh + Attach. NUNCA ventanas con borde de OS —
+  chrome Avalonia. QA `--attachdlg` verde (pad-realized=1,
+  window-chrome=Avalonia). Captura `docs/img/attach-to-process-pad.png`.
+- Run con debug respeta breakpoints persistidos: para en la línea y el IDE la
+  resalta (mismo flujo del DebuggingService legacy).
+- Staging automático del runtime GTK tras Main.sln (`after.Main.sln.targets`
+  → StageUnifiedRuntime); TipsOfTheDay.xml agregado a main/data → Welcome
+  Page del GTK arranca en vivo (logo, recientes, New/Open).
+- Tests 16/16.

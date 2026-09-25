@@ -22,4 +22,15 @@
     </ItemGroup>
   </Target>
 
+
+  <!-- Unified runtime staging: when the build is driven by Main.sln (dotnet build
+       Main.sln), stage the GTK runtime (net10run) into main/build after the build
+       and keep the freshly built MonoDevelop.dll entrypoint in sync. The staging
+       target lives in after.Main.sln.targets and triggers only on the key
+       projects (Startup/Startup.Avalonia/Ide) so net472 tool projects that cannot
+       build in this setup don't affect it. -->
+  <Import Project="$(MSBuildThisFileDirectory)before.Main.sln.targets"
+          Condition="'$(IsGraphBuild)' != 'true' and '$(SolutionName)' == 'Main.sln'" />
+  <Import Project="$(MSBuildThisFileDirectory)after.Main.sln.targets"
+          Condition="'$(SolutionName)' == 'Main.sln'" />
 </Project>
