@@ -167,8 +167,11 @@ documento sucio a propósito para poder probar el diálogo visualmente
 | `--newproject` | New Project en modo add-to-solution (temp, no destructivo) | `[newproject]` |
 | `--bmkpad` | Pad Bookmarks: toggle/navegación/listado + menú contextual | `[bmkpad]` |
 | `--bkpad` | Pad Breakpoints: toggle/persistencia .userprefs/navegación (con `--keepbps` deja el estado para capturas) | `[bkpad]` |
-| `--locals` | Run con debug (netcoredbg DAP): parada en bp, resaltado, Locals reales, pads | `[locals]`/`[debug]` |
+| `--locals` | Run con debug (netcoredbg DAP): parada en bp, resaltado, Locals reales, threads/frames, evaluate | `[locals]`/`[debug]` |
 | `--attachdlg` | Tab Attach to Process: /proc real, filtro, Attach | `[attachdlg]` |
+| `--watch` | Pad Watch: evaluate DAP real, add/remove expresiones | `[watch]` |
+| `--condbp` | Breakpoint condicional + hit count: persistencia + DAP + parada | `[condbp]` |
+| `--attachreal` | Attach DAP real a un proceso .NET vivo + detach (proceso sobrevive) | `[attachreal]` |
 
 QA visual: los hooks se complementan con capturas X11 (`magick x:<win>`) para
 comparar la UI contra la legacy GTK en vivo (ver bitácoras en
@@ -212,11 +215,22 @@ comparar la UI contra la legacy GTK en vivo (ver bitácoras en
   Run > Debug lanzan la sesión DAP con los breakpoints persistidos: el
   proceso para en la línea y el editor la resalta (fondo amarillo); los pads
   Locals/Watch se llenan con los valores reales del frame detenido
-  (`Name = Value`). Continue/Stop reutilizan la sesión.
+  (`Name = Value`); Call Stack muestra los frames navegables (doble clic va
+  al frame) y Threads los threads reales (doble clic cambia el stack). El
+  Watch reevalúa sus expresiones en cada stop (evaluate DAP, add/remove con
+  menú del pad). Continue/Pause/Stop/Detach reutilizan la sesión; el attach
+  (comando DAP `attach` — el launch de netcoredbg ignora `mode=attach`)
+  pausa con el PID y el detach deja el proceso vivo.
 - **Attach to Process**: tab del pad inferior (NUNCA una ventana con borde
   de OS — todo el shell usa chrome Avalonia). Enumera procesos reales de
   /proc (cmdline/comm, skip kernels/self, estado de /proc/<pid>/stat) con
-  filtro, Refresh y Attach; Run > Attach to Process abre el tab.
+  filtro, Refresh y Attach; Run > Attach to Process abre el tab y Attach
+  ejecuta el attach DAP real al PID con los breakpoints persistidos.
+- **Breakpoints avanzados**: Condition…/Hit Count…/Tracepoint… en el menú del
+  pad; se persisten en `<sln>.userprefs` (`condition`/`hitcount`/
+  `tracepoint`, formato Mono.Debugging legacy) y viajan al adaptador DAP
+  (`condition`/`hitCondition`/`logMessage`). Las filas del pad muestran
+  `when <cond>`, `(hit N)` y `print: <msg>`.
 
 ## Estado del bucle de migración
 

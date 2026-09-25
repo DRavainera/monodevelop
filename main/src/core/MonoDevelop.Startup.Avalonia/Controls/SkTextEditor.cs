@@ -1760,10 +1760,41 @@ public class SkTextEditor : Control
 
 	public IReadOnlyDictionary<int, bool> BreakpointLines => breakpointLines;
 
+	// ----- Advanced breakpoint attributes (legacy Breakpoint.Condition / HitCount /
+	// Tracepoint): line → (condition expression, hit count, log message). Sent to
+	// the DAP adapter on every (re)launch and shown in the Breakpoints pad. -----
+	public sealed record BreakpointOptions (string? Condition = null, int? HitCount = null, string? LogMessage = null);
+	readonly Dictionary<int, BreakpointOptions> breakpointOptions = new (); // line (0-based) → attributes
+
+	/// <summary>Full store info: line (0-based) → enabled + attributes.</summary>
+	public IReadOnlyDictionary<int, (bool Enabled, BreakpointOptions Options)> Breakpoints
+		=> breakpointLines.ToDictionary (kv => kv.Key, kv => (kv.Value, breakpointOptions.TryGetValue (kv.Key, out var o) ? o : new BreakpointOptions ()));
+
+	/// <summary>Sets condition/hit count/log message for the breakpoint at a line
+	/// (0-based). Passing all-null clears the attributes.</summary>
+	public void SetBreakpointOptions (int line, string? condition, int? hitCount, string? logMessage)
+	{
+		if (!breakpointLines.ContainsKey (line))
+			return;
+		if (string.IsNullOrWhiteSpace (condition) && hitCount is null && string.IsNullOrWhiteSpace (logMessage))
+			breakpointOptions.Remove (line);
+		else
+			breakpointOptions [line] = new BreakpointOptions (
+				string.IsNullOrWhiteSpace (condition) ? null : condition.Trim (),
+				hitCount,
+				string.IsNullOrWhiteSpace (logMessage) ? null : logMessage.Trim ());
+		MarkDirty ();
+		BreakpointsChanged?.Invoke (this, EventArgs.Empty);
+	}
+
+	public BreakpointOptions? GetBreakpointOptions (int line)
+		=> breakpointOptions.TryGetValue (line, out var o) ? o : null;
+
 	public void ToggleBreakpoint ()
 	{
 		if (!breakpointLines.Remove (caretLine))
 			breakpointLines [caretLine] = true;
+		breakpointOptions.Remove (caretLine);
 		MarkDirty ();
 		BreakpointsChanged?.Invoke (this, EventArgs.Empty);
 	}
@@ -1779,6 +1810,7 @@ public class SkTextEditor : Control
 	public void RemoveBreakpoint (int line)
 	{
 		if (breakpointLines.Remove (line)) {
+			breakpointOptions.Remove (line);
 			MarkDirty ();
 			BreakpointsChanged?.Invoke (this, EventArgs.Empty);
 		}
@@ -1789,15 +1821,21 @@ public class SkTextEditor : Control
 		if (breakpointLines.Count == 0)
 			return;
 		breakpointLines.Clear ();
+		breakpointOptions.Clear ();
 		MarkDirty ();
 		BreakpointsChanged?.Invoke (this, EventArgs.Empty);
 	}
 
-	public void SetBreakpoints (IEnumerable<KeyValuePair<int, bool>> lines)
+	/// <summary>Restores a persisted store (0-based lines → enabled + attributes).</summary>
+	public void SetBreakpoints (IEnumerable<KeyValuePair<int, (bool Enabled, BreakpointOptions Options)>> lines)
 	{
 		breakpointLines.Clear ();
-		foreach (var (l, en) in lines)
+		breakpointOptions.Clear ();
+		foreach (var (l, (en, opts)) in lines) {
 			breakpointLines [l] = en;
+			if (opts.Condition is not null || opts.HitCount is not null || opts.LogMessage is not null)
+				breakpointOptions [l] = opts;
+		}
 		MarkDirty ();
 	}
 

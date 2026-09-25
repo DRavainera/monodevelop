@@ -784,3 +784,56 @@ agregó al árbol fuente (la Welcome Page GTK lo necesita para la sección
 arranque GTK muestra la welcome page real (logo, Solutions recientes, New/
 Open) — verificado en X11 con capturas; era el último bloqueo del arranque
 limpio del `--old-gui`.
+
+## M16b — Debugger avanzado: Threads/Call Stack reales, attach DAP real, Watch (evaluate) y breakpoints condicionales
+
+**Servicio DAP extendido (`DebugSessionService`):** `GetThreadsAsync` (DAP
+threads), `GetStackTraceAsync(threadId)` (20 niveles, para cualquier thread),
+`EvaluateAsync(expr, frameId)` (DAP evaluate, contexto watch; devuelve valor,
+variablesReference para hijos, o el error del adaptador), `PauseAsync
+(threadId?)` (DAP pause — netcoredbg acepta un thread id real; con el PID del
+proceso funciona en attach y emite stopped con allThreadsStopped) y
+`AttachAsync(pid, breakpoints)` — ahora sobre el comando DAP **attach**
+(núcleo del fix: el handler `launch` de netcoredbg IGNORA `mode=attach` y
+exige `program`; el attach real necesita el comando `attach` con
+`processId`). La respuesta de start se verifica (`success`), los breakpoints
+se envían con `condition`/`hitCondition`/`logMessage` por línea, y
+`Terminate` en sesión attach hace detach (el debuggee sobrevive; verificado).
+
+**Pads Threads y Call Stack reales:** en cada stop, `RefreshDebugPadsAsync`
+llena Call Stack con los frames del thread detenido (doble clic →
+`OpenFileDocumentAtLine`, navegación al frame como el pad legacy) y Threads
+con los threads reales marcando el detenido `(stopped)`; doble clic en un
+thread cambia el Call Stack a ese thread (`GetStackTraceAsync`). QA
+`--locals` ampliado: `threads=1 frames=1` tras el stop y `evaluate(answer)=42`
+(evaluate DAP real sobre el frame).
+
+**Watch con evaluate:** expresiones en `watchExpressions` (add/remove vía menú
+contextual del pad o doble clic, InputDialog con chrome Avalonia); el pad se
+reevalúa en cada stop contra el frame actual y muestra `expr = value`
+(`answer = 42`, `answer + 1 = 43`). QA `--watch`: rows=2 → remove → rows=1 →
+cleanup. Captura `docs/img/watch-pad.png` (pads Locals/Watch con valores del
+proceso). `MD_QA_HOLD=<secs>` mantiene el estado en pantalla para capturas.
+
+**Attach to Process real:** el Attach del tab lanza `AttachToProcessAsync`
+(AttachAsync con los breakpoints persistidos; `stopped` en el attach llena los
+pads). QA `--attachreal`: duerme un proceso .NET de larga vida
+(`/tmp/dotsleeper`), hace el attach real, pausa (PID como threadId, con
+reintentos — el runtime necesita un instante tras el attach), verifica
+`paused=True reason=pause`, `threads=3`, evaluate con error honesto del
+adaptador, y DETACH dejando el proceso vivo (`alive-after-detach=True`),
+como el DetachFromProcess legacy. El hook `--attachreal` mata el sleeper al
+final (QA no destructivo).
+
+**Breakpoints condicionales + hit count + tracepoints:** `BreakpointEntry`
+ampliado (Condition/HitCount/LogMessage) y persistidos en `<sln>.userprefs`
+como atributos `condition`/`hitcount`/`tracepoint` del XML de Mono.Debugging
+(compatibles con el IDE legacy); `SkTextEditor.Breakpoints` expone enabled +
+opciones por línea, `SetBreakpointOptions` los edita y el toggle/remove los
+limpia. Menú del pad Breakpoints: **Condition…**, **Hit Count…**,
+**Tracepoint…** (InputDialogs, vacío = limpiar) junto a los existentes; las
+filas del pad muestran `when <cond>`, `(hit N)` y `print: <msg>`. Al
+lanzar Debug/Attach los atributos viajan al adaptador (`condition`/
+`hitCondition`/`logMessage` de DAP). QA `--condbp`: persiste
+`cond=answer == 42 hit=3`, fila del pad `Program.cs:10 when answer == 42
+(hit 3)`, la sesión DAP arranca con ese breakpoint y para en la línea 10.

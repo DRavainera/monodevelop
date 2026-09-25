@@ -6,14 +6,20 @@ using System.Xml;
 
 namespace MonoDevelop.AvaloniaShell.Services;
 
-public record BreakpointEntry (string FileName, int Line, bool Enabled);
+/// <summary>One entry of the breakpoint store (legacy Breakpoint parity):
+/// file + 1-based line, enabled flag and the DAP-era attributes condition /
+/// hit count / tracepoint message (legacy BreakpointStore keeps them too).</summary>
+public record BreakpointEntry (string FileName, int Line, bool Enabled,
+	string? Condition = null, int? HitCount = null, string? LogMessage = null);
 
 /// <summary>
 /// Breakpoint persistence like the legacy DebuggingService.OnStoreUserPrefs:
 /// the &lt;sln&gt;.userprefs 'Properties' element keeps a
 /// &lt;MonoDevelop.Ide.DebuggingService.Breakpoints&gt; element containing
-/// &lt;Breakpoint file="…" relfile="…" line="…" column="1" [enabled="false"]/&gt;
-/// children — the same shape Mono.Debugging's BreakpointStore.Save/Load writes.
+/// &lt;Breakpoint file="…" relfile="…" line="…" column="1" [enabled="false"]
+/// [condition="…" hitcount="N" tracepoint="msg"]/&gt; children — the shape
+/// Mono.Debugging's BreakpointStore.Save/Load writes (extra attributes
+/// preserved so a real MonoDevelop can still read our store).
 /// </summary>
 public static class BreakpointService
 {
@@ -40,7 +46,14 @@ public static class BreakpointService
 					continue;
 				_ = int.TryParse (bp.GetAttribute ("line"), out var line);
 				var enabled = bp.GetAttribute ("enabled") != "false";
-				result.Add (new BreakpointEntry (file, line, enabled));
+				var condition = bp.GetAttribute ("condition");
+				if (condition.Length == 0)
+					condition = null;
+				int? hitCount = int.TryParse (bp.GetAttribute ("hitcount"), out var hc) && hc > 0 ? hc : null;
+				var trace = bp.GetAttribute ("tracepoint");
+				if (trace.Length == 0)
+					trace = null;
+				result.Add (new BreakpointEntry (file, line, enabled, condition, hitCount, trace));
 			}
 		} catch { /* corrupt prefs: empty store */ }
 		return result;
@@ -77,6 +90,12 @@ public static class BreakpointService
 			be.SetAttribute ("column", "1");
 			if (!bp.Enabled)
 				be.SetAttribute ("enabled", "false");
+			if (!string.IsNullOrEmpty (bp.Condition))
+				be.SetAttribute ("condition", bp.Condition);
+			if (bp.HitCount is int hit && hit > 0)
+				be.SetAttribute ("hitcount", hit.ToString ());
+			if (!string.IsNullOrEmpty (bp.LogMessage))
+				be.SetAttribute ("tracepoint", bp.LogMessage);
 			store.AppendChild (be);
 		}
 		root.AppendChild (store);

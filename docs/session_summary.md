@@ -566,3 +566,23 @@ documento + keywords).
   → StageUnifiedRuntime); TipsOfTheDay.xml agregado a main/data → Welcome
   Page del GTK arranca en vivo (logo, recientes, New/Open).
 - Tests 16/16.
+
+## 2026-09-24 (b) — M16b: Threads/Call Stack reales, attach DAP, Watch y breakpoints avanzados
+
+- Fix clave del attach: el handler `launch` de netcoredbg ignora
+  `mode=attach`; el attach real exige el comando DAP `attach` con
+  `processId`. Verificado con proceso .NET de larga vida: attach → pause
+  (PID como threadId, con reintentos) → `threads=3` → detach y el proceso
+  sobrevive (como DetachFromProcess legacy). QA `--attachreal`.
+- Pads Threads y Call Stack con datos reales de la sesión (threads con
+  `(stopped)`, frames navegables con doble clic). QA `--locals` ampliado
+  (`threads=1 frames=1`, `evaluate(answer)=42`).
+- Watch con evaluate DAP real: add/remove (menú del pad + InputDialog
+  Avalonia), reevaluación en cada stop. QA `--watch`: `answer = 42`,
+  `answer + 1 = 43`, remove → rows=1. Captura `docs/img/watch-pad.png`;
+  `MD_QA_HOLD` mantiene pads en pantalla para capturas.
+- Breakpoints condicionales + hit count + tracepoints: persisten en
+  .userprefs (`condition`/`hitcount`/`tracepoint`, formato Mono.Debugging),
+  menú Condition…/Hit Count…/Tracepoint…, filas `when … (hit N) print: …`,
+  y viajan al adaptador DAP. QA `--condbp` verde de punta a punta.
+- Tests 16/16.

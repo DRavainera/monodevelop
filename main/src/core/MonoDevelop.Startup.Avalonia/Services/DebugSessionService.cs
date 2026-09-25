@@ -26,6 +26,12 @@ public record DebugVariable (string Name, string Value, bool HasChildren, int Va
 /// <summary>One stack frame of the stopped thread (DAP StackFrame).</summary>
 public record DebugFrame (int Id, string Method, string File, int Line);
 
+/// <summary>One thread of the debuggee (DAP Thread).</summary>
+public record DebugThread (int Id, string Name, bool Stopped);
+
+/// <summary>Result of a DAP evaluate (Watch pad / hover eval).</summary>
+public record DebugEvaluation (string Value, bool HasChildren, int VariablesReference, string? Error);
+
 /// <summary>A parsed DAP message (response body or event body).</summary>
 public sealed class DapBody
 {
@@ -73,7 +79,32 @@ public sealed class DebugSessionService : IDisposable
 	public System.Collections.ObjectModel.ObservableCollection<string> OutputLog => outputLog;
 
 	public async Task<bool> StartAsync (string programPath, string workingDirectory, IEnumerable<(string File, int Line)> breakpoints)
+		=> await StartAsync (programPath, workingDirectory,
+			breakpoints.Select (b => (b.File, b.Line, (string?)null, (int?)null, (string?)null)));
+
+	public Task<bool> AttachAsync (int pid, IEnumerable<(string File, int Line)> breakpoints)
+		=> AttachAsync (pid, breakpoints.Select (b => (b.File, b.Line, (string?)null, (int?)null, (string?)null)));
+
+	public async Task<bool> StartAsync (string programPath, string workingDirectory, IEnumerable<(string File, int Line, string? Condition, int? HitCount, string? LogMessage)> breakpoints)
+		=> await StartCoreAsync (launchArgs => {
+			launchArgs ["program"] = programPath;
+			launchArgs ["cwd"] = workingDirectory;
+		}, breakpoints, attach: false);
+
+	/// <summary>Attach to a running process (legacy AttachToProcessHandler):
+	/// the adapter debugs the given PID instead of launching a program.</summary>
+	public Task<bool> AttachAsync (int pid, IEnumerable<(string File, int Line, string? Condition, int? HitCount, string? LogMessage)> breakpoints)
+		=> StartCoreAsync (launchArgs => {
+			launchArgs ["mode"] = "attach";
+			launchArgs ["processId"] = pid;
+		}, breakpoints, attach: true);
+
+	// Shared launch/attach path: start the adapter, initialize, launch|attach,
+	// push breakpoints (with condition/hitCondition/logMessage when present),
+	// configurationDone.
+	async Task<bool> StartCoreAsync (Action<Dictionary<string, object>> configureLaunch, IEnumerable<(string File, int Line, string? Condition, int? HitCount, string? LogMessage)> breakpoints, bool attach)
 	{
+		attachMode = attach;
 		if (IsActive)
 			Terminate ();
 		var dbg = FindNetcoredbg ();
@@ -83,7 +114,6 @@ public sealed class DebugSessionService : IDisposable
 			RedirectStandardError = true,
 			UseShellExecute = false,
 			CreateNoWindow = true,
-			WorkingDirectory = workingDirectory,
 		};
 		proc = Process.Start (psi);
 		if (proc is null)
@@ -93,18 +123,31 @@ public sealed class DebugSessionService : IDisposable
 		var init = await RequestAsync ("initialize", new Dictionary<string, object> { ["adapterID"] = "coreclr", ["threads"] = true });
 		if (init is null || !IsOk (init))
 			return false;
-		await RequestAsync ("launch", new Dictionary<string, object> {
+		var launchArgs = new Dictionary<string, object> {
 			["type"] = "coreclr",
 			["name"] = "MonoDevelop",
-			["program"] = programPath,
-			["cwd"] = workingDirectory,
 			["stopAtEntry"] = false,
-		});
+		};
+		configureLaunch (launchArgs);
+		// Attach uses the DAP "attach" command (netcoredbg's launch handler only
+		// launches: it requires "program" and ignores mode=attach).
+		var startResponse = await RequestAsync (attach ? "attach" : "launch", launchArgs);
+		if (startResponse is null || !IsOk (startResponse))
+			return false;
 		var byFile = breakpoints.GroupBy (b => b.File);
 		foreach (var g in byFile) {
 			await RequestAsync ("setBreakpoints", new Dictionary<string, object> {
 				["source"] = new Dictionary<string, object> { ["name"] = Path.GetFileName (g.Key), ["path"] = g.Key },
-				["breakpoints"] = g.Select (b => new Dictionary<string, object> { ["line"] = b.Line }).ToArray (),
+				["breakpoints"] = g.Select (b => {
+					var bp = new Dictionary<string, object> { ["line"] = b.Line };
+					if (!string.IsNullOrWhiteSpace (b.Condition))
+						bp ["condition"] = b.Condition!;
+					if (b.HitCount is int hit && hit > 0)
+						bp ["hitCondition"] = hit.ToString ();
+					if (!string.IsNullOrWhiteSpace (b.LogMessage))
+						bp ["logMessage"] = b.LogMessage!;
+					return (object)bp;
+				}).ToArray (),
 				["lines"] = g.Select (b => b.Line).ToArray (),
 			});
 		}
@@ -116,6 +159,64 @@ public sealed class DebugSessionService : IDisposable
 		=> await RequestAsync ("continue", new Dictionary<string, object> { ["threadId"] = lastStoppedThreadId });
 
 	int lastStoppedThreadId;
+
+	/// <summary>Legacy DebugCommands.Pause: break all threads of the debuggee.
+	/// netcoredbg accepts a real thread id (the process PID works at attach time)
+	/// and emits stopped(allThreadsStopped) — LastStop picks it up.</summary>
+	public async Task PauseAsync (int? threadId = null)
+	{
+		var tid = threadId ?? (lastStoppedThreadId > 0 ? lastStoppedThreadId : 1);
+		await RequestAsync ("pause", new Dictionary<string, object> { ["threadId"] = tid });
+	}
+
+	/// <summary>DAP threads — the Threads pad rows.</summary>
+	public async Task<DebugThread []> GetThreadsAsync ()
+	{
+		var res = await RequestAsync ("threads", new Dictionary<string, object> ());
+		var arr = res? ["body"]? ["threads"] as JsonArray;
+		if (arr is null)
+			return Array.Empty<DebugThread> ();
+		return arr.Select (t => new DebugThread (
+			t? ["id"]?.GetValue<int> () ?? 0,
+			t? ["name"]?.GetValue<string> () ?? "?",
+			(t? ["id"]?.GetValue<int> () ?? 0) == lastStoppedThreadId)).ToArray ();
+	}
+
+	/// <summary>DAP stackTrace for any thread (Call Stack pad rows).</summary>
+	public async Task<DebugFrame []> GetStackTraceAsync (int threadId)
+	{
+		var frames = await RequestAsync ("stackTrace", new Dictionary<string, object> { ["threadId"] = threadId, ["levels"] = 20, ["startFrame"] = 0 });
+		var arr = frames? ["body"]? ["stackFrames"] as JsonArray;
+		if (arr is null)
+			return Array.Empty<DebugFrame> ();
+		return arr.OfType<JsonObject> ().Select (f => new DebugFrame (
+			f ["id"]?.GetValue<int> () ?? 0,
+			f ["name"]?.GetValue<string> () ?? "?",
+			f ["source"]? ["path"]?.GetValue<string> () ?? "",
+			f ["line"]?.GetValue<int> () ?? 0)).ToArray ();
+	}
+
+	/// <summary>DAP evaluate — Watch pad rows and expression evaluation.
+	/// With a frameId the expression evaluates in that scope.</summary>
+	public async Task<DebugEvaluation> EvaluateAsync (string expression, int? frameId = null)
+	{
+		var args = new Dictionary<string, object> { ["expression"] = expression, ["context"] = "watch" };
+		if (frameId is int fid)
+			args ["frameId"] = fid;
+		var res = await RequestAsync ("evaluate", args);
+		if (res is null || !IsOk (res))
+			return new DebugEvaluation ("", false, 0, res? ["message"]?.GetValue<string> () ?? "evaluate failed");
+		var body = res ["body"] as JsonObject;
+		return new DebugEvaluation (
+			body? ["result"]?.GetValue<string> () ?? "",
+			(body? ["variablesReference"]?.GetValue<int> () ?? 0) > 0,
+			body? ["variablesReference"]?.GetValue<int> () ?? 0,
+			null);
+	}
+
+	/// <summary>Frame id of the current stop (Watch evaluates in this scope).</summary>
+	public int? CurrentFrameId
+		=> IsActive && lastFrames.Length > 0 ? lastFrames [0]! ["id"]?.GetValue<int> () : null;
 
 	public async Task<DebugVariable []> GetLocalsAsync ()
 	{
@@ -312,13 +413,20 @@ public sealed class DebugSessionService : IDisposable
 	{
 		try {
 			if (IsActive) {
-				_ = RequestAsync ("disconnect", new Dictionary<string, object> { ["terminateDebuggee"] = true });
+				// Detach when the session was an attach (legacy DetachFromProcess):
+				// the debuggee keeps running instead of being killed.
+				_ = RequestAsync (attachMode ? "disconnect" : "terminate", new Dictionary<string, object> { ["terminateDebuggee"] = !attachMode });
 				Thread.Sleep (300);
 			}
 		} catch { }
 		try { proc?.Kill (true); } catch { }
 		proc = null;
 	}
+
+	/// <summary>True when the session came from Attach to Process (Terminate then
+	/// detaches instead of killing the debuggee).</summary>
+	public bool IsAttach => attachMode;
+	bool attachMode;
 
 	public void Dispose () => Terminate ();
 }

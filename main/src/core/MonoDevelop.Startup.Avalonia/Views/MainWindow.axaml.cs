@@ -287,6 +287,14 @@ public partial class MainWindow : Window
 							var vars = await sess.GetLocalsAsync ();
 							Output ("[locals] values=" + string.Join (",", vars.Select (v => v.Name + "=" + v.Value)));
 							FillVariableList (localsList, vars, "No locals");
+							await RefreshDebugPadsAsync ();
+							Avalonia.Threading.Dispatcher.UIThread.Post (new Action (() =>
+								Output ("[locals] threads=" + (threadsList?.Items.Count ?? -1)
+									+ " frames=" + (callStackList?.Items.Count ?? -1))),
+								Avalonia.Threading.DispatcherPriority.Background);
+							var eval = await sess.EvaluateAsync ("answer", sess.CurrentFrameId);
+							Output ("[locals] evaluate(answer)=" + (eval.Error is null ? eval.Value : "ERR:" + eval.Error));
+							await Task.Delay (400);
 							Avalonia.Threading.Dispatcher.UIThread.Post (new Action (() => {
 								var realized = localsList!.GetRealizedContainers ()?.ToList ();
 								Output ("[locals] pad-realized=" + (realized?.Count ?? -1) + " rows=" + localsList.Items.Count);
@@ -306,6 +314,137 @@ public partial class MainWindow : Window
 							await Task.Delay (2500);
 						}
 					}
+				}
+			} else if (qa == "--watch") {
+				// QA: Watch pad — add watch expressions (legacy Watch pad add/remove),
+				// debug to a stop, verify evaluate in the frame context, cleanup.
+				var file = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile), "TestProj", "TestProj", "Program.cs");
+				OpenFileDocument (file);
+				var name = Path.GetFileName (file);
+				watchExpressions.Clear ();
+				watchExpressions.AddRange (new[] { "answer", "answer + 1" });
+				if (docs.TryGetValue (name, out var ed)) {
+					SelectDocument (name);
+					if (ed.BreakpointLines.Count > 0) { ed.ClearBreakpoints (); PersistBreakpoints (); }
+					ed.GotoLine (9); ed.ToggleBreakpoint ();
+					PersistBreakpoints ();
+				}
+				_ = RunStartupProjectAsync (debug: true);
+				var deadline = DateTime.UtcNow.AddSeconds (60);
+				while (DateTime.UtcNow < deadline && debugSession?.LastStop is null)
+					await Task.Delay (300);
+				if (debugSession?.LastStop is null) {
+					Output ("[watch] no stop within timeout");
+				} else {
+					await RefreshWatchPadAsync ();
+					Avalonia.Threading.Dispatcher.UIThread.Post (new Action (() => {
+						var rows = watchList!.Items.OfType<ListBoxItem> ()
+							.Select (i => (i.Content as TextBlock)?.Text ?? "").ToList ();
+						Output ("[watch] rows=" + rows.Count + " " + string.Join (" | ", rows));
+						watchExpressions.Remove ("answer + 1");
+						_ = RefreshWatchPadAsync ();
+						Avalonia.Threading.Dispatcher.UIThread.Post (new Action (() => {
+							Output ("[watch] after-remove rows=" + watchList!.Items.OfType<ListBoxItem> ().Count ());
+							debugSession!.Terminate ();
+							watchExpressions.Clear ();
+							ClearExecutionLineHighlight ();
+							if (docs.TryGetValue (name, out var ed2)) { ed2.ClearBreakpoints (); PersistBreakpoints (); }
+							Output ("[watch] done");
+						}), Avalonia.Threading.DispatcherPriority.Background);
+					}), Avalonia.Threading.DispatcherPriority.Background);
+					// MD_QA_HOLD=<secs> keeps the pads on screen for screenshots.
+					await Task.Delay (int.TryParse (Environment.GetEnvironmentVariable ("MD_QA_HOLD"), out var watchHold) && watchHold > 0 ? watchHold * 1000 : 2500);
+				}
+			} else if (qa == "--condbp") {
+				// QA: conditional + hit-count breakpoints — attributes set on the
+				// editor store, persisted to .userprefs with condition/hitcount,
+				// pushed to the DAP adapter (session starts OK and stops on the bp).
+				var file = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile), "TestProj", "TestProj", "Program.cs");
+				OpenFileDocument (file);
+				var name = Path.GetFileName (file);
+				if (docs.TryGetValue (name, out var ed)) {
+					SelectDocument (name);
+					if (ed.BreakpointLines.Count > 0) { ed.ClearBreakpoints (); PersistBreakpoints (); }
+					ed.GotoLine (9); ed.ToggleBreakpoint ();
+					ed.SetBreakpointOptions (9, "answer == 42", 3, null); // line 10 1-based
+					PersistBreakpoints ();
+					var stored = Services.BreakpointService.Load (loadedSolutionPath!)
+						.FirstOrDefault (b => Path.GetFullPath (b.FileName) == Path.GetFullPath (file));
+					Output ("[condbp] stored cond=" + (stored?.Condition ?? "none")
+						+ " hit=" + (stored?.HitCount?.ToString () ?? "none")
+						+ " enabled=" + (stored?.Enabled ?? false));
+					var rowText = lastBreakpointRowTexts.FirstOrDefault (t => t.Contains (":10"));
+					Output ("[condbp] pad-row=" + (rowText ?? "none"));
+				}
+				_ = RunStartupProjectAsync (debug: true);
+				var deadline2 = DateTime.UtcNow.AddSeconds (60);
+				while (DateTime.UtcNow < deadline2 && debugSession?.LastStop is null)
+					await Task.Delay (300);
+				var stop2 = debugSession?.LastStop;
+				var line2 = stop2?.Frames.FirstOrDefault ()?.Line ?? -1;
+				Output ("[condbp] stopped-at=" + line2 + " (bp line 10, cond answer==42, hit 3)");
+				debugSession?.Terminate ();
+				ClearExecutionLineHighlight ();
+				if (docs.TryGetValue (name, out var ed3)) { ed3.ClearBreakpoints (); PersistBreakpoints (); }
+				Output ("[condbp] done");
+			} else if (qa == "--attachreal") {
+				// QA: real DAP attach — launches a long-lived .NET process, attaches
+				// the session to its PID through the pad flow (AttachAsync), verifies
+				// attach + real threads, then detaches (process must survive) and
+				// kills the sleeper.
+				var sleeperHome = Path.Combine ("/tmp", "dotsleeper");
+				System.Diagnostics.Process? sleeper = null;
+				try {
+					sleeper = System.Diagnostics.Process.Start (new System.Diagnostics.ProcessStartInfo ("/home/daniel/.dotnet/dotnet", Path.Combine (sleeperHome, "bin", "Debug", "net10.0", "dotsleeper.dll")) {
+						UseShellExecute = false,
+						RedirectStandardOutput = true,
+					});
+					if (sleeper is not null)
+						_ = sleeper.StandardOutput.ReadLineAsync (); // wait for "sleeper-ready"
+					await Task.Delay (500);
+				} catch { }
+				if (sleeper is null) {
+					Output ("[attachreal] could not start sleeper");
+				} else {
+					await Task.Delay (300);
+					var bpFile = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile), "TestProj", "TestProj", "Program.cs");
+					debugSession?.Dispose ();
+					var session = new Services.DebugSessionService ();
+					debugSession = session;
+					var ok = await session.AttachAsync (sleeper.Id, Array.Empty<(string, int, string?, int?, string?)> ());
+					Output ("[attachreal] attach=" + ok + " pid=" + sleeper.Id + " alive-after-attach=" + !sleeper.HasExited);
+					Output ("[attachreal] is-attach=" + session.IsAttach);
+					// The legacy attach breaks the debuggee (DebuggingService.Pause):
+					// pause with the process PID as threadId — GetThreadsWithState
+					// lists threads only once the process is stopped. The runtime
+					// needs a beat after the attach before Stop() succeeds, so
+					// re-issue pause until the stopped event lands (deterministic).
+					Services.DebugStopInfo? stop = null;
+					var tDeadline = DateTime.UtcNow.AddSeconds (20);
+					while (DateTime.UtcNow < tDeadline && stop is null) {
+						await session.PauseAsync (sleeper.Id);
+						var inner = DateTime.UtcNow.AddSeconds (4);
+						while (DateTime.UtcNow < inner && stop is null) {
+							await Task.Delay (300);
+							stop = session.LastStop;
+						}
+					}
+					Output ("[attachreal] paused=" + (stop is not null) + " reason=" + (stop?.Reason ?? "none"));
+					var threads = Array.Empty<Services.DebugThread> ();
+					while (DateTime.UtcNow < tDeadline) {
+						threads = await session.GetThreadsAsync ();
+						if (threads.Length > 0)
+							break;
+						await Task.Delay (500);
+					}
+					Output ("[attachreal] threads=" + threads.Length + " first=" + (threads.FirstOrDefault ()?.Name ?? "none"));
+					var ev = await session.EvaluateAsync ("ticks", session.CurrentFrameId);
+					Output ("[attachreal] evaluate(ticks)=" + (ev.Error is null ? ev.Value : "ERR:" + ev.Error));
+					session.Terminate (); // detach: the sleeper must survive
+					await Task.Delay (500);
+					Output ("[attachreal] alive-after-detach=" + !sleeper.HasExited);
+					try { sleeper.Kill (true); } catch { }
+					Output ("[attachreal] done");
 				}
 			} else if (qa == "--attachdlg") {
 				// QA: Attach to Process pad tab — real /proc enumeration, filter, count,
@@ -940,6 +1079,7 @@ public partial class MainWindow : Window
 	// execution line is highlighted in the editor (yellow like the legacy arrow).
 	Services.DebugSessionService? debugSession;
 	Views.AttachToProcessPanel? attachPanel;
+	ListBox? threadsList;
 	bool debugPaused;
 	int currentDebugLine = -1;
 	string? currentDebugFile;
@@ -1065,6 +1205,11 @@ public partial class MainWindow : Window
 
 		watchList = new ListBox { Background = Brushes.Transparent };
 		watchList.Bind (ListBox.ForegroundProperty, Application.Current.GetResourceObservable ("IdeFgBrush"));
+		// Legacy Watch pad menu: Add Watch / Remove Watch; rows re-evaluate on stop.
+		watchList.ContextMenu = BookmarksMenu (
+			("Add Watch", null, AddWatchExpression),
+			("Remove Watch", null, RemoveSelectedWatch));
+		watchList.DoubleTapped += (_, _) => AddWatchExpression ();
 		BottomPads.AddTab (new PadHost.PadTab { Id = "watch", Label = "Watch", Icon = "md-view-debug-watch", Content = watchList, Visible = false });
 
 		callStackList = new ListBox { Background = Brushes.Transparent };
@@ -1075,14 +1220,20 @@ public partial class MainWindow : Window
 		};
 		BottomPads.AddTab (new PadHost.PadTab { Id = "callstack", Label = "Call Stack", Icon = "md-view-debug-call-stack", Content = callStackList, Visible = false });
 
-		var threads = new ListBox { Background = Brushes.Transparent };
-		threads.Bind (ListBox.ForegroundProperty, Application.Current.GetResourceObservable ("IdeFgBrush"));
-		BottomPads.AddTab (new PadHost.PadTab { Id = "threads", Label = "Threads", Icon = "md-view-debug-threads", Content = threads, Visible = false });
+		// Threads pad rows show real DAP threads; double click switches the Call
+		// Stack to that thread (legacy Threads pad behavior).
+		threadsList = new ListBox { Background = Brushes.Transparent };
+		threadsList.Bind (ListBox.ForegroundProperty, Application.Current.GetResourceObservable ("IdeFgBrush"));
+		threadsList.DoubleTapped += (_, _) => {
+			if (threadsList.SelectedItem is ListBoxItem { Tag: Services.DebugThread t } && debugSession is { IsActive: true } s)
+				_ = ShowThreadStackTraceAsync (s, t.Id);
+		};
+		BottomPads.AddTab (new PadHost.PadTab { Id = "threads", Label = "Threads", Icon = "md-view-debug-threads", Content = threadsList, Visible = false });
 
 		// Attach to Process — an in-window pad tab, not an OS-decorated dialog:
 		// every window surface in the shell uses Avalonia chrome only.
 		attachPanel = new AttachToProcessPanel ();
-		attachPanel.AttachRequested += (_, pid) => Output ("[attach] selected pid " + pid + " — attach over DAP lands with the debugging-phase pad work");
+		attachPanel.AttachRequested += (_, pid) => _ = AttachToProcessAsync (pid);
 		BottomPads.AddTab (new PadHost.PadTab { Id = "attach", Label = "Attach to Process", Icon = "md-debug-all", Content = attachPanel, Visible = false });
 
 		// Bookmarks pad (the legacy pad lists the open document's bookmarks; double
@@ -1346,10 +1497,14 @@ public partial class MainWindow : Window
 		RefreshBookmarksPad ();
 	}
 
-	// Legacy BreakpointPad menu subset: Go to / Enable-Disable / Remove / Clear all.
+	// Legacy BreakpointPad menu subset: Go to / Enable-Disable / Condition / Hit
+	// count / Tracepoint / Remove / Clear all.
 	ContextMenu BuildBreakpointsMenu () => BookmarksMenu (
 		("Go to Breakpoint", null, GoToSelectedBreakpoint),
 		("Enable/Disable Breakpoint", "md-breakpoint", ToggleSelectedBreakpointEnabled),
+		("Condition…", null, EditSelectedBreakpointCondition),
+		("Hit Count…", null, EditSelectedBreakpointHitCount),
+		("Tracepoint…", null, EditSelectedBreakpointLogMessage),
 		("Remove Breakpoint", null, RemoveSelectedBreakpoint),
 		("Clear All Breakpoints", "md-breakpoint-disable-all", () => { foreach (var ed in docs.Values) ed.ClearBreakpoints (); PersistBreakpoints (); RefreshBreakpointsPad (); }));
 
@@ -1394,6 +1549,58 @@ public partial class MainWindow : Window
 		RefreshBreakpointsPad ();
 	}
 
+	// Legacy EditBreakpointCommand dialogs: Condition / Hit count / Tracepoint
+	// message on the selected breakpoint (Breakpoint.Condition, .HitCount,
+	// .Tracepoint). Empty input clears the attribute.
+	async void EditSelectedBreakpointCondition ()
+	{
+		var (ed, line) = SelectedBreakpoint ();
+		if (ed is null)
+			return;
+		var current = ed.GetBreakpointOptions (line)?.Condition ?? "";
+		var dlg = new Views.InputDialog ("Breakpoint Condition", "Break only when this expression is true:", current);
+		await dlg.ShowDialog (this);
+		if (!dlg.Confirmed)
+			return;
+		var opts = ed.GetBreakpointOptions (line);
+		ed.SetBreakpointOptions (line, dlg.Value.Trim (), opts?.HitCount, opts?.LogMessage);
+		PersistBreakpoints ();
+		RefreshBreakpointsPad ();
+	}
+
+	async void EditSelectedBreakpointHitCount ()
+	{
+		var (ed, line) = SelectedBreakpoint ();
+		if (ed is null)
+			return;
+		var current = ed.GetBreakpointOptions (line)?.HitCount?.ToString () ?? "";
+		var dlg = new Views.InputDialog ("Breakpoint Hit Count", "Break when the hit count reaches (empty = always):", current);
+		await dlg.ShowDialog (this);
+		if (!dlg.Confirmed)
+			return;
+		int? hit = int.TryParse (dlg.Value.Trim (), out var n) && n > 0 ? n : null;
+		var opts = ed.GetBreakpointOptions (line);
+		ed.SetBreakpointOptions (line, opts?.Condition, hit, opts?.LogMessage);
+		PersistBreakpoints ();
+		RefreshBreakpointsPad ();
+	}
+
+	async void EditSelectedBreakpointLogMessage ()
+	{
+		var (ed, line) = SelectedBreakpoint ();
+		if (ed is null)
+			return;
+		var current = ed.GetBreakpointOptions (line)?.LogMessage ?? "";
+		var dlg = new Views.InputDialog ("Tracepoint Message", "Print this message instead of breaking (empty = break):", current);
+		await dlg.ShowDialog (this);
+		if (!dlg.Confirmed)
+			return;
+		var opts = ed.GetBreakpointOptions (line);
+		ed.SetBreakpointOptions (line, opts?.Condition, opts?.HitCount, dlg.Value.Trim ());
+		PersistBreakpoints ();
+		RefreshBreakpointsPad ();
+	}
+
 	// BreakpointPad refresh: rows across every open document (icon + file:line),
 	// with the disabled state like the legacy md-breakpoint-disabled stock.
 	public void RefreshBreakpointsPad ()
@@ -1405,12 +1612,18 @@ public partial class MainWindow : Window
 		var any = false;
 		lastBreakpointRowTexts.Clear ();
 		foreach (var (tag, ed) in docs.OrderBy (d => d.Key, StringComparer.OrdinalIgnoreCase)) {
-			foreach (var (line, enabled) in ed.BreakpointLines.OrderBy (b => b.Key)) {
+			foreach (var (line, (enabled, opts)) in ed.Breakpoints.OrderBy (b => b.Key)) {
 				any = true;
 				var panel = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
 				if (IconService.GetImage (enabled ? "md-breakpoint" : "md-breakpoint-disabled") is { } img)
 					panel.Children.Add (new Image { Source = img, Width = 16, Height = 16 });
 				var rowText = $"{Path.GetFileName (tag)}:{line + 1}" + (enabled ? "" : "  (disabled)");
+				if (opts.Condition is { Length: > 0 } cond)
+					rowText += $"  when {cond}";
+				if (opts.HitCount is int hit)
+					rowText += $"  (hit {hit})";
+				if (opts.LogMessage is { Length: > 0 } log)
+					rowText += $"  print: {log}";
 				lastBreakpointRowTexts.Add (rowText);
 				panel.Children.Add (new TextBlock {
 					Text = rowText,
@@ -1438,8 +1651,8 @@ public partial class MainWindow : Window
 			return;
 		var all = new List<Services.BreakpointEntry> ();
 		foreach (var ed in docs.Values.Where (d => !string.IsNullOrEmpty (d.FilePath)))
-			foreach (var (line, enabled) in ed.BreakpointLines)
-				all.Add (new Services.BreakpointEntry (ed.FilePath, line + 1, enabled)); // 1-based like Mono.Debugging
+			foreach (var (line, (enabled, opts)) in ed.Breakpoints)
+				all.Add (new Services.BreakpointEntry (ed.FilePath, line + 1, enabled, opts.Condition, opts.HitCount, opts.LogMessage)); // 1-based like Mono.Debugging
 		try {
 			Services.BreakpointService.Save (loadedSolutionPath, all);
 		} catch (Exception ex) {
@@ -1968,11 +2181,14 @@ public partial class MainWindow : Window
 					UpdateDocTabTitle (tag, docDirty: editor.IsDirty);
 			};
 			editor.BreakpointsChanged += OnEditorBreakpointsChanged;
-			// Restore the persisted breakpoints of this file (DebuggingService load path).
+			// Restore the persisted breakpoints of this file (DebuggingService load
+			// path), including condition/hit count/tracepoint attributes.
 			if (!string.IsNullOrEmpty (loadedSolutionPath)) {
 				var stored = Services.BreakpointService.Load (loadedSolutionPath)
 					.Where (b => Path.GetFullPath (b.FileName) == Path.GetFullPath (path))
-					.Select (b => new KeyValuePair<int, bool> (b.Line - 1, b.Enabled)); // 0-based internally
+					.Select (b => new KeyValuePair<int, (bool Enabled, Controls.SkTextEditor.BreakpointOptions Options)> (
+						b.Line - 1, // 0-based internally
+						(b.Enabled, new Controls.SkTextEditor.BreakpointOptions (b.Condition, b.HitCount, b.LogMessage))));
 				if (stored.Any ())
 					editor.SetBreakpoints (stored);
 			}
@@ -3133,10 +3349,12 @@ public partial class MainWindow : Window
 			return;
 		case "MonoDevelop.Debugger.DebugCommands.Continue":
 			ContinueDebug ();
-			return;
-		case "MonoDevelop.Debugger.DebugCommands.Pause":
-			Output ("[debug] pause not yet supported by the DAP session");
-			return;
+			return;			case "MonoDevelop.Debugger.DebugCommands.Pause":
+				if (debugSession is { IsActive: true } s && !debugPaused) {
+					_ = s.PauseAsync ();
+					Output ("[debug] pause requested");
+				}
+				return;
 		case "MonoDevelop.Debugger.DebugCommands.Stop":
 		case "MonoDevelop.Debugger.DebugCommands.Detach":
 			StopDebug ();
@@ -3964,17 +4182,18 @@ public partial class MainWindow : Window
 		Output (ok ? "[debug] session started" : "[debug] failed to start netcoredbg session");
 	}
 
-	// DebuggingService.OnStoreUserPrefs read-back: the persisted breakpoints of the
-	// whole solution (1-based lines) as DAP (file, line) pairs.
-	System.Collections.Generic.List<(string File, int Line)> CollectPersistedBreakpoints ()
+	// DebuggingService.OnStoreUserPrefs read-back: the persisted breakpoints of
+	// the whole solution (1-based lines) as DAP (file, line, condition, hit,
+	// log) tuples. Disabled breakpoints stay in the store but are not pushed.
+	System.Collections.Generic.List<(string File, int Line, string? Condition, int? HitCount, string? LogMessage)> CollectPersistedBreakpoints ()
 	{
-		var result = new System.Collections.Generic.List<(string, int)> ();
+		var result = new System.Collections.Generic.List<(string, int, string?, int?, string?)> ();
 		if (string.IsNullOrEmpty (loadedSolutionPath))
 			return result;
 		try {
 			foreach (var b in Services.BreakpointService.Load (loadedSolutionPath))
 				if (b.Enabled && File.Exists (b.FileName))
-					result.Add ((Path.GetFullPath (b.FileName), b.Line));
+					result.Add ((Path.GetFullPath (b.FileName), b.Line, b.Condition, b.HitCount, b.LogMessage));
 		} catch (Exception ex) {
 			Output ("[debug] breakpoint load failed: " + ex.Message);
 		}
@@ -4019,16 +4238,16 @@ public partial class MainWindow : Window
 
 	async System.Threading.Tasks.Task RefreshDebugPadsAsync ()
 	{
-		if (debugSession is { IsActive: true }) {
-			var locals = await debugSession.GetLocalsAsync ();
+		if (debugSession is { IsActive: true } sess) {
+			var locals = await sess.GetLocalsAsync ();
 			FillVariableList (localsList, locals, "No locals");
-			FillVariableList (watchList, Array.Empty<Services.DebugVariable> (), "No watches");
-			var frames = debugSession.CurrentFrames;
-			var cs = callStackList;
-			if (cs is not null) {
-				cs.Items.Clear ();
+			await RefreshWatchPadAsync ();
+			// Call Stack: frames of the stopped thread; double click navigates.
+			var frames = sess.CurrentFrames;
+			if (callStackList is not null) {
+				callStackList.Items.Clear ();
 				foreach (var f in frames)
-					cs.Items.Add (new ListBoxItem {
+					callStackList.Items.Add (new ListBoxItem {
 						Tag = f,
 						Content = new TextBlock {
 							Text = $"{f.Method} — {Path.GetFileName (f.File)}:{f.Line}",
@@ -4036,8 +4255,68 @@ public partial class MainWindow : Window
 						},
 					});
 			}
+			// Threads pad: real threads; the stopped one is marked.
+			if (threadsList is not null) {
+				var threads = await sess.GetThreadsAsync ();
+				threadsList.Items.Clear ();
+				foreach (var t in threads)
+					threadsList.Items.Add (new ListBoxItem {
+						Tag = t,
+						Content = new TextBlock {
+							Text = $"{t.Id}  {t.Name}" + (t.Stopped ? "  (stopped)" : ""),
+							FontSize = 11.5,
+						},
+					});
+			}
 			SetPadVisible ("locals", true);
 		}
+	}
+
+	// Watch pad: evaluate every watch expression in the current frame (the legacy
+	// Watch pad re-evaluates on each stop). Rows show "expr = value".
+	async System.Threading.Tasks.Task RefreshWatchPadAsync ()
+	{
+		var list = watchList;
+		if (list is null)
+			return;
+		list.Items.Clear ();
+		if (debugSession is not { IsActive: true } sess || watchExpressions.Count == 0) {
+			FillVariableList (list, Array.Empty<Services.DebugVariable> (), watchExpressions.Count == 0 ? "No watches" : "Not paused");
+			return;
+		}
+		var frameId = sess.CurrentFrameId;
+		foreach (var expr in watchExpressions) {
+			var ev = await sess.EvaluateAsync (expr, frameId);
+			list.Items.Add (new ListBoxItem {
+				Tag = expr,
+				Content = new TextBlock {
+					Text = $"{expr} = " + (ev.Error is null ? ev.Value : $"? ({ev.Error})"),
+					FontSize = 11.5,
+				},
+			});
+		}
+	}
+
+	// Watch expressions in insertion order (legacy Watch pad watch items).
+	readonly System.Collections.Generic.List<string> watchExpressions = new ();
+
+	async void AddWatchExpression ()
+	{
+		var dlg = new Views.InputDialog ("Add Watch", "Expression:");
+		await dlg.ShowDialog (this);
+		if (dlg.Confirmed) {
+			var expr = dlg.Value.Trim ();
+			if (expr.Length > 0 && !watchExpressions.Contains (expr))
+				watchExpressions.Add (expr);
+		}
+		await RefreshWatchPadAsync ();
+	}
+
+	void RemoveSelectedWatch ()
+	{
+		if (watchList?.SelectedItem is ListBoxItem { Tag: string expr })
+			watchExpressions.Remove (expr);
+		_ = RefreshWatchPadAsync ();
 	}
 
 	void FillVariableList (ListBox? list, Services.DebugVariable [] vars, string emptyText)
@@ -4077,8 +4356,7 @@ public partial class MainWindow : Window
 
 	// Legacy AttachToProcessHandler: pick a running process and debug it. The
 	// picker is the "attach" tab of the bottom pad (in-window, Avalonia chrome —
-	// never an OS-decorated popup); the attach itself reuses the DAP session with
-	// the picked PID (netcoredbg attach mode) once the pads are wired for it.
+	// never an OS-decorated popup).
 	async System.Threading.Tasks.Task ShowAttachToProcessAsync ()
 	{
 		if (attachPanel is null)
@@ -4089,6 +4367,56 @@ public partial class MainWindow : Window
 		BottomPads.Select ("attach");
 		Output ("[attach] panel opened — pick a process and press Attach");
 		await System.Threading.Tasks.Task.CompletedTask;
+	}
+
+	// AttachToProcessHandler.Run: attach the DAP session to the picked PID. The
+	// persisted breakpoints are pushed too; Terminate() then detaches (IsAttach)
+	// instead of killing the process, like the legacy DetachFromProcess.
+	async System.Threading.Tasks.Task AttachToProcessAsync (int pid)
+	{
+		Output ("[attach] attaching to pid " + pid + "…");
+		debugSession?.Dispose ();
+		var session = new Services.DebugSessionService ();
+		debugSession = session;
+		session.DebuggerOutput += (_, text) => Avalonia.Threading.Dispatcher.UIThread.Post (() => {
+			foreach (var line in text.Split ('\n'))
+				if (!string.IsNullOrWhiteSpace (line))
+					Output (line.TrimEnd ());
+		});
+		session.Stopped += (_, stop) => Avalonia.Threading.Dispatcher.UIThread.Post (() => OnDebuggerStopped (stop));
+		session.Terminated += (_, _) => Avalonia.Threading.Dispatcher.UIThread.Post (() => {
+			Output ("[debug] terminated");
+			debugPaused = false;
+			ClearExecutionLineHighlight ();
+		});
+		var bps = CollectPersistedBreakpoints ();
+		var ok = await session.AttachAsync (pid, bps);
+		Output (ok
+			? $"[attach] session attached to {pid} (breakpoints: {bps.Count})"
+			: "[attach] failed to attach — netcoredbg attach mode rejected the PID");
+		if (ok) {
+			SetPadVisible ("locals", true);
+			SetPadVisible ("threads", true);
+			// Show where the process is right now (netcoredbg stops it on attach).
+			var stop = session.LastStop;
+			if (stop is not null)
+				OnDebuggerStopped (stop);
+		}
+	}
+
+	// Legacy Threads pad double-click: switch the Call Stack pad to the thread.
+	async System.Threading.Tasks.Task ShowThreadStackTraceAsync (Services.DebugSessionService session, int threadId)
+	{
+		var frames = await session.GetStackTraceAsync (threadId);
+		if (callStackList is not null) {
+			callStackList.Items.Clear ();
+			foreach (var f in frames)
+				callStackList.Items.Add (new ListBoxItem {
+					Tag = f,
+					Content = new TextBlock { Text = $"{f.Method} — {Path.GetFileName (f.File)}:{f.Line}", FontSize = 11.5 },
+				});
+		}
+		Output ("[threads] call stack of thread " + threadId + " — " + frames.Length + " frames");
 	}
 
 	void StopBuildOrRun ()
