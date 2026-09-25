@@ -55,6 +55,9 @@ public sealed class DebugSessionService : IDisposable
 	// event races with the launch path; polling LastStop is deterministic.
 	public DebugStopInfo? LastStop => lastStopInfo;
 
+	/// <summary>Clears the buffered stop (QA: waiting for the NEXT stop, e.g. after a step).</summary>
+	public void ResetLastStop () => lastStopInfo = null;
+
 	public event EventHandler<DebugStopInfo>? Stopped;
 	public event EventHandler? Terminated;
 	public event EventHandler<string>? DebuggerOutput;
@@ -168,6 +171,17 @@ public sealed class DebugSessionService : IDisposable
 		var tid = threadId ?? (lastStoppedThreadId > 0 ? lastStoppedThreadId : 1);
 		await RequestAsync ("pause", new Dictionary<string, object> { ["threadId"] = tid });
 	}
+
+	// DAP stepping (legacy StepOver/StepInto/StepOut commands): next/stepIn/
+	// stepOut operate on the stopped thread; the stopped event follows.
+	public Task StepOverAsync ()
+		=> RequestAsync ("next", new Dictionary<string, object> { ["threadId"] = lastStoppedThreadId });
+
+	public Task StepIntoAsync ()
+		=> RequestAsync ("stepIn", new Dictionary<string, object> { ["threadId"] = lastStoppedThreadId });
+
+	public Task StepOutAsync ()
+		=> RequestAsync ("stepOut", new Dictionary<string, object> { ["threadId"] = lastStoppedThreadId });
 
 	/// <summary>DAP threads — the Threads pad rows.</summary>
 	public async Task<DebugThread []> GetThreadsAsync ()

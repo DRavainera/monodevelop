@@ -172,6 +172,9 @@ documento sucio a propósito para poder probar el diálogo visualmente
 | `--watch` | Pad Watch: evaluate DAP real, add/remove expresiones | `[watch]` |
 | `--condbp` | Breakpoint condicional + hit count: persistencia + DAP + parada | `[condbp]` |
 | `--attachreal` | Attach DAP real a un proceso .NET vivo + detach (proceso sobrevive) | `[attachreal]` |
+| `--step` | Stepping: Step Over desde el bp, highlight movido, pads refrescados | `[step]` |
+| `--tree` | Locals como árbol expandible (variablesReference, hijos lazy) | `[tree]` |
+| `--imm` | Immediate pad: evaluate en el frame + resultado en Output | `[immediate]`/`[imm]` |
 
 QA visual: los hooks se complementan con capturas X11 (`magick x:<win>`) para
 comparar la UI contra la legacy GTK en vivo (ver bitácoras en
@@ -231,6 +234,16 @@ comparar la UI contra la legacy GTK en vivo (ver bitácoras en
   `tracepoint`, formato Mono.Debugging legacy) y viajan al adaptador DAP
   (`condition`/`hitCondition`/`logMessage`). Las filas del pad muestran
   `when <cond>`, `(hit N)` y `print: <msg>`.
+- **Stepping y hover eval**: Step Over/Into/Out (F10/F11/Shift+F11) con
+  botones en la toolbar y menú Run completo (Debug F5, Continue, Pause,
+  Stop, Detach, Attach to Process). En pausa, el hover del editor muestra
+  `word = <valor DAP>` (evaluate en el frame actual) en lugar de la
+  descripción estática.
+- **Locals/Watch como árboles**: variables con hijos expanden lazy (DAP
+  variablesReference), como el árbol del pad legacy; Watch reevalúa sus
+  expresiones en cada stop.
+- **Immediate pad**: expresiones contra el proceso detenido (Enter o Run);
+  el resultado queda en el Output (`[immediate] <expr> = <valor>`).
 
 ## Estado del bucle de migración
 

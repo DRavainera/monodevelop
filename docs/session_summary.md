@@ -586,3 +586,21 @@ documento + keywords).
   menú Condition…/Hit Count…/Tracepoint…, filas `when … (hit N) print: …`,
   y viajan al adaptador DAP. QA `--condbp` verde de punta a punta.
 - Tests 16/16.
+
+## 2026-09-25 (a) — M16c: hover eval, stepping, árbol de variables, Immediate
+
+- Hover eval: en pausa, el tooltip del editor muestra `word = <valor DAP>`
+  (evaluate en el frame actual); sin pausa cae a la descripción Roslyn.
+- Stepping: Step Over/Into/Out (DAP next/stepIn/stepOut) con botones en la
+  toolbar (iconos legacy md-step-*-debug), menú Run completo con atajos
+  F10/F11/Shift+F5/F5 y dispatcher. QA `--step`: 13 → Step Over → 14 con
+  highlight movido y pads refrescados.
+- Locals/Watch como árboles expandibles: hijos lazy vía variablesReference.
+  QA `--tree`: roots=3, expandir List → 13 hijos (`_items = {int[4]}`).
+- Immediate pad: expresiones evaluadas en el frame, resultado en el Output
+  (`[immediate] answer + 1 = 43`, `greeting = "hello"`); sin sesión, mensaje
+  honesto. QA `--imm` verde.
+- Hallazgo documentado: un bp sobre una asignación para ANTES de ejecutarla
+  (locals 0/null); los QAs usan la línea de Console.WriteLine y esperan
+  CurrentFrameId antes de evaluar (sin frame → scope estático).
+- Tests 16/16.

@@ -4,10 +4,11 @@ using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
-using Avalonia;
-using Avalonia.Controls;
+using Avalonia;	using Avalonia.Controls;
+
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Controls.Primitives;
+using Avalonia.Controls.Templates;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Layout;
@@ -243,19 +244,21 @@ public partial class MainWindow : Window
 				}
 			} else if (qa == "--locals") {
 				// QA: Run with debug — builds, launches netcoredbg with the persisted
-				// breakpoints, verifies the stop at line 10, the Locals pad values and
-				// the execution-line highlight; cleans up deterministically.
+				// breakpoints, verifies the stop (line 13 = Console.WriteLine, where
+				// all locals are assigned — a bp on `int answer = 42;` stops BEFORE
+				// the assignment and the locals read 0/null), the Locals pad values,
+				// threads/frames and the execution-line highlight; cleans up.
 				if (loadedSolutionPath is null) {
 					Output ("[locals] no solution loaded");
 				} else {
-					// Ensure the breakpoint store has exactly the Program.cs:10 entry.
+					// Ensure the breakpoint store has exactly the Program.cs:13 entry.
 					var file = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile), "TestProj", "TestProj", "Program.cs");
 					OpenFileDocument (file);
 					var name = Path.GetFileName (file);
 					if (docs.TryGetValue (name, out var ed)) {
 						SelectDocument (name);
 						if (ed.BreakpointLines.Count > 0) { ed.ClearBreakpoints (); PersistBreakpoints (); }
-						ed.GotoLine (9); ed.ToggleBreakpoint (); // Program.cs line 10 (1-based)
+						ed.GotoLine (12); ed.ToggleBreakpoint (); // Program.cs line 13 (1-based)
 						PersistBreakpoints ();
 					}
 					_ = RunStartupProjectAsync (debug: true);
@@ -283,7 +286,7 @@ public partial class MainWindow : Window
 						} else {
 							var f0 = stopInfo.Frames.FirstOrDefault ();
 							Output ("[locals] stopped reason=" + stopInfo.Reason + " file=" + Path.GetFileName (f0?.File ?? "?") + ":" + f0?.Line);
-							Output ("[locals] highlight=" + (currentDebugLine == 10 && currentDebugFile == Path.GetFullPath (file)));
+							Output ("[locals] highlight=" + (currentDebugLine == 13 && currentDebugFile == Path.GetFullPath (file)));
 							var vars = await sess.GetLocalsAsync ();
 							Output ("[locals] values=" + string.Join (",", vars.Select (v => v.Name + "=" + v.Value)));
 							FillVariableList (localsList, vars, "No locals");
@@ -387,6 +390,111 @@ public partial class MainWindow : Window
 				ClearExecutionLineHighlight ();
 				if (docs.TryGetValue (name, out var ed3)) { ed3.ClearBreakpoints (); PersistBreakpoints (); }
 				Output ("[condbp] done");
+			} else if (qa == "--step") {
+				// QA: stepping — debug to the bp at line 10, Step Over twice (lines
+				// 11/12 across Console.WriteLine calls), verify the highlight moves
+				// and the pads refresh; then Continue to exit.
+				var file = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile), "TestProj", "TestProj", "Program.cs");
+				OpenFileDocument (file);
+				var name = Path.GetFileName (file);
+				if (docs.TryGetValue (name, out var ed)) {
+					SelectDocument (name);
+					if (ed.BreakpointLines.Count > 0) { ed.ClearBreakpoints (); PersistBreakpoints (); }
+					// Line 13 (1-based): Console.WriteLine — all locals are assigned by
+					// then (a bp on `int answer = 42;` stops BEFORE the assignment, so
+					// the locals would read 0/null like the real debugger).
+					ed.GotoLine (12); ed.ToggleBreakpoint ();
+					PersistBreakpoints ();
+				}
+				_ = RunStartupProjectAsync (debug: true);
+				var deadline = DateTime.UtcNow.AddSeconds (60);
+				while (DateTime.UtcNow < deadline && debugSession?.LastStop is null)
+					await Task.Delay (300);
+				Output ("[step] first-stop=" + (debugSession?.LastStop?.Frames.FirstOrDefault ()?.Line ?? -1));
+				foreach (var expect in new[] { 14 }) {
+					StepDebug ("over");
+					debugSession!.ResetLastStop ();
+					Services.DebugStopInfo? stepStop = null;
+					var stepDeadline = DateTime.UtcNow.AddSeconds (20);
+					while (DateTime.UtcNow < stepDeadline && stepStop is null) {
+						await Task.Delay (200);
+						stepStop = debugSession.LastStop;
+					}
+					var at = stepStop?.Frames.FirstOrDefault ()?.Line ?? -1;
+					Output ("[step] line=" + at + " expected=" + expect + " highlight=" + (currentDebugLine == at));
+				}
+				debugSession?.Terminate ();
+				ClearExecutionLineHighlight ();
+				if (docs.TryGetValue (name, out var ed2)) { ed2.ClearBreakpoints (); PersistBreakpoints (); }
+				Output ("[step] done");
+			} else if (qa == "--tree") {
+				// QA: expandable variable trees — debug to the bp, fill Locals, verify
+				// the tree roots and that a child expansion returns real rows.
+				var file = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile), "TestProj", "TestProj", "Program.cs");
+				OpenFileDocument (file);
+				var name = Path.GetFileName (file);
+				if (docs.TryGetValue (name, out var ed)) {
+					SelectDocument (name);
+					if (ed.BreakpointLines.Count > 0) { ed.ClearBreakpoints (); PersistBreakpoints (); }
+					ed.GotoLine (12); ed.ToggleBreakpoint (); // line 13: locals all assigned
+					PersistBreakpoints ();
+				}
+				_ = RunStartupProjectAsync (debug: true);
+				var deadline = DateTime.UtcNow.AddSeconds (60);
+				while (DateTime.UtcNow < deadline && debugSession?.LastStop is null)
+					await Task.Delay (300);
+				if (debugSession?.LastStop is null) {
+					Output ("[tree] no stop within timeout");
+				} else {
+					var locals = await debugSession!.GetLocalsAsync ();
+					FillVariableList (localsList, locals, "No locals");
+					Output ("[tree] roots=" + (localsList?.Items.Count ?? -1)
+						+ " first=" + ((localsList?.Items.OfType<VariableNode> ().FirstOrDefault ()?.Display) ?? "none"));
+					var withKids = localsList!.Items.OfType<VariableNode> ().FirstOrDefault (n => n.VariablesReference > 0);
+					if (withKids is null) {
+						Output ("[tree] no-expandable=False");
+					} else {
+						var kids = LoadVariableChildren (withKids).ToList ();
+						Output ("[tree] expand=" + kids.Count + " first-child=" + (kids.FirstOrDefault ()?.Display ?? "none"));
+					}
+					debugSession.Terminate ();
+					ClearExecutionLineHighlight ();
+					if (docs.TryGetValue (name, out var ed2)) { ed2.ClearBreakpoints (); PersistBreakpoints (); }
+					Output ("[tree] done");
+				}
+			} else if (qa == "--imm") {
+				// QA: Immediate pad — debug to the bp, run "answer + 1" and "greeting"
+				// through RunImmediate, verify the Output rows; also the no-session path.
+				RunImmediate (); // no session yet → honest error row
+				var file = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile), "TestProj", "TestProj", "Program.cs");
+				OpenFileDocument (file);
+				var name = Path.GetFileName (file);
+				if (docs.TryGetValue (name, out var ed)) {
+					SelectDocument (name);
+					if (ed.BreakpointLines.Count > 0) { ed.ClearBreakpoints (); PersistBreakpoints (); }
+					ed.GotoLine (12); ed.ToggleBreakpoint (); // line 13: locals all assigned
+					PersistBreakpoints ();
+				}
+				_ = RunStartupProjectAsync (debug: true);
+				var deadline = DateTime.UtcNow.AddSeconds (60);
+				while (DateTime.UtcNow < deadline && debugSession?.LastStop is null)
+					await Task.Delay (300);
+				if (debugSession?.LastStop is null) {
+					Output ("[imm] no stop within timeout");
+				} else {
+					// Wait for the stack to be pulled (CurrentFrameId) — evaluating
+					// without a frame falls back to the static scope (answer=0).
+					while (DateTime.UtcNow < deadline && debugSession!.CurrentFrameId is null)
+						await Task.Delay (100);
+					foreach (var expr in new[] { "answer + 1", "greeting" }) {
+						immediateInput!.Text = expr;
+						await RunImmediateAsync (expr);
+					}
+					debugSession!.Terminate ();
+					ClearExecutionLineHighlight ();
+					if (docs.TryGetValue (name, out var ed2)) { ed2.ClearBreakpoints (); PersistBreakpoints (); }
+					Output ("[imm] done");
+				}
 			} else if (qa == "--attachreal") {
 				// QA: real DAP attach — launches a long-lived .NET process, attaches
 				// the session to its PID through the pad flow (AttachAsync), verifies
@@ -1070,8 +1178,9 @@ public partial class MainWindow : Window
 	StackPanel? propertiesList;
 	ListBox? bookmarksList;
 	ListBox? breakpointsList;
-	ListBox? localsList;
-	ListBox? watchList;
+	TreeView? localsList;
+	TreeView? watchList;
+	TextBox? immediateInput;
 	ListBox? callStackList;
 
 	// Legacy DebuggingService equivalent: one DAP session over the vendored
@@ -1196,20 +1305,32 @@ public partial class MainWindow : Window
 		BottomPads.AddTab (new PadHost.PadTab { Id = "searchresults", Label = "Search Results", Icon = "gtk-find", Content = searchResults, Visible = false });
 
 		// Debugger pads (legacy defaultPlacement Bottom): real content backed by the
-		// DAP session (netcoredbg) — Locals/Watch fill on every stop, Call Stack shows
-		// the frames. Single bottom dock, the legacy right sub-dock group was dropped
-		// during the 4-pad rework.
-		localsList = new ListBox { Background = Brushes.Transparent };
-		localsList.Bind (ListBox.ForegroundProperty, Application.Current.GetResourceObservable ("IdeFgBrush"));
+		// DAP session (netcoredbg) — Locals/Watch are expandable trees (variables
+		// with children load lazily via variablesReference, like the legacy pad),
+		// Call Stack shows the frames. Single bottom dock, the legacy right sub-dock
+		// group was dropped during the 4-pad rework.
+		localsList = MakeVariableTree ();
 		BottomPads.AddTab (new PadHost.PadTab { Id = "locals", Label = "Locals", Icon = "md-view-debug-locals", Content = localsList, Visible = false });
 
-		watchList = new ListBox { Background = Brushes.Transparent };
-		watchList.Bind (ListBox.ForegroundProperty, Application.Current.GetResourceObservable ("IdeFgBrush"));
+		watchList = MakeVariableTree ();
 		// Legacy Watch pad menu: Add Watch / Remove Watch; rows re-evaluate on stop.
 		watchList.ContextMenu = BookmarksMenu (
 			("Add Watch", null, AddWatchExpression),
-			("Remove Watch", null, RemoveSelectedWatch));
-		watchList.DoubleTapped += (_, _) => AddWatchExpression ();
+			("Remove Watch", null, RemoveSelectedWatch));				VariableNode.Loader = LoadVariableChildren;
+
+			// Immediate pad: execute expressions against the stopped process, like
+		// the legacy Immediate window; results land in the Output pad.
+			var immediateHost = new DockPanel { LastChildFill = true };
+			var immediateGo = new Button { Content = "Run", Padding = new Thickness (10, 3) };
+			DockPanel.SetDock (immediateGo, Dock.Right);
+			immediateHost.Children.Add (immediateGo);
+			immediateInput = new TextBox { Watermark = "Expression (e.g. answer + 1)", FontSize = 12, VerticalContentAlignment = VerticalAlignment.Center };
+			immediateInput.KeyDown += (_, e) => {
+				if (e.Key == Key.Enter) { RunImmediate (); e.Handled = true; }
+			};
+			immediateGo.Click += (_, _) => RunImmediate ();
+			immediateHost.Children.Add (immediateInput);
+			BottomPads.AddTab (new PadHost.PadTab { Id = "immediate", Label = "Immediate", Icon = "md-command-window", Content = immediateHost, Visible = false });
 		BottomPads.AddTab (new PadHost.PadTab { Id = "watch", Label = "Watch", Icon = "md-view-debug-watch", Content = watchList, Visible = false });
 
 		callStackList = new ListBox { Background = Brushes.Transparent };
@@ -2181,6 +2302,14 @@ public partial class MainWindow : Window
 					UpdateDocTabTitle (tag, docDirty: editor.IsDirty);
 			};
 			editor.BreakpointsChanged += OnEditorBreakpointsChanged;
+			// Debugger hover eval: while paused, tooltips show the live value of the
+		// word under the mouse (DAP evaluate) instead of the static description.
+			editor.DebugHoverEval = word => {
+				if (!debugPaused || debugSession is not { IsActive: true } sess)
+					return null;
+				var ev = sess.EvaluateAsync (word, sess.CurrentFrameId).GetAwaiter ().GetResult ();
+				return ev.Error is null ? ev.Value : null;
+			};
 			// Restore the persisted breakpoints of this file (DebuggingService load
 			// path), including condition/hit count/tracepoint attributes.
 			if (!string.IsNullOrEmpty (loadedSolutionPath)) {
@@ -2787,6 +2916,20 @@ public partial class MainWindow : Window
 			RunIcon!.Source = bmp;
 		if (Services.IconService.GetImage ("md-debug-all") is Avalonia.Media.Imaging.Bitmap dbgBmp)
 			DebugIcon!.Source = dbgBmp;
+		SetIfAvailable (StepOverIcon, "md-step-over-debug");
+		SetIfAvailable (StepIntoIcon, "md-step-into-debug");
+		SetIfAvailable (StepOutIcon, "md-step-out-debug");
+	}
+
+	// Step icons fall back to the debug icon when the legacy PNG has no variant.
+	static void SetIfAvailable (Avalonia.Controls.Image? target, string stock)
+	{
+		if (target is null)
+			return;
+		if (Services.IconService.GetImage (stock) is Avalonia.Media.Imaging.Bitmap bmp)
+			target.Source = bmp;
+		else if (Services.IconService.GetImage ("md-debug-all") is Avalonia.Media.Imaging.Bitmap fallback)
+			target.Source = fallback;
 	}
 
 	static bool IsToolbarInteractive (Avalonia.Visual v)
@@ -2813,6 +2956,15 @@ public partial class MainWindow : Window
 	{
 		OnMenuCommand ("MonoDevelop.Debugger.DebugCommands.Debug");
 	}
+
+	void OnToolbarStepOver (object? sender, RoutedEventArgs e)
+		=> OnMenuCommand ("MonoDevelop.Debugger.DebugCommands.StepOver");
+
+	void OnToolbarStepInto (object? sender, RoutedEventArgs e)
+		=> OnMenuCommand ("MonoDevelop.Debugger.DebugCommands.StepInto");
+
+	void OnToolbarStepOut (object? sender, RoutedEventArgs e)
+		=> OnMenuCommand ("MonoDevelop.Debugger.DebugCommands.StepOut");
 
 	void OnToolbarConfigChanged (object? sender, SelectionChangedEventArgs e)
 	{
@@ -3350,15 +3502,24 @@ public partial class MainWindow : Window
 		case "MonoDevelop.Debugger.DebugCommands.Continue":
 			ContinueDebug ();
 			return;			case "MonoDevelop.Debugger.DebugCommands.Pause":
-				if (debugSession is { IsActive: true } s && !debugPaused) {
-					_ = s.PauseAsync ();
-					Output ("[debug] pause requested");
-				}
-				return;
-		case "MonoDevelop.Debugger.DebugCommands.Stop":
-		case "MonoDevelop.Debugger.DebugCommands.Detach":
-			StopDebug ();
+			if (debugSession is { IsActive: true } s && !debugPaused) {
+				_ = s.PauseAsync ();
+				Output ("[debug] pause requested");
+			}
 			return;
+			case "MonoDevelop.Debugger.DebugCommands.StepOver":
+				StepDebug ("over");
+				return;
+			case "MonoDevelop.Debugger.DebugCommands.StepInto":
+				StepDebug ("into");
+				return;
+			case "MonoDevelop.Debugger.DebugCommands.StepOut":
+				StepDebug ("out");
+				return;
+			case "MonoDevelop.Debugger.DebugCommands.Stop":
+			case "MonoDevelop.Debugger.DebugCommands.Detach":
+				StopDebug ();
+				return;
 		case "MonoDevelop.Debugger.DebugCommands.AttachToProcess":
 			_ = ShowAttachToProcessAsync ();
 			return;
@@ -4273,27 +4434,23 @@ public partial class MainWindow : Window
 	}
 
 	// Watch pad: evaluate every watch expression in the current frame (the legacy
-	// Watch pad re-evaluates on each stop). Rows show "expr = value".
+	// Watch pad re-evaluates on each stop). Roots are tree nodes — a watch with
+	// children expands like a Locals variable.
 	async System.Threading.Tasks.Task RefreshWatchPadAsync ()
 	{
-		var list = watchList;
-		if (list is null)
+		var tree = watchList;
+		if (tree is null)
 			return;
-		list.Items.Clear ();
+		tree.Items.Clear ();
 		if (debugSession is not { IsActive: true } sess || watchExpressions.Count == 0) {
-			FillVariableList (list, Array.Empty<Services.DebugVariable> (), watchExpressions.Count == 0 ? "No watches" : "Not paused");
+			tree.Items.Add (new VariableNode (watchExpressions.Count == 0 ? "No watches" : "Not paused", 0));
 			return;
 		}
 		var frameId = sess.CurrentFrameId;
 		foreach (var expr in watchExpressions) {
 			var ev = await sess.EvaluateAsync (expr, frameId);
-			list.Items.Add (new ListBoxItem {
-				Tag = expr,
-				Content = new TextBlock {
-					Text = $"{expr} = " + (ev.Error is null ? ev.Value : $"? ({ev.Error})"),
-					FontSize = 11.5,
-				},
-			});
+			var display = $"{expr} = " + (ev.Error is null ? ev.Value : $"? ({ev.Error})");
+			tree.Items.Add (new VariableNode (display, ev.HasChildren ? ev.VariablesReference : 0));
 		}
 	}
 
@@ -4314,10 +4471,81 @@ public partial class MainWindow : Window
 
 	void RemoveSelectedWatch ()
 	{
-		if (watchList?.SelectedItem is ListBoxItem { Tag: string expr })
-			watchExpressions.Remove (expr);
+		if (watchList?.SelectedItem is VariableNode node && node.Display is { Length: > 0 } d) {
+			var name = d.Split ('=') [0].Trim ();
+			watchExpressions.Remove (name);
+		}
 		_ = RefreshWatchPadAsync ();
 	}
+
+	// ----- Variable trees (Locals/Watch): expandable nodes like the legacy pad.
+	// A node with variablesReference > 0 shows a placeholder child; on expand the
+	// real children load from the DAP session (lazy, like Scope/Variables).
+	static TreeView MakeVariableTree ()
+	{
+		var tv = new TreeView { Background = Brushes.Transparent };
+		tv.Bind (TreeView.ForegroundProperty, Application.Current.GetResourceObservable ("IdeFgBrush"));
+		tv.ItemTemplate = new FuncTreeDataTemplate<VariableNode> (
+			(node, _) => new TextBlock { Text = node.Display },
+			node => node.LoadChildren ());
+		return tv;
+	}
+
+	// DAP child expansion for the trees: variables of a variablesReference, or
+	// the result of re-evaluating a watch expression (its children come from the
+	// evaluation result). The leaf marker keeps the expander honest.
+	System.Collections.Generic.IEnumerable<VariableNode> LoadVariableChildren (VariableNode node)
+	{
+		if (debugSession is not { IsActive: true } sess) {
+			node.MarkLoaded ();
+			return new[] { new VariableNode ("session ended", 0) };
+		}
+		var children = node.VariablesReference > 0
+			? sess.GetVariablesAsync (node.VariablesReference).GetAwaiter ().GetResult ()
+			: null;
+		node.MarkLoaded ();
+		if (children is null || children.Length == 0)
+			return new[] { new VariableNode ("(no children)", 0) };
+		return children.Select (v => NodeFor (v, v.Name));
+	}
+
+	public sealed class VariableNode
+	{
+		public string Display { get; }
+		public int VariablesReference { get; }
+		public bool Loaded { get; private set; }
+
+		public VariableNode (string display, int variablesReference)
+		{
+			Display = display;
+			VariablesReference = variablesReference;
+		}
+
+		public void MarkLoaded () => Loaded = true;
+
+		public System.Collections.Generic.IEnumerable<VariableNode> LoadChildren ()
+		=> Loader is null ? new VariableNode [0] : Loader (this) ?? new VariableNode [0];
+
+		// Hook set by MainWindow (needs the live session); static so the data
+		// template can call it without a reference to the window.
+		public static Func<VariableNode, System.Collections.Generic.IEnumerable<VariableNode>?>? Loader;
+	}
+
+	void FillVariableList (TreeView? tree, Services.DebugVariable [] vars, string emptyText)
+	{
+		if (tree is null)
+			return;
+		tree.Items.Clear ();
+		if (vars.Length == 0) {
+			tree.Items.Add (new VariableNode (emptyText, 0));
+			return;
+		}
+		foreach (var v in vars)
+			tree.Items.Add (NodeFor (v, v.Name));
+	}
+
+	static VariableNode NodeFor (Services.DebugVariable v, string label)
+		=> new ($"{label} = {v.Value}", v.HasChildren ? v.VariablesReference : 0);
 
 	void FillVariableList (ListBox? list, Services.DebugVariable [] vars, string emptyText)
 	{
@@ -4341,6 +4569,48 @@ public partial class MainWindow : Window
 			ClearExecutionLineHighlight ();
 			_ = s.ContinueAsync ();
 			Output ("[debug] continue");
+		}
+	}
+
+	// Legacy Immediate window: evaluate an expression in the current frame and
+	// print "expr = value" in the Output pad (not paused → honest message).
+	void RunImmediate ()
+	{
+		var expr = immediateInput?.Text?.Trim ();
+		if (string.IsNullOrEmpty (expr))
+			return;
+		if (debugSession is not { IsActive: true } sess) {
+			Output ($"[immediate] {expr} = ? (no active debug session)");
+			return;
+		}
+		_ = RunImmediateAsync (expr);
+	}
+
+	async System.Threading.Tasks.Task RunImmediateAsync (string expr)
+	{
+		if (debugSession is not { IsActive: true } sess) {
+			Output ($"[immediate] {expr} = ? (no active debug session)");
+			return;
+		}
+		var ev = await sess.EvaluateAsync (expr, sess.CurrentFrameId);
+		Output ($"[immediate] {expr} = " + (ev.Error is null ? ev.Value : $"? ({ev.Error})"));
+		if (ev.Error is null)
+			immediateInput?.Clear ();
+	}
+
+	// Legacy StepOver/StepInto/StepOut: DAP next/stepIn/stepOut on the stopped
+	// thread; the following stopped event re-highlights and refreshes the pads.
+	void StepDebug (string which)
+	{
+		if (debugSession is { IsActive: true } s && debugPaused) {
+			debugPaused = false;
+			ClearExecutionLineHighlight ();
+			switch (which) {
+				case "into": _ = s.StepIntoAsync (); break;
+				case "out": _ = s.StepOutAsync (); break;
+				default: _ = s.StepOverAsync (); break;
+			}
+			Output ("[debug] step " + which);
 		}
 	}
 

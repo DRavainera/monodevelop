@@ -83,7 +83,7 @@ internal static class Program
 			.FirstOrDefault (a =>
 				a is "--about" or "--prefs" or "--addins" or "--find" or "--build" or "--run"
 					or "--goto" or "--tasks" or "--tool" or "--editops" or "--windocs" or "--navhist"
-					or "--bookmarks" or "--addref" or "--brace" or "--buildone" or "--mcaret" or "--fmt" or "--diff" or "--fold" or "--viewcmds" or "--bubbles" or "--compl" or "--tool" or "--ctxmenu" or "--filter" or "--props" or "--dirtyfiles" or "--editqa" or "--totd" or "--progress" or "--encodings" or "--newconfig" or "--newconfig-real" or "--openimport" or "--activeconfig" or "--newproject" or "--bmkpad" or "--bkpad" or "--locals" or "--attachdlg" or "--watch" or "--condbp" or "--attachreal"
+					or "--bookmarks" or "--addref" or "--brace" or "--buildone" or "--mcaret" or "--fmt" or "--diff" or "--fold" or "--viewcmds" or "--bubbles" or "--compl" or "--tool" or "--ctxmenu" or "--filter" or "--props" or "--dirtyfiles" or "--editqa" or "--totd" or "--progress" or "--encodings" or "--newconfig" or "--newconfig-real" or "--openimport" or "--activeconfig" or "--newproject" or "--bmkpad" or "--bkpad" or "--locals" or "--attachdlg" or "--watch" or "--condbp" or "--attachreal" or "--step" or "--tree" or "--imm"
 				|| a.StartsWith ("--prefs=", StringComparison.Ordinal)
 				|| a.StartsWith ("--gotoline", StringComparison.Ordinal)) ?? "";
 

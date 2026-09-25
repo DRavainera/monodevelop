@@ -837,3 +837,43 @@ lanzar Debug/Attach los atributos viajan al adaptador (`condition`/
 `hitCondition`/`logMessage` de DAP). QA `--condbp`: persiste
 `cond=answer == 42 hit=3`, fila del pad `Program.cs:10 when answer == 42
 (hit 3)`, la sesión DAP arranca con ese breakpoint y para en la línea 10.
+
+## M16c — Hover eval, stepping (F10/F11), árbol de variables e Immediate
+
+**Hover eval en el editor (debugger tooltip):** `SkTextEditor.DebugHoverEval`
+es el gancho que MainWindow instala por documento; en pausa, el tooltip de
+hover muestra `word = <valor DAP>` (evaluate en el frame actual, icono
+`md-debug-all`) en lugar de la descripción estática Roslyn — el pipeline del
+legacy TooltipProvider + debugger tooltip. Sin sesión en pausa, cae a la
+descripción normal. `ShowDebugTooltipForQa` ejercita el mismo popup para QA
+visual.
+
+**Stepping:** `StepOver/StepInto/StepOutAsync` (DAP next/stepIn/stepOut sobre
+el thread detenido); botones en la toolbar junto a Debug (iconos legacy
+`md-step-over-debug`/`md-step-into-debug`/`md-step-out-debug` con fallback),
+menú Run completo (Debug F5, Step Over F10, Step Into F11, Step Out Shift
+F11, Continue, Pause, Stop Debugging Shift F5, Detach, Attach to Process), y
+dispatcher para `DebugCommands.StepOver/StepInto/StepOut`. El stopped event
+de cada paso re-resalta la línea y refresca los pads. QA `--step`: bp en la
+línea 13 (Console.WriteLine — con el bp sobre `int answer = 42;` el stop es
+ANTES de la asignación y los locals leen 0/null, como un debugger real),
+Step Over → 14 con highlight movido.
+
+**Árbol de variables (Locals/Watch):** los pads son TreeViews
+(`MakeVariableTree` + `VariableNode`); un nodo con `variablesReference > 0`
+carga sus hijos LAZY al expandir (DAP variables), igual que el árbol del pad
+legacy. Watch reevalúa sus expresiones como raíces expandibles. QA `--tree`:
+roots=3 (`answer = 42`, …), expandir el List → 13 hijos (`_items =
+{int[4]}`, …).
+
+**Immediate pad:** tab del pad inferior con TextBox + Run (Enter también
+ejecuta); cada expresión se evalúa en el frame detenido (DAP evaluate) y el
+resultado queda en el Output como `[immediate] <expr> = <valor>` (o el error
+del adaptador); sin sesión → mensaje honesto. QA `--imm`: sin sesión →
+mensaje; en pausa: `answer + 1 = 43`, `greeting = "hello"`.
+
+**Lección de determinismo documentada:** el stop sobre una línea de
+asignación ocurre ANTES de ejecutarla (bp en `int answer = 42;` ⇒
+answer=0); los QAs usan la línea de Console.WriteLine y esperan
+`CurrentFrameId` antes de evaluar — evaluar sin frame cae al scope estático
+(answer=0/1).

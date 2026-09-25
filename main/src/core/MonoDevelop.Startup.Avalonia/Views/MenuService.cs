@@ -377,7 +377,18 @@ public static class MenuService
 			Item ("Start Without Debugging", icon: "gtk-execute", shortcut: "Ctrl F5", click: Command ("MonoDevelop.Ide.Commands.ProjectCommands.Run")),
 			Sub ("Run With", new List<MenuEntry> { Item ("(Default)", disabled: true) }, autoHide: true),
 			Sep (),
-			Item ("_Stop", icon: "gtk-stop", shortcut: "Shift F5", click: Command ("MonoDevelop.Ide.Commands.ProjectCommands.Stop")),
+			Item ("_Debug", icon: "md-debug-all", shortcut: "F5", click: Command ("MonoDevelop.Debugger.DebugCommands.Debug")),
+			Item ("Ste_p Over", icon: "md-step-over", shortcut: "F10", click: Command ("MonoDevelop.Debugger.DebugCommands.StepOver")),
+			Item ("Step _Into", icon: "md-step-into", shortcut: "F11", click: Command ("MonoDevelop.Debugger.DebugCommands.StepInto")),
+			Item ("Step O_ut", icon: "md-step-out", shortcut: "Shift F11", click: Command ("MonoDevelop.Debugger.DebugCommands.StepOut")),
+			Item ("_Continue", icon: "md-play", shortcut: "Alt F5", click: Command ("MonoDevelop.Debugger.DebugCommands.Continue")),
+			Item ("_Pause", icon: "md-pause", click: Command ("MonoDevelop.Debugger.DebugCommands.Pause")),
+			Sep (),
+			Item ("_Stop Debugging", icon: "gtk-stop", shortcut: "Shift F5", click: Command ("MonoDevelop.Debugger.DebugCommands.Stop")),
+			Item ("De_tach", icon: "md-detach", click: Command ("MonoDevelop.Debugger.DebugCommands.Detach")),
+			Item ("Attach to Process...", icon: "md-debug-attach", click: Command ("MonoDevelop.Debugger.DebugCommands.AttachToProcess")),
+			Sep (),
+			Item ("_Stop", icon: "gtk-stop", shortcut: "Ctrl Shift F5", click: Command ("MonoDevelop.Ide.Commands.ProjectCommands.Stop")),
 		}
 	};
 

@@ -38,6 +38,18 @@
                 Click="OnToolbarDebug" ToolTip.Tip="Start Debugging (F5)">
           <Image x:Name="DebugIcon" Width="16" Height="16" />
         </Button>
+        <Button x:Name="StepOverButton" Width="28" Height="22" Margin="0,0,4,0"
+                Click="OnToolbarStepOver" ToolTip.Tip="Step Over (F10)">
+          <Image x:Name="StepOverIcon" Width="16" Height="16" />
+        </Button>
+        <Button x:Name="StepIntoButton" Width="28" Height="22" Margin="0,0,4,0"
+                Click="OnToolbarStepInto" ToolTip.Tip="Step Into (F11)">
+          <Image x:Name="StepIntoIcon" Width="16" Height="16" />
+        </Button>
+        <Button x:Name="StepOutButton" Width="28" Height="22" Margin="0,0,8,0"
+                Click="OnToolbarStepOut" ToolTip.Tip="Step Out (Shift F11)">
+          <Image x:Name="StepOutIcon" Width="16" Height="16" />
+        </Button>
         <ComboBox x:Name="RunConfigCombo" Width="150" Height="22" FontSize="12"
                   ToolTip.Tip="Run configuration" SelectionChanged="OnToolbarConfigChanged" />
         <ComboBox x:Name="ConfigCombo" Width="150" Height="22" FontSize="12" Margin="8,0"

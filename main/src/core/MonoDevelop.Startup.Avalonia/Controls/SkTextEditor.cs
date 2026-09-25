@@ -267,12 +267,44 @@ public class SkTextEditor : Control
 		var info = GetHoverInfo (hoverPoint);
 		if (info is null)
 			return;
+		// Debugger hover eval (legacy TooltipProvider + debugger tooltip): while a
+		// debug session is paused, the tooltip shows the live value of the word.
+		if (DebugHoverEval is { } eval) {
+			var (word, _, _) = WordAtPoint (hoverPoint);
+			var value = eval (word);
+			if (value is not null)
+				info = (info.Value.Header, $"{word} = {value}", "md-debug-all");
+		}
 		hoverPopup ??= new EditorTooltipPopup ();
 		// Screen coordinates: the popup is a top-level window, so the editor-relative
 		// point must be translated through PointToScreen (showing it at parent.Position
 		// + point landed on the wrong pad when the editor is offset).
 		var screenPt = this.PointToScreen (hoverPoint);
 		hoverPopup.ShowAtScreen (PopupOwner, screenPt, info.Value.Header, info.Value.Description, info.Value.Icon);
+	}
+
+	/// <summary>Debugger hover-eval hook: when paused, MainWindow plugs a callback
+	/// that returns the live value of a word (DAP evaluate) or null to fall back
+	/// to the Roslyn description (legacy debugger tooltip behavior).</summary>
+	public Func<string, string?>? DebugHoverEval { get; set; }
+
+	/// <summary>QA pipeline: shows the hover tooltip for a word using the debug
+	/// eval hook (same popup as the pointer pipeline).</summary>
+	public void ShowDebugTooltipForQa (string word, string value)
+	{
+		if (PopupOwner is null)
+			return;
+		hoverPopup ??= new EditorTooltipPopup ();
+		for (int i = 0; i < lines.Count; i++) {
+			int col = lines [i].IndexOf (word, StringComparison.Ordinal);
+			if (col < 0)
+				continue;
+			var pt = new Point (
+				GutterWidth () + 4 + (col + word.Length / 2.0) * FontSize * 0.6,
+				(i - scrollLines + 0.5) * LineHeight);
+			hoverPopup.ShowAtScreen (PopupOwner, this.PointToScreen (pt), word, $"{word} = {value}", "md-debug-all");
+			return;
+		}
 	}
 
 	/// <summary>Word under an editor-relative point (legacy GetItem: offset → word).</summary>
