@@ -4,7 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
 
-namespace MonoDevelop.AvaloniaShell.Services;
+namespace MonoDevelop.Ide.Services;
 
 /// <summary>
 /// Port of the legacy CommentTasksView scanning: reads the comment tags from the

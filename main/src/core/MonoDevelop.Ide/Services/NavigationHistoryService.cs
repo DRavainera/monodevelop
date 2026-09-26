@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace MonoDevelop.AvaloniaShell.Services;
+namespace MonoDevelop.Ide.Services;
 
 /// <summary>
 /// Navigation history service (legacy IdeServices.NavigationHistoryService):

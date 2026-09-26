@@ -1,5 +1,5 @@
 using System;
-using MonoDevelop.AvaloniaShell.Controls;
+using MonoDevelop.Ide.Controls;
 using Xunit;
 
 namespace AvaloniaShell.Editor.Tests;

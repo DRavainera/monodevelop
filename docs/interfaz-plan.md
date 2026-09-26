@@ -926,3 +926,102 @@ add/remove y al cerrar el workspace. La config activa ya persistía
 (`MonoDevelop.Ide.Workspace/ActiveConfiguration`) y `RefreshConfigurationSelectors`
 la restaura al abrir. QA `--persistqa`: cierra y reabre la solución →
 `watch-exprs=answer + 1 restored-pad=True`, `bp@13=True`, `config=Debug`.
+
+## M16e — Integración estructural (Services/Controls → MonoDevelop.Ide, debug → MonoDevelop.Debugger), Watch editable in-place con reevaluación por step, gutter con hover y pinned watches como burbujas
+
+**Integración estructural (sin módulos duplicados ni carpeta `Avalonia/`):**
+los módulos propios del shell dejaron de vivir en `Startup.Avalonia` y ahora
+están integrados PLANOS junto a los demás módulos del proyecto, con `git mv`
+(historial limpio):
+
+- `Startup.Avalonia/Services/*` → `main/src/core/MonoDevelop.Ide/Services/`
+  (10 servicios, ns `MonoDevelop.Ide.Services`).
+- `Startup.Avalonia/Controls/*` → `main/src/core/MonoDevelop.Ide/Controls/`
+  (SkTextEditor, PadHost, CompletionPopup, EditorTooltipPopup; ns
+  `MonoDevelop.Ide.Controls`).
+- Los servicios de debug → `main/src/addins/MonoDevelop.Debugger/` junto a
+  `PinnedWatch*.cs` (WatchService, BreakpointService, DebugSessionService; ns
+  `MonoDevelop.Debugger.Services`).
+- `Startup.Avalonia` queda con XAML + code-behind que conecta (Views/), como
+  pide la regla de migración: la lógica se transfiere para que el código de
+  Avalonia esté integrado al resto del proyecto. Mientras la superficie
+  Avalonia de `MonoDevelop.Ide` no tome el mando, el csproj del shell compila
+  esas fuentes con `<Compile Include="..">` — fuente única, sin copias.
+  GTK/Gdk/Mono.Cairo siguen intactos (legacy que se retira tras 9.x) y los
+  módulos no-GTK no se duplicaron ni reemplazaron.
+
+**Watch pad con edición in-place (paridad del Watch pad legacy):** doble clic
+sobre una fila o el menú "Edit Watch…" pone un TextBox inline SOBRE la fila
+(`container.Header = box` sobre el `TreeViewItem` realizado cuyo DataContext
+es el nodo seleccionado — `GetRealizedContainers()`, sin SelectedIndex).
+Enter confirma por el camino compartido `CommitWatchExpressionAsync`
+(reemplaza la expresión ANTIGUA en su misma posición preservando el orden,
+dedup, persiste en `.userprefs` y reevalúa el pad); Esc cancela con rollback;
+LostFocus cierra. La reevaluación automática ya existía por stop
+(`RefreshDebugPadsAsync` en cada evento stopped) y ahora se demuestra que
+cubre los steps sin refresco manual. QA `--watchedit` (bp en la línea 10:
+`answer` aún es 0):
+
+```
+[watchedit] initial=answer = 0
+[watchedit] inline-editor=True
+[watchedit] after-esc=answer = 0 kept=True          # Esc → rollback
+[watchedit] after-commit=answer + 1 = 1 order-kept=True
+[watchedit] after-step=answer + 1 = 43 reevaluated=True  # 1 StepOver y el pad solo
+[watchedit] done
+```
+
+**Gutter con hover (paridad del editor legacy):** mover el puntero por el
+gutter resalta la línea bajo el cursor (banda alpha 28 sobre la fila completa
++ refuerzo alpha 26 en la franja de breakpoints), la franja de iconos muestra
+cursor de mano y tooltip "Line N — click to toggle breakpoint" (el resto del
+gutter muestra solo "Line N"), y `OnPointerExited` limpia banda, cursor y
+tooltip. El pipeline de tooltip de palabra queda desactivado sobre el gutter
+(no compiten). `GutterHover`/`ClearGutterHover`/`SimulateGutterHoverForQa`
+exponen el estado para QA/servicios. QA `--gutterbp` ampliado (además del
+toggle/persistencia/data tip de M16d):
+
+```
+[gutterbp] hover-line=12 hand=True tip='Line 12 — click to toggle breakpoint'
+[gutterbp] hover-cleared=True tip-removed=True
+```
+
+**Pinned watches como burbujas (paridad del PinnedWatch legacy):** "Pin
+Watch" en el menú contextual del editor fija la palabra bajo el caret
+(`WordAtCaret`) a la línea actual (`TogglePinnedWatch`, toggle como el
+legacy); la burbuja ámbar (bg 0x503f1a, borde 0x8f742e, texto 0xe8cf9a) se
+dibuja tras el texto de la línea y muestra `expr = valor` — el valor llega
+por DAP en cada stop (`RefreshPinnedWatchValuesAsync`, un evaluate por pin)
+o `expr = ?` fuera de sesión. Serialización en la MISMA clave legacy
+`MonoDevelop.Ide.DebuggingService.PinnedWatches` del `<sln>.userprefs` con la
+ubicación completa del PinnedWatchStore (file relativo a la solución,
+line 1-based, column/endLine/endColumn/offsetX/offsetY + expression);
+`SavePinned` mezcla en un solo elemento los watches del pad (solo
+expression) y los pins del editor, y `LoadPinned` resuelve el file relativo
+y salta las filas sin file — el IDE GTK legacy y el shell Avalonia comparten
+el mismo `.userprefs`. Los pins se restauran al reabrir cada documento
+(filtrando por ruta absoluta) y el menú del pad permite quitarlos. QA
+`--pinwatch` (pins "answer"@10 y "greeting"@11 desde el caret):
+
+```
+[pinwatch] bubbles=10:answer | 11:greeting
+[pinwatch] legacy-file-attr=True line10=True line11=True expr-answer=True
+[pinwatch] load-path=2 first=Program.cs:10:answer
+[pinwatch] live=answer = 42 | greeting = "hello" answer-evaluated=True
+[pinwatch] after-unpin=1
+[pinwatch] done
+```
+
+**Bloqueo de arranque resuelto (entorno):** tras un reinicio del entorno los
+QA dejaron de arrancar: el proceso giraba al 100% de CPU dentro de
+`StartWithClassicDesktopLifetime` sin crear ventana (gdb: bucle en
+`FcPatternGetString` desde `SkFontMgr_fontconfig::GetFamilyNames` de
+libSkiaSharp, antes de tocar X11). Causa: las fuentes de usuario con
+directorios WOFF/WOFF2 (`~/.local/share/fonts/VictorMono/`) disparan el bucle
+en el scan de familias de fontconfig; con una config `FONTCONFIG_FILE` que
+solo incluya `/usr/share/fonts` (+ OTF/TTF del usuario) el shell arranca
+normal. Workaround documentado en el README del shell (receta QA); no requiere
+cambios de código. Nota operativa: los QA muertos por `timeout` dejan un
+`dotnet` vivo que bloquea el rebuild del DLL (`AVLN9999`) — hacer
+`pkill -f "MonoDevelop[.]AvaloniaShell"` y `dotnet build-server shutdown`
+antes de recompilar.

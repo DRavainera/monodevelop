@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using Avalonia.Controls;
 using Avalonia.Media;
 using Avalonia.Input;
-using MonoDevelop.AvaloniaShell.Services;
+using MonoDevelop.Ide.Services;
 
 namespace MonoDevelop.AvaloniaShell.Views;
 
@@ -76,7 +76,7 @@ public static class MenuService
 			// Delegate.Target, same as MenuBuilder recovers it.
 			if (e.OnClick?.Target is CommandAction ca) {
 				e.CommandId = ca.Id;
-				userBindings ??= Services.SettingsStore.LoadKeyBindings ();
+				userBindings ??= MonoDevelop.Ide.Services.SettingsStore.LoadKeyBindings ();
 				if (userBindings.TryGetValue (ca.Id, out var custom) && !string.IsNullOrEmpty (custom))
 					e.Shortcut = custom;
 			}

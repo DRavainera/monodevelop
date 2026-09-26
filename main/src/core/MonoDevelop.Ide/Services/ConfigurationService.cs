@@ -4,7 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 
-namespace MonoDevelop.AvaloniaShell.Services;
+namespace MonoDevelop.Ide.Services;
 
 /// <summary>
 /// Reads and persists configurations exactly where the legacy ProjectService

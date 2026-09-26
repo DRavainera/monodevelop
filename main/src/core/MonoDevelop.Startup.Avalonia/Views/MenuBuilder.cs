@@ -4,7 +4,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Shapes;
 using Avalonia.Media;
-using MonoDevelop.AvaloniaShell.Services;
+using MonoDevelop.Ide.Services;
 using Avalonia.Interactivity;
 
 namespace MonoDevelop.AvaloniaShell.Views;

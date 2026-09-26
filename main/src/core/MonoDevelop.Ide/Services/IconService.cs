@@ -7,7 +7,7 @@ using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Styling;
 
-namespace MonoDevelop.AvaloniaShell.Services;
+namespace MonoDevelop.Ide.Services;
 
 /// <summary>
 /// Loads the redesigned PNG icons of MonoDevelop.Ide (main/src/core/MonoDevelop.Ide/icons)

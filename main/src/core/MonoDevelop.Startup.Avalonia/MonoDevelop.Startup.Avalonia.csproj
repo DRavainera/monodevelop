@@ -12,6 +12,11 @@
     <OutputPath>..\..\..\build\</OutputPath>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <OutputType Condition="'$(TargetFramework)' == 'net10.0-windows'">Exe</OutputType>
+    <!-- Symbols live inside the DLL (embedded): a stray handle on the loose
+         obj/Debug/*.pdb was blocking every rebuild (AVLN9999) even with the
+         build servers shut down; embedded PDBs avoid the extra file entirely
+         and remain fully debuggable in VS/VSCode. -->
+    <DebugType>embedded</DebugType>
     <NoWarn>$(NoWarn);CS1591</NoWarn>
   </PropertyGroup>
   <ItemGroup>
@@ -31,5 +36,18 @@
   <ItemGroup>
     <ProjectReference Include="..\..\..\external\mono-addins\Mono.Addins\Mono.Addins.csproj" />
     <ProjectReference Include="..\..\..\external\mono-addins\Mono.Addins.Setup\Mono.Addins.Setup.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Integration without duplicates: the shell compiles the Services and
+         Controls that LIVE in MonoDevelop.Ide (and the debugger services that
+         live in the MonoDevelop.Debugger addin) — single source of truth, no
+         Avalonia-only copies. MonoDevelop.Ide.csproj keeps its explicit file
+         list (it builds the GTK legacy UI and does not reference Avalonia);
+         once its Avalonia surface takes over, these move into its Compile set. -->
+    <Compile Include="..\MonoDevelop.Ide\Services\**\*.cs" />
+    <Compile Include="..\MonoDevelop.Ide\Controls\**\*.cs" />
+    <Compile Include="..\..\addins\MonoDevelop.Debugger\WatchService.cs" />
+    <Compile Include="..\..\addins\MonoDevelop.Debugger\BreakpointService.cs" />
+    <Compile Include="..\..\addins\MonoDevelop.Debugger\DebugSessionService.cs" />
   </ItemGroup>
 </Project>

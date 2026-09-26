@@ -4,7 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 
-namespace MonoDevelop.AvaloniaShell.Services;
+namespace MonoDevelop.Ide.Services;
 
 public record SolutionEntry (string Name, string ProjectPath, bool IsFolder, string? Parent);
 

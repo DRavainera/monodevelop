@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using Avalonia.Controls;
 using Avalonia.Input;
 
-namespace MonoDevelop.AvaloniaShell.Services;
+namespace MonoDevelop.Ide.Services;
 
 /// <summary>
 /// Registry of the MenuItems that carry a legacy command id. MainWindow parses the

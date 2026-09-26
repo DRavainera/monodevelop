@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
-using MonoDevelop.AvaloniaShell.Services;
+using MonoDevelop.Ide.Services;
 
 namespace MonoDevelop.AvaloniaShell.Views;
 

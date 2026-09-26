@@ -4,7 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Xml;
 
-namespace MonoDevelop.AvaloniaShell.Services;
+namespace MonoDevelop.Debugger.Services;
 
 /// <summary>One entry of the breakpoint store (legacy Breakpoint parity):
 /// file + 1-based line, enabled flag and the DAP-era attributes condition /

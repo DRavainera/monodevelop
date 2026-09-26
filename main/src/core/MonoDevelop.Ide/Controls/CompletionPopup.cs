@@ -9,9 +9,9 @@ using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Interactivity;
 using Avalonia.Media;
-using MonoDevelop.AvaloniaShell.Services;
+using MonoDevelop.Ide.Services;
 
-namespace MonoDevelop.AvaloniaShell.Controls;
+namespace MonoDevelop.Ide.Controls;
 
 /// <summary>
 /// Code completion popup — the Avalonia port of the legacy CompletionListWindowGtk

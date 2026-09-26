@@ -3,7 +3,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
 
-namespace MonoDevelop.AvaloniaShell.Controls;
+namespace MonoDevelop.Ide.Controls;
 
 /// <summary>
 /// Hover tooltip — the Avalonia port of the legacy TooltipProvider pipeline

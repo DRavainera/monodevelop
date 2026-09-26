@@ -61,21 +61,29 @@ MonoDevelop.Startup.Avalonia/
 │   ├── GoToDialog.cs           # Go To File/Type/Line
 │   ├── DirtyFilesDialog.*      # "Save Files": gate de cierre con documentos modificados
 │   └── InputDialog.cs          # Input genérico (Rename, New Folder, herramientas…)
-├── Controls/                   # Controles propios
-│   ├── SkTextEditor.cs         # Editor de texto SkiaSharp (reemplazo del Mono.TextEditor/Cairo)
-│   ├── PadHost.cs              # Host de pads dockable (pestañas + botón hide, como los DockItem legacy)
-│   ├── CompletionPopup.cs      # Intellisense (port de CompletionListWindowGtk)
-│   └── EditorTooltipPopup.cs   # Hover tooltip (port del pipeline TooltipProvider)
-└── Services/                   # Servicios sin UI
-    ├── IconService.cs          # PNGs de MonoDevelop.Ide/icons (mapeo StockIcons.addin.xml, variantes ~dark/~disabled/@2x)
-    ├── SolutionLoader.cs       # Carga real de .sln/.csproj al árbol del Solution pad
-    ├── UserPreferences.cs      # Persistencia MonoDevelop-properties.xml + RecentSolutions
-    ├── SettingsStore.cs        # Atajos (Custom.kb.xml) y herramientas externas (MonoDevelop-tools.xml)
-    ├── KeyboardShortcutRegistry.cs # Registro de atajos y dispatch de teclado
-    ├── NavigationHistoryService.cs # Back/Forward/Zoom de navegación (NavigationCommands legacy)
-    ├── TaskScanner.cs          # Escáner de TODO/HACK/… para el pad Tasks
-    ├── ExternalToolRunner.cs   # Ejecución de herramientas externas (ToolCommands legacy)
-    └── GettextService.cs       # i18n: UserInterfaceLanguage + traducción del menú
+└── MonoDevelop.Startup.Avalonia.csproj # XAML + code-behind que conecta; la lógica vive INTEGRADA (ver abajo)
+
+### Integración con MonoDevelop.Ide y MonoDevelop.Debugger (M16e)
+
+El shell NO tiene módulos propios de lógica: todo vive integrado junto a los
+demás módulos del IDE (sin carpetas `Avalonia/` ni código duplicado):
+
+- `main/src/core/MonoDevelop.Ide/Services/` — los 10 servicios (ns
+  `MonoDevelop.Ide.Services`): IconService, SolutionLoader, UserPreferences,
+  SettingsStore, KeyboardShortcutRegistry, NavigationHistoryService,
+  TaskScanner, ExternalToolRunner, GettextService, ConfigurationService.
+- `main/src/core/MonoDevelop.Ide/Controls/` — los 4 controles (ns
+  `MonoDevelop.Ide.Controls`): SkTextEditor, PadHost, CompletionPopup,
+  EditorTooltipPopup.
+- `main/src/addins/MonoDevelop.Debugger/` — los servicios de debug junto a
+  `PinnedWatch*.cs` (ns `MonoDevelop.Debugger.Services`): WatchService,
+  BreakpointService, DebugSessionService.
+
+Mientras la superficie Avalonia de `MonoDevelop.Ide` no tome el mando, el
+csproj del shell compila esas fuentes con `<Compile Include="..">` — fuente
+única, sin copias. `DebugType=embedded` (PDB embebido) evita el lock del
+handle fantasma sobre `obj/Debug/*.pdb` que bloqueaba rebuilds tras
+reinicios del entorno.
 ```
 
 ### Decisiones clave
@@ -102,6 +110,27 @@ Cada hook abre la app, ejercita un módulo de forma determinista y loguea
 ```bash
 ~/.dotnet/dotnet build/MonoDevelop.AvaloniaShell.dll \
   --sln=/ruta/TestProj.sln --<hook> 2>&1 | grep -E "\[<tag>\]"
+```
+
+⚠️ **Si el arranque se cuelga sin abrir ventana** (gira al 100% CPU sin
+imprimir nada): la causa son las fuentes de usuario con directorios
+WOFF/WOFF2 (`~/.local/share/fonts/**`) — el `SkFontMgr_fontconfig` de
+libSkiaSharp entra en bucle infinito dentro de `FcPatternGetString` al
+inicializar Avalonia.Skia (antes de crear la ventana). Workaround no
+destructivo para QA: apuntar `FONTCONFIG_FILE` a una config con solo fuentes
+de sistema:
+
+```bash
+cat > /tmp/fonts-qa.conf <<'EOF'
+<?xml version="1.0"?>
+<!DOCTYPE fontconfig SYSTEM "fonts.dtd">
+<fontconfig>
+  <dir>/usr/share/fonts</dir>
+  <cachedir>/tmp/fccache-qa</cachedir>
+</fontconfig>
+EOF
+FONTCONFIG_FILE=/tmp/fonts-qa.conf xvfb-run -a -s "-screen 0 1600x1000x24" \
+  ~/.dotnet/dotnet build/MonoDevelop.AvaloniaShell.dll --sln=/ruta/TestProj.sln --<hook>
 ```
 
 ### `--editqa` — editor de código (M11y)
@@ -175,10 +204,12 @@ documento sucio a propósito para poder probar el diálogo visualmente
 | `--step` | Stepping: Step Over desde el bp, highlight movido, pads refrescados | `[step]` |
 | `--tree` | Locals como árbol expandible (variablesReference, hijos lazy) | `[tree]` |
 | `--imm` | Immediate pad: evaluate en el frame + resultado en Output | `[immediate]`/`[imm]` |
-| `--gutterbp` | Clic en el gutter = toggle bp (como legacy) + data tip inline al pausar | `[gutterbp]` |
+| `--gutterbp` | Clic en el gutter = toggle bp (como legacy) + data tip inline + hover del gutter (banda, cursor mano, tooltip "Line N") | `[gutterbp]` |
 | `--frame` | Call Stack: seleccionar frame muestra SUS locals (scopes por frameId) | `[frame]` |
 | `--immcompl` | Immediate: autocompletado de miembros tras `.` (DAP), commit Tab/Enter | `[immcompl]` |
 | `--persistqa` | Sesión de debug persistida: cerrar/reabrir solución restaura bps+watches+config | `[persist]` |
+| `--watchedit` | Pad Watch: edición in-place (Esc rollback, Enter reemplaza en sitio) + reevaluación automática tras el step | `[watchedit]` |
+| `--pinwatch` | Pinned watches: burbujas por línea, serialización file/line legacy en .userprefs, valor vivo al pausar, unpin | `[pinwatch]` |
 
 QA visual: los hooks se complementan con capturas X11 (`magick x:<win>`) para
 comparar la UI contra la legacy GTK en vivo (ver bitácoras en
@@ -186,7 +217,7 @@ comparar la UI contra la legacy GTK en vivo (ver bitácoras en
 
 ### Configuraciones e importación
 
-- `Services/ConfigurationService.cs` persiste configuraciones donde las guarda
+- `MonoDevelop.Ide/Services/ConfigurationService.cs` persiste configuraciones donde las guarda
   el legacy: `GlobalSection(SolutionConfigurationPlatforms)` + mapeos por GUID
   en el .sln, y `<PropertyGroup Condition=" '$(Configuration)|$(Platform)'" />`
   en cada .csproj ("Any CPU" ⇄ "AnyCPU"). El New Configuration dialog crea la
@@ -205,7 +236,7 @@ comparar la UI contra la legacy GTK en vivo (ver bitácoras en
   doble clic salta a la línea; se refresca al toggle/clear/cambio de documento.
   Menú contextual: Previous/Next Bookmark, Remove bookmark y Remove All
   Bookmarks (semántica del pad del SourceEditor legacy).
-- **Breakpoints** (`Services/BreakpointService.cs`): el pad Breakpoints (zona
+- **Breakpoints** (`MonoDevelop.Debugger/BreakpointService.cs`): el pad Breakpoints (zona
   debug, icono `md-breakpoint`) lista `Archivo:línea` de todos los documentos
   con marcadores rojos/grises en el gutter (toggle por clic) y menú Go to /
   Enable-Disable / Remove / Clear All. Persiste en `<sln>.userprefs` bajo
@@ -214,7 +245,7 @@ comparar la UI contra la legacy GTK en vivo (ver bitácoras en
   1-based) y se restauran al abrir cada documento. Build y Run usan la
   configuración activa: `dotnet build -c "<config>"` y
   `dotnet run -c "<config>"`.
-- **Debug real con netcoredbg (DAP)** (`Services/DebugSessionService.cs`):
+- **Debug real con netcoredbg (DAP)** (`MonoDevelop.Debugger/DebugSessionService.cs`):
   netcoredbg vive como submodule `main/external/netcoredbg` (fork de Samsung;
   NUNCA DLLs binarios externos) y se compila desde fuente
   (`cmake + clang`, generador Makefiles; binario en
@@ -261,23 +292,43 @@ comparar la UI contra la legacy GTK en vivo (ver bitácoras en
 - **Cambio de frame en el Call Stack**: seleccionar un frame recarga los
   Locals con los scopes de ESE frame (`scopes` con frameId → variables), como
   el StackFrame pad legacy; doble clic navega al código.
-- **Persistencia de la sesión de debug**: breakpoints, watches y config
-  activa viven en `<sln>.userprefs` — los breakpoints con el formato
-  Mono.Debugging (`Services/BreakpointService.cs`) y los watches con la clave
-  legacy `MonoDevelop.Ide.DebuggingService.PinnedWatches`
-  (`Services/WatchService.cs`; solo la expresión — el PinnedWatchStore legacy
-  serializa además la ubicación del pin, que el pad del shell no usa). Se
-  restauran al reabrir la solución (los breakpoints al reabrir cada
-  documento, como el legacy).
+- **Watch con edición in-place**: doble clic o menú "Edit Watch…" pone un
+  TextBox sobre la fila (como el Watch pad legacy); Enter confirma
+  (reemplaza la expresión en sitio preservando el orden, dedup, persiste y
+  reevalúa), Esc cancela. Tras CADA stop (steps incluidos) el pad reevalúa
+  sus expresiones sin intervención.
+- **Pinned watches como burbujas (paridad PinnedWatch legacy)**: "Pin Watch"
+  en el menú contextual del editor fija la palabra bajo el caret a la línea
+  actual; la burbuja ámbar muestra `expr = valor` (evaluado por DAP en cada
+  stop) o `expr = ?` fuera de sesión. Se serializan en la MISMA clave legacy
+  `MonoDevelop.Ide.DebuggingService.PinnedWatches` con la ubicación completa
+  (file relativo a la solución, line 1-based, column/endLine/endColumn/
+  offsetX/offsetY + expression) — el IDE GTK legacy y el shell Avalonia
+  comparten el mismo `.userprefs`.
+- **Gutter con hover (como el legacy)**: la línea bajo el cursor se resalta
+  (banda completa + refuerzo en la franja de breakpoints), la franja de
+  iconos muestra cursor de mano y tooltip "Line N — click to toggle
+  breakpoint"; al salir del gutter se limpia todo.
+- **Persistencia de la sesión de debug**: breakpoints, watches (pad + pins
+  del editor) y config activa viven en `<sln>.userprefs` — los breakpoints
+  con el formato Mono.Debugging (`MonoDevelop.Debugger/WatchService.cs`
+  comparte la clave legacy `MonoDevelop.Ide.DebuggingService.PinnedWatches`:
+  los watches del pad viajan solo con `expression` y los pins del editor con
+  la ubicación completa file/line/column del PinnedWatchStore legacy
+  (`SavePinned`/`LoadPinned` mezclan ambos tipos de fila). Se restauran al
+  reabrir la solución (los breakpoints y los pins al reabrir cada documento,
+  como el legacy).
 
 ## Estado del bucle de migración
 
 Cada módulo se porta desde el código GTK listando primero sus funcionalidades,
 se implementa en Avalonia y pasa QA de paridad antes de avanzar al siguiente.
-Completados recientes: Properties pad real (M11w), DirtyFilesDialog (M11x),
-editor estable + intellisense + hover tooltip (M11y). Siguientes candidatos:
+Completados recientes: Watch editable in-place + reevaluación por step,
+pinned watches como burbujas y gutter con hover (M16e), integración
+estructural Services/Controls → MonoDevelop.Ide y servicios de debug →
+addin MonoDevelop.Debugger. Siguientes candidatos:
 TipOfTheDay, SelectEncodingsDialog, NewConfigurationDialog/NewLayoutDialog,
 ProgressDialog, AttachToProcessDialog (Debugger) y semántica Roslyn real para
 completion/tooltip.
 
-Detalle hito por hito: `docs/interfaz-plan.md` § M4–M11y.
+Detalle hito por hito: `docs/interfaz-plan.md` § M4–M16e.

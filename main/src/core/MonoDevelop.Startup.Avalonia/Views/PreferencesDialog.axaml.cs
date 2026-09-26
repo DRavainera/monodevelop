@@ -9,7 +9,7 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Media.Imaging;
 using Avalonia.Styling;
-using MonoDevelop.AvaloniaShell.Services;
+using MonoDevelop.Ide.Services;
 
 namespace MonoDevelop.AvaloniaShell.Views;
 

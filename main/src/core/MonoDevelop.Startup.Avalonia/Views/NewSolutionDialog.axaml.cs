@@ -5,7 +5,7 @@ using System.Linq;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Media.Imaging;
-using MonoDevelop.AvaloniaShell.Services;
+using MonoDevelop.Ide.Services;
 
 namespace MonoDevelop.AvaloniaShell.Views;
 

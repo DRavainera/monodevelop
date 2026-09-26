@@ -1,3 +1,4 @@
+using MonoDevelop.Debugger.Services;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -15,8 +16,8 @@ using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Styling;
 using Avalonia.VisualTree;
-using MonoDevelop.AvaloniaShell.Controls;
-using MonoDevelop.AvaloniaShell.Services;
+using MonoDevelop.Ide.Controls;
+using MonoDevelop.Ide.Services;
 using MonoDevelop.AvaloniaShell.Views;
 
 namespace MonoDevelop.AvaloniaShell.Views;
@@ -121,15 +122,15 @@ public partial class MainWindow : Window
 			} else if (qa == "--newconfig") {
 				// QA: New Configuration — name/platform combos with the legacy
 				// validation; OK persists the config in the loaded .sln/.csproj.
-				var cfgs = loadedSolutionPath is null ? new[] { "Debug", "Release" } : Services.ConfigurationService.GetSolutionConfigurations (loadedSolutionPath);
+				var cfgs = loadedSolutionPath is null ? new[] { "Debug", "Release" } : MonoDevelop.Ide.Services.ConfigurationService.GetSolutionConfigurations (loadedSolutionPath);
 				var dlg = new NewConfigurationDialog (cfgs.Count == 0 ? new[] { "Debug", "Release" } : cfgs, isSolution: true);
 				Output ("[newconfig] dialog opened (OK initially " + (dlg.IsOkEnabledForQa ? "enabled" : "disabled") + ")");
 				dlg.ShowDialog (this);
 				if (dlg.Accepted && !string.IsNullOrEmpty (dlg.ConfigName) && loadedSolutionPath is not null) {
 					var namePart = dlg.ConfigName.Split ('|') [0];
-					var platPart = dlg.ConfigName.Contains ('|') ? dlg.ConfigName.Split ('|') [1] : Services.ConfigurationService.AnyCpuSolution;
+					var platPart = dlg.ConfigName.Contains ('|') ? dlg.ConfigName.Split ('|') [1] : MonoDevelop.Ide.Services.ConfigurationService.AnyCpuSolution;
 					try {
-						var created = Services.ConfigurationService.AddSolutionConfiguration (loadedSolutionPath, namePart, platPart, dlg.CreateChildren);
+						var created = MonoDevelop.Ide.Services.ConfigurationService.AddSolutionConfiguration (loadedSolutionPath, namePart, platPart, dlg.CreateChildren);
 						Output ("[newconfig] " + (created ? "created config in " + Path.GetFileName (loadedSolutionPath) : "config already exists"));
 						if (created)
 							OpenSolutionInWindow (loadedSolutionPath); // reload like ProjectOperations reload
@@ -145,13 +146,13 @@ public partial class MainWindow : Window
 				if (loadedSolutionPath is null) {
 					Output ("[activeconfig] no solution loaded");
 				} else {
-					var initial = Services.ConfigurationService.GetActiveConfiguration (loadedSolutionPath);
+					var initial = MonoDevelop.Ide.Services.ConfigurationService.GetActiveConfiguration (loadedSolutionPath);
 					Output ("[activeconfig] initial=" + initial + " combo=" + (ConfigCombo?.SelectedItem as string ?? "?"));
 					OnMenuCommand ("MonoDevelop.Ide.Commands.ProjectCommands.SelectActiveConfiguration:Release");
-					var after = Services.ConfigurationService.GetActiveConfiguration (loadedSolutionPath);
+					var after = MonoDevelop.Ide.Services.ConfigurationService.GetActiveConfiguration (loadedSolutionPath);
 					Output ("[activeconfig] after-switch=" + after + " persisted=" + File.ReadAllText (loadedSolutionPath.Substring (0, loadedSolutionPath.Length - 4) + ".userprefs").Contains ("Release") + " combo=" + (ConfigCombo?.SelectedItem as string ?? "?"));
 					OnMenuCommand ("MonoDevelop.Ide.Commands.ProjectCommands.SelectActiveConfiguration:Debug");
-					Output ("[activeconfig] restored=" + Services.ConfigurationService.GetActiveConfiguration (loadedSolutionPath));
+					Output ("[activeconfig] restored=" + MonoDevelop.Ide.Services.ConfigurationService.GetActiveConfiguration (loadedSolutionPath));
 				}
 			} else if (qa == "--newproject") {
 				// QA: New Project dialog in add-to-solution mode — creates a console
@@ -165,7 +166,7 @@ public partial class MainWindow : Window
 					await dlg.ShowDialog (this);
 					var projPath = dlg.CreatedProjectPath;
 					if (projPath is not null)
-						Services.ConfigurationService.AppendProjectToSolution (projPath, loadedSolutionPath);
+						MonoDevelop.Ide.Services.ConfigurationService.AppendProjectToSolution (projPath, loadedSolutionPath);
 					var slnText = File.ReadAllText (loadedSolutionPath);
 					Output ("[newproject] created=" + (projPath is not null) + " sln-entry=" + slnText.Contains ("QAAdded") + " mappings=" + slnText.Contains (".Debug|AnyCPU.Build.0"));
 					OpenSolutionInWindow (loadedSolutionPath);
@@ -264,7 +265,7 @@ public partial class MainWindow : Window
 					_ = RunStartupProjectAsync (debug: true);
 					// The session is created inside RunStartupProjectAsync; wait for its stop.
 					var deadline = DateTime.UtcNow.AddSeconds (60);
-					Services.DebugSessionService? sess = null;
+					MonoDevelop.Debugger.Services.DebugSessionService? sess = null;
 					while (DateTime.UtcNow < deadline && sess is null) {
 						await Task.Delay (300);
 						sess = debugSession;
@@ -276,7 +277,7 @@ public partial class MainWindow : Window
 						// have already stopped before this code runs — a fresh
 						// subscription would race and miss the stop. LastStop is
 						// buffered by the service, so polling is deterministic.
-						Services.DebugStopInfo? stopInfo = null;
+						MonoDevelop.Debugger.Services.DebugStopInfo? stopInfo = null;
 						while (DateTime.UtcNow < deadline && stopInfo is null) {
 							await Task.Delay (300);
 							stopInfo = sess.LastStop;
@@ -358,6 +359,130 @@ public partial class MainWindow : Window
 					// MD_QA_HOLD=<secs> keeps the pads on screen for screenshots.
 					await Task.Delay (int.TryParse (Environment.GetEnvironmentVariable ("MD_QA_HOLD"), out var watchHold) && watchHold > 0 ? watchHold * 1000 : 2500);
 				}
+			} else if (qa == "--watchedit") {
+				// QA: Watch pad in-place editing + auto re-evaluation per step —
+				// bp on line 10 (1-based) stops BEFORE `int answer = 42;` runs, so
+				// `answer` reads 0; the in-place edit renames the row to
+				// "answer + 1" (= 1) and ONE step over makes it 43 WITHOUT any
+				// manual refresh — proving the pad re-evaluates after every step.
+				var file = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile), "TestProj", "TestProj", "Program.cs");
+				OpenFileDocument (file);
+				var name = Path.GetFileName (file);
+				watchExpressions.Clear ();
+				watchExpressions.Add ("answer");
+				// The Watch pad ships hidden; the inline editor needs the TreeView
+				// realized, so surface (and select) the tab like the legacy pad do.
+				SetPadVisible ("watch", true);
+				if (docs.TryGetValue (name, out var ed)) {
+					SelectDocument (name);
+					if (ed.BreakpointLines.Count > 0) { ed.ClearBreakpoints (); PersistBreakpoints (); }
+					ed.GotoLine (9); ed.ToggleBreakpoint (); // line 10 1-based
+					PersistBreakpoints ();
+				}
+				_ = RunStartupProjectAsync (debug: true);
+				var deadline = DateTime.UtcNow.AddSeconds (60);
+				while (DateTime.UtcNow < deadline && debugSession?.LastStop is null)
+					await Task.Delay (300);
+				while (DateTime.UtcNow < deadline && debugSession?.CurrentFrameId is null)
+					await Task.Delay (100);
+				await RefreshWatchPadAsync ();
+				await Task.Delay (250); // let the rows realize before the inline edit
+				System.Func<System.Collections.Generic.List<string>> rows = () =>
+					watchList!.Items.OfType<VariableNode> ().Select (n => n.Display).ToList ();
+				Output ("[watchedit] initial=" + string.Join (" | ", rows ()));
+				// Esc rolls back the edit.
+				watchList!.SelectedItem = watchList.Items.OfType<VariableNode> ().FirstOrDefault (n => n.WatchExpression == "answer");
+				BeginWatchEdit ();
+				Output ("[watchedit] inline-editor=" + (watchEditBox is not null));
+				if (watchEditBox is { } escBox) {
+					escBox.Text = "answer + 999";
+					EndWatchEdit ();
+					await Task.Delay (300);
+					Output ("[watchedit] after-esc=" + string.Join (" | ", rows ()) + " kept=" + (watchExpressions.Count == 1 && watchExpressions [0] == "answer"));
+				}
+				// Commit replaces the expression in place (order kept).
+				watchList.SelectedItem = watchList.Items.OfType<VariableNode> ().FirstOrDefault (n => n.WatchExpression == "answer");
+				BeginWatchEdit ();
+				if (watchEditBox is { } okBox) {
+					okBox.Text = "answer + 1";
+					CommitWatchEdit ();
+					await Task.Delay (400);
+					await RefreshWatchPadAsync ();
+					await Task.Delay (250);
+					Output ("[watchedit] after-commit=" + string.Join (" | ", rows ()) + " order-kept=" + (watchExpressions.Count == 1 && watchExpressions [0] == "answer + 1"));
+				}
+				// One step over (line 11: greeting = …) → answer becomes 42 and the
+				// pad re-evaluates automatically: "answer + 1 = 43".
+				debugSession!.ResetLastStop ();
+				StepDebug ("over");
+				var stepDeadline = DateTime.UtcNow.AddSeconds (20);
+				while (DateTime.UtcNow < stepDeadline && debugSession.LastStop is null)
+					await Task.Delay (200);
+				await Task.Delay (800); // the stopped event refreshes the pads async
+				await RefreshWatchPadAsync ();
+				Output ("[watchedit] after-step=" + string.Join (" | ", rows ()) + " reevaluated=" + rows ().Any (r => r.Contains ("answer + 1 = 43")));
+				debugSession.Terminate ();
+				ClearExecutionLineHighlight ();
+				watchExpressions.Clear ();
+				PersistWatches ();
+				if (docs.TryGetValue (name, out var edWe)) { edWe.ClearBreakpoints (); PersistBreakpoints (); }
+				Output ("[watchedit] done");
+			} else if (qa == "--pinwatch") {
+				// QA: pinned watches — pin the words at the caret as editor bubbles,
+				// verify the legacy file/line serialization in <sln>.userprefs, the
+				// live evaluation on a debug stop and the load path (document open).
+				var file = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile), "TestProj", "TestProj", "Program.cs");
+				OpenFileDocument (file);
+				var name = Path.GetFileName (file);
+				if (docs.TryGetValue (name, out var ed)) {
+					SelectDocument (name);
+					ed.SetPinnedWatches (Array.Empty<(int, string)> ()); // repeatable QA
+				// GotoLine preserves the caret column: park it inside the words.
+				// line 10 "int answer = …": col 12 ∈ answer (8..14);
+				// line 11 "string greeting …": from the kept col 12, +3 → col 15 ∈ greeting (7..15).
+				ed.GotoLine (9); ed.CaretRight (12);
+				PinWatchAtCaret (ed);
+				ed.GotoLine (10); ed.CaretRight (3);
+				PinWatchAtCaret (ed);
+					Output ("[pinwatch] bubbles=" + string.Join (" | ", ed.PinnedWatchList.Select (p => (p.Line + 1) + ":" + p.Expression)));
+					RefreshPinnedWatchesPad ();
+					var xml = File.ReadAllText (loadedSolutionPath!.Substring (0, loadedSolutionPath.Length - 4) + ".userprefs");
+					Output ("[pinwatch] legacy-file-attr=" + (xml.Contains ("file=\"TestProj/Program.cs\"") || xml.Contains ("file=\"TestProj\\\\Program.cs\""))
+						+ " line10=" + xml.Contains ("line=\"10\"")
+						+ " line11=" + xml.Contains ("line=\"11\"")
+						+ " expr-answer=" + xml.Contains ("expression=\"answer\""));
+					var reloaded = MonoDevelop.Debugger.Services.WatchService.LoadPinned (loadedSolutionPath);
+					Output ("[pinwatch] load-path=" + reloaded.Count + " first=" + (reloaded.Count > 0 ? Path.GetFileName (reloaded [0].File) + ":" + reloaded [0].Line + ":" + reloaded [0].Expression : "none"));
+				}
+				// A debug stop evaluates every pin in the frame (legacy PinnedWatch.Evaluate).
+				if (docs.TryGetValue (name, out var edB)) {
+					if (edB.BreakpointLines.Count > 0) { edB.ClearBreakpoints (); PersistBreakpoints (); }
+					edB.GotoLine (12); edB.ToggleBreakpoint (); // line 13: locals all assigned
+					PersistBreakpoints ();
+				}
+				_ = RunStartupProjectAsync (debug: true);
+				var deadlineP = DateTime.UtcNow.AddSeconds (60);
+				while (DateTime.UtcNow < deadlineP && debugSession?.LastStop is null)
+					await Task.Delay (300);
+				while (DateTime.UtcNow < deadlineP && debugSession?.CurrentFrameId is null)
+					await Task.Delay (100);
+				await Task.Delay (900); // RefreshPinnedWatchValuesAsync runs on the stopped event
+				var live = docs.TryGetValue (name, out var edL) ? edL.PinnedWatchValues : null;
+				Output ("[pinwatch] live=" + (live is null ? "none" : string.Join (" | ", live.Select (v => v.label)))
+					+ " answer-evaluated=" + (live?.Any (v => v.label == "answer = 42") ?? false));
+				// Toggle off the first pin (the legacy unpin path) → store shrinks.
+				if (docs.TryGetValue (name, out var edU)) {
+					edU.GotoLine (9); // caret column (13) already inside "answer"
+					PinWatchAtCaret (edU);
+					RefreshPinnedWatchesPad ();
+					Output ("[pinwatch] after-unpin=" + MonoDevelop.Debugger.Services.WatchService.LoadPinned (loadedSolutionPath!).Count);
+					edU.SetPinnedWatches (Array.Empty<(int, string)> ());
+					RefreshPinnedWatchesPad ();
+					edU.ClearBreakpoints (); PersistBreakpoints ();
+				}
+				debugSession?.Terminate ();
+				ClearExecutionLineHighlight ();
+				Output ("[pinwatch] done");
 			} else if (qa == "--condbp") {
 				// QA: conditional + hit-count breakpoints — attributes set on the
 				// editor store, persisted to .userprefs with condition/hitcount,
@@ -371,7 +496,7 @@ public partial class MainWindow : Window
 					ed.GotoLine (9); ed.ToggleBreakpoint ();
 					ed.SetBreakpointOptions (9, "answer == 42", 3, null); // line 10 1-based
 					PersistBreakpoints ();
-					var stored = Services.BreakpointService.Load (loadedSolutionPath!)
+					var stored = MonoDevelop.Debugger.Services.BreakpointService.Load (loadedSolutionPath!)
 						.FirstOrDefault (b => Path.GetFullPath (b.FileName) == Path.GetFullPath (file));
 					Output ("[condbp] stored cond=" + (stored?.Condition ?? "none")
 						+ " hit=" + (stored?.HitCount?.ToString () ?? "none")
@@ -414,7 +539,7 @@ public partial class MainWindow : Window
 				foreach (var expect in new[] { 14 }) {
 					StepDebug ("over");
 					debugSession!.ResetLastStop ();
-					Services.DebugStopInfo? stepStop = null;
+					MonoDevelop.Debugger.Services.DebugStopInfo? stepStop = null;
 					var stepDeadline = DateTime.UtcNow.AddSeconds (20);
 					while (DateTime.UtcNow < stepDeadline && stepStop is null) {
 						await Task.Delay (200);
@@ -524,6 +649,16 @@ public partial class MainWindow : Window
 						var tip = docs.TryGetValue (name, out var edT) ? edT.CurrentDataTip : null;
 						Output ("[gutterbp] datatip=" + (tip is null ? "none" : $"line={tip?.Line + 1} '{tip?.Text}'"));
 						Output ("[gutterbp] bubble-red@13=" + docs [name].BreakpointLines.ContainsKey (12));
+						// Gutter hover polish: row highlight + hand cursor on the
+						// breakpoint strip + line tooltip (same content the click uses).
+						var edH = docs [name];
+						edH.SimulateGutterHoverForQa (11, breakpointStrip: true);
+						var hover = edH.GutterHover;
+						var gtip = Avalonia.Controls.ToolTip.GetTip (edH) as TextBlock;
+						Output ("[gutterbp] hover-line=" + (hover.Line + 1) + " hand=" + hover.InBreakpointStrip + " tip='" + (gtip?.Text ?? "none") + "'");
+						edH.ClearGutterHover ();
+						var gtip2 = Avalonia.Controls.ToolTip.GetTip (edH) as TextBlock;
+						Output ("[gutterbp] hover-cleared=" + (edH.GutterHover.Line == -1 && edH.GutterHover.InBreakpointStrip == false) + " tip-removed=" + (gtip2 is null));
 						debugSession!.Terminate ();
 						ClearExecutionLineHighlight ();
 						if (docs.TryGetValue (name, out var edG)) { edG.ClearBreakpoints (); PersistBreakpoints (); }
@@ -623,8 +758,8 @@ public partial class MainWindow : Window
 						PersistWatches ();
 						edP.GotoLine (12); edP.ToggleBreakpoint ();
 						PersistBreakpoints ();
-						Output ("[persist] pre-reopen watches=" + string.Join (",", Services.WatchService.Load (loadedSolutionPath)));
-						Output ("[persist] pre-reopen config=" + Services.ConfigurationService.GetActiveConfiguration (loadedSolutionPath));
+						Output ("[persist] pre-reopen watches=" + string.Join (",", MonoDevelop.Debugger.Services.WatchService.Load (loadedSolutionPath)));
+						Output ("[persist] pre-reopen config=" + MonoDevelop.Ide.Services.ConfigurationService.GetActiveConfiguration (loadedSolutionPath));
 						// Close and reopen the solution (CloseWorkspace → OpenSolution),
 						// then reopen the file — breakpoints restore from .userprefs on
 						// document open, like the legacy DebuggingService load path.
@@ -634,10 +769,10 @@ public partial class MainWindow : Window
 						OpenFileDocument (file);
 						await Task.Delay (400);
 						var watched = watchExpressions;
-						var restored = Services.WatchService.Load (loadedSolutionPath!);
+						var restored = MonoDevelop.Debugger.Services.WatchService.Load (loadedSolutionPath!);
 						var bp13 = docs.TryGetValue ("Program.cs", out var edR) && edR.BreakpointLines.ContainsKey (12);
 						Output ("[persist] post-reopen watch-exprs=" + string.Join (",", restored) + " restored-pad=" + watched.Contains ("answer + 1"));
-						Output ("[persist] post-reopen bp@13=" + (bp13 ? "True" : "False") + " config=" + Services.ConfigurationService.GetActiveConfiguration (loadedSolutionPath!));
+						Output ("[persist] post-reopen bp@13=" + (bp13 ? "True" : "False") + " config=" + MonoDevelop.Ide.Services.ConfigurationService.GetActiveConfiguration (loadedSolutionPath!));
 						// Cleanup so the QA is repeatable.
 						watchExpressions.Clear ();
 						PersistWatches ();
@@ -666,7 +801,7 @@ public partial class MainWindow : Window
 					await Task.Delay (300);
 					var bpFile = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile), "TestProj", "TestProj", "Program.cs");
 					debugSession?.Dispose ();
-					var session = new Services.DebugSessionService ();
+					var session = new MonoDevelop.Debugger.Services.DebugSessionService ();
 					debugSession = session;
 					var ok = await session.AttachAsync (sleeper.Id, Array.Empty<(string, int, string?, int?, string?)> ());
 					Output ("[attachreal] attach=" + ok + " pid=" + sleeper.Id + " alive-after-attach=" + !sleeper.HasExited);
@@ -676,7 +811,7 @@ public partial class MainWindow : Window
 					// lists threads only once the process is stopped. The runtime
 					// needs a beat after the attach before Stop() succeeds, so
 					// re-issue pause until the stopped event lands (deterministic).
-					Services.DebugStopInfo? stop = null;
+					MonoDevelop.Debugger.Services.DebugStopInfo? stop = null;
 					var tDeadline = DateTime.UtcNow.AddSeconds (20);
 					while (DateTime.UtcNow < tDeadline && stop is null) {
 						await session.PauseAsync (sleeper.Id);
@@ -687,7 +822,7 @@ public partial class MainWindow : Window
 						}
 					}
 					Output ("[attachreal] paused=" + (stop is not null) + " reason=" + (stop?.Reason ?? "none"));
-					var threads = Array.Empty<Services.DebugThread> ();
+					var threads = Array.Empty<MonoDevelop.Debugger.Services.DebugThread> ();
 					while (DateTime.UtcNow < tDeadline) {
 						threads = await session.GetThreadsAsync ();
 						if (threads.Length > 0)
@@ -731,7 +866,7 @@ public partial class MainWindow : Window
 					Output ("[newconfig-real] no solution loaded");
 				} else {
 					try {
-						var created = Services.ConfigurationService.AddSolutionConfiguration (loadedSolutionPath, "QAConfig", Services.ConfigurationService.AnyCpuSolution, createChildren: true);
+						var created = MonoDevelop.Ide.Services.ConfigurationService.AddSolutionConfiguration (loadedSolutionPath, "QAConfig", MonoDevelop.Ide.Services.ConfigurationService.AnyCpuSolution, createChildren: true);
 						var slnText = File.ReadAllText (loadedSolutionPath);
 						var csprojs = Directory.GetFiles (Path.GetDirectoryName (loadedSolutionPath)!, "*.csproj", SearchOption.AllDirectories);
 						var inSln = slnText.Contains ("QAConfig|Any CPU", StringComparison.Ordinal);
@@ -1129,11 +1264,11 @@ public partial class MainWindow : Window
 					PushNavigationPoint ();
 					OpenFileDocumentAtLine (file, 11);
 					PushNavigationPoint ();
-					Output ($"[nav-qa] back from l11 → {Services.NavigationHistoryService.MoveBack ()}");
-					Output ($"[nav-qa] back again → {Services.NavigationHistoryService.MoveBack ()}");
-					Output ($"[nav-qa] forward → {Services.NavigationHistoryService.MoveForward ()}");
-					Services.NavigationHistoryService.Clear ();
-					Output ($"[nav-qa] after clear: CanMoveBack={Services.NavigationHistoryService.CanMoveBack}");
+					Output ($"[nav-qa] back from l11 → {MonoDevelop.Ide.Services.NavigationHistoryService.MoveBack ()}");
+					Output ($"[nav-qa] back again → {MonoDevelop.Ide.Services.NavigationHistoryService.MoveBack ()}");
+					Output ($"[nav-qa] forward → {MonoDevelop.Ide.Services.NavigationHistoryService.MoveForward ()}");
+					MonoDevelop.Ide.Services.NavigationHistoryService.Clear ();
+					Output ($"[nav-qa] after clear: CanMoveBack={MonoDevelop.Ide.Services.NavigationHistoryService.CanMoveBack}");
 				}
 			} else if (qa == "--windocs") {
 				// QA: exercise document cycling / Nth selection.
@@ -1187,7 +1322,7 @@ public partial class MainWindow : Window
 					if (docs.TryGetValue (Path.GetFileName (file), out var ed)) {
 						int eq = qa.IndexOf ('=');
 						if (eq > 0) {
-							var (line, col) = Controls.SkTextEditor.ParseGotoInput (qa [(eq + 1)..], 1);
+							var (line, col) = MonoDevelop.Ide.Controls.SkTextEditor.ParseGotoInput (qa [(eq + 1)..], 1);
 							ed.GotoLine (line - 1);
 							if (col > 1)
 								ed.GotoLinePopupColumn (col);
@@ -1223,9 +1358,9 @@ public partial class MainWindow : Window
 					_ = RunGitAsync ("status --short");
 				}
 			} else if (qa == "--tool") {
-				var first = Services.SettingsStore.LoadTools ().FirstOrDefault ();
+				var first = MonoDevelop.Ide.Services.SettingsStore.LoadTools ().FirstOrDefault ();
 				if (first is not null)
-					_ = Services.ExternalToolRunner.Run (first);
+					_ = MonoDevelop.Ide.Services.ExternalToolRunner.Run (first);
 				else
 					Output ("[tool] no external tools configured (Preferences > External Tools)");
 			}
@@ -1252,12 +1387,12 @@ public partial class MainWindow : Window
 	void BuildMenu ()
 	{
 		MainMenu!.Items.Clear ();
-		Services.KeyboardShortcutRegistry.Reset ();
+		MonoDevelop.Ide.Services.KeyboardShortcutRegistry.Reset ();
 		var recents = RecentSolutions.GetAll ().Select (r => r.Path).ToList ();
 		// Project > Active Configuration mirrors the loaded solution configs with the
 		// active one checked (legacy SelectActiveConfigurationHandler.Update).
 		if (!string.IsNullOrEmpty (loadedSolutionPath) && File.Exists (loadedSolutionPath)) {
-			var cfgs = Services.ConfigurationService.GetSolutionConfigurations (loadedSolutionPath);
+			var cfgs = MonoDevelop.Ide.Services.ConfigurationService.GetSolutionConfigurations (loadedSolutionPath);
 			MenuService.DynamicActiveConfigs = cfgs.ToArray ();
 			MenuService.DynamicActiveConfig = activeConfiguration;
 		} else {
@@ -1270,7 +1405,7 @@ public partial class MainWindow : Window
 		foreach (var item in MenuBuilder.BuildItems (entries))
 			MainMenu.Items.Add (item);
 		// Re-attach on every rebuild: the items are new instances each time.
-		Services.KeyboardShortcutRegistry.AttachHotKeys (this);
+		MonoDevelop.Ide.Services.KeyboardShortcutRegistry.AttachHotKeys (this);
 	}
 
 	// View > Pads checkmarks mirror the real pad visibility on every rebuild, like the
@@ -1307,7 +1442,7 @@ public partial class MainWindow : Window
 		if (isTextEditingCombo)
 			return;
 
-		var bindings = Services.KeyboardShortcutRegistry.GetBindings ();
+		var bindings = MonoDevelop.Ide.Services.KeyboardShortcutRegistry.GetBindings ();
 		foreach (var (commandId, gesture) in bindings) {
 			if (gesture.Matches (e)) {
 				Console.WriteLine ($"[keys] {gesture} → {commandId}");
@@ -1335,7 +1470,7 @@ public partial class MainWindow : Window
 	// Legacy DebuggingService equivalent: one DAP session over the vendored
 	// netcoredbg; Locals/Watch/Call Stack pads fill on every stop, the current
 	// execution line is highlighted in the editor (yellow like the legacy arrow).
-	Services.DebugSessionService? debugSession;
+	MonoDevelop.Debugger.Services.DebugSessionService? debugSession;
 	Views.AttachToProcessPanel? attachPanel;
 	ListBox? threadsList;
 	bool debugPaused;
@@ -1462,10 +1597,14 @@ public partial class MainWindow : Window
 		BottomPads.AddTab (new PadHost.PadTab { Id = "locals", Label = "Locals", Icon = "md-view-debug-locals", Content = localsList, Visible = false });
 
 		watchList = MakeVariableTree ();
-		// Legacy Watch pad menu: Add Watch / Remove Watch; rows re-evaluate on stop.
+		// Legacy Watch pad menu: Add Watch / Remove Watch; rows re-evaluate on stop
+		// and every row is editable in place (double click → inline TextBox,
+		// Enter commits the new expression and re-evaluates, Esc cancels).
 		watchList.ContextMenu = BookmarksMenu (
 			("Add Watch", null, AddWatchExpression),
-			("Remove Watch", null, RemoveSelectedWatch));
+			("Remove Watch", null, RemoveSelectedWatch),
+			("Edit Watch…", null, EditSelectedWatch));
+		watchList.DoubleTapped += (_, _) => BeginWatchEdit ();
 		BottomPads.AddTab (new PadHost.PadTab { Id = "watch", Label = "Watch", Icon = "md-view-debug-watch", Content = watchList, Visible = false });
 		VariableNode.Loader = LoadVariableChildren;
 
@@ -1502,7 +1641,7 @@ public partial class MainWindow : Window
 		threadsList = new ListBox { Background = Brushes.Transparent };
 		threadsList.Bind (ListBox.ForegroundProperty, Application.Current.GetResourceObservable ("IdeFgBrush"));
 		threadsList.DoubleTapped += (_, _) => {
-			if (threadsList.SelectedItem is ListBoxItem { Tag: Services.DebugThread t } && debugSession is { IsActive: true } s)
+			if (threadsList.SelectedItem is ListBoxItem { Tag: MonoDevelop.Debugger.Services.DebugThread t } && debugSession is { IsActive: true } s)
 				_ = ShowThreadStackTraceAsync (s, t.Id);
 		};
 		BottomPads.AddTab (new PadHost.PadTab { Id = "threads", Label = "Threads", Icon = "md-view-debug-threads", Content = threadsList, Visible = false });
@@ -1659,14 +1798,14 @@ public partial class MainWindow : Window
 
 	readonly List<(string Tag, Control Content)> documents = new ();
 	// Open file editors by tab tag (island tabs): used by Save/SaveAll (FileCommands).
-	readonly Dictionary<string, Controls.SkTextEditor> docs = new ();
+	readonly Dictionary<string, MonoDevelop.Ide.Controls.SkTextEditor> docs = new ();
 
 	void AddDocument (string tag, Control content, bool closable = true, bool select = true)
 	{
 		if (documents.Any (d => d.Tag == tag))
 			return;
 		documents.Add ((tag, content));
-		if (content is Controls.SkTextEditor ed && !docs.ContainsKey (tag))
+		if (content is MonoDevelop.Ide.Controls.SkTextEditor ed && !docs.ContainsKey (tag))
 			docs.Add (tag, ed);
 
 		var header = new Panel();
@@ -1711,7 +1850,7 @@ public partial class MainWindow : Window
 			if (doc.Content is not null) {
 				DocContent!.Children.Clear ();
 				DocContent.Children.Add (doc.Content);
-				if (doc.Content is Controls.SkTextEditor ed && !string.IsNullOrEmpty (ed.FilePath))
+				if (doc.Content is MonoDevelop.Ide.Controls.SkTextEditor ed && !string.IsNullOrEmpty (ed.FilePath))
 					StatusText!.Text = ed.FilePath;
 			}
 		} else {
@@ -1785,7 +1924,7 @@ public partial class MainWindow : Window
 		("Remove Breakpoint", null, RemoveSelectedBreakpoint),
 		("Clear All Breakpoints", "md-breakpoint-disable-all", () => { foreach (var ed in docs.Values) ed.ClearBreakpoints (); PersistBreakpoints (); RefreshBreakpointsPad (); }));
 
-	(Controls.SkTextEditor? Editor, int Line) SelectedBreakpoint ()
+	(MonoDevelop.Ide.Controls.SkTextEditor? Editor, int Line) SelectedBreakpoint ()
 	{
 		if (breakpointsList?.SelectedItem is ListBoxItem { Tag: string key }) {
 			var parts = key.Split ('|');
@@ -1929,7 +2068,7 @@ public partial class MainWindow : Window
 		if (string.IsNullOrEmpty (loadedSolutionPath))
 			return;
 		try {
-			Services.WatchService.Save (loadedSolutionPath, watchExpressions);
+			MonoDevelop.Debugger.Services.WatchService.Save (loadedSolutionPath, watchExpressions);
 		} catch (Exception ex) {
 			Output ("[watch] persist failed: " + ex.Message);
 		}
@@ -1939,12 +2078,12 @@ public partial class MainWindow : Window
 	{
 		if (string.IsNullOrEmpty (loadedSolutionPath))
 			return;
-		var all = new List<Services.BreakpointEntry> ();
+		var all = new List<MonoDevelop.Debugger.Services.BreakpointEntry> ();
 		foreach (var ed in docs.Values.Where (d => !string.IsNullOrEmpty (d.FilePath)))
 			foreach (var (line, (enabled, opts)) in ed.Breakpoints)
-				all.Add (new Services.BreakpointEntry (ed.FilePath, line + 1, enabled, opts.Condition, opts.HitCount, opts.LogMessage)); // 1-based like Mono.Debugging
+				all.Add (new MonoDevelop.Debugger.Services.BreakpointEntry (ed.FilePath, line + 1, enabled, opts.Condition, opts.HitCount, opts.LogMessage)); // 1-based like Mono.Debugging
 		try {
-			Services.BreakpointService.Save (loadedSolutionPath, all);
+			MonoDevelop.Debugger.Services.BreakpointService.Save (loadedSolutionPath, all);
 		} catch (Exception ex) {
 			Output ("[breakpoints] persist failed: " + ex.Message);
 		}
@@ -2287,7 +2426,7 @@ public partial class MainWindow : Window
 	{
 		Console.WriteLine ("[solution] opening: " + path);
 		try {
-			var loaded = Services.SolutionLoader.Load (path);
+			var loaded = MonoDevelop.Ide.Services.SolutionLoader.Load (path);
 			if (loaded is null) {
 				Output ("Failed to load solution: " + path);
 				return;
@@ -2333,7 +2472,7 @@ public partial class MainWindow : Window
 			// Restore the persisted watch expressions (legacy PinnedWatches user
 			// prefs load path); the Watch pad re-fills them on the next stop.
 			watchExpressions.Clear ();
-			foreach (var w in Services.WatchService.Load (path))
+			foreach (var w in MonoDevelop.Debugger.Services.WatchService.Load (path))
 				watchExpressions.Add (w);
 			PersistWatches ();
 
@@ -2463,7 +2602,7 @@ public partial class MainWindow : Window
 			return;
 		}
 		try {
-			var editor = new Controls.SkTextEditor {
+			var editor = new MonoDevelop.Ide.Controls.SkTextEditor {
 				FilePath = path,
 				IsDirty = false,
 				Background = Brushes.Transparent,
@@ -2472,12 +2611,13 @@ public partial class MainWindow : Window
 			};
 			editor.Text = File.ReadAllText (path);
 			editor.IsDirty = false;
-			editor.Bind (Controls.SkTextEditor.ForegroundProperty, Application.Current!.GetResourceObservable ("IdeFgBrush"));
+			editor.Bind (MonoDevelop.Ide.Controls.SkTextEditor.ForegroundProperty, Application.Current!.GetResourceObservable ("IdeFgBrush"));
 			editor.PropertyChanged += (_, e) => {
-				if (e.Property == Controls.SkTextEditor.IsDirtyProperty)
+				if (e.Property == MonoDevelop.Ide.Controls.SkTextEditor.IsDirtyProperty)
 					UpdateDocTabTitle (tag, docDirty: editor.IsDirty);
 			};
 			editor.BreakpointsChanged += OnEditorBreakpointsChanged;
+			editor.PinnedWatchesChanged += OnEditorPinnedWatchesChanged;
 			// Debugger hover eval: while paused, tooltips show the live value of the
 		// word under the mouse (DAP evaluate) instead of the static description.
 			editor.DebugHoverEval = word => {
@@ -2489,13 +2629,18 @@ public partial class MainWindow : Window
 			// Restore the persisted breakpoints of this file (DebuggingService load
 			// path), including condition/hit count/tracepoint attributes.
 			if (!string.IsNullOrEmpty (loadedSolutionPath)) {
-				var stored = Services.BreakpointService.Load (loadedSolutionPath)
+				var stored = MonoDevelop.Debugger.Services.BreakpointService.Load (loadedSolutionPath)
 					.Where (b => Path.GetFullPath (b.FileName) == Path.GetFullPath (path))
-					.Select (b => new KeyValuePair<int, (bool Enabled, Controls.SkTextEditor.BreakpointOptions Options)> (
+					.Select (b => new KeyValuePair<int, (bool Enabled, MonoDevelop.Ide.Controls.SkTextEditor.BreakpointOptions Options)> (
 						b.Line - 1, // 0-based internally
-						(b.Enabled, new Controls.SkTextEditor.BreakpointOptions (b.Condition, b.HitCount, b.LogMessage))));
+						(b.Enabled, new MonoDevelop.Ide.Controls.SkTextEditor.BreakpointOptions (b.Condition, b.HitCount, b.LogMessage))));
 				if (stored.Any ())
 					editor.SetBreakpoints (stored);
+				// Restore the pinned watches of this file (legacy
+				// PinnedWatchStore.GetWatchesForFile on document open).
+				editor.SetPinnedWatches (MonoDevelop.Debugger.Services.WatchService.LoadPinned (loadedSolutionPath)
+					.Where (w => Path.GetFullPath (w.File) == Path.GetFullPath (path))
+					.Select (w => (w.Line - 1, w.Expression)));
 			}
 			AttachEditorContextMenu (editor);
 			AddDocument (tag, editor);
@@ -2516,7 +2661,7 @@ public partial class MainWindow : Window
 
 	// Editor context menu, same items as the legacy SourceEditorWidget context path
 	// (cut/copy/paste/select all, go to line) with the legacy stock icons.
-	void AttachEditorContextMenu (Controls.SkTextEditor editor)
+	void AttachEditorContextMenu (MonoDevelop.Ide.Controls.SkTextEditor editor)
 	{
 		MenuItem Item (string header, string? stockId, Action onClick)
 		{
@@ -2536,6 +2681,10 @@ public partial class MainWindow : Window
 				new Separator (),
 				Item ("Select All", "gtk-select-all", editor.SelectAll),
 				Item ("Go To Line…", null, editor.GotoLinePopup),
+				new Separator (),
+				// Legacy debugger actions: pin the word at the caret to its line
+				// (PinnedWatch) — removed from the same bubble's context menu.
+				Item ("Pin Watch", "md-view-debug-watch", () => PinWatchAtCaret (editor)),
 			},
 		};
 		editor.ContextMenu = menu;
@@ -2969,7 +3118,7 @@ public partial class MainWindow : Window
 			if (!string.IsNullOrEmpty (dlg.CreatedProjectPath) && !string.IsNullOrEmpty (loadedSolutionPath)) {
 				// Legacy ProjectOperations.AddSolutionItem: project entry + GUID + config
 				// mappings in the .sln, then reload the tree.
-				Services.ConfigurationService.AppendProjectToSolution (dlg.CreatedProjectPath, loadedSolutionPath);
+				MonoDevelop.Ide.Services.ConfigurationService.AppendProjectToSolution (dlg.CreatedProjectPath, loadedSolutionPath);
 				Output ("[newproject] added " + Path.GetFileName (dlg.CreatedProjectPath) + " to " + Path.GetFileName (loadedSolutionPath));
 				OpenSolutionInWindow (loadedSolutionPath);
 				return;
@@ -3089,9 +3238,9 @@ public partial class MainWindow : Window
 	// theme variant, like the legacy ImageService icons.
 	void SetToolbarIcons ()
 	{
-		if (Services.IconService.GetImage ("gtk-execute") is Avalonia.Media.Imaging.Bitmap bmp)
+		if (MonoDevelop.Ide.Services.IconService.GetImage ("gtk-execute") is Avalonia.Media.Imaging.Bitmap bmp)
 			RunIcon!.Source = bmp;
-		if (Services.IconService.GetImage ("md-debug-all") is Avalonia.Media.Imaging.Bitmap dbgBmp)
+		if (MonoDevelop.Ide.Services.IconService.GetImage ("md-debug-all") is Avalonia.Media.Imaging.Bitmap dbgBmp)
 			DebugIcon!.Source = dbgBmp;
 		SetIfAvailable (StepOverIcon, "md-step-over-debug");
 		SetIfAvailable (StepIntoIcon, "md-step-into-debug");
@@ -3103,9 +3252,9 @@ public partial class MainWindow : Window
 	{
 		if (target is null)
 			return;
-		if (Services.IconService.GetImage (stock) is Avalonia.Media.Imaging.Bitmap bmp)
+		if (MonoDevelop.Ide.Services.IconService.GetImage (stock) is Avalonia.Media.Imaging.Bitmap bmp)
 			target.Source = bmp;
-		else if (Services.IconService.GetImage ("md-debug-all") is Avalonia.Media.Imaging.Bitmap fallback)
+		else if (MonoDevelop.Ide.Services.IconService.GetImage ("md-debug-all") is Avalonia.Media.Imaging.Bitmap fallback)
 			target.Source = fallback;
 	}
 
@@ -3152,7 +3301,7 @@ public partial class MainWindow : Window
 		// (WorkspaceUserData.ActiveConfiguration) and echoed to the Project menu.
 		if (cb == ConfigCombo && !suppressConfigSync && !string.IsNullOrEmpty (loadedSolutionPath)) {
 			try {
-				Services.ConfigurationService.SetActiveConfiguration (loadedSolutionPath, sel);
+				MonoDevelop.Ide.Services.ConfigurationService.SetActiveConfiguration (loadedSolutionPath, sel);
 				activeConfiguration = sel;
 				Output ($"[toolbar] {name} → {sel} (saved to {Path.GetFileName (loadedSolutionPath)})");
 			} catch (Exception ex) {
@@ -3174,10 +3323,10 @@ public partial class MainWindow : Window
 	{
 		if (string.IsNullOrEmpty (loadedSolutionPath) || !File.Exists (loadedSolutionPath))
 			return;
-		var configs = Services.ConfigurationService.GetSolutionConfigurations (loadedSolutionPath);
+		var configs = MonoDevelop.Ide.Services.ConfigurationService.GetSolutionConfigurations (loadedSolutionPath);
 		if (configs.Count == 0)
 			return;
-		var active = Services.ConfigurationService.GetActiveConfiguration (loadedSolutionPath);
+		var active = MonoDevelop.Ide.Services.ConfigurationService.GetActiveConfiguration (loadedSolutionPath);
 		activeConfiguration = active;
 		suppressConfigSync = true;
 		try {
@@ -3230,9 +3379,9 @@ public partial class MainWindow : Window
 			return;
 		}
 		if (commandId.StartsWith ("tool:", StringComparison.Ordinal)) {
-			var tool = Services.SettingsStore.LoadTools ().FirstOrDefault (t => t.MenuCommand == commandId.Substring ("tool:".Length));
+			var tool = MonoDevelop.Ide.Services.SettingsStore.LoadTools ().FirstOrDefault (t => t.MenuCommand == commandId.Substring ("tool:".Length));
 			if (tool is not null)
-				_ = Services.ExternalToolRunner.Run (tool);
+				_ = MonoDevelop.Ide.Services.ExternalToolRunner.Run (tool);
 			return;
 		}
 		if (commandId.StartsWith ("cmd:", StringComparison.Ordinal)) {
@@ -3434,7 +3583,7 @@ public partial class MainWindow : Window
 
 		// ----- NavigationCommands (legacy NavigationHistoryService) + Zoom -----
 		case "MonoDevelop.Ide.Commands.NavigationCommands.NavigateBack": {
-			var p = Services.NavigationHistoryService.MoveBack ();
+			var p = MonoDevelop.Ide.Services.NavigationHistoryService.MoveBack ();
 			if (p is not null)
 				NavigateToPoint (p);
 			else
@@ -3442,7 +3591,7 @@ public partial class MainWindow : Window
 			return;
 		}
 		case "MonoDevelop.Ide.Commands.NavigationCommands.NavigateForward": {
-			var p = Services.NavigationHistoryService.MoveForward ();
+			var p = MonoDevelop.Ide.Services.NavigationHistoryService.MoveForward ();
 			if (p is not null)
 				NavigateToPoint (p);
 			else
@@ -3450,7 +3599,7 @@ public partial class MainWindow : Window
 			return;
 		}
 		case "MonoDevelop.Ide.Commands.NavigationCommands.NavigateHistory": {
-			var (points, current) = Services.NavigationHistoryService.GetNavigationList (15);
+			var (points, current) = MonoDevelop.Ide.Services.NavigationHistoryService.GetNavigationList (15);
 			for (int i = 0; i < points.Count; i++)
 				Output ($"[nav] {(i == current ? "→" : " ")} {points [i]}");
 			if (points.Count == 0)
@@ -3458,7 +3607,7 @@ public partial class MainWindow : Window
 			return;
 		}
 		case "MonoDevelop.Ide.Commands.NavigationCommands.ClearNavigationHistory":
-			Services.NavigationHistoryService.Clear ();
+			MonoDevelop.Ide.Services.NavigationHistoryService.Clear ();
 			Output ("[nav] history cleared");
 			return;
 		case "MonoDevelop.Ide.Commands.ViewCommands.ZoomIn":
@@ -3624,7 +3773,7 @@ public partial class MainWindow : Window
 			var cfgName = id.Substring (id.IndexOf (':') + 1);
 			if (!string.IsNullOrEmpty (loadedSolutionPath)) {
 				try {
-					Services.ConfigurationService.SetActiveConfiguration (loadedSolutionPath, cfgName);
+					MonoDevelop.Ide.Services.ConfigurationService.SetActiveConfiguration (loadedSolutionPath, cfgName);
 					activeConfiguration = cfgName;
 					suppressConfigSync = true;
 					try { ConfigCombo!.SelectedItem = cfgName; } finally { suppressConfigSync = false; }
@@ -4008,9 +4157,9 @@ public partial class MainWindow : Window
 		case "MonoDevelop.Ide.Commands.ToolCommands.ToolList":
 			// Legacy ToolList is a dynamic submenu (one entry per configured tool);
 			// the new shell runs the first tool directly when invoked from dispatch.
-			var tools = Services.SettingsStore.LoadTools ();
+			var tools = MonoDevelop.Ide.Services.SettingsStore.LoadTools ();
 			if (tools.Count > 0)
-				_ = Services.ExternalToolRunner.Run (tools [0]);
+				_ = MonoDevelop.Ide.Services.ExternalToolRunner.Run (tools [0]);
 			else
 				Output ("[tools] no external tools configured (Tools > Edit Custom Tools)");
 			return;
@@ -4079,7 +4228,7 @@ public partial class MainWindow : Window
 	public void ApplyFontPreferences ()
 	{
 		foreach (var ed in docs.Values) {
-			var spec = Services.SettingsStore.GetFontSpec ("Editor");
+			var spec = MonoDevelop.Ide.Services.SettingsStore.GetFontSpec ("Editor");
 			if (!string.IsNullOrWhiteSpace (spec)) {
 				var sp = spec.LastIndexOf (' ');
 				if (sp > 0 && double.TryParse (spec [(sp + 1)..], out var size))
@@ -4223,7 +4372,7 @@ public partial class MainWindow : Window
 			Output ("[tasks] no solution loaded");
 			return;
 		}
-		var rows = Services.TaskScanner.Scan (dir);
+		var rows = MonoDevelop.Ide.Services.TaskScanner.Scan (dir);
 		var list = new ListBox { Background = Brushes.Transparent };
 		list.Bind (ListBox.ForegroundProperty, Application.Current!.GetResourceObservable ("IdeFgBrush"));
 		var items = new System.Collections.ObjectModel.ObservableCollection<string> ();
@@ -4240,11 +4389,11 @@ public partial class MainWindow : Window
 		};
 		BottomPads.SetTabVisible ("tasks", true);
 		BottomPads.Select ("tasks");
-		BottomPads.ReplaceTabContent ("tasks", WrapWithHeader ($"{rows.Count} task(s) — tags: {string.Join (", ", Services.TaskScanner.GetTags ().Select (t => t.Tag))}", list));
+		BottomPads.ReplaceTabContent ("tasks", WrapWithHeader ($"{rows.Count} task(s) — tags: {string.Join (", ", MonoDevelop.Ide.Services.TaskScanner.GetTags ().Select (t => t.Tag))}", list));
 		Output ($"[tasks] {rows.Count} task(s) found");
 	}
 
-	readonly Dictionary<string, Services.TaskScanner.TaskRow> taskRows = new ();
+	readonly Dictionary<string, MonoDevelop.Ide.Services.TaskScanner.TaskRow> taskRows = new ();
 
 	// Legacy SearchResultWidget.Activate: opens the document and moves the caret.
 	public void OpenFileDocumentAtLine (string path, int line)
@@ -4295,7 +4444,7 @@ public partial class MainWindow : Window
 	}
 
 	// NavigationHistoryService jump: open the file (if needed) and restore the caret line.
-	void NavigateToPoint (Services.NavigationPoint p)
+	void NavigateToPoint (MonoDevelop.Ide.Services.NavigationPoint p)
 	{
 		if (!string.IsNullOrEmpty (p.File) && File.Exists (p.File))
 			OpenFileDocumentAtLine (p.File, p.Line);
@@ -4307,11 +4456,11 @@ public partial class MainWindow : Window
 	{
 		var tag = (DocTabs.SelectedItem as TabItem)?.Tag as string;
 		if (tag is not null && docs.TryGetValue (tag, out var ed))
-			Services.NavigationHistoryService.Push (ed.FilePath is { Length: > 0 } ? ed.FilePath : null, ed.CurrentLine + 1);
+			MonoDevelop.Ide.Services.NavigationHistoryService.Push (ed.FilePath is { Length: > 0 } ? ed.FilePath : null, ed.CurrentLine + 1);
 	}
 
 	// Runs an edit action on the active document when it is a text editor.
-	void WithActiveEditor (Action<Controls.SkTextEditor> action)
+	void WithActiveEditor (Action<MonoDevelop.Ide.Controls.SkTextEditor> action)
 	{
 		if (docs.TryGetValue ((DocTabs.SelectedItem as TabItem)?.Tag as string ?? "", out var ed))
 			action (ed);
@@ -4324,7 +4473,7 @@ public partial class MainWindow : Window
 	void OpenNewFileDocument ()
 	{
 		var name = $"new{newFileCounter}.cs";
-		newFileCounter++;		var editor = new Controls.SkTextEditor {
+		newFileCounter++;		var editor = new MonoDevelop.Ide.Controls.SkTextEditor {
 			FilePath = "",
 			IsDirty = false,
 			Background = Brushes.Transparent,
@@ -4380,7 +4529,7 @@ public partial class MainWindow : Window
 			var slnPath = Path.Combine (Path.GetDirectoryName (path)!, Path.GetFileNameWithoutExtension (path) + ".sln");
 			try {
 				if (!File.Exists (slnPath)) {
-					Services.ConfigurationService.AddProjectToSolution (path, slnPath);
+					MonoDevelop.Ide.Services.ConfigurationService.AddProjectToSolution (path, slnPath);
 					Output ("[open] imported project → created " + Path.GetFileName (slnPath));
 				}
 				OpenSolutionInWindow (slnPath);
@@ -4450,7 +4599,7 @@ public partial class MainWindow : Window
 		var failed = false;
 		// Legacy ProjectOperations build the active configuration (SelectActiveConfiguration).
 		var config = !string.IsNullOrEmpty (loadedSolutionPath) && File.Exists (loadedSolutionPath)
-			? Services.ConfigurationService.GetActiveConfiguration (loadedSolutionPath)
+			? MonoDevelop.Ide.Services.ConfigurationService.GetActiveConfiguration (loadedSolutionPath)
 			: activeConfiguration;
 		Output ($"[build] configuration {config}");
 		foreach (var proj in projs.ToList ()) {
@@ -4476,7 +4625,7 @@ public partial class MainWindow : Window
 			return;
 		}
 		var runConfig = !string.IsNullOrEmpty (loadedSolutionPath) && File.Exists (loadedSolutionPath)
-			? Services.ConfigurationService.GetActiveConfiguration (loadedSolutionPath)
+			? MonoDevelop.Ide.Services.ConfigurationService.GetActiveConfiguration (loadedSolutionPath)
 			: activeConfiguration;
 		if (!debug) {
 			Output ($"[run] dotnet run -c {runConfig} — " + Path.GetFileName (proj));
@@ -4503,7 +4652,7 @@ public partial class MainWindow : Window
 		var bps = CollectPersistedBreakpoints ();
 		Output ($"[debug] netcoredbg launch — {Path.GetFileName (dll)}, breakpoints: {bps.Count}");
 		debugSession?.Dispose ();
-		var session = new Services.DebugSessionService ();
+		var session = new MonoDevelop.Debugger.Services.DebugSessionService ();
 		debugSession = session;
 		session.DebuggerOutput += (_, text) => Avalonia.Threading.Dispatcher.UIThread.Post (() => {
 			foreach (var line in text.Split ('\n'))
@@ -4529,7 +4678,7 @@ public partial class MainWindow : Window
 		if (string.IsNullOrEmpty (loadedSolutionPath))
 			return result;
 		try {
-			foreach (var b in Services.BreakpointService.Load (loadedSolutionPath))
+			foreach (var b in MonoDevelop.Debugger.Services.BreakpointService.Load (loadedSolutionPath))
 				if (b.Enabled && File.Exists (b.FileName))
 					result.Add ((Path.GetFullPath (b.FileName), b.Line, b.Condition, b.HitCount, b.LogMessage));
 		} catch (Exception ex) {
@@ -4540,7 +4689,7 @@ public partial class MainWindow : Window
 
 	// Legacy CurrentLineNumber highlight: select the document and paint the stopped
 	// line yellow (like the execution arrow) until Continue/terminate clears it.
-	void OnDebuggerStopped (Services.DebugStopInfo stop)
+	void OnDebuggerStopped (MonoDevelop.Debugger.Services.DebugStopInfo stop)
 	{
 		debugPaused = true;
 		var frame = stop.Frames.FirstOrDefault ();
@@ -4550,6 +4699,9 @@ public partial class MainWindow : Window
 			currentDebugLine = frame.Line;
 			HighlightExecutionLine ();
 			ShowDataTipForFrame (frame);
+			// Legacy PinnedWatch.Evaluate: the pinned bubbles of the open documents
+			// re-evaluate on every stop (continue/step clear them with the tips).
+			RefreshPinnedWatchValuesAsync ();
 			Output ($"[debug] stopped ({stop.Reason}) at {Path.GetFileName (frame.File)}:{frame.Line}");
 		}
 		_ = RefreshDebugPadsAsync ();
@@ -4561,7 +4713,7 @@ public partial class MainWindow : Window
 	// (e.g. "Console.WriteLine(...)") that no scope resolves — like the legacy
 	// tooltip, which only resolves what the current frame can evaluate, each
 	// identifier is tried until one evaluates without error. Best effort.
-	async void ShowDataTipForFrame (Services.DebugFrame frame)
+	async void ShowDataTipForFrame (MonoDevelop.Debugger.Services.DebugFrame frame)
 	{
 		if (!docs.TryGetValue (Path.GetFileName (frame.File), out var ed))
 			return;
@@ -4582,8 +4734,66 @@ public partial class MainWindow : Window
 
 	void ClearDataTips ()
 	{
-		foreach (var (_, ed) in docs)
+		foreach (var (_, ed) in docs) {
 			ed.SetDataTip (null, null);
+			ed.SetPinnedWatchValues (null); // pinned bubbles back to "expr = ?"
+		}
+	}
+
+	// ----- Pinned watches (legacy Debugger.PinnedWatch adorners): the word at
+	// the caret pins to its line as an amber bubble; the store (file/line/
+	// expression) persists in the legacy PinnedWatches user-prefs key through
+	// the debugger addin's WatchService, and every debugger stop re-evaluates
+	// the pins of the open documents (legacy PinnedWatch.Evaluate). -----
+
+	void PinWatchAtCaret (MonoDevelop.Ide.Controls.SkTextEditor ed)
+	{
+		var expr = ed.WordAtCaret ();
+		if (expr.Length == 0) {
+			Output ("[pinwatch] no word at caret");
+			return;
+		}
+		ed.TogglePinnedWatch (ed.CurrentLine, expr);
+	}
+
+	// DebuggingService.OnStoreUserPrefs for pins: the whole editor store of
+	// every open document, saved next to the pad watches.
+	void RefreshPinnedWatchesPad ()
+	{
+		if (string.IsNullOrEmpty (loadedSolutionPath))
+			return;
+		try {
+			var pins = new List<MonoDevelop.Debugger.Services.WatchEntry> ();
+			foreach (var ed in docs.Values.Where (d => !string.IsNullOrEmpty (d.FilePath) && d.PinnedWatchList.Count > 0))
+				foreach (var (line, expr) in ed.PinnedWatchList)
+					pins.Add (new MonoDevelop.Debugger.Services.WatchEntry (ed.FilePath, line + 1, expr)); // 1-based like PinnedWatch
+			MonoDevelop.Debugger.Services.WatchService.SavePinned (loadedSolutionPath, watchExpressions, pins);
+		} catch (Exception ex) {
+			Output ("[pinwatch] persist failed: " + ex.Message);
+		}
+	}
+
+	void OnEditorPinnedWatchesChanged (object? sender, EventArgs e)
+		=> RefreshPinnedWatchesPad ();
+
+	// Legacy stopped hook: evaluate every pin in the current frame; the value
+	// replaces the bubble's static label until continue/step clears it.
+	async void RefreshPinnedWatchValuesAsync ()
+	{
+		if (debugSession is not { IsActive: true } sess || !debugPaused) {
+			foreach (var ed in docs.Values)
+				ed.SetPinnedWatchValues (null);
+			return;
+		}
+		var values = new List<(int line, string label)> ();
+		foreach (var ed in docs.Values.Where (d => d.PinnedWatchList.Count > 0)) {
+			foreach (var (line, expr) in ed.PinnedWatchList) {
+				var ev = await sess.EvaluateAsync (expr, sess.CurrentFrameId);
+				values.Add ((line, expr + " = " + (ev.Error is null ? ev.Value : "?")));
+			}
+		}
+		foreach (var ed in docs.Values.Where (d => d.PinnedWatchList.Count > 0))
+			ed.SetPinnedWatchValues (values);
 	}
 
 	void HighlightExecutionLine ()
@@ -4644,7 +4854,8 @@ public partial class MainWindow : Window
 
 	// Watch pad: evaluate every watch expression in the current frame (the legacy
 	// Watch pad re-evaluates on each stop). Roots are tree nodes — a watch with
-	// children expands like a Locals variable.
+	// children expands like a Locals variable. Rows keep their owning expression
+	// in VariableNode.WatchExpression so in-place editing knows what to replace.
 	async System.Threading.Tasks.Task RefreshWatchPadAsync ()
 	{
 		var tree = watchList;
@@ -4659,7 +4870,7 @@ public partial class MainWindow : Window
 		foreach (var expr in watchExpressions) {
 			var ev = await sess.EvaluateAsync (expr, frameId);
 			var display = $"{expr} = " + (ev.Error is null ? ev.Value : $"? ({ev.Error})");
-			tree.Items.Add (new VariableNode (display, ev.HasChildren ? ev.VariablesReference : 0));
+			tree.Items.Add (new VariableNode (display, ev.HasChildren ? ev.VariablesReference : 0) { WatchExpression = expr });
 		}
 	}
 
@@ -4670,25 +4881,103 @@ public partial class MainWindow : Window
 	{
 		var dlg = new Views.InputDialog ("Add Watch", "Expression:");
 		await dlg.ShowDialog (this);
-		if (dlg.Confirmed) {
-			var expr = dlg.Value.Trim ();
-			if (expr.Length > 0 && !watchExpressions.Contains (expr)) {
-				watchExpressions.Add (expr);
-				PersistWatches ();
-			}
-		}
-		await RefreshWatchPadAsync ();
+		if (dlg.Confirmed)
+			await CommitWatchExpressionAsync (null, dlg.Value.Trim ());
+		else
+			await RefreshWatchPadAsync ();
 	}
 
 	void RemoveSelectedWatch ()
 	{
-		if (watchList?.SelectedItem is VariableNode node && node.Display is { Length: > 0 } d) {
-			var name = d.Split ('=') [0].Trim ();
+		if (watchList?.SelectedItem is VariableNode node && node.WatchExpression is { Length: > 0 } name) {
 			if (watchExpressions.Remove (name))
 				PersistWatches ();
 		}
 		_ = RefreshWatchPadAsync ();
 	}
+
+	// ----- Watch pad in-place editing (legacy Watch pad: double-click or the
+	// context menu puts an inline editor over the row; Enter commits the new
+	// expression — replacing the old one in place — and re-evaluates, Esc
+	// cancels). Committing also persists the store like any other mutation. -----
+	void EditSelectedWatch ()
+	{
+		if (watchList?.SelectedItem is VariableNode { WatchExpression: { Length: > 0 } })
+			BeginWatchEdit ();
+	}
+
+	void BeginWatchEdit ()
+	{
+		var tree = watchList;
+		if (tree is null || watchEditBox is not null)
+			return;
+		if (tree.SelectedItem is not VariableNode { WatchExpression: { Length: > 0 } expr })
+			return;
+		int idx = tree.Items.IndexOf (tree.SelectedItem);
+		if (idx < 0)
+			return;
+		// Realized row container (TreeViewItem) whose DataContext is the selected node.
+		var container = tree.GetRealizedContainers ()?.OfType<TreeViewItem> ().FirstOrDefault (c => ReferenceEquals (c.DataContext, tree.SelectedItem));
+		if (container is null)
+			return;
+		var box = new TextBox { Text = expr, FontSize = 11.5 };
+		// Escape rolls back; Enter commits through the shared rename path.
+		box.KeyDown += (s, e) => {
+			if (e.Key == Key.Escape) {
+				EndWatchEdit ();
+				e.Handled = true;
+			} else if (e.Key == Key.Enter) {
+				CommitWatchEdit ();
+				e.Handled = true;
+			}
+		};
+		box.LostFocus += (_, _) => EndWatchEdit ();
+		watchEditBox = box;
+		container.Header = box;
+		box.Focus ();
+		box.SelectAll ();
+	}
+
+	void CommitWatchEdit ()
+	{
+		var box = watchEditBox;
+		var tree = watchList;
+		if (box is null || tree is null)
+			return;
+		var oldExpr = (tree.SelectedItem as VariableNode)?.WatchExpression;
+		var newExpr = box.Text?.Trim () ?? "";
+		watchEditBox = null;
+		_ = CommitWatchExpressionAsync (oldExpr, newExpr);
+	}
+
+	void EndWatchEdit ()
+	{
+		if (watchEditBox is not null) {
+			watchEditBox = null;
+			_ = RefreshWatchPadAsync ();
+		}
+	}
+
+	// Shared by the in-place editor and Add Watch: replaces oldExpr with newExpr
+	// (dedup + insertion order kept), persists and re-evaluates the pad.
+	async System.Threading.Tasks.Task CommitWatchExpressionAsync (string? oldExpr, string newExpr)
+	{
+		if (oldExpr is not null) {
+			int i = watchExpressions.IndexOf (oldExpr);
+			if (i >= 0) {
+				if (newExpr.Length == 0)
+					watchExpressions.RemoveAt (i);
+				else if (!watchExpressions.Contains (newExpr))
+					watchExpressions [i] = newExpr;
+			}
+		} else if (newExpr.Length > 0 && !watchExpressions.Contains (newExpr)) {
+			watchExpressions.Add (newExpr);
+		}
+		PersistWatches ();
+		await RefreshWatchPadAsync ();
+	}
+
+	TextBox? watchEditBox;
 
 	// ----- Variable trees (Locals/Watch): expandable nodes like the legacy pad.
 	// A node with variablesReference > 0 shows a placeholder child; on expand the
@@ -4727,6 +5016,9 @@ public partial class MainWindow : Window
 		public int VariablesReference { get; }
 		public bool Loaded { get; private set; }
 
+		// Owning expression of a Watch pad root row (in-place editing).
+		public string? WatchExpression { get; init; }
+
 		public VariableNode (string display, int variablesReference)
 		{
 			Display = display;
@@ -4743,7 +5035,7 @@ public partial class MainWindow : Window
 		public static Func<VariableNode, System.Collections.Generic.IEnumerable<VariableNode>?>? Loader;
 	}
 
-	void FillVariableList (TreeView? tree, Services.DebugVariable [] vars, string emptyText)
+	void FillVariableList (TreeView? tree, MonoDevelop.Debugger.Services.DebugVariable [] vars, string emptyText)
 	{
 		if (tree is null)
 			return;
@@ -4756,10 +5048,10 @@ public partial class MainWindow : Window
 			tree.Items.Add (NodeFor (v, v.Name));
 	}
 
-	static VariableNode NodeFor (Services.DebugVariable v, string label)
+	static VariableNode NodeFor (MonoDevelop.Debugger.Services.DebugVariable v, string label)
 		=> new ($"{label} = {v.Value}", v.HasChildren ? v.VariablesReference : 0);
 
-	void FillVariableList (ListBox? list, Services.DebugVariable [] vars, string emptyText)
+	void FillVariableList (ListBox? list, MonoDevelop.Debugger.Services.DebugVariable [] vars, string emptyText)
 	{
 		if (list is null)
 			return;
@@ -4922,7 +5214,9 @@ public partial class MainWindow : Window
 	}
 
 	// Legacy StepOver/StepInto/StepOut: DAP next/stepIn/stepOut on the stopped
-	// thread; the following stopped event re-highlights and refreshes the pads.
+	// thread; the following stopped event re-highlights and refreshes the pads
+	// (which re-evaluates the Watch pad after every step, like the legacy
+	// Watch pad refresh on StoppedEvent).
 	void StepDebug (string which)
 	{
 		if (debugSession is { IsActive: true } s && debugPaused) {
@@ -4971,7 +5265,7 @@ public partial class MainWindow : Window
 	{
 		Output ("[attach] attaching to pid " + pid + "…");
 		debugSession?.Dispose ();
-		var session = new Services.DebugSessionService ();
+		var session = new MonoDevelop.Debugger.Services.DebugSessionService ();
 		debugSession = session;
 		session.DebuggerOutput += (_, text) => Avalonia.Threading.Dispatcher.UIThread.Post (() => {
 			foreach (var line in text.Split ('\n'))
@@ -5000,7 +5294,7 @@ public partial class MainWindow : Window
 	}
 
 	// Legacy Threads pad double-click: switch the Call Stack pad to the thread.
-	async System.Threading.Tasks.Task ShowThreadStackTraceAsync (Services.DebugSessionService session, int threadId)
+	async System.Threading.Tasks.Task ShowThreadStackTraceAsync (MonoDevelop.Debugger.Services.DebugSessionService session, int threadId)
 	{
 		var frames = await session.GetStackTraceAsync (threadId);
 		if (callStackList is not null) {
@@ -5016,7 +5310,7 @@ public partial class MainWindow : Window
 
 	// Legacy StackFrame selection: the Locals tree shows the selected frame's
 	// scope (scopes by frameId), like clicking a frame in the legacy Call Stack.
-	async System.Threading.Tasks.Task ShowFrameLocalsAsync (Services.DebugSessionService session, Services.DebugFrame frame)
+	async System.Threading.Tasks.Task ShowFrameLocalsAsync (MonoDevelop.Debugger.Services.DebugSessionService session, MonoDevelop.Debugger.Services.DebugFrame frame)
 	{
 		var locals = await session.GetLocalsForFrameAsync (frame.Id);
 		FillVariableList (localsList, locals, "No locals");

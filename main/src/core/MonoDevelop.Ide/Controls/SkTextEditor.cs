@@ -15,7 +15,7 @@ using Avalonia.VisualTree;
 using Avalonia.Threading;
 using SkiaSharp;
 
-namespace MonoDevelop.AvaloniaShell.Controls;
+namespace MonoDevelop.Ide.Controls;
 
 /// <summary>
 /// Text editor control rendered through SkiaSharp (the replacement of the legacy
@@ -342,6 +342,7 @@ public class SkTextEditor : Control
 	{
 		base.OnPointerExited (e);
 		OnPointerLeaveForHover ();
+		ClearGutterHover ();
 	}
 
 	void MarkDirty ()
@@ -852,8 +853,18 @@ public class SkTextEditor : Control
 	{
 		base.OnPointerMoved (e);
 		var pt = e.GetPosition (this);
+		// Gutter hover polish: highlight the row under the cursor, hand cursor
+		// over the breakpoint strip, tooltip with the line number.
+		UpdateGutterHover (pt);
 		// Hover tooltip: restart the timer on every move (legacy tooltip pipeline).
 		if (!dragging) {
+			// Over the gutter the word-hover pipeline stays off (the legacy margin
+			// shows its own tooltip, not the language one).
+			if (pointerInGutter) {
+				hoverTimer.Stop ();
+				hoverPopup?.HideTooltip ();
+				return;
+			}
 			var word = WordAtPoint (pt).Word;
 			bool sameSpot = hoverPopup?.IsVisible == true &&
 				Math.Abs (pt.X - hoverPoint.X) < FontSize * 0.6 && Math.Abs (pt.Y - hoverPoint.Y) < LineHeight;
@@ -1624,6 +1635,92 @@ public class SkTextEditor : Control
 
 	public (int Line, string Text)? CurrentDataTip => dataTip;
 
+	// ----- Pinned watches (legacy Debugger.PinnedWatch adorners): expressions
+	// pinned to a line, rendered as inline bubbles after the text. The store
+	// (file/line/expression) lives in the debugger addin (WatchService) and
+	// round-trips through the legacy PinnedWatches user-prefs key. -----
+	readonly Dictionary<int, List<string>> pinnedWatches = new (); // line (0-based) → expressions
+
+	/// <summary>Raised on any pinned-watch change so the window persists the store.</summary>
+	public event EventHandler? PinnedWatchesChanged;
+
+	/// <summary>All pinned watches of this document: (0-based line, expression).</summary>
+	public IReadOnlyList<(int Line, string Expression)> PinnedWatchList
+		=> pinnedWatches.OrderBy (kv => kv.Key).SelectMany (kv => kv.Value.Select (e => (kv.Key, e))).ToList ();
+
+	public bool HasPinnedWatch (int line0Based, string expression)
+		=> pinnedWatches.TryGetValue (line0Based, out var l) && l.Contains (expression);
+
+	/// <summary>Pins (or unpins when already present) an expression to a line.</summary>
+	public void TogglePinnedWatch (int line0Based, string expression)
+	{
+		if (string.IsNullOrEmpty (expression))
+			return;
+		if (!pinnedWatches.TryGetValue (line0Based, out var list)) {
+			list = new List<string> ();
+			pinnedWatches [line0Based] = list;
+		}
+		if (!list.Remove (expression))
+			list.Add (expression);
+		else if (list.Count == 0)
+			pinnedWatches.Remove (line0Based);
+		MarkDirty ();
+		PinnedWatchesChanged?.Invoke (this, EventArgs.Empty);
+	}
+
+	public void RemovePinnedWatch (int line0Based, string expression)
+	{
+		if (pinnedWatches.TryGetValue (line0Based, out var list) && list.Remove (expression)) {
+			if (list.Count == 0)
+				pinnedWatches.Remove (line0Based);
+			MarkDirty ();
+			PinnedWatchesChanged?.Invoke (this, EventArgs.Empty);
+		}
+	}
+
+	public void SetPinnedWatches (IEnumerable<(int Line, string Expression)> watches)
+	{
+		pinnedWatches.Clear ();
+		foreach (var (line, expr) in watches) {
+			if (!pinnedWatches.TryGetValue (line, out var list)) {
+				list = new List<string> ();
+				pinnedWatches [line] = list;
+			}
+			if (!list.Contains (expr))
+				list.Add (expr);
+		}
+		MarkDirty ();
+	}
+
+	// Live labels per pinned expression — set on every debugger stop (legacy
+	// PinnedWatch.Evaluate): "expr = value" replaces the static "expr = ?".
+	IReadOnlyList<(int line, string label)>? pinnedWatchValues;
+
+	public IReadOnlyList<(int line, string label)>? PinnedWatchValues => pinnedWatchValues;
+
+	public void SetPinnedWatchValues (IReadOnlyList<(int line, string label)>? values)
+	{
+		pinnedWatchValues = values;
+		MarkDirty ();
+	}
+
+	/// <summary>Context menu shown when right-clicking a line with pinned
+	/// watches (or anywhere, via Pin Watch): remove the pinned expression(s) of
+	/// that line — the pin action is provided by the editor context menu.</summary>
+	public Avalonia.Controls.ContextMenu? BuildPinnedWatchMenu (int line0Based)
+	{
+		if (!pinnedWatches.TryGetValue (line0Based, out var list) || list.Count == 0)
+			return null;
+		var menu = new Avalonia.Controls.ContextMenu ();
+		foreach (var expr in list.ToList ()) {
+			var captured = expr;
+			var item = new Avalonia.Controls.MenuItem { Header = $"Remove pinned watch '{expr}'" };
+			item.Click += (_, _) => RemovePinnedWatch (line0Based, captured);
+			menu.Items.Add (item);
+		}
+		return menu;
+	}
+
 	// ----- Completion (legacy TextEditorCommands.ShowCompletionWindow = "Complete Word",
 	// ShowParameterCompletionWindow = parameter info, ToggleCompletionSuggestionMode,
 	// ShowCodeTemplateWindow, ShowCodeSurroundingsWindow). -----
@@ -2277,7 +2374,84 @@ public class SkTextEditor : Control
 	/// <summary>Width of the clickable breakpoint strip: the red circle sits at
 	/// gutterW - 9, so the strip is the last 18px of the gutter (like the legacy
 	/// left margin icon column).</summary>
-	float GutterIconStripWidth () => Math.Max (0, GutterWidth () - 18);
+		float GutterIconStripWidth () => Math.Max (0, GutterWidth () - 18);
+
+	// ----- Gutter hover polish (legacy Mono.TextEditor gutter area): the row
+	// under the pointer highlights, the breakpoint strip shows the hand cursor
+	// (like ActionTextArea's margin cursors) and a tooltip announces the line
+	// the click would toggle. Pure hover state — no caret changes. -----
+	bool pointerInGutter;
+	bool pointerInBpStrip;
+	int hoverGutterLine = -1;
+
+	/// <summary>Live gutter hover state for QA: line under the pointer
+	/// (0-based, -1 when outside the gutter) and whether the hand cursor
+	/// (breakpoint strip) is active.</summary>
+	public (int Line, bool InBreakpointStrip) GutterHover => (hoverGutterLine, pointerInBpStrip);
+
+	bool IsInBreakpointStrip (double x) => x > GutterIconStripWidth () && x <= GutterWidth ();
+
+	void UpdateGutterHover (Point p)
+	{
+		bool inGutter = p.X <= GutterWidth ();
+		bool inStrip = inGutter && IsInBreakpointStrip (p.X);
+		int line = inGutter
+			? Math.Clamp ((int)(p.Y / LineHeight + scrollLines), 0, Math.Max (0, lines.Count - 1))
+			: -1;
+		if (inGutter == pointerInGutter && inStrip == pointerInBpStrip && line == hoverGutterLine)
+			return;
+		pointerInGutter = inGutter;
+		pointerInBpStrip = inStrip;
+		hoverGutterLine = line;
+		Cursor = inStrip ? new Cursor (StandardCursorType.Hand) : Cursor.Default;
+		ShowGutterTip (line);
+		MarkDirty ();
+	}
+
+	/// <summary>QA: clears the gutter hover state without a pointer exit event.</summary>
+	public void ClearGutterHover ()
+	{
+		if (!pointerInGutter && hoverGutterLine < 0)
+			return;
+		pointerInGutter = false;
+		pointerInBpStrip = false;
+		hoverGutterLine = -1;
+		Cursor = Cursor.Default;
+		ShowGutterTip (-1);
+		MarkDirty ();
+	}
+
+	/// <summary>QA-only: drives the gutter hover pipeline without a pointer —
+	/// the same state a real hover over the breakpoint strip produces
+	/// (highlight row, hand cursor, "Line N" tooltip).</summary>
+	public void SimulateGutterHoverForQa (int line0Based, bool breakpointStrip)
+	{
+		hoverGutterLine = Math.Clamp (line0Based, 0, Math.Max (0, lines.Count - 1));
+		pointerInGutter = true;
+		pointerInBpStrip = breakpointStrip;
+		Cursor = breakpointStrip ? new Cursor (StandardCursorType.Hand) : Cursor.Default;
+		ShowGutterTip (hoverGutterLine);
+		MarkDirty ();
+	}
+
+	// Tooltip with the line number the gutter click would act on (0-based
+	// internal, 1-based in the message, like the legacy margin tooltip).
+	void ShowGutterTip (int line)
+	{
+		var tip = ToolTip.GetTip (this);
+		if (line < 0) {
+			if (tip is TextBlock tb && tb.Text is { Length: > 0 } t && t.StartsWith ("Line ", StringComparison.Ordinal)) {
+				ToolTip.SetTip (this, null);
+				return;
+			}
+		}
+		var text = pointerInBpStrip
+			? $"Line {line + 1} — click to toggle breakpoint"
+			: $"Line {line + 1}";
+		if (tip is TextBlock existing && existing.Text == text)
+			return;
+		ToolTip.SetTip (this, new TextBlock { Text = text, FontSize = 11 });
+	}
 
 	public override void Render (DrawingContext context)
 	{
@@ -2332,6 +2506,19 @@ public class SkTextEditor : Control
 		canvas.DrawRect (0, 0, (float)Bounds.Width, (float)Bounds.Height, bgPaint);
 		using var gutterPaint = new SKPaint { Color = gutterBg, IsAntialias = false };
 		canvas.DrawRect (0, 0, gutterW, (float)Bounds.Height, gutterPaint);
+		// gutter hover row (legacy Mono.TextEditor gutter hover highlight)
+		if (pointerInGutter && hoverGutterLine >= 0) {
+			float hoverY = (hoverGutterLine - (float)scrollLines) * lineH;
+			if (hoverY >= -lineH && hoverY <= (float)Bounds.Height) {
+				using var hoverRow = new SKPaint { Color = gutterFg.WithAlpha (28), IsAntialias = false };
+				canvas.DrawRect (0, hoverY, (float)Bounds.Width, lineH, hoverRow);
+				// breakpoint strip gets its own stronger band (the hand-cursor zone)
+				if (pointerInBpStrip) {
+					using var stripBand = new SKPaint { Color = gutterFg.WithAlpha (26), IsAntialias = false };
+					canvas.DrawRect (GutterIconStripWidth (), hoverY, gutterW - GutterIconStripWidth (), lineH, stripBand);
+				}
+			}
+		}
 		using var gutterLinePaint = new SKPaint { Color = gutterFg.WithAlpha (60), IsAntialias = false };
 		canvas.DrawRect (gutterW - 1, 0, 1, (float)Bounds.Height, gutterLinePaint);
 
@@ -2423,6 +2610,28 @@ public class SkTextEditor : Control
 			}
 			// inline message bubble (legacy MessageBubble) after the line text
 			DrawBubbles (canvas, i, x, baseline, textFont, textPaint);
+			// pinned-watch bubbles (legacy PinnedWatch adorner): one amber bubble
+			// per expression pinned to the line; on a debug stop each shows its
+			// evaluated "expr = value" (static "expr = ?" between sessions).
+			if (pinnedWatches.TryGetValue (i, out var pins)) {
+				float px = x + 10;
+				foreach (var pin in pins) {
+					var label = pin;
+					if (pinnedWatchValues is not null) {
+						var live = pinnedWatchValues.FirstOrDefault (v => v.line == i && v.label.StartsWith (pin + " ", StringComparison.Ordinal) || v.label == pin).label;
+						if (live is { Length: > 0 })
+							label = live;
+					}
+					float pw = label.Length * charW + 14;
+					using var pinBg = new SKPaint { Color = new SKColor (0x50, 0x3f, 0x1a), IsAntialias = false };
+					canvas.DrawRect (px, y + 1, pw, lineH - 2, pinBg);
+					using var pinBorder = new SKPaint { Color = new SKColor (0x8f, 0x74, 0x2e), IsAntialias = false };
+					canvas.DrawRect (px, y + 1, pw, lineH - 2, pinBorder);
+					textPaint.Color = new SKColor (0xe8, 0xcf, 0x9a);
+					canvas.DrawText (label, px + 7, baseline, textFont, textPaint);
+					px += pw + 6;
+				}
+			}
 			// debug data tip (legacy inline value bubble) after the bubbles
 			if (dataTip is { } tip && tip.line == i) {
 				using var tipBg = new SKPaint { Color = new SKColor (0x2a, 0x4d, 0x2e), IsAntialias = false };

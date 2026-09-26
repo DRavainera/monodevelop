@@ -4,7 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 
-namespace MonoDevelop.AvaloniaShell.Services;
+namespace MonoDevelop.Ide.Services;
 
 /// <summary>
 /// Port of the legacy ExternalTool.Run: expands the StringParserService variables
@@ -17,7 +17,7 @@ public static class ExternalToolRunner
 {
 	public static async Task Run (SettingsStore.ExternalTool tool)
 	{
-		var win = Views.MainWindow.Instance;
+		var win = MonoDevelop.AvaloniaShell.Views.MainWindow.Instance;
 		var active = win?.ActiveEditorPath ();
 
 		// Legacy SaveCurrentFile checkbox.

@@ -1,7 +1,7 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:views="using:MonoDevelop.AvaloniaShell.Views"
-        xmlns:controls="using:MonoDevelop.AvaloniaShell.Controls"
+        xmlns:controls="using:MonoDevelop.Ide.Controls"
         x:Class="MonoDevelop.AvaloniaShell.Views.MainWindow"
         Title="MonoDevelop — Avalonia Shell"
         Width="1280" Height="800"

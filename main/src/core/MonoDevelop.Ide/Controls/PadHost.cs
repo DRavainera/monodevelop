@@ -7,9 +7,9 @@ using Avalonia.Controls.Primitives;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
-using MonoDevelop.AvaloniaShell.Services;
+using MonoDevelop.Ide.Services;
 
-namespace MonoDevelop.AvaloniaShell.Controls;
+namespace MonoDevelop.Ide.Controls;
 
 /// <summary>
 /// Dockable pad host like the legacy DockFrame pads: a header with the pad title

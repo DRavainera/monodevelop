@@ -149,7 +149,7 @@ public class SelectEncodingsDialog : Window
 	/// MonoDevelop-properties.xml, like PropertyService.Get on the legacy).</summary>
 	static HashSet<string> ConversionEncodingIds ()
 	{
-		var raw = Services.UserPreferences.Get ("MonoDevelop.Projects.Text.ConversionEncodings") ?? "";
+		var raw = MonoDevelop.Ide.Services.UserPreferences.Get ("MonoDevelop.Projects.Text.ConversionEncodings") ?? "";
 		return raw.Split (' ', StringSplitOptions.RemoveEmptyEntries).ToHashSet (StringComparer.OrdinalIgnoreCase);
 	}
 
@@ -160,7 +160,7 @@ public class SelectEncodingsDialog : Window
 		var ids = selectedList.Items.OfType<EncodingEntry> ().Select (e => e.WebName).ToList ();
 		if (!ids.Contains ("UTF-16", StringComparer.OrdinalIgnoreCase) && ids.Count > 0)
 			ids.Insert (Math.Min (1, ids.Count), "UTF-16");
-		Services.UserPreferences.Set ("MonoDevelop.Projects.Text.ConversionEncodings", string.Join (" ", ids));
+		MonoDevelop.Ide.Services.UserPreferences.Set ("MonoDevelop.Projects.Text.ConversionEncodings", string.Join (" ", ids));
 	}
 
 	/// <summary>Legacy MoveItem: move the selection between lists, keeping the

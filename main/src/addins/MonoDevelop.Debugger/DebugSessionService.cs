@@ -18,7 +18,7 @@ using JsonObject = System.Text.Json.Nodes.JsonObject;
 using JsonArray = System.Text.Json.Nodes.JsonArray;
 using JsonValue = System.Text.Json.Nodes.JsonValue;
 
-namespace MonoDevelop.AvaloniaShell.Services;
+namespace MonoDevelop.Debugger.Services;
 
 /// <summary>One variable shown in the Locals/Watch pads (DAP Variable).</summary>
 public record DebugVariable (string Name, string Value, bool HasChildren, int VariablesReference);

@@ -23,7 +23,7 @@ internal static class Program
 
 		// UI language from the legacy preference (same MonoDevelopProperties.xml the
 		// GTK UI reads), applied before any string is built.
-		MonoDevelop.AvaloniaShell.Services.GettextService.Initialize ();
+		MonoDevelop.Ide.Services.GettextService.Initialize ();
 		BuildAvaloniaApp ().StartWithClassicDesktopLifetime (StripOldGui (args));
 		return 0;
 	}
@@ -84,7 +84,7 @@ internal static class Program
 				a is "--about" or "--prefs" or "--addins" or "--find" or "--build" or "--run"
 					or "--goto" or "--tasks" or "--tool" or "--editops" or "--windocs" or "--navhist"
 					or "--bookmarks" or "--addref" or "--brace" or "--buildone" or "--mcaret" or "--fmt" or "--diff" or "--fold" or "--viewcmds" or "--bubbles" or "--compl" or "--tool" or "--ctxmenu" or "--filter" or "--props" or "--dirtyfiles" or "--editqa" or "--totd" or "--progress" or "--encodings" or "--newconfig" or "--newconfig-real" or "--openimport" or "--activeconfig" or "--newproject" or "--bmkpad" or "--bkpad" or "--locals" or "--attachdlg" or "--watch" or "--condbp" or "--attachreal" or "--step" or "--tree" or "--imm"
-						or "--gutterbp" or "--frame" or "--immcompl" or "--persistqa"
+						or "--gutterbp" or "--frame" or "--immcompl" or "--persistqa" or "--watchedit" or "--pinwatch"
 				|| a.StartsWith ("--prefs=", StringComparison.Ordinal)
 				|| a.StartsWith ("--gotoline", StringComparison.Ordinal)) ?? "";
 
