@@ -87,6 +87,8 @@ public partial class MainWindow : Window
 		// OnOpened by re-parenting the caption buttons to the requested side; the
 		// XAML default places them on the right, matching Linux and Windows.
 		Opened += async (s, e) => {
+			// The window is up: disarm the startup watchdog (Program.cs).
+			Program.StartupWatchdogDone.Cancel ();
 			if (IsMac)
 				MoveCaptionButtonsLeft ();
 			ApplyThemeVariant (Application.Current?.ActualThemeVariant ?? ThemeVariant.Dark);
@@ -476,13 +478,101 @@ public partial class MainWindow : Window
 					PinWatchAtCaret (edU);
 					RefreshPinnedWatchesPad ();
 					Output ("[pinwatch] after-unpin=" + MonoDevelop.Debugger.Services.WatchService.LoadPinned (loadedSolutionPath!).Count);
-					edU.SetPinnedWatches (Array.Empty<(int, string)> ());
-					RefreshPinnedWatchesPad ();
+					// Clickable bubbles: the rendered frame registers the bubble
+					// rects; right-click over one offers Remove + Go to line (the
+					// bubble removal also leaves the store clean for the next run).
+					await Task.Delay (600); // ensure a rendered frame on the QA display
+					var rect = edU.PinnedWatchRectForQa (10, 0); // greeting bubble, line 11
+					Output ("[pinwatch] bubble-rect=" + (rect is not null));
+					if (rect is { } r) {
+						var hit = edU.TryGetPinnedWatchAt (r.Center, out var hl, out var hexpr);
+						Output ("[pinwatch] bubble-hit=" + hit + " line=" + (hl + 1) + " expr=" + hexpr);
+						var bmenu = edU.BuildPinnedWatchMenu (hl);
+						var items = bmenu?.Items.OfType<Avalonia.Controls.MenuItem> ().Select (m => (m.Header as string) ?? "").ToList ();
+						Output ("[pinwatch] bubble-menu=" + (items is not null ? string.Join (" | ", items) : "none"));
+						var gotoItem = bmenu?.Items.OfType<Avalonia.Controls.MenuItem> ().FirstOrDefault (m => ((m.Header as string) ?? "").Contains ("Go to line"));
+						gotoItem?.RaiseEvent (new Avalonia.Interactivity.RoutedEventArgs (Avalonia.Controls.MenuItem.ClickEvent));
+						Output ("[pinwatch] goto-line=" + (edU.CurrentLine + 1));
+						var removeItem = bmenu?.Items.OfType<Avalonia.Controls.MenuItem> ().FirstOrDefault (m => ((m.Header as string) ?? "").StartsWith ("Remove pinned watch", StringComparison.Ordinal));
+						removeItem?.RaiseEvent (new Avalonia.Interactivity.RoutedEventArgs (Avalonia.Controls.MenuItem.ClickEvent));
+						RefreshPinnedWatchesPad ();
+						Output ("[pinwatch] after-bubble-remove=" + MonoDevelop.Debugger.Services.WatchService.LoadPinned (loadedSolutionPath!).Count);
+					} else {
+						edU.SetPinnedWatches (Array.Empty<(int, string)> ());
+						RefreshPinnedWatchesPad ();
+					}
 					edU.ClearBreakpoints (); PersistBreakpoints ();
 				}
 				debugSession?.Terminate ();
 				ClearExecutionLineHighlight ();
 				Output ("[pinwatch] done");
+			} else if (qa == "--legacyqa") {
+				// QA: pinned watches written by the LEGACY GTK IDE — the full
+				// PinnedWatchStore serialization (file/line/column/…/expression)
+				// under the same PinnedWatches key — must surface as editor
+				// bubbles here and survive a save from this side (round trip).
+				var file = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile), "TestProj", "TestProj", "Program.cs");
+				var slnPath = loadedSolutionPath!;
+				var prefsPath = slnPath.Substring (0, slnPath.Length - 4) + ".userprefs";
+				var backup = File.Exists (prefsPath) ? File.ReadAllText (prefsPath) : null;
+				// The exact XML the legacy ProjectPathItemProperty serializer writes:
+				// file relative to the solution dir, 1-based line/column (seeded
+				// below, AFTER closing the workspace so the close-persist does not
+				// overwrite it).
+				// Reopen the solution so the load path runs against the legacy prefs.
+				// NOTE the order: close FIRST (it persists the current empty state),
+				// THEN seed the legacy XML, THEN reopen — otherwise the close
+				// overwrite would wipe the seed.
+				await CloseWorkspaceAsync ();
+				File.WriteAllText (prefsPath,
+					"<?xml version=\"1.0\" encoding=\"utf-8\"?>\n" +
+					"<Properties>\n" +
+					"  <MonoDevelop.Ide.Workspace>\n" +
+					"    <Property name=\"ActiveConfiguration\" value=\"Debug\" />\n" +
+					"  </MonoDevelop.Ide.Workspace>\n" +
+					"  <MonoDevelop.Ide.DebuggingService.PinnedWatches>\n" +
+					"    <Watch file=\"TestProj/Program.cs\" line=\"10\" column=\"9\" endLine=\"10\" endColumn=\"15\" offsetX=\"0\" offsetY=\"0\" expression=\"answer\" liveUpdate=\"False\" />\n" +
+					"    <Watch file=\"TestProj/Program.cs\" line=\"11\" column=\"7\" endLine=\"11\" endColumn=\"15\" offsetX=\"0\" offsetY=\"0\" expression=\"greeting\" liveUpdate=\"False\" />\n" +
+					"  </MonoDevelop.Ide.DebuggingService.PinnedWatches>\n" +
+					"  <MonoDevelop.Ide.DebuggingService.Breakpoints />\n" +
+				"</Properties>");
+				Output ("[legacyqa] seeded-rows=" + (File.ReadAllText (prefsPath).Split ("<Watch ").Length - 1));
+				await Task.Delay (300); // close-persist can land late; re-check
+				Output ("[legacyqa] after-300ms-rows=" + (File.ReadAllText (prefsPath).Split ("<Watch ").Length - 1));
+				if (!File.ReadAllText (prefsPath).Contains ("<Watch ")) {
+					File.WriteAllText (prefsPath, File.ReadAllText (prefsPath).Replace (
+						"<MonoDevelop.Ide.DebuggingService.PinnedWatches />",
+						"<MonoDevelop.Ide.DebuggingService.PinnedWatches>\n" +
+						"    <Watch file=\"TestProj/Program.cs\" line=\"10\" column=\"9\" endLine=\"10\" endColumn=\"15\" offsetX=\"0\" offsetY=\"0\" expression=\"answer\" liveUpdate=\"False\" />\n" +
+						"    <Watch file=\"TestProj/Program.cs\" line=\"11\" column=\"7\" endLine=\"11\" endColumn=\"15\" offsetX=\"0\" offsetY=\"0\" expression=\"greeting\" liveUpdate=\"False\" />\n" +
+						"  </MonoDevelop.Ide.DebuggingService.PinnedWatches>"));
+					Output ("[legacyqa] reseeded");
+				}
+				OpenSolutionInWindow (Program.SolutionArg);
+				await Task.Delay (800);
+				Output ("[legacyqa] before-open-doc-rows=" + (File.ReadAllText (prefsPath).Split ("<Watch ").Length - 1));
+				OpenFileDocument (file);
+				await Task.Delay (400);
+				var name = Path.GetFileName (file);
+				if (docs.TryGetValue (name, out var edLegacy)) {
+					Output ("[legacyqa] restored=" + string.Join (" | ", edLegacy.PinnedWatchList.Select (p => (p.Line + 1) + ":" + p.Expression)));
+					var entries = MonoDevelop.Debugger.Services.WatchService.LoadPinned (slnPath);
+					Output ("[legacyqa] loadpinned=" + string.Join (" | ", entries.Select (en => Path.GetFileName (en.File) + ":" + en.Line + ":" + en.Expression + " col=" + en.Column)));
+					// A save from this side must keep the legacy format.
+					RefreshPinnedWatchesPad ();
+					var xmlAfter = File.ReadAllText (prefsPath);
+					Output ("[legacyqa] legacy-format-kept=" + (xmlAfter.Contains ("file=\"TestProj/Program.cs\"")
+						&& xmlAfter.Contains ("expression=\"answer\"")
+						&& xmlAfter.Contains ("line=\"10\"")
+						&& xmlAfter.Contains ("expression=\"greeting\"")));
+					edLegacy.SetPinnedWatches (Array.Empty<(int, string)> ());
+					RefreshPinnedWatchesPad ();
+				}
+				if (backup is not null)
+					File.WriteAllText (prefsPath, backup);
+				else if (File.Exists (prefsPath))
+					File.Delete (prefsPath);
+				Output ("[legacyqa] done");
 			} else if (qa == "--condbp") {
 				// QA: conditional + hit-count breakpoints — attributes set on the
 				// editor store, persisted to .userprefs with condition/hitcount,
@@ -2471,10 +2561,16 @@ public partial class MainWindow : Window
 
 			// Restore the persisted watch expressions (legacy PinnedWatches user
 			// prefs load path); the Watch pad re-fills them on the next stop.
+			// SavePreservingPins: re-writing the pad rows must NOT wipe the
+			// pinned editor rows the legacy IDE stored under the same key.
 			watchExpressions.Clear ();
 			foreach (var w in MonoDevelop.Debugger.Services.WatchService.Load (path))
 				watchExpressions.Add (w);
-			PersistWatches ();
+			try {
+				MonoDevelop.Debugger.Services.WatchService.SavePreservingPins (path, watchExpressions);
+			} catch (Exception ex) {
+				Output ("[watch] persist failed: " + ex.Message);
+			}
 
 			// Legacy behavior: opening a solution hides the welcome page and updates
 			// its project bar message.

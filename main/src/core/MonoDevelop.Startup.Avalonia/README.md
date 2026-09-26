@@ -112,6 +112,9 @@ Cada hook abre la app, ejercita un módulo de forma determinista y loguea
   --sln=/ruta/TestProj.sln --<hook> 2>&1 | grep -E "\[<tag>\]"
 ```
 
+⚠️ **Watchdog de arranque**: si la UI no abre en 30s (`MD_STARTUP_WATCHDOG=<secs>`
+lo ajusta) el shell imprime `[fatal]` con la causa conocida (bucle de
+SkiaSharp/fontconfig con fuentes WOFF/WOFF2 del usuario) y sale con código 2.
 ⚠️ **Si el arranque se cuelga sin abrir ventana** (gira al 100% CPU sin
 imprimir nada): la causa son las fuentes de usuario con directorios
 WOFF/WOFF2 (`~/.local/share/fonts/**`) — el `SkFontMgr_fontconfig` de
@@ -209,7 +212,8 @@ documento sucio a propósito para poder probar el diálogo visualmente
 | `--immcompl` | Immediate: autocompletado de miembros tras `.` (DAP), commit Tab/Enter | `[immcompl]` |
 | `--persistqa` | Sesión de debug persistida: cerrar/reabrir solución restaura bps+watches+config | `[persist]` |
 | `--watchedit` | Pad Watch: edición in-place (Esc rollback, Enter reemplaza en sitio) + reevaluación automática tras el step | `[watchedit]` |
-| `--pinwatch` | Pinned watches: burbujas por línea, serialización file/line legacy en .userprefs, valor vivo al pausar, unpin | `[pinwatch]` |
+| `--pinwatch` | Pinned watches: burbujas por línea, serialización file/line legacy en .userprefs, valor vivo al pausar, unpin, burbujas CLICABLES (menú Remove / Go to line) | `[pinwatch]` |
+| `--legacyqa` | Pins escritos por el IDE GTK legacy (XML exacto de PinnedWatchStore): siembra, reabre y verifica restauración + round trip del formato | `[legacyqa]` |
 
 QA visual: los hooks se complementan con capturas X11 (`magick x:<win>`) para
 comparar la UI contra la legacy GTK en vivo (ver bitácoras en
@@ -300,11 +304,15 @@ comparar la UI contra la legacy GTK en vivo (ver bitácoras en
 - **Pinned watches como burbujas (paridad PinnedWatch legacy)**: "Pin Watch"
   en el menú contextual del editor fija la palabra bajo el caret a la línea
   actual; la burbuja ámbar muestra `expr = valor` (evaluado por DAP en cada
-  stop) o `expr = ?` fuera de sesión. Se serializan en la MISMA clave legacy
+  stop) o `expr = ?` fuera de sesión. Las burbujas son CLICABLES: right-click
+  sobre una burbuja abre su menú (Remove pinned watch / Go to line). Se
+  serializan en la MISMA clave legacy
   `MonoDevelop.Ide.DebuggingService.PinnedWatches` con la ubicación completa
   (file relativo a la solución, line 1-based, column/endLine/endColumn/
   offsetX/offsetY + expression) — el IDE GTK legacy y el shell Avalonia
-  comparten el mismo `.userprefs`.
+  comparten el mismo `.userprefs` y los pins escritos por el GTK viejo se
+  restauran aquí (y viceversa: `SavePreservingPins` reescribe solo las filas
+  del pad sin borrar las del editor).
 - **Gutter con hover (como el legacy)**: la línea bajo el cursor se resalta
   (banda completa + refuerzo en la franja de breakpoints), la franja de
   iconos muestra cursor de mano y tooltip "Line N — click to toggle
@@ -331,4 +339,4 @@ TipOfTheDay, SelectEncodingsDialog, NewConfigurationDialog/NewLayoutDialog,
 ProgressDialog, AttachToProcessDialog (Debugger) y semántica Roslyn real para
 completion/tooltip.
 
-Detalle hito por hito: `docs/interfaz-plan.md` § M4–M16e.
+Detalle hito por hito: `docs/interfaz-plan.md` § M4–M16f.

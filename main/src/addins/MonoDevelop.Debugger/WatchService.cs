@@ -130,6 +130,13 @@ public static class WatchService
 		doc.Save (prefs);
 	}
 
+	/// <summary>Updates ONLY the pad-watch expression rows, preserving the
+	/// pinned editor rows already in the store. The solution-open path must
+	/// not wipe the legacy pins it just loaded (a plain Save there would
+	/// replace the whole element with expression-only rows).</summary>
+	public static void SavePreservingPins (string slnPath, IEnumerable<string> padWatches)
+		=> SavePinned (slnPath, padWatches, LoadPinned (slnPath));
+
 	/// <summary>Saves the full pinned store: pad watches as expression-only rows
 	/// (they have no editor location) and editor pins with the legacy location
 	/// attributes, file relative to the solution when possible.</summary>

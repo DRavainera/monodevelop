@@ -1025,3 +1025,65 @@ cambios de código. Nota operativa: los QA muertos por `timeout` dejan un
 `dotnet` vivo que bloquea el rebuild del DLL (`AVLN9999`) — hacer
 `pkill -f "MonoDevelop[.]AvaloniaShell"` y `dotnet build-server shutdown`
 antes de recompilar.
+
+## M16f — Watchdog de arranque, burbujas pinned-watch clicables, restauración del formato legacy GTK y esqueleto Xwt.Avalonia
+
+**Watchdog de arranque (detección temprana del bucle de SkiaSharp):** los QA
+pueden colgarse antes de que exista ventana (el bucle de
+`SkFontMgr_fontconfig::GetFamilyNames → FcPatternGetString` con fuentes de
+usuario WOFF/WOFF2, ver el bloqueo resuelto en M16e). El shell arma un
+watchdog en `Program.Main`: si la ventana no abrió en el presupuesto (30s por
+defecto, `MD_STARTUP_WATCHDOG=<secs>` lo ajusta) imprime el diagnóstico de la
+causa conocida y el workaround y sale con código 2; `MainWindow.Opened` lo
+desarma. Validado en ambos sentidos: entorno roto → `[fatal]` + exit 2;
+arranque sano → la ventana abre y el watchdog se cancela sin ruido.
+
+**Burbujas pinned-watch clicables (paridad del adorner legacy):** el render
+registra el rect de cada burbuja por frame (`pinnedWatchRects`) y
+`TryGetPinnedWatchAt` hace el hit-test; el right-click sobre una burbuja
+(`ContextRequested`) muestra SU menú en vez del menú del editor:
+`Remove pinned watch '<expr>'` y `Go to line N` (con caret a la línea y
+`GotoLine` + foco). QA `--pinwatch` extendido: `bubble-rect=True`,
+`bubble-hit=True line=11 expr=greeting`,
+`bubble-menu=Remove pinned watch 'greeting' | Go to line 11`, el Go to line
+mueve el caret (`goto-line=11`) y el Remove borra el pin
+(`after-bubble-remove=0`).
+
+**Restauración desde el IDE legacy GTK (idéntica clave .userprefs):** QA
+nuevo `--legacyqa`: cierra el workspace, SIEMBRA el XML exacto que escribe el
+serializador legacy (`<Watch file="TestProj/Program.cs" line="10" column="9"
+endLine=… endColumn=… offsetX=… offsetY=… expression="answer"
+liveUpdate="False"/>` — file relativo al dir de la solución vía
+`ProjectPathItemProperty`/`PathDataType`), reabre la solución y verifica que
+los pins aparecen como burbujas (`restored=10:answer | 11:greeting`),
+`LoadPinned` los resuelve con columna (`col=9`) y que un guardado del lado
+Avalonia conserva el formato legacy (`legacy-format-kept=True`). FIX real de
+integración que destapó el QA: la reapertura de solución llamaba
+`PersistWatches` → `WatchService.Save`, que REEMPLAZABA el elemento
+`PinnedWatches` completo borrando los pins legacy recién cargados; ahora esa
+ruta usa `WatchService.SavePreservingPins` (reescribe solo las filas del pad
+y conserva las filas con ubicación del editor).
+
+**Esqueleto Xwt.Avalonia (reemplazo de Xwt.Gtk, dentro del submódulo
+external/xwt):** el núcleo Xwt ahora es multi-target `net40;net10.0` (shim de
+compatibilidad `Xwt/Compatibility/SystemXamlShim.cs` para los 3 tipos de
+System.Xaml que usa el frontend + `XamlServices` del designer con
+PlatformNotSupported + BinaryFormatter con guard NET en TransferDataSource;
+net40 compila bit a bit igual). Nuevo proyecto `Xwt.Avalonia/` (net10.0,
+Avalonia 12.1.2) con `AvaloniaEngine : ToolkitEngineBackend` (guest mode:
+reusa la Application del shell; standalone: dispatcher propio; InvokeAsync/
+timers/RunJobs sobre Avalonia.Threading; GetNativeWidget/GetBackendForWindow/
+GetNativeWindow) y la PRIMERA oleada de backends: Window (IWindowBackend
+sobre Avalonia.Window), Label, Button (con routing del Clicked al sink del
+frontend), Box (contenedor fijo que aplica las allocation que calcula el
+frontend Box, como el CustomContainer de Gtk), TextEntry y Canvas. App de
+humo `Xwt.Avalonia.Smoke` headless: 9/9 aserciones verdes (initialize por
+nombre de backend, Label/Button/Entry/Box → controles nativos, composición
+del Box, ventana con contenido, evento Clicked de vuelta al frontend,
+round-trip de texto del entry). Oleadas siguientes documentadas en el engine:
+handlers de dibujo (Avalonia.Media+SkiaSharp), Scroll/CheckBox/Frame/ImageView,
+TreeView/ListView+stores (los Pads), menús/diálogos/clipboard, hosting guest
+ICustomWidgetBackend. Nota de API: Avalonia 12 renombró `SystemDecorations →
+WindowDecorations` y `TemplatedControl` vive en `…Controls.Primitives`; los
+tipos Avalonia se usan por alias dentro de `Xwt.AvaloniaBackend` porque los
+namespaces Xwt sombrean Control/Window/Canvas/Alignment/WrapMode.

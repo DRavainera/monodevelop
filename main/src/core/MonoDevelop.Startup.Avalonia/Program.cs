@@ -24,12 +24,39 @@ internal static class Program
 		// UI language from the legacy preference (same MonoDevelopProperties.xml the
 		// GTK UI reads), applied before any string is built.
 		MonoDevelop.Ide.Services.GettextService.Initialize ();
+		ArmStartupWatchdog ();
 		BuildAvaloniaApp ().StartWithClassicDesktopLifetime (StripOldGui (args));
 		return 0;
 	}
 
 	static string [] StripOldGui (string [] args)
 		=> args.Where (a => a != "--old-gui").ToArray ();
+
+	// Startup watchdog (early detection instead of a silent hang): Avalonia
+	// init can wedge inside the SkiaSharp fontconfig font manager (a
+	// SkFontMgr_fontconfig loop over user WOFF/WOFF2 font directories — see
+	// docs/interfaz-plan.md §M16f) burning 100% CPU BEFORE any window
+	// exists. If the main window has not opened within the budget (default
+	// 30s, MD_STARTUP_WATCHDOG overrides), print the known-cause diagnostic
+	// and exit fast.
+	public static readonly System.Threading.CancellationTokenSource StartupWatchdogDone
+		= new System.Threading.CancellationTokenSource ();
+
+	static void ArmStartupWatchdog ()
+	{
+		int seconds = int.TryParse (Environment.GetEnvironmentVariable ("MD_STARTUP_WATCHDOG"), out var s) && s > 0 ? s : 30;
+		_ = System.Threading.Tasks.Task.Run (async () => {
+			try {
+				await System.Threading.Tasks.Task.Delay (seconds * 1000, StartupWatchdogDone.Token);
+			} catch (OperationCanceledException) {
+				return; // started fine — disarm
+			}
+			Console.Error.WriteLine ($"[fatal] The UI did not start within {seconds}s.");
+			Console.Error.WriteLine ("[fatal] Known cause: user fonts with WOFF/WOFF2 directories (~/.local/share/fonts) trip an infinite loop in SkiaSharp's fontconfig font manager (SkFontMgr_fontconfig::GetFamilyNames -> FcPatternGetString). Upstream fix: bound the family scan / skip non-TT containers.");
+			Console.Error.WriteLine ("[fatal] Workaround: run with FONTCONFIG_FILE pointing to a config that only includes system fonts, e.g. the recipe in docs/interfaz-plan.md (M16f).");
+			Environment.Exit (2);
+		});
+	}
 
 	// Runs the GTK legacy UI (MonoDevelop.dll, staged in the same main/build tree
 	// as this Avalonia shell) as a child process and forwards its exit code, so the
@@ -84,7 +111,7 @@ internal static class Program
 				a is "--about" or "--prefs" or "--addins" or "--find" or "--build" or "--run"
 					or "--goto" or "--tasks" or "--tool" or "--editops" or "--windocs" or "--navhist"
 					or "--bookmarks" or "--addref" or "--brace" or "--buildone" or "--mcaret" or "--fmt" or "--diff" or "--fold" or "--viewcmds" or "--bubbles" or "--compl" or "--tool" or "--ctxmenu" or "--filter" or "--props" or "--dirtyfiles" or "--editqa" or "--totd" or "--progress" or "--encodings" or "--newconfig" or "--newconfig-real" or "--openimport" or "--activeconfig" or "--newproject" or "--bmkpad" or "--bkpad" or "--locals" or "--attachdlg" or "--watch" or "--condbp" or "--attachreal" or "--step" or "--tree" or "--imm"
-						or "--gutterbp" or "--frame" or "--immcompl" or "--persistqa" or "--watchedit" or "--pinwatch"
+						or "--gutterbp" or "--frame" or "--immcompl" or "--persistqa" or "--watchedit" or "--pinwatch" or "--legacyqa"
 				|| a.StartsWith ("--prefs=", StringComparison.Ordinal)
 				|| a.StartsWith ("--gotoline", StringComparison.Ordinal)) ?? "";
 

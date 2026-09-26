@@ -236,6 +236,9 @@ public class SkTextEditor : Control
 	public SkTextEditor ()
 	{
 		Focusable = true;
+		// Clickable pinned-watch bubbles: right-click over a bubble shows its
+		// menu (remove / go to line) instead of the editor context menu.
+		ContextRequested += OnEditorContextRequested;
 		// Seed the line model: the TextProperty default ("") never fires
 		// OnPropertyChanged, so the model starts empty without this.
 		SetLines (Text ?? "");
@@ -818,9 +821,8 @@ public class SkTextEditor : Control
 	{
 		base.OnPointerPressed (e);
 		Focus ();
-		var pt = e.GetCurrentPoint (this);
-		if (pt.Properties.IsLeftButtonPressed) {
-			// Legacy left margin: a click on the gutter marker strip toggles the
+		var pt = e.GetCurrentPoint (this);			if (pt.Properties.IsLeftButtonPressed) {
+				// Legacy left margin: a click on the gutter marker strip toggles the
 			// breakpoint of that line (Mono.TextEditor ActionTextArea
 			// "left margin click"). The strip is the icon column next to the line
 			// numbers; the rest of the gutter keeps its click-to-move-caret role.
@@ -897,6 +899,24 @@ public class SkTextEditor : Control
 	{
 		base.OnPointerReleased (e);
 		dragging = false;
+	}
+
+	// Right-click on a pinned-watch bubble shows the bubble menu (legacy
+	// PinnedWatch adorner menu parity: remove the watch / jump to line);
+	// anywhere else the regular editor context menu applies. ContextRequested
+	// is a CLR event (not virtual) in the current Avalonia, subscribed in the
+	// constructor.
+	void OnEditorContextRequested (object? sender, ContextRequestedEventArgs e)
+	{
+		var pt = e.TryGetPosition (this, out var p) ? p : new Avalonia.Point (0, 0);
+		if (TryGetPinnedWatchAt (pt, out var pinLine, out var _)) {
+			var menu = BuildPinnedWatchMenu (pinLine);
+			if (menu is not null) {
+				caretLine = pinLine;
+				menu.Open (this);
+				e.Handled = true;
+			}
+		}
 	}
 
 	void InsertText (string text)
@@ -1704,9 +1724,9 @@ public class SkTextEditor : Control
 		MarkDirty ();
 	}
 
-	/// <summary>Context menu shown when right-clicking a line with pinned
-	/// watches (or anywhere, via Pin Watch): remove the pinned expression(s) of
-	/// that line — the pin action is provided by the editor context menu.</summary>
+	/// <summary>Context menu shown when right-clicking a pinned-watch bubble
+	/// (legacy PinnedWatch pad menu parity): remove the clicked expression or
+	/// jump the caret to its line.</summary>
 	public Avalonia.Controls.ContextMenu? BuildPinnedWatchMenu (int line0Based)
 	{
 		if (!pinnedWatches.TryGetValue (line0Based, out var list) || list.Count == 0)
@@ -1718,8 +1738,43 @@ public class SkTextEditor : Control
 			item.Click += (_, _) => RemovePinnedWatch (line0Based, captured);
 			menu.Items.Add (item);
 		}
+		menu.Items.Add (new Avalonia.Controls.Separator ());
+		var gotoItem = new Avalonia.Controls.MenuItem { Header = $"Go to line {line0Based + 1}" };
+		gotoItem.Click += (_, _) => {
+			GotoLine (line0Based);
+			Focus ();
+		};
+		menu.Items.Add (gotoItem);
 		return menu;
+	}	// Bubble rects in editor coordinates, rebuilt on every frame (registered
+	// while the bubbles are drawn) so the bubbles are clickable (legacy
+	// PinnedWatch adorners were interactive).
+	readonly Dictionary<int, List<(string Expr, Avalonia.Rect Rect)>> pinnedWatchRects = new ();
+
+	/// <summary>Hit test: is the point inside a pinned-watch bubble? Returns
+	/// the 0-based line and the expression of the bubble under the point.</summary>
+	public bool TryGetPinnedWatchAt (Avalonia.Point point, out int line0Based, out string? expression)
+	{
+		line0Based = -1;
+		expression = null;
+		foreach (var kv in pinnedWatchRects) {
+			foreach (var (expr, rect) in kv.Value) {
+				if (rect.Contains (point)) {
+					line0Based = kv.Key;
+					expression = expr;
+					return true;
+				}
+			}
+		}
+		return false;
 	}
+
+	/// <summary>QA helper: the registered bubble rect for (line, index), or
+	/// null when that frame has not been drawn yet.</summary>
+	public Avalonia.Rect? PinnedWatchRectForQa (int line0Based, int index)
+		=> pinnedWatchRects.TryGetValue (line0Based, out var list) && list.Count > index
+			? list [index].Rect
+			: null;
 
 	// ----- Completion (legacy TextEditorCommands.ShowCompletionWindow = "Complete Word",
 	// ShowParameterCompletionWindow = parameter info, ToggleCompletionSuggestionMode,
@@ -2524,6 +2579,7 @@ public class SkTextEditor : Control
 
 		int firstLine = (int)Math.Max (0, scrollLines);
 		int visible = (int)Math.Ceiling ((float)Bounds.Height / lineH) + 1;
+		pinnedWatchRects.Clear (); // rebuilt every frame (clickable bubbles)
 
 		using var textPaint = new SKPaint { IsAntialias = true };
 		using var textFont = new SKFont (font.Typeface, (float)FontSize);
@@ -2615,6 +2671,7 @@ public class SkTextEditor : Control
 			// evaluated "expr = value" (static "expr = ?" between sessions).
 			if (pinnedWatches.TryGetValue (i, out var pins)) {
 				float px = x + 10;
+				var rects = pinnedWatchRects [i] = new List<(string, Avalonia.Rect)> ();
 				foreach (var pin in pins) {
 					var label = pin;
 					if (pinnedWatchValues is not null) {
@@ -2629,6 +2686,7 @@ public class SkTextEditor : Control
 					canvas.DrawRect (px, y + 1, pw, lineH - 2, pinBorder);
 					textPaint.Color = new SKColor (0xe8, 0xcf, 0x9a);
 					canvas.DrawText (label, px + 7, baseline, textFont, textPaint);
+					rects.Add ((pin, new Avalonia.Rect (px, y + 1, pw, lineH - 2)));
 					px += pw + 6;
 				}
 			}
