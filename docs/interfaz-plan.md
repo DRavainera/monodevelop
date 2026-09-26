@@ -1087,3 +1087,56 @@ ICustomWidgetBackend. Nota de API: Avalonia 12 renombró `SystemDecorations →
 WindowDecorations` y `TemplatedControl` vive en `…Controls.Primitives`; los
 tipos Avalonia se usan por alias dentro de `Xwt.AvaloniaBackend` porque los
 namespaces Xwt sombrean Control/Window/Canvas/Alignment/WrapMode.
+
+## M16g — Fix de visibilidad: el sanitizador fontconfig ahora se aplica de verdad
+
+### Síntoma
+El shell arrancaba sin ventana: proceso vivo al 100% CPU en
+`FcPatternGetString → FcObjectTypeLookup → strcmp` (libfontconfig) **antes** del
+ctor de `MainWindow` (watchdog `[fatal]` a los 30s). El sanitizer de M16f
+(`FontconfigSanitizer.cs`) generaba una config válida — `fc-list` con ella
+mostraba 0 WOFFs — pero la app colgaba igual, mientras que la misma config pasada
+por el entorno (`FONTCONFIG_FILE=/tmp/…`) abría ventanas y cargaba la solución.
+
+### Causa raíz
+`Environment.SetEnvironmentVariable` de .NET solo actualiza la vista administrada
+del entorno: **no escribe en el bloque environ del proceso**, y libfontconfig
+(cargada por libSkiaSharp) lee `FONTCONFIG_FILE` con `getenv(3)` nativo al
+inicializarse. Resultado: la config se generaba, el mensaje `[fontconfig]
+web-font exclusion applied` salía, y Skia seguía inicializando el font manager
+con la config por defecto (que arrastra el caché compartido de
+`~/.cache/fontconfig` con las entradas de los WOFF/WOFF2 del usuario) → bucle.
+Matriz empírica que la aisló (arnés `env -i`, X :0, `--goto`):
+- A (setenv interno, estado borrado): cuelga.
+- B (setenv interno, caché caliente): cuelga — descarta "lento la 1ª vez".
+- C (solo `/usr/share/fonts` por entorno): ventana + solución < 22s.
+- D/E (config del sanitizer / fonts17 por entorno): cargan.
+Nota: `/proc/<pid>/environ` tampoco refleja `setenv` post-exec; el stack de gdb
+fue la prueba definitiva. Además, `fc-list`/`fc-cache` no ejercitan el mismo
+camino que el font manager de Skia: una config puede ser "válida" y aun así no
+estar aplicada en el proceso.
+
+### Fix (M16g)
+- `FontconfigSanitizer.Apply()`: ahora hace `setenv(3)` de libc vía P/Invoke
+  (además del setenv administrado); si libc falla, imprime WARNING.
+- Guard nuevo: si el entorno YA define `FONTCONFIG_FILE` (usuario/arnés QA), el
+  sanitizer no toca nada (antes lo pisaba/regeneraba).
+- Watchdog: el presupuesto por defecto sube a **120s** cuando
+  `FontconfigSanitizer.FirstRun` (regeneración de config ⇒ caché privado frío:
+  el escaneo completo de ~1300 fuentes tarda más de los 30s originales; cada
+  reintento moría a mitad del escaneo y dejaba un caché parcial — por eso el
+  "hang permanente" parecía eterno). Corridas siguientes vuelven a 30s.
+
+### Validación (QA, GNOME Wayland/Xwayland :0, arnés `env -i`)
+- T6: sin `FONTCONFIG_FILE` externo + estado borrado → regenera config, abre
+  ambas ventanas (`MonoDevelop — Avalonia Shell` + `Go To File`), carga TestProj.
+- T7: `FONTCONFIG_FILE` externo + estado borrado → no regenera (guard), ventana
+  + solución; log sin `[fontconfig] … applied`.
+- T8a/T8b: primera corrida en frío (2 ventanas, loaded) y corrida caliente
+  (2 ventanas, loaded, 0 `[fatal]`).
+- Regresión completa tras el fix: tests 16/16 y hooks `--watchedit`
+  (reevaluated=43), `--pinwatch` (bubble-hit/goto-line/remove), `--gutterbp`
+  (toggle+stored+datatip), `--legacyqa` (restored + formato legacy conservado),
+  todos verdes. Nota de arnés: el debuggee necesita `dotnet` en PATH
+  (netcoredbg lo lanza); un `PATH=/usr/bin:/bin` sin `~/.dotnet` produce
+  `0x80004005` en las evaluaciones — artefacto del arnés, no del shell.

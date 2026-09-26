@@ -115,13 +115,30 @@ Cada hook abre la app, ejercita un módulo de forma determinista y loguea
 ⚠️ **Watchdog de arranque**: si la UI no abre en 30s (`MD_STARTUP_WATCHDOG=<secs>`
 lo ajusta) el shell imprime `[fatal]` con la causa conocida (bucle de
 SkiaSharp/fontconfig con fuentes WOFF/WOFF2 del usuario) y sale con código 2.
+El presupuesto por defecto sube a **120s en la primera corrida** tras
+(re)generar la config del sanitizador (`FontconfigSanitizer.FirstRun`): el
+escaneo completo de fuentes construye el caché privado una sola vez.
+✅ **Auto-fix (M16g)**: ya no hace falta el workaround manual. `Program.Main`
+llama `MonoDevelop.Ide.Services.FontconfigSanitizer.Apply()` antes de tocar
+Avalonia/Skia: si hay WOFF/WOFF2 en los directorios de fuentes de usuario y el
+entorno no define `FONTCONFIG_FILE`, genera una config privada en
+`~/.local/share/MonoDevelop-Avalonia/fontconfig.conf` (directorios explícitos
+de sistema + usuario, **sin** include de fonts.conf para no arrastrar el caché
+compartido, `rejectfont` de cada directorio-hoja con WOFF/WOFF2 y cachedir
+privado) y la activa con `setenv(3)` de libc. Detalle clave: el puro
+`Environment.SetEnvironmentVariable` NO alcanza — libfontconfig lee la variable
+con `getenv(3)` nativo y el valor administrado es invisible para libSkiaSharp
+(el shell colgaba igual aunque la config generada fuera válida: validada con
+`fc-list`, nunca aplicada). QA verde en los 4 escenarios: primera corrida en
+frío (regenera + caché frío), corrida caliente, y respeto de `FONTCONFIG_FILE`
+externo del usuario/arnés.
 ⚠️ **Si el arranque se cuelga sin abrir ventana** (gira al 100% CPU sin
 imprimir nada): la causa son las fuentes de usuario con directorios
 WOFF/WOFF2 (`~/.local/share/fonts/**`) — el `SkFontMgr_fontconfig` de
 libSkiaSharp entra en bucle infinito dentro de `FcPatternGetString` al
-inicializar Avalonia.Skia (antes de crear la ventana). Workaround no
-destructivo para QA: apuntar `FONTCONFIG_FILE` a una config con solo fuentes
-de sistema:
+inicializar Avalonia.Skia (antes de crear la ventana). Workaround manual QA
+(solo si el sanitizador no pudiera aplicarse): apuntar `FONTCONFIG_FILE` a
+una config con solo fuentes de sistema:
 
 ```bash
 cat > /tmp/fonts-qa.conf <<'EOF'

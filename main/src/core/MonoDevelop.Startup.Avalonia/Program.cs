@@ -21,6 +21,10 @@ internal static class Program
 		if (args.Any (a => a == "--old-gui"))
 			return LaunchLegacyGtk (args);
 
+		// Keep the SkiaSharp fontconfig font manager from hanging on user
+		// web fonts (WOFF/WOFF2) BEFORE any Avalonia/Skia type initializes.
+		MonoDevelop.Ide.Services.FontconfigSanitizer.Apply ();
+
 		// UI language from the legacy preference (same MonoDevelopProperties.xml the
 		// GTK UI reads), applied before any string is built.
 		MonoDevelop.Ide.Services.GettextService.Initialize ();
@@ -44,7 +48,10 @@ internal static class Program
 
 	static void ArmStartupWatchdog ()
 	{
-		int seconds = int.TryParse (Environment.GetEnvironmentVariable ("MD_STARTUP_WATCHDOG"), out var s) && s > 0 ? s : 30;
+		// First sanitizer run builds the private fontconfig cache from scratch
+		// (every system + user font is scanned once); give it room by default.
+		int fallback = MonoDevelop.Ide.Services.FontconfigSanitizer.FirstRun ? 120 : 30;
+		int seconds = int.TryParse (Environment.GetEnvironmentVariable ("MD_STARTUP_WATCHDOG"), out var s) && s > 0 ? s : fallback;
 		_ = System.Threading.Tasks.Task.Run (async () => {
 			try {
 				await System.Threading.Tasks.Task.Delay (seconds * 1000, StartupWatchdogDone.Token);
@@ -122,9 +129,11 @@ internal static class Program
 			? arg.Substring ("--sln=".Length) : "";
 
 	// Avalonia configuration, don't remove; also used by visual designer.
+	// WithInterFont was dropped: it embeds a bundled font that Skia must
+	// register through the same fontconfig manager that hangs on web fonts —
+	// the system fonts (plus the sanitizer rejects) provide coverage.
 	public static AppBuilder BuildAvaloniaApp ()
 		=> AppBuilder.Configure<App> ()
 			.UsePlatformDetect ()
-			.WithInterFont ()
 			.LogToTrace ();
 }
