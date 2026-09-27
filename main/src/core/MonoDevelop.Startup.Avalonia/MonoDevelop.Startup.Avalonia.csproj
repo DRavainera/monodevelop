@@ -36,18 +36,25 @@
   <ItemGroup>
     <ProjectReference Include="..\..\..\external\mono-addins\Mono.Addins\Mono.Addins.csproj" />
     <ProjectReference Include="..\..\..\external\mono-addins\Mono.Addins.Setup\Mono.Addins.Setup.csproj" />
-  </ItemGroup>
-  <ItemGroup>
-    <!-- Integration without duplicates: the shell compiles the Services and
-         Controls that LIVE in MonoDevelop.Ide (and the debugger services that
-         live in the MonoDevelop.Debugger addin) — single source of truth, no
-         Avalonia-only copies. MonoDevelop.Ide.csproj keeps its explicit file
-         list (it builds the GTK legacy UI and does not reference Avalonia);
-         once its Avalonia surface takes over, these move into its Compile set. -->
-    <Compile Include="..\MonoDevelop.Ide\Services\**\*.cs" />
-    <Compile Include="..\MonoDevelop.Ide\Controls\**\*.cs" />
-    <Compile Include="..\..\addins\MonoDevelop.Debugger\WatchService.cs" />
-    <Compile Include="..\..\addins\MonoDevelop.Debugger\BreakpointService.cs" />
-    <Compile Include="..\..\addins\MonoDevelop.Debugger\DebugSessionService.cs" />
-  </ItemGroup>
+    <!-- The Xwt Avalonia backend: dialogs/pads built on the Xwt frontend
+         render through the same Avalonia/Skia stack as this shell. -->
+    <ProjectReference Include="..\..\..\external\xwt\Xwt.Avalonia\Xwt.Avalonia.csproj" />
+    <ProjectReference Include="..\..\..\external\xwt\Xwt\Xwt.csproj" />
+  </ItemGroup>	<ItemGroup>
+		<!-- Integration without duplicates: the shell compiles the Services and
+			Controls that LIVE in MonoDevelop.Ide (and the debugger services that
+			live in the MonoDevelop.Debugger addin) — single source of truth, no
+			Avalonia-only copies. MonoDevelop.Ide.csproj keeps its explicit file
+			list (it builds the GTK legacy UI and does not reference Avalonia);
+			once its Avalonia surface takes over, these move into its Compile set. -->
+		<Compile Include="..\MonoDevelop.Ide\Services\**\*.cs" />
+		<Compile Include="..\MonoDevelop.Ide\Controls\**\*.cs" />
+		<Compile Include="..\..\addins\MonoDevelop.Debugger\WatchService.cs" />
+		<Compile Include="..\..\addins\MonoDevelop.Debugger\BreakpointService.cs" />
+		<Compile Include="..\..\addins\MonoDevelop.Debugger\DebugSessionService.cs" />
+		<!-- REAL Xwt dialogs running on the Xwt.Avalonia backend: compiled from
+			their MonoDevelop.Ide source (single source of truth), no GTK — these
+			are the first genuine MonoDevelop dialogs off the GTK stack. -->
+		<Compile Include="..\MonoDevelop.Ide\MonoDevelop.Ide.Projects\NewSolutionRunConfigurationDialog.cs" />
+	</ItemGroup>
 </Project>

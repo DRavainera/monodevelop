@@ -142,6 +142,26 @@ public partial class MainWindow : Window
 				} else {
 					Output ("[newconfig] accepted=" + dlg.Accepted + " name='" + dlg.ConfigName + "' children=" + dlg.CreateChildren);
 				}
+			} else if (qa == "--xruncfg") {
+				// QA: the REAL MonoDevelop.Ide Xwt dialog (NewSolutionRunConfigurationDialog,
+				// compiled from its original source) running on the Xwt.Avalonia backend:
+				// Xwt.Application.Initialize guest mode → Dialog.Run() modal loop →
+				// an automated tick responds the Create command after 2s (exercising
+				// Respond → backend EndLoop → Run return), the command round-trips.
+				Xwt.Application.Initialize ("Xwt.AvaloniaBackend.AvaloniaEngine, Xwt.Avalonia");
+				var dlg = new MonoDevelop.Ide.Projects.NewSolutionRunConfigurationDialog ();
+				Output ("[xruncfg] dialog opened on Xwt.Avalonia (backend=" + Xwt.Toolkit.CurrentEngine.GetType ().Name + ")");
+				var autoClose = new Avalonia.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds (2) };
+				autoClose.Tick += (s, e) => {
+					autoClose.Stop ();
+					var create = dlg.Buttons.OfType<Xwt.DialogButton> ().FirstOrDefault (b => b.Command != null && b.Command.Id == "create");
+					if (create != null)
+						dlg.Respond (create.Command);
+				};
+				autoClose.Start ();
+				var result = dlg.Run ();
+				Output ("[xruncfg] closed command=" + (result?.Id ?? "null") + " name='" + dlg.RunConfigurationName + "'");
+				dlg.Dispose ();
 			} else if (qa == "--activeconfig") {
 				// QA: Active Configuration — persisted value read back from .userprefs,
 				// switch via the menu command, verify persistence, restore Debug.

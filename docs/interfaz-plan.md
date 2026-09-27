@@ -1140,3 +1140,149 @@ estar aplicada en el proceso.
   todos verdes. Nota de arnés: el debuggee necesita `dotnet` en PATH
   (netcoredbg lo lanza); un `PATH=/usr/bin:/bin` sin `~/.dotnet` produce
   `0x80004005` en las evaluaciones — artefacto del arnés, no del shell.
+
+## M17 — Xwt.Avalonia oleada 1: dibujo real (Context/Font/TextLayout/Gradient/Image sobre Avalonia.Media + SkiaSharp)
+
+Dentro del submódulo `external/xwt`, nuevo `Xwt.Avalonia/DrawingBackends.cs`
+(~1150 líneas) con los 8 handlers de dibujo que el frontend Xwt inicializa
+en `Toolkit.Initialize` (el Canvas custom-draw y los diálogos los necesitan):
+`ContextBackend` (pila estilo Cairo: `SkDrawContext` con SKCanvas + SKPath
+compartido + stack de `DrawState`; clip/fill/stroke ±preserve, patrones,
+transformaciones, paths, hit-test), `FontBackend` (`FontData` + cache de
+typefaces; mono/serif con candidatos conocidos, default runtime),
+`TextLayoutBackend` (`AvaloniaTextLayout`: un blob por run para colores por
+atributo, ellipsize, alineación, mapeo índice↔coordenada), `GradientBackend`,
+`ImagePatternBackend`, `ImageBuilderBackend` (SKSurface offscreen) y
+`AvaloniaImageBackend`. Además `CanvasBackend` reescrito: `Grid` con un host
+de render (`Control` con `Render` override — `Panel.Render` está sellado en
+Avalonia 12) que rasteriza cada frame a un `WriteableBitmap` Bgra8888 (patrón
+`SkTextEditor` del shell) y entrega al sink `ICanvasEventSink.OnDraw` un
+`SkDrawContext`; los children van en un overlay `Canvas`.
+
+### Tres trampas del frontend que costaron cada una su depuración
+
+1. **ConvertToBitmap de imágenes custom-drawn**: `ImageBuilder.ToBitmap()` →
+   `VectorImage` (backend sin tamaño intrínseco). El raster debe REPLAYAR el
+   callback con `idesc.Size` (el tamaño real); ignorarlo producía un bitmap
+   1×1 con memoria sin inicializar (síntoma del probe: builder 16×16 → rojo
+   perfecto por backend directo, pero `ToBitmap()` basura).
+2. **`SKTypeface.Default.FamilyName` VACÍO** con el font manager fontconfig de
+   SkiaSharp 3.119 en este entorno (310 familias visibles y aun así default
+   `''`): cualquier layout con el font del sistema medía 1×1 (fallback del
+   frontend a `Font.SystemFont` ⇒ familia `''` ⇒ typeface sin métricas).
+   Fix: `FontCache.DefaultFamily()` elige una sans real instalada (DejaVu
+   Sans → Liberation Sans → …) o la primera familia no vacía.
+3. **`ImageDescription.Alpha` default = 0**: el replay del `DrawingImage` hace
+   `c.GlobalAlpha = idesc.Alpha`; con el ImageDescription sintético del raster
+   (sin Alpha explícito) TODO salía invisible — el callback corría feliz y
+   pintaba cero píxeles (sin excepción, imposible de ver sin instrumentar).
+   Fix: `Alpha = 1` en el replay.
+
+Además, `ContextBackend.SetPattern` recibe el Pattern del FRONTEND (el
+recorder de VectorImage lo guarda tal cual): hay que resolverlo con
+`Toolkit.GetSafeBackend` igual que hace Xwt.WPF antes de sacarle el shader.
+
+### Validación
+
+Smoke headless (`FONTCONFIG_FILE=/tmp/fctest/c_only.conf`, el fixture de
+tmp se regenera igual que en M16e — se borró con el reinicio):
+**19/19 aserciones** — 9 de widgets de la oleada 0 + 5 de dibujo de la
+oleada 1 + 5 de la oleada 3 (ver abajo).
+Pipeline backend-directo verificado además con un probe temporal de reflexión
+(borrado; 310 familias, builder 16×16 → `#ffff0000` en (5,5)).
+
+## M18 — Xwt.Avalonia oleada 3: los Pads (ListView/TreeView + stores, ComboBox)
+
+`ListBackends.cs` (~1100 líneas) con `ListViewBackend` (implementa también
+`IListBoxBackend`), `TreeViewBackend` y `ComboBoxBackend`, más los stores
+`ListStoreBackend`/`TreeStoreBackend`.
+
+### Decisión de diseño: panel de filas propio, sin templates de Avalonia
+
+Los rows renderizan con controles Avalonia planos (`ScrollViewer →
+StackPanel` de `Grid` por fila) en vez de `ItemsControl`/`TreeView` con
+templates de datos: el contrato Xwt exige APIs claveadas por `TreePosition`
+(SelectRow/ExpandRow/GetCellBounds/GetRowAtPosition…) sobre un origen de
+datos que el backend NO posee, y la API de árboles de Avalonia 12
+(`ITreeDataTemplate.BindChildren`) descarta la identidad por nodo que hay
+que conservar. El contenido de celda mapea igual que `CellUtil` de Xwt.WPF
+(TextCellView→TextBlock, ImageCellView→Image rasterizada por el backend de
+imagen de la oleada 1, CheckBoxCellView→CheckBox); `CanvasCellView` queda
+para la oleada de celdas custom-drawn.
+
+### Descubrimiento: los stores SÍ requieren backend propio
+
+Los comentarios de `ITreeStoreBackend`/`IListStoreBackend` dicen "you don't
+need to implement this" — pero es falso en la práctica: `ListStore`
+exige un backend registrado (su `BackendHost` no tiene fallback y explota
+con `No backend found for object: Xwt.ListStore`) y el fallback del
+`TreeStore` (`DefaultTreeStoreBackend`) es **internal** al núcleo, así que
+ningún engine externo puede registrarlo. `ListStoreBackend` y
+`TreeStoreBackend` implementan ambos contratos con filas/nodos cuya
+identidad ES el `TreePosition` (los handles se pueden guardar y comparar,
+igual que los GtkTreeIter de GTK; `IndexOf` resuelve posición→índice vía el
+store). Para `IListDataSource` propios (los view models de los Pads) hay
+fallback por índice (`IndexRowHandle`).
+
+El TreeView re reconstruye de los eventos del origen (NodeChanged/
+NodeInserted/…) y el flatten depth-first respeta la expansión, disparando
+los pares Expanding/Expanded y Collapsing/Collapsed del sink. La
+selección (simple/múltiple con Ctrl), el foco, scroll-to-row,
+ExpandToRow/ExpandRow(recursivo) y alternancia de filas van contra los
+handles; la indentación visual es margen por profundidad (el glifo del
+expander llega con la oleada de celdas custom).
+
+### Validación
+
+Smoke 19/19: ListView sobre `ListStore` del núcleo (2 filas, selección por
+índice via backend), TreeView sobre `TreeStore` (selección de un hijo por
+posición de nodo estable) y ComboBox sobre `ListStore` (índice seleccionado
+round-trip). Aserción en el smoke: un `DataField` no puede reutilizarse
+entre stores (el núcleo lo rechaza — "already belongs to another data
+store"), detalle del contrato del frontend que conviene respetar en los
+Pads.
+
+## M19 — Integración en Main.sln y un diálogo REAL de MonoDevelop sobre Xwt.Avalonia
+
+### Integración de build
+
+- `Xwt.Avalonia` entra en `Main.sln` (junto a Xwt/Xwt.Gtk/Xwt.WPF del
+  submódulo) y `MonoDevelop.Startup.Avalonia.csproj` referencia `Xwt` +
+  `Xwt.Avalonia` — el shell y el backend comparten la MISMA pila
+  Avalonia 12.1.2 + SkiaSharp 3.119.4.
+- El shell compila el diálogo REAL desde su fuente original
+  (`MonoDevelop.Ide/MonoDevelop.Ide.Projects/NewSolutionRunConfigurationDialog.cs`,
+  0 líneas cambiadas — patrón "integration without duplicates").
+- Adaptador `CoreGettextShim.cs`: los diálogos reales llaman a
+  `MonoDevelop.Core.GettextCatalog`; referenciar MonoDevelop.Core arrastraría
+  el runtime legacy del addin engine (`Runtime.Preferences` en el static
+  ctor), así que — como el `SystemXamlShim` de Xwt net10 — el tipo se provee
+  como adaptador fino que delega en `GettextService.T` del shell (única
+  fuente de traducción).
+
+### Huecos de backend cerrados para diálogos
+
+- **`DialogBackend`** (`IDialogBackend`): ventana Avalonia con barra de
+  botones Xwt (SetButtons/UpdateButton/DefaultButton/sensitive) y el par
+  RunLoop/EndLoop. Lección clave: el bucle modal es un **DispatcherFrame
+  anidado** — un pump de `RunJobs` + sleep NO sirve los timers de Avalonia,
+  y cualquier automatización/animación dentro del diálogo se congelaba.
+- **`AvaloniaDesktopBackend`**: pantallas/ratón vía la plataforma
+  (Avalonia 12 ya no expone lista estática de pantallas: se lee de
+  `Window.Screens` de una ventana viva registrada). `Dialog.AdjustSize` lo
+  exige: sin él, `Dialog.Run()` explota en `Desktop.PrimaryScreen`.
+
+### Validación (hook QA `--xruncfg`)
+
+```
+[xruncfg] dialog opened on Xwt.Avalonia (backend=Toolkit)
+[xruncfg] closed command=create name='Multiple Projects'
+```
+
+El `NewSolutionRunConfigurationDialog` original abre, corre su bucle modal,
+el temporizador QA responde el comando `create` a los 2s (Respond →
+EndLoop → retorno de `Run()`), el resultado round-trips y el nombre leído
+es el del TextEntry. Smoke del backend 19/19; build del shell 0 errores.
+Arnés: `env -i` + `DISPLAY=:0` (Xwayland del usuario; el :1 del arnés
+anterior ya no sirve — la sesión es Wayland/Xwayland :0) y fontconfig
+sanitizado o por entorno.
