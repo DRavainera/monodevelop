@@ -62,7 +62,9 @@ public class AddReferenceDialog : DialogWindow
 
 		Title = "Add Reference";
 		Width = 620;
-		Height = 560;
+		// The bottom action row needs ~40px of breathing room: at 560 the dialog
+		// frame clipped the OK/Cancel captions.
+		Height = 600;
 		ShowTitleRow ();
 
 		// ----- Filter row (legacy CombinedBox: filter entry above the tabs) -----
@@ -106,7 +108,7 @@ public class AddReferenceDialog : DialogWindow
 			BorderThickness = new Thickness (1),
 			CornerRadius = new CornerRadius (3),
 		};
-		removeButton = new Button { Content = "Remove", Width = 80, IsEnabled = false };
+		removeButton = new Button { Content = "Remove", MinWidth = 80, IsEnabled = false };
 		removeButton.Click += (_, _) => RemoveSelected ();
 		var refsHeader = new Grid { ColumnDefinitions = ColumnDefinitions.Parse ("*,Auto"), Margin = new Thickness (12, 10, 12, 0) };
 		var refsLabel = new TextBlock { Text = "References", FontWeight = FontWeight.SemiBold, FontSize = 12, VerticalAlignment = VerticalAlignment.Center };
@@ -117,9 +119,9 @@ public class AddReferenceDialog : DialogWindow
 		refsList.SelectionChanged += (_, _) => removeButton.IsEnabled = refsList.SelectedIndex >= 0;
 
 		// ----- Bottom buttons (legacy OK / Cancel) -----
-		var ok = new Button { Content = "OK", Width = 80, Classes = { "chromebtn" } };
+		var ok = new Button { Content = "OK", MinWidth = 80, Classes = { "chromebtn" } };
 		ok.Click += (_, _) => Apply ();
-		var cancel = new Button { Content = "Cancel", Width = 80, Classes = { "chromebtn" } };
+		var cancel = new Button { Content = "Cancel", MinWidth = 80, Classes = { "chromebtn" } };
 		cancel.Click += (_, _) => Close ();
 		removeButton.Classes.Add ("chromebtn");
 		var buttons = new StackPanel {

@@ -146,9 +146,12 @@
     <ResourceDictionary>
       <!-- FluentTheme 12.1.2 hardcodes fonts:Inter#Inter as ContentFontFamily (the
            Inter package is optional and NOT referenced here) → override with the
-           embedded Selawik (OFL, metric-compatible Segoe UI replacement). -->
-      <FontFamily x:Key="ContentFontFamily">Selawik</FontFamily>
-      <FontFamily x:Key="ContentControlThemeFontFamily">Selawik</FontFamily>
+           embedded Selawik (OFL, metric-compatible Segoe UI replacement). The
+           fonts: URI resolves INSIDE the shell assembly's embedded /Fonts/*.ttf —
+           a plain "Selawik" name would depend on an OS-installed copy and fall
+           back per-glyph (clipped button captions) when it is absent. -->
+      <FontFamily x:Key="ContentFontFamily">avares://MonoDevelop.AvaloniaShell/Fonts/selawk.ttf#Selawik</FontFamily>
+      <FontFamily x:Key="ContentControlThemeFontFamily">avares://MonoDevelop.AvaloniaShell/Fonts/selawk.ttf#Selawik</FontFamily>
       <ResourceDictionary.ThemeDictionaries>
         <ResourceDictionary x:Key="Dark">
           <Color x:Key="IdeWindowBg">#1E1E1E</Color>

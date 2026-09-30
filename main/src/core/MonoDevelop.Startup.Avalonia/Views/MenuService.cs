@@ -36,6 +36,11 @@ public static class MenuService
 		// Legacy command id when the action is Command ("...") — used by the keyboard
 		// dispatcher (MenuItem keyboard placement) and the KeyBindings preferences panel.
 		public string? CommandId { get; set; }
+
+		// Marker for submenus that BuildMenu fills dynamically (e.g. "RunWith"),
+		// and flags for entries the shell manages after building.
+		public string? Tag { get; set; }
+		public bool AutoHide { get; set; }
 	}
 
 	public static IReadOnlyList<MenuEntry> BuildMainMenu (IReadOnlyList<string>? recentSolutions = null)
@@ -375,7 +380,7 @@ public static class MenuService
 		Label = "_Run",
 		Children = {
 			Item ("Start Without Debugging", icon: "gtk-execute", shortcut: "Ctrl F5", click: Command ("MonoDevelop.Ide.Commands.ProjectCommands.Run")),
-			Sub ("Run With", new List<MenuEntry> { Item ("(Default)", disabled: true) }, autoHide: true),
+			new MenuEntry { Label = "Run With", Tag = "RunWith", Children = { Item ("(Default)", disabled: true) }, AutoHide = true },
 			Sep (),
 			Item ("_Debug", icon: "md-debug-all", shortcut: "F5", click: Command ("MonoDevelop.Debugger.DebugCommands.Debug")),
 			Item ("Ste_p Over", icon: "md-step-over-debug", shortcut: "F10", click: Command ("MonoDevelop.Debugger.DebugCommands.StepOver")),
@@ -552,6 +557,48 @@ public static class MenuService
 	}
 
 	static MenuEntry Sep () => new () { Label = "-", IsSeparator = true };
+
+	/// <summary>Finds a native MenuItem anywhere under the root by its Tag marker
+	/// (submenus marked for dynamic filling, e.g. "RunWith").</summary>
+	public static Avalonia.Controls.MenuItem? FindMenuByTag (System.Collections.Generic.IEnumerable<Avalonia.Controls.MenuItem> roots, string marker)
+	{
+		foreach (var root in roots) {
+			if (root.Tag is string t && t == marker)
+				return root;
+			var nested = FindMenuByTag (root, marker);
+			if (nested is not null)
+				return nested;
+		}
+		return null;
+	}
+
+	public static Avalonia.Controls.MenuItem? FindMenuByTag (Avalonia.Controls.MenuFlyoutPresenter? parent, string marker)
+	{
+		if (parent is null)
+			return null;
+		foreach (var item in parent.Items) {
+			if (item is Avalonia.Controls.MenuItem { Tag: string t } mi && t == marker)
+				return mi;
+			var nested = FindMenuByTag (item as Avalonia.Controls.MenuItem, marker);
+			if (nested is not null)
+				return nested;
+		}
+		return null;
+	}
+
+	public static Avalonia.Controls.MenuItem? FindMenuByTag (Avalonia.Controls.MenuItem? parent, string marker)
+	{
+		if (parent is null)
+			return null;
+		foreach (var item in parent.Items) {
+			if (item is Avalonia.Controls.MenuItem { Tag: string t } mi && t == marker)
+				return mi;
+			var nested = FindMenuByTag (item as Avalonia.Controls.MenuItem, marker);
+			if (nested is not null)
+				return nested;
+		}
+		return null;
+	}
 
 	static MenuEntry SepHeader (string label) => new () { Label = label, IsHeader = true, Disabled = true };
 }

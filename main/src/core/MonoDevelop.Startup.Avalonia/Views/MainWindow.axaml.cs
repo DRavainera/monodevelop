@@ -73,6 +73,7 @@ public partial class MainWindow : Window
 		xwtSolutionTree.Columns.Add (textCol);
 		xwtSolutionTree.RowActivated += OnXwtSolutionRowActivated;
 		xwtSolutionTree.SelectionChanged += (_, _) => UpdatePropertiesPad ();
+		xwtSolutionTree.ButtonPressed += OnXwtSolutionContextMenu;
 
 		if (Xwt.Toolkit.CurrentEngine.GetNativeWidget (xwtSolutionTree) is Control native) {
 			xwtSolutionHost.Children.Remove (xwtPlaceholder!);
@@ -268,6 +269,51 @@ public partial class MainWindow : Window
 				autoRun.Start ();
 				await dlg.ShowDialog (this);
 				Output ("[exmode] closed result=" + (dlg.Result is { } r ? r.Config.Name + "→" + r.Mode.Name : "null"));
+			} else if (qa == "--tabscroll") {
+				// QA: tab strip overflow — open enough documents for the ‹ › buttons
+				// to appear, step through the tabs, then close until they fit again
+				// and the buttons disappear.
+				var file = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile), "TestProj", "TestProj", "Program.cs");
+				if (!File.Exists (file)) {
+					Output ("[tabscroll] no test file");
+				} else {
+					for (int i = 1; i <= 10 && !TabScrollButtonsVisible (); i++) {
+						var docName = "QaOverflow" + i + ".cs";
+						OpenDocumentText (docName, $"// overflow filler {i}\n");
+						await Task.Delay (60); // layout pass so the strip sizes update
+						Output ("[tabscroll] opened " + docName + " scrollVisible=" + TabScrollButtonsVisible ());
+					}
+					Output ("[tabscroll] overflow reached: " + TabScrollButtonsVisible ());
+					double before = tabStripOffset;
+					NudgeTabStrip (-1);
+					Output ("[tabscroll] nudge left: offset " + before + " → " + tabStripOffset);
+					NudgeTabStrip (1);
+					Output ("[tabscroll] nudge right: offset → " + tabStripOffset);
+					while (docs.Count > 0 && TabScrollButtonsVisible ()) {
+						var last = docs.Keys.Last ();
+						CloseDocument (last);
+					}
+					// The last CloseDocument removes the last doc; reopen the base file
+					// so the shell keeps a tab.
+					if (docs.Count == 0)
+						OpenFileDocument (file);
+					await Task.Delay (200); // layout settle after the removals
+					UpdateTabScrollButtons ();
+					Output ("[tabscroll] after close: docs=" + docs.Count + " scrollVisible=" + TabScrollButtonsVisible ());
+				}
+			} else if (qa == "--selpad") {
+				// QA: the Xwt tree selection drives the Properties pad — select
+				// solution / project / file nodes and dump the pad content each time.
+				if (loadedSolutionPath is null) {
+					Output ("[selpad] no solution loaded");
+				} else {
+					var proj = ResolveActiveProject ();
+					var progFile = Path.Combine (Path.GetDirectoryName (proj!)!, "Program.cs");
+					foreach (var tag in new[] { "solution:" + loadedSolutionPath, "project:" + proj, progFile }) {
+						bool ok = SelectXwtSolutionRow (tag);
+						Output ($"[selpad] select '{Path.GetFileName (tag)}' ok={ok} resolved='{SelectedXwtNode ()}' header='{propertiesTitleLabel?.Text}' rows={propertiesList!.Children.Count}");
+					}
+				}
 			} else if (qa == "--newconfig") {
 				// QA: New Configuration — name/platform combos with the legacy
 				// validation; OK persists the config in the loaded .sln/.csproj.
@@ -1845,6 +1891,82 @@ public partial class MainWindow : Window
 			MainMenu.Items.Add (item);
 		// Re-attach on every rebuild: the items are new instances each time.
 		MonoDevelop.Ide.Services.KeyboardShortcutRegistry.AttachHotKeys (this);
+		// Run > Run With mirrors the execution modes (legacy ExecutionModeCommandService
+		// fills the submenu per run target); selection persists in the settings store.
+		FillRunWithMenu ();
+	}
+
+	/// <summary>Run With… (legacy ExecutionModeCommandService.ShowSelector): the
+	/// ExecutionModeSelectorDialog over the REAL run configurations of the startup
+	/// project (Default for now — the config list comes from the csproj) and the
+	/// execution modes; the chosen pair drives the run command.</summary>
+	void ShowExecutionModeSelector ()
+	{
+		var proj = ResolveActiveProject ();
+		var runConfigs = new System.Collections.Generic.List<ExecutionModeSelectorDialog.RunConfig> {
+			new () { Name = string.IsNullOrEmpty (activeConfiguration) ? "Default" : activeConfiguration },
+		};
+		if (proj is not null) {
+			// Project configuration names straight from the csproj (Configuration|Platform
+			// property groups) — the legacy listConfigs.Fill(item.GetRunConfigurations()).
+			try {
+				var doc = System.Xml.Linq.XDocument.Load (proj);
+				foreach (var el in doc.Descendants ().Where (d => d.Name.LocalName == "PropertyGroup")) {
+					var cond = (string?)el.Attribute ("Condition");
+					var eq = cond?.IndexOf ("==", StringComparison.Ordinal) ?? -1;
+					var namePart = eq > 0 ? cond! [(eq + 2)..].Split ('|') [0].Trim ('\'', ' ') : null;
+					if (!string.IsNullOrEmpty (namePart) && runConfigs.All (r => r.Name != namePart))
+						runConfigs.Add (new () { Name = namePart });
+				}
+			} catch { }
+		}
+		var dlg = new ExecutionModeSelectorDialog ();
+		dlg.Load (
+			runConfigs,
+			new System.Collections.Generic.List<ExecutionModeSelectorDialog.ModeEntry> {
+				new () { Name = ".NET Core", Id = "dotnet", SetName = ".NET Core" },
+				new () { Name = "Mono", Id = "mono", SetName = "Mono" },
+				new () { Name = "External Terminal", Id = "external", SetName = "External" },
+			},
+			selectedModeId: MonoDevelop.Ide.Services.SettingsStore.GetString ("MonoDevelop.Ide.RunWithMode") is { Length: > 0 } m ? m : null);
+		_ = dlg.ShowDialog (this);
+		dlg.Closed += (_, _) => {
+			if (dlg.Result is not { } pair)
+				return;
+			MonoDevelop.Ide.Services.SettingsStore.SetString ("MonoDevelop.Ide.RunWithMode", pair.Mode.Id);
+			if (runConfigs.Any (r => r.Name == pair.Config.Name))
+				MonoDevelop.Ide.Services.ConfigurationService.SetActiveConfiguration (loadedSolutionPath!, pair.Config.Name);
+			Output ($"[runwith] {pair.Config.Name} → {pair.Mode.Name}");
+			BuildMenu ();
+		};
+	}
+
+	/// <summary>Fills Run > Run With with the execution modes (legacy
+	/// ExecutionModeCommandService fills it from the mode sets of the active run
+	/// target), checking the persisted choice. "(Default)" clears the override.</summary>
+	void FillRunWithMenu ()
+	{
+		var runWith = MenuService.FindMenuByTag (MainMenu!.Items.OfType<Avalonia.Controls.MenuItem> (), "RunWith");
+		if (runWith is null)
+			return;
+		runWith.Items.Clear ();
+		var chosen = MonoDevelop.Ide.Services.SettingsStore.GetString ("MonoDevelop.Ide.RunWithMode");
+		var modes = new (string Id, string Label) [] {
+			("", "(Default)"),
+			("dotnet", ".NET Core"),
+			("mono", "Mono"),
+			("external", "External Terminal"),
+		};
+		foreach (var (id, label) in modes) {
+			var mi = new MenuItem { Header = label, Tag = id };
+			mi.Click += (_, _) => {
+				MonoDevelop.Ide.Services.SettingsStore.SetString ("MonoDevelop.Ide.RunWithMode", (string)mi.Tag!);
+				Output ("[runwith] mode = " + ((string)mi.Tag! is { Length: > 0 } m ? m : "(Default)"));
+				BuildMenu (); // re-check the picked mode
+			};
+		mi.IsChecked = string.Equals (chosen ?? "", id, StringComparison.Ordinal);
+		runWith.Items.Add (mi);
+	}
 	}
 
 	// View > Pads checkmarks mirror the real pad visibility on every rebuild, like the
@@ -2361,12 +2483,19 @@ public partial class MainWindow : Window
 	Control? DocTabsPresenter
 		=> DocTabs!.GetVisualDescendants ().OfType<Avalonia.Controls.Presenters.ItemsPresenter> ().FirstOrDefault (p => p.Name == "PART_ItemsPresenter");
 
+	/// <summary>Total width of the tab strip CONTENT: the sum of every tab's
+	/// arranged width. The ItemsPresenter is arranged AT the viewport width (the
+	/// clip hides the overflow), so its own Bounds can never report the excess —
+	/// the tabs themselves carry the real content width.</summary>
+	double TabStripContentWidth =>
+		DocTabs?.Items.OfType<TabItem> ().Where (t => t.IsVisible).Sum (t => t.Bounds.Width) ?? 0;
+
 	/// <summary>Shifts the clipped tab row (‹ › buttons): one step = half viewport.</summary>
 	void NudgeTabStrip (int dir)
 	{
 		if (TabStripViewport is not { } vp || DocTabsPresenter is not { } row)
 			return;
-		double overflow = row.Bounds.Width - vp.Bounds.Width;
+		double overflow = TabStripContentWidth - vp.Bounds.Width;
 		if (overflow <= 0)
 			return;
 		tabStripOffset = System.Math.Clamp (tabStripOffset + dir * System.Math.Max (100, vp.Bounds.Width / 2), -overflow, 0);
@@ -2384,7 +2513,7 @@ public partial class MainWindow : Window
 		var row = DocTabsPresenter;
 		if (vp is null || row is null)
 			return;
-		double overflow = row.Bounds.Width - vp.Bounds.Width;
+		double overflow = TabStripContentWidth - vp.Bounds.Width;
 		bool over = overflow > 1;
 		tabStripOffset = System.Math.Clamp (tabStripOffset, -System.Math.Max (0, overflow), 0);
 		if (row.RenderTransform is Avalonia.Media.TranslateTransform t)
@@ -2393,6 +2522,36 @@ public partial class MainWindow : Window
 			if (b.Name == "DocScrollLeft" || b.Name == "DocScrollRight")
 				b.IsVisible = over;
 		}
+	}
+
+	/// <summary>QA helper: are the ‹ › tab nav buttons visible right now?</summary>
+	internal bool TabScrollButtonsVisible ()
+	{
+		bool left = false, right = false;
+		foreach (var b in DocTabs!.GetVisualDescendants ().OfType<Button> ()) {
+			if (b.Name == "DocScrollLeft") left = b.IsVisible;
+			if (b.Name == "DocScrollRight") right = b.IsVisible;
+		}
+		return left && right;
+	}
+
+	/// <summary>QA helper: opens a titled untitled document with the given text.</summary>
+	void OpenDocumentText (string title, string text)
+	{
+		if (docs.ContainsKey (title)) {
+			SelectDocument (title);
+			return;
+		}
+		var editor = new MonoDevelop.Ide.Controls.SkTextEditor {
+			FilePath = "",
+			IsDirty = false,
+			Background = Brushes.Transparent,
+			PopupOwner = this,
+			Cursor = new Avalonia.Input.Cursor (Avalonia.Input.StandardCursorType.Ibeam),
+		};
+		editor.Text = text;
+		AttachEditorContextMenu (editor);
+		AddDocument (title, editor);
 	}
 
 	/// <summary>Legacy tab icon: md-class-file for code, md-text-file-icon otherwise.</summary>
@@ -2957,7 +3116,8 @@ public partial class MainWindow : Window
 		};
 	}
 
-	// ProjectCommands.NewFolder on a node.
+	// ProjectCommands.NewFolder on a node (legacy FolderNodeBuilder: the real
+	// NewFolderDialog with default name, live validation and Add).
 	void CreateContextNewFolder ()
 	{
 		var dir = ContextTargetDirectory ();
@@ -2965,18 +3125,13 @@ public partial class MainWindow : Window
 			Output ("[add] select a project or folder node first");
 			return;
 		}
-		var dlg = new InputDialog ("New Folder", "Folder name:", "NewFolder");
+		var dlg = new NewFolderDialog (dir);
 		_ = dlg.ShowDialog (this);
 		dlg.Closed += (_, _) => {
-			if (!dlg.Confirmed || string.IsNullOrWhiteSpace (dlg.Value))
+			if (dlg.NewFolderCreated is null)
 				return;
-			try {
-				Directory.CreateDirectory (Path.Combine (dir, dlg.Value));
-				RefreshSolutionTree ();
-				Output ("[add] folder created: " + dlg.Value);
-			} catch (Exception ex) {
-				Output ("[add] failed: " + ex.Message);
-			}
+			RefreshSolutionTree ();
+			Output ("[add] folder created: " + Path.GetFileName (dlg.NewFolderCreated));
 		};
 	}
 
@@ -3400,17 +3555,27 @@ public partial class MainWindow : Window
 
 	void OnSolutionPadContextMenu (object? sender, PointerReleasedEventArgs e)
 	{
-		if (e.InitialPressMouseButton != MouseButton.Right || solutionTreeView is null)
+		if (e.InitialPressMouseButton != MouseButton.Right || xwtSolutionTree is null)
 			return;
 		e.Handled = true;
-		// Select the node under the pointer (legacy pads select before showing the menu).
-		if (e.Source is Visual v) {
-			var item = v.GetSelfAndVisualAncestors ().OfType<TreeViewItem> ().FirstOrDefault ();
-			if (item is not null)
-				item.IsSelected = true;
-		}
+		ShowProjectPadMenuAtPointer ();
+	}
+
+	// Xwt tree right-click (ButtonPressed, IsContextMenuTrigger): the backend has
+	// already selected the row under the pointer — show the ProjectPad menu there.
+	void OnXwtSolutionContextMenu (object? sender, Xwt.ButtonEventArgs e)
+	{
+		if (!e.IsContextMenuTrigger)
+			return;
+		Avalonia.Threading.Dispatcher.UIThread.Post (ShowProjectPadMenuAtPointer);
+	}
+
+	/// <summary>Shows the ProjectPad context menu at the pointer, over the Xwt
+	/// tree (legacy Gtk.Menu.Popup at the event coordinates).</summary>
+	void ShowProjectPadMenuAtPointer ()
+	{
 		var flyout = new MenuFlyout { ItemsSource = BuildProjectPadMenu () };
-		flyout.ShowAt (solutionTreeView, true);
+		flyout.ShowAt (xwtSolutionHost!, true);
 	}
 
 	/// <summary>The ProjectPad context menu for the currently selected node, mirroring
@@ -3481,8 +3646,8 @@ public partial class MainWindow : Window
 	// solution path → Solution; .csproj → Project; folder: → ProjectFolder; file → ProjectFile.
 	(string NodeType, string? Path) SelectedNodeType ()
 	{
-		if (solutionTreeView?.SelectedItem is TreeViewItem { Tag: { } tag }) {
-			var s = tag.ToString () ?? "";
+		var s = SelectedXwtNode ();
+		if (s is not null) {
 			if (s.StartsWith ("references:", StringComparison.Ordinal)) return ("References", s);
 			if (s.StartsWith ("reference:", StringComparison.Ordinal)) return ("ProjectReference", s);
 			if (s.StartsWith ("folder:", StringComparison.Ordinal)) return ("ProjectFolder", s ["folder:".Length..]);
@@ -3491,6 +3656,77 @@ public partial class MainWindow : Window
 			if (File.Exists (s)) return ("ProjectFile", s);
 		}
 		return ("None", null);
+	}
+
+	/// <summary>Tag of the selected node in the Xwt tree ("solution:path",
+	/// "project:path", "folder:path", "references:path", "reference:name" or a
+	/// file path), resolved through the store by TreePosition — null when nothing
+	/// is selected. This is the single source of truth for every consumer that
+	/// used to read the Avalonia preview tree's Tag (context menu, properties).</summary>
+	string? SelectedXwtNode ()
+	{
+		if (xwtSolutionTree is null || xwtSolutionStore is null)
+			return null;
+		try {
+			// Frontend-typed read: SelectedRow → GetNavigatorAt → GetValue(tagField).
+			var pos = xwtSolutionTree.SelectedRow;
+			if (pos is null)
+				return null;
+			return xwtSolutionStore.GetNavigatorAt (pos).GetValue (xwtSolTagField) as string;
+		} catch (Exception ex) {
+			Output ("[selpad] resolve failed: " + ex.Message);
+		}
+		return null;
+	}
+
+	/// <summary>Programmatic selection for QA (drives SelectionChanged like a
+	/// user click): selects the row whose tag matches.</summary>
+	internal bool SelectXwtSolutionRow (string tag)
+	{
+		if (xwtSolutionTree is null || xwtSolutionStore is null)
+			return false;
+		try {
+			// ALWAYS resolve through a fresh store walk: the navigators kept in
+			// xwtSolutionNodes mutate as children are added during the build, so
+			// their CurrentPosition is not stable (the project nav drifted to its
+			// last child row).
+			if (!FindXwtRowByTag (tag, out var pos))
+				return false;
+			xwtSolutionTree.SelectRow (pos);
+			return true;
+		} catch {
+			return false;
+		}
+	}
+
+	// Walks the store (depth-first over navigators) until a node carries the tag.
+	bool FindXwtRowByTag (string tag, out Xwt.TreePosition found)
+	{
+		var root = xwtSolutionStore!.GetFirstNode ();
+		while (root is not null) {
+			if (WalkXwtNav (root, tag, out found))
+				return true;
+			root = root.MoveNext () ? root : null;
+		}
+		found = null!;
+		return false;
+	}
+
+	bool WalkXwtNav (Xwt.TreeNavigator nav, string tag, out Xwt.TreePosition found)
+	{
+		if (nav.GetValue (xwtSolTagField) as string == tag) {
+			found = nav.CurrentPosition;
+			return true;
+		}
+		if (nav.MoveToChild ()) {
+			do {
+					if (WalkXwtNav (nav, tag, out found))
+						return true;
+				} while (nav.MoveNext ());
+				nav.MoveToParent ();
+		}
+		found = null!;
+		return false;
 	}
 
 	// ----- Properties pad (legacy PropertyPad + ProjectFileDescriptor /
@@ -4179,6 +4415,13 @@ public partial class MainWindow : Window
 		}
 		if (commandId.StartsWith ("pad:", StringComparison.Ordinal)) {
 			TogglePad (commandId.Substring ("pad:".Length));
+			return;
+		}
+		if (commandId.StartsWith ("runwith:", StringComparison.Ordinal)) {
+			// Run > Run With mode choice (legacy ExecutionModeSelectorDialog result):
+			// opens the selector with the real run configurations of the active
+			// target and applies the chosen config→mode pair.
+			ShowExecutionModeSelector ();
 			return;
 		}
 		if (commandId.StartsWith ("tool:", StringComparison.Ordinal)) {
@@ -5437,6 +5680,32 @@ public partial class MainWindow : Window
 			? MonoDevelop.Ide.Services.ConfigurationService.GetActiveConfiguration (loadedSolutionPath)
 			: activeConfiguration;
 		if (!debug) {
+			// Run With override (legacy ExecutionModeCommandService executes through
+			// the chosen mode): mono wraps the built assembly, external routes to a
+			// terminal; the default keeps the plain dotnet run.
+			var mode = MonoDevelop.Ide.Services.SettingsStore.GetString ("MonoDevelop.Ide.RunWithMode");
+			if (mode == "mono") {
+				Output ($"[run] mono — {Path.GetFileName (proj)} ({runConfig})");
+				await RunBuildAsync (rebuild: false);
+				var dllM = Path.Combine (Path.GetDirectoryName (proj)!, "bin", runConfig, "net10.0", Path.GetFileNameWithoutExtension (proj) + ".dll");
+				if (File.Exists (dllM)) {
+					await RunProcessAsync ("mono", $"\"{dllM}\"");
+					return;
+				}
+				Output ("[run] mono: built dll not found, falling back to dotnet run");
+			} else if (mode == "external") {
+				Output ($"[run] external terminal — {Path.GetFileName (proj)} ({runConfig})");
+				try {
+					System.Diagnostics.Process.Start (new System.Diagnostics.ProcessStartInfo {
+						FileName = "xterm",
+						Arguments = $"-e dotnet run -c \"{runConfig}\" --project \"{proj}\"",
+						UseShellExecute = false,
+					});
+					return;
+				} catch (Exception ex) {
+					Output ("[run] xterm not available (" + ex.Message + "), running inline");
+				}
+			}
 			Output ($"[run] dotnet run -c {runConfig} — " + Path.GetFileName (proj));
 			await RunProcessAsync ("dotnet", $"run -c \"{runConfig}\" --project \"{proj}\"");
 			return;

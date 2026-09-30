@@ -1435,3 +1435,95 @@ El colgado de arranque por WOFF/WOFF2 en los directorios de fuentes del usuario
 <https://github.com/mono/SkiaSharp/issues/5210> (texto completo en
 `docs/skiasharp-fontconfig-issue.md`, con el workaround FontconfigSanitizer y
 la matriz empírica de M16e/M16f/M16g).
+
+## M22 — Integración de los ports: fuente embebida, menús conectados y Properties desde el árbol Xwt
+
+### Fuente Selawik embebida de verdad (y la ventana que se quedaba corta)
+
+- El recurso `ContentFontFamily` apuntaba a `Selawik` plano: resolvía contra
+  fontconfig del SISTEMA (dependía de que el usuario la tuviera instalada;
+  sin ella, fallback por glifo → captions cortadas). El URI embebido correcto
+  en Avalonia 12 es **`avares://MonoDevelop.AvaloniaShell/Fonts/selawk.ttf#Selawik`** —
+  el formato viejo `fonts:Assembly#Family` ya NO resuelve y crashea el
+  FontManager (`Could not create glyphTypeface. Font family: Selawik (key:
+  fonts:MonoDevelop.AvaloniaShell)`) al primer texto renderizado.
+- Los TTF Selawik (OFL) ya viven en `Fonts/` como AvaloniaResource: la UI no
+  depende de ninguna fuente del sistema.
+- AddReferenceDialog: `Width = 80` → `MinWidth = 80` en OK/Cancel/Remove
+  (Width fijo + fuente distinta = caption recortada) y `Height 560 → 600` —
+  a 560 el frame recortaba la fila de acciones entera (holgura medida tras el
+  fix: 43px bajo los captions).
+- **Validación**: captura del dialog con XTEST, análisis de píxeles (extensión
+  del texto OK 443-459, Cancel 531-569, ambos dentro del botón; 43px libres
+  al borde inferior) y visual 2x del preview.
+
+### Context menu del árbol Xwt real (ButtonPressed → MenuFlyout)
+
+- `TreeViewBackend.HandleRowClick` ahora distingue el right-click: selecciona
+  la fila bajo el puntero (legacy pads seleccionan antes de mostrar el menú)
+  y eleva `Widget.ButtonPressed` con `IsContextMenuTrigger=true` y las coords
+  dentro del widget (`RowOffset(index)` suma las alturas de las filas
+  previas).
+- `EnsureXwtSolutionTree` cablea `ButtonPressed → OnXwtSolutionContextMenu` →
+  `ShowProjectPadMenuAtPointer` (el MISMO `BuildProjectPadMenu` por tipo de
+  nodo que ya existía; `SelectedNodeType` ahora lee del árbol Xwt).
+- La ruta muerta `solutionTreeView` (árbol Avalonia de preview, nunca
+  asignado desde M21) queda desconectada del menú/properties.
+
+### Properties pad alimentado por la selección del árbol Xwt
+
+- `SelectedXwtNode()`: resuelve el tag del nodo seleccionado con la API
+  tipada del frontend (`tree.SelectedRow → store.GetNavigatorAt(pos).GetValue(tagField)`)
+  — cero reflexión.
+- `SelectXwtSolutionRow(tag)` (QA/demos): resuelve SIEMPRE con un walk fresco
+  del store (`FindXwtRowByTag` sobre TreeNavigator). Los TreeNavigator
+  guardados en `xwtSolutionNodes` MUTAN al construir hijos durante el build:
+  su `CurrentPosition` no es estable (el nav del proyecto quedó apuntando a
+  su último hijo — el bug que la 1ª QA destapó).
+- `TreeViewBackend.SelectRow`: modo Single REEMPLAZA la selección (como
+  `gtk_tree_selection_select_path`) y eleva `OnSelectionChanged` — antes solo
+  añadía a la lista y el pad no se actualizaba.
+- **Validación `--selpad`**: solution→6 filas (Name/File Path/Format/…),
+  project→9 (Target framework/Assembly name/Output type…), Program.cs→10
+  (Build action Compile, tamaño, fecha…).
+
+### Run With: ExecutionModeSelectorDialog en el menú Run
+
+- El submenu `Run > Run With` lleva Tag="RunWith" en MenuService (nuevos
+  campos Tag/AutoHide en MenuEntry); `FillRunWithMenu` (en BuildMenu) lo llena
+  con los modos (.NET Core/Mono/External Terminal/(Default)) y marca el
+  persistido; `MenuService.FindMenuByTag` lo encuentra en el menú nativo.
+- `OnMenuCommand("runwith:")` abre el ExecutionModeSelectorDialog con las run
+  configurations REALES del proyecto activo (PropertyGroups Condition del
+  csproj → Debug/Release) y aplica el par elegido: persiste el modo en
+  `MonoDevelop.Ide.RunWithMode` (SettingsStore), la config en el .userprefs
+  (SetActiveConfiguration) y `RunStartupProjectAsync` lo ejecuta: mono →
+  `mono bin/Debug/net10.0/X.dll` (con build previo y fallback a dotnet run si
+  no hay dll), external → `xterm -e dotnet run`, default → dotnet run.
+
+### Add → New Folder: el NewFolderDialog real en el menú del Solution pad
+
+- `CreateContextNewFolder` ya no usa el InputDialog genérico: abre el
+  `NewFolderDialog` (default "New Folder[NN]", validación ilegal/duplicado
+  con warning ámbar, Add deshabilitado) sobre `ContextTargetDirectory()` y al
+  confirmar refresca el árbol (`RefreshSolutionTree`) — el flujo de
+  FolderNodeBuilder legacy.
+
+### Hook QA `--tabscroll`: overflow real de la strip de tabs
+
+- **Causa de la QA falsa-negativa**: el `PART_ItemsPresenter` se arrangea AL
+  ancho del viewport (el clip oculta el exceso), así que `row.Bounds.Width`
+  jamás lo reporta. El ancho de contenido real es la SUMA de las tabs
+  (`TabStripContentWidth`).
+- El hook abre "QaOverflowN.cs" hasta que ‹ › aparecen (60ms de layout entre
+  aperturas), mide el nudge (‹ → offset negativo, › → 0), cierra docs hasta
+  que caben y verifica que los botones desaparecen.
+- **Validación**: overflow al 6º tab (True), nudge 0→−143→0, tras cerrar
+  docs=1 scrollVisible=False.
+
+### Otros
+
+- `--tabscroll` y `--selpad` registrados en `QaDialogArg`.
+- `IPopupWindowBackend` registrado en AvaloniaEngine (PopupWindowBackend:
+  Window sin decoraciones, SizeToContent, Topmost, Esc → ClosePopup +
+  `Sink.OnClosed`); deja listo el popup Xwt para los menús widget.
