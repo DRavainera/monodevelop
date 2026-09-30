@@ -80,9 +80,13 @@
                   ToolTip.Tip="Active configuration" SelectionChanged="OnToolbarConfigChanged" />
         <!-- Right cluster: the search box is right-most, ':' selects a category (":c"
              commands, ":f" files) and Enter runs the search like SearchPopupWindow. -->
-        <TextBox x:Name="ToolbarSearch" DockPanel.Dock="Right" Width="220" Height="22" FontSize="12"
-                 Watermark="Search (:commands, :files)" VerticalContentAlignment="Center"
-                 KeyDown="OnToolbarSearchKeyDown" />
+        <Grid DockPanel.Dock="Right" Width="220" Height="22">
+          <TextBox x:Name="ToolbarSearch" Height="22" FontSize="12" Padding="24,0,6,0"
+                   Watermark="Search (:commands, :files)" VerticalContentAlignment="Center"
+                   KeyDown="OnToolbarSearchKeyDown" />
+          <Image x:Name="SearchIcon" Width="14" Height="14" HorizontalAlignment="Left" Margin="6,0,0,0"
+                 VerticalAlignment="Center" IsHitTestVisible="False" Opacity="0.7" />
+        </Grid>
         <!-- Legacy center: the ButtonBar — a segmented pill with the debug step
              buttons (hidden by default; shown only while a debug session runs) —
              followed by the StatusArea message text filling the remaining space. -->

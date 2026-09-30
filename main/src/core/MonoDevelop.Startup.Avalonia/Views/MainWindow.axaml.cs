@@ -301,6 +301,67 @@ public partial class MainWindow : Window
 					UpdateTabScrollButtons ();
 					Output ("[tabscroll] after close: docs=" + docs.Count + " scrollVisible=" + TabScrollButtonsVisible ());
 				}
+			} else if (qa == "--searchpopup") {
+				// QA: toolbar search — live results while typing, category prefixes
+				// and Enter activation opening the picked file.
+				ToolbarSearch!.Text = "Prog";
+				OnToolbarSearchTextChanged ("Prog");
+				Output ("[searchpopup] 'Prog' results=" + searchResults.Count + " visible=" + (searchPopupHost?.IsVisible == true) +
+					" first=" + (searchResults.Count > 0 ? searchResults [0].Title + " | " + searchResults [0].Subtitle : "-"));
+				OnToolbarSearchTextChanged (":c build");
+				Output ("[searchpopup] ':c build' results=" + searchResults.Count + " bindings=" + MenuCommandBindings ().Count + " first=" + (searchResults.Count > 0 ? searchResults [0].Title : "-"));
+				OnToolbarSearchTextChanged (":s TODO");
+				Output ("[searchpopup] ':s TODO' results=" + searchResults.Count + " first=" + (searchResults.Count > 0 ? searchResults [0].Title : "-"));
+				// Open the file, search again — the open document ranks first — and
+				// activate it (Enter path) verifying the tab selection.
+				var proj = ResolveActiveProject ();
+				var progFile = proj is null ? null : Path.Combine (Path.GetDirectoryName (proj)!, "Program.cs");
+				if (progFile is not null && File.Exists (progFile))
+					OpenFileDocument (progFile);
+				OnToolbarSearchTextChanged ("Prog");
+				if (searchResults.Count > 0 && searchResults [0].Subtitle == "(open document)") {
+					var tag0 = searchResults [0].Title;
+					ActivateSelectedSearchResult ();
+					Output ("[searchpopup] activated → tab selected: " + (DocTabs.SelectedItem is TabItem ti ? ti.Tag : "none") + " expected: " + tag0);
+				} else {
+					Output ("[searchpopup] activation skipped (first=" + (searchResults.Count > 0 ? searchResults [0].Subtitle : "-") + ")");
+				}
+			} else if (qa == "--rowactivate") {
+				// QA: the RowActivated flow — programmatic activation of the
+				// Program.cs row opens the document in a tab and logs the step.
+				var proj = ResolveActiveProject ();
+				var progFile = proj is null ? null : Path.Combine (Path.GetDirectoryName (proj)!, "Program.cs");
+				if (progFile is null || !File.Exists (progFile)) {
+					Output ("[rowactivate] no Program.cs in the loaded solution");
+				} else if (!SelectXwtSolutionRow (progFile)) {
+					Output ("[rowactivate] row not found for " + progFile);
+				} else {
+					var backend = Xwt.Toolkit.CurrentEngine.GetSafeBackend (xwtSolutionTree!);
+					var pos = xwtSolutionTree!.SelectedRow;
+					OnXwtSolutionRowActivated (xwtSolutionTree, new Xwt.TreeViewRowEventArgs (pos));
+					bool opened = docs.ContainsKey (Path.GetFileName (progFile!)) &&
+						(DocTabs.SelectedItem as TabItem)?.Tag as string == Path.GetFileName (progFile);
+					Output ("[rowactivate] opened=" + opened + " tab=" + ((DocTabs.SelectedItem as TabItem)?.Tag as string ?? "none"));
+				}
+			} else if (qa == "--ctxnewfolder") {
+				// QA: the context-menu New Folder flow end to end — select the
+				// project folder row, run ProjectCommands.NewFolder (the menu
+				// handler), confirm the dialog and verify the directory + tree.
+				var proj = ResolveActiveProject ();
+				if (proj is null) {
+					Output ("[ctxnewfolder] no project");
+				} else {
+					var dir = Path.GetDirectoryName (proj)!;
+					SelectXwtSolutionRow ("project:" + proj);
+					var qaName = "QaCtxFolder" + DateTime.Now.Second;
+					dialogAutoConfirmFolder = qaName;
+					OnMenuCommand ("MonoDevelop.Ide.Commands.ProjectCommands.NewFolder", "project:" + proj);
+					dialogAutoConfirmFolder = null;
+					bool created = Directory.Exists (Path.Combine (dir, qaName));
+					Output ("[ctxnewfolder] created=" + created + " name=" + qaName + " treeRefreshed=" + (xwtSolutionNodes.Count > 0));
+					if (created)
+						Directory.Delete (Path.Combine (dir, qaName));
+				}
 			} else if (qa == "--selpad") {
 				// QA: the Xwt tree selection drives the Properties pad — select
 				// solution / project / file nodes and dump the pad content each time.
@@ -2979,6 +3040,9 @@ public partial class MainWindow : Window
 	string? loadedSolutionPath;
 	// Node path of the last context-menu invocation (legacy NodeCommandHandler dataItem).
 	string? contextNodePath;
+	// QA: when set, the next NewFolderDialog auto-fills this name and confirms
+	// (the --ctxnewfolder hook exercises the full menu flow headlessly).
+	string? dialogAutoConfirmFolder;
 
 	/// <summary>Project path for build commands: the context node when the command
 	/// came from the Solution pad, else the active project.</summary>
@@ -3068,6 +3132,15 @@ public partial class MainWindow : Window
 		if (string.IsNullOrEmpty (contextNodePath))
 			return null;
 		var p = contextNodePath;
+		// All the tagged prefixes must come off BEFORE any path work — a bare
+		// "project:/home/…" fed to GetDirectoryName yields a garbage relative
+		// path (the folder landed in a literal "project:/" dir under the CWD).
+		foreach (var prefix in new[] { "folder:", "project:", "solution:", "references:" }) {
+			if (p.StartsWith (prefix, StringComparison.Ordinal)) {
+				p = p [prefix.Length..];
+				break;
+			}
+		}
 		if (p.StartsWith ("folder:", StringComparison.Ordinal))
 			return p ["folder:".Length..];
 		if (File.Exists (p))
@@ -3126,6 +3199,17 @@ public partial class MainWindow : Window
 			return;
 		}
 		var dlg = new NewFolderDialog (dir);
+		if (dialogAutoConfirmFolder is not null) {
+			// QA path: fill + confirm immediately, then run the same postlude.
+			dlg.FolderNameForQa = dialogAutoConfirmFolder;
+			dlg.ValidateForQa ();
+			dlg.AcceptForQa ();
+			if (dlg.NewFolderCreated is not null) {
+				RefreshSolutionTree ();
+				Output ("[add] folder created: " + Path.GetFileName (dlg.NewFolderCreated));
+			}
+			return;
+		}
 		_ = dlg.ShowDialog (this);
 		dlg.Closed += (_, _) => {
 			if (dlg.NewFolderCreated is null)
@@ -3418,12 +3502,16 @@ public partial class MainWindow : Window
 	// DoubleTapped used: OnSolutionOpen semantics).
 	void OnXwtSolutionRowActivated (object? sender, Xwt.TreeViewRowEventArgs e)
 	{
+		// Legacy ProjectFileNodeBuilder OnActivate: double-click on a file row
+		// opens the document in a tab (RowActivated → OpenFileDocument).
 		if (xwtSolutionStore is null)
 			return;
 		var nav = xwtSolutionStore.GetNavigatorAt (e.Position);
 		var tag = nav.GetValue (xwtSolTagField);
-		if (File.Exists (tag))
+		if (File.Exists (tag)) {
 			OpenFileDocument (tag);
+			Output ("[rowactivate] opened " + Path.GetFileName (tag));
+		}
 	}
 
 	// DesktopService.GetIconForFile equivalent over the migrated icon set.
@@ -3939,9 +4027,12 @@ public partial class MainWindow : Window
 	// was not invoked on a node so the editor rename keeps handling it.
 	bool RenameContextNode ()
 	{
-		if (string.IsNullOrEmpty (contextNodePath))
+		// Same as Delete: resolve from the live Xwt tree selection first.
+		var (nodeType, selPath) = SelectedNodeType ();
+		var contextPath = nodeType is "ProjectFile" or "ProjectFolder" ? selPath : contextNodePath;
+		if (string.IsNullOrEmpty (contextPath))
 			return false;
-		var path = contextNodePath;
+		var path = contextPath;
 		var isFolder = path.StartsWith ("folder:", StringComparison.Ordinal);
 		if (isFolder)
 			path = path ["folder:".Length..];
@@ -3983,9 +4074,12 @@ public partial class MainWindow : Window
 	// Delete the file/folder node with confirmation (legacy DeleteItem).
 	bool DeleteContextNode ()
 	{
-		if (string.IsNullOrEmpty (contextNodePath))
+		// The selected node of the LIVE Xwt tree is the source of truth (the
+		// contextNodePath from the dead Avalonia preview tree never updates).
+		var (nodeType, selPath) = SelectedNodeType ();
+		var path = nodeType is "ProjectFile" or "ProjectFolder" ? selPath : contextNodePath;
+		if (string.IsNullOrEmpty (path))
 			return false;
-		var path = contextNodePath;
 		var isFolder = path.StartsWith ("folder:", StringComparison.Ordinal);
 		if (isFolder)
 			path = path ["folder:".Length..];
@@ -4242,6 +4336,20 @@ public partial class MainWindow : Window
 		SetIfAvailable (StepOverIcon, "md-step-over-debug");
 		SetIfAvailable (StepIntoIcon, "md-step-into-debug");
 		SetIfAvailable (StepOutIcon, "md-step-out-debug");
+		SetIfAvailable (SearchIcon, "md-find");
+		if (ToolbarSearch is not null) {
+			ToolbarSearch.TextChanged += (_, _) => OnToolbarSearchTextChanged (ToolbarSearch.Text);
+			ToolbarSearch.LostFocus += (_, _) => {
+				// Grace so a click on a result lands before hiding (the legacy
+				// popup dismisses on outside click the same way).
+				var grace = new Avalonia.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds (150) };
+				grace.Tick += (_, _) => {
+					grace.Stop ();
+					HideSearchPopup ();
+				};
+				grace.Start ();
+			};
+		}
 	}
 
 	// Legacy MainToolbar behavior: the debug step buttons live right of the
@@ -4257,34 +4365,225 @@ public partial class MainWindow : Window
 	// category (":c" = commands, ":f" = files, ":s" = search in solution), plain text
 	// searches across the categories, Enter opens the corresponding dialog
 	// (FindInFiles for the search-in-solution category) and Escape clears.
+	// ----- Toolbar search (legacy SearchPopupWindow over the MainToolbar search
+	// entry: live results in a dropdown popup while typing — Files from the open
+	// solution, Commands from the menu catalog — ':' prefixes a category and
+	// Enter/activate opens the picked result). -----
+
+	Border? searchPopupHost;
+	ListBox? searchResultsList;
+	readonly List<(string Icon, string Title, string Subtitle, Action Activate)> searchResults = new ();
+	bool searchPopupUpdating;
+
+	/// <summary>A category-filtered live search, mirroring SearchPopupWindow:
+	/// "text" searches everything, ":c text" commands, ":f text" files,
+	/// ":s text" opens Find in Files like the legacy double-click path.</summary>
+	void OnToolbarSearchTextChanged (string? raw)
+	{
+		if (searchPopupUpdating)
+			return;
+		var term = raw?.Trim () ?? "";
+		if (term.Length == 0) {
+			HideSearchPopup ();
+			return;
+		}
+		string category = "all";
+		if (term.StartsWith (":", StringComparison.Ordinal)) {
+			int sp = term.IndexOf (' ');
+			var tag = (sp < 0 ? term [1..] : term [1..sp]).ToLowerInvariant ();
+			category = tag is "c" or "command" or "commands" ? "commands"
+				: tag is "f" or "file" or "files" ? "files"
+				: tag is "s" or "search" ? "search"
+				: "all";
+			term = sp < 0 ? "" : term [(sp + 1)..].Trim ();
+		}
+		if (category == "search") {
+			// Legacy SearchInSolutionSearchCategory: the result action opens Find in
+			// Files with the term — show exactly that one entry.
+			searchResults.Clear ();
+			searchResults.Add (("md-find", $"Search for '{term}' in Solution", "Opens the Find in Files dialog", () => {
+				_ = new FindInFilesDialog { SearchTextOverride = term }.ShowDialog (this);
+			}));
+			ShowSearchPopup ();
+			return;
+		}
+		searchResults.Clear ();
+		if (category is "all" or "files")
+			CollectFileResults (term);
+		if (category is "all" or "commands")
+			CollectCommandResults (term);
+		ShowSearchPopup ();
+	}
+
+	// Legacy FileSearchCategory: every file of the loaded solution, matched by
+	// filename and relative project path, ranked (name match > path match).
+	void CollectFileResults (string term)
+	{
+		if (term.Length == 0)
+			return;
+		var projDir = string.IsNullOrEmpty (loadedSolutionPath) ? null : Path.GetDirectoryName (loadedSolutionPath);
+		var seen = new HashSet<string> (StringComparer.OrdinalIgnoreCase);
+		foreach (var doc in docs.Keys) {
+			if (term.Length == 0 || doc.Contains (term, StringComparison.OrdinalIgnoreCase))
+				AddFileResult (doc, "(open document)", term);
+			seen.Add (doc);
+		}
+		if (projDir is null)
+			return;
+		foreach (var file in Directory.EnumerateFiles (projDir, "*", SearchOption.AllDirectories)) {
+			if (file.Contains ("/obj/") || file.Contains ("/bin/") || file.Contains ("/.git/"))
+				continue;
+			if (seen.Contains (Path.GetFileName (file)))
+				continue;
+			var name = Path.GetFileName (file);
+			var rel = Path.GetRelativePath (projDir, file);
+			bool nameMatch = name.Contains (term, StringComparison.OrdinalIgnoreCase);
+			bool pathMatch = rel.Contains (term, StringComparison.OrdinalIgnoreCase);
+			if (nameMatch || pathMatch)
+				AddFileResult (name, rel, term);
+			if (searchResults.Count >= 12)
+				return;
+		}
+	}
+
+	void AddFileResult (string name, string relPath, string term)
+	{
+		if (searchResults.Any (r => r.Subtitle == relPath))
+			return;
+		var path = relPath == "(open document)" && docs.TryGetValue (name, out var ed) && !string.IsNullOrEmpty (ed.FilePath) ? ed.FilePath : null;
+		searchResults.Add (("md-class-file", name, relPath, () => {
+			var target = path ?? System.IO.Path.Combine (
+				Path.GetDirectoryName (loadedSolutionPath!)!, relPath);
+			if (File.Exists (target))
+				OpenFileDocument (target);
+			else
+				Output ("[search] file not found: " + target);
+		}));
+	}
+
+	// Legacy CommandSearchCategory over the menu catalog: label matches first
+	// (menuCommandBindings labels come mnemonic-free), then id matches, then the
+	// rest — the cap must never starve a label match that sits late in the list.
+	void CollectCommandResults (string term)
+	{
+		var bindings = MenuCommandBindings ();
+		var labelHits = new List<(string CommandId, string Label)> ();
+		var idHits = new List<(string CommandId, string Label)> ();
+		foreach (var b in bindings) {
+			if (term.Length > 0 && b.Label.Contains (term, StringComparison.OrdinalIgnoreCase))
+				labelHits.Add (b);
+			else if (term.Length > 0 && b.CommandId.Contains (term, StringComparison.OrdinalIgnoreCase))
+				idHits.Add (b);
+		}
+		foreach (var (commandId, label) in labelHits.Concat (idHits))
+			searchResults.Add (("md-execute", label, commandId, () => OnMenuCommand (commandId)));
+	}
+
+	/// <summary>Shows the dropdown under the search box (a plain Border popup like
+	/// the legacy XwtThemedPopup, positioned below the entry) with the live rows.</summary>
+	void ShowSearchPopup ()
+	{
+		if (ToolbarSearch is null)
+			return;
+		if (searchPopupHost is null) {
+			searchResultsList = new ListBox { Background = Brushes.Transparent };
+			searchResultsList.DoubleTapped += (_, _) => ActivateSelectedSearchResult ();
+			searchResultsList.KeyDown += (_, e) => {
+				if (e.Key == Key.Enter)
+					ActivateSelectedSearchResult ();
+			};
+			searchPopupHost = new Border {
+				Background = (Brush)Application.Current!.FindResource ("IdeWindowBgBrush")!,
+				BorderBrush = (Brush)Application.Current.FindResource ("IdeBorderBrush")!,
+				BorderThickness = new Thickness (1),
+				CornerRadius = new CornerRadius (6),
+				Padding = new Thickness (4),
+				MaxHeight = 360,
+				Child = new ScrollViewer { Content = searchResultsList },
+			};
+			searchPopupHost.ZIndex = 100;
+			// Window-level host: inside the search box's Grid the popup would sit
+			// under every later sibling of the toolbar row (clipped/overpainted).
+			if (Content is Panel rootPanel)
+				rootPanel.Children.Add (searchPopupHost);
+		}
+		// Anchor: right edge aligned to the search box, just below the toolbar row.
+		var boxOrigin = ToolbarSearch.TranslatePoint (new Avalonia.Point (0, 0), this) ?? default;
+		searchPopupHost.Width = Math.Max (280, ToolbarSearch.Width);
+		searchPopupHost.Margin = new Thickness (boxOrigin.X, boxOrigin.Y + ToolbarSearch.Height + 4, 0, 0);
+		searchPopupHost.HorizontalAlignment = HorizontalAlignment.Left;
+		searchPopupHost.VerticalAlignment = VerticalAlignment.Top;
+		searchPopupHost.IsVisible = true;
+		RebuildSearchPopupRows ();
+	}
+
+	void RebuildSearchPopupRows ()
+	{
+		if (searchResultsList is null)
+			return;
+		searchResultsList.Items.Clear ();
+		foreach (var (icon, title, subtitle, _) in searchResults) {
+			var sp = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6, Margin = new Thickness (2) };
+			if (IconService.GetImage (icon) is { } img)
+				sp.Children.Add (new Image { Source = img, Width = 16, Height = 16 });
+			var col = new StackPanel { Orientation = Orientation.Vertical };
+			var t = new TextBlock { Text = title, FontSize = 12 };
+			t.Bind (TextBlock.ForegroundProperty, Application.Current!.GetResourceObservable ("IdeFgBrush"));
+			var s = new TextBlock { Text = subtitle, FontSize = 10.5, Opacity = 0.6 };
+			s.Bind (TextBlock.ForegroundProperty, Application.Current.GetResourceObservable ("IdeFgBrush"));
+			col.Children.Add (t);
+			col.Children.Add (s);
+			sp.Children.Add (col);
+			searchResultsList.Items.Add (sp);
+		}
+		if (searchResults.Count == 0) {
+			var none = new TextBlock { Text = "(no results)", FontSize = 12, Margin = new Thickness (4), Opacity = 0.6 };
+			none.Bind (TextBlock.ForegroundProperty, Application.Current!.GetResourceObservable ("IdeFgBrush"));
+			searchResultsList.Items.Add (none);
+		}
+		if (searchResultsList.Items.Count > 0)
+			searchResultsList.SelectedIndex = 0;
+	}
+
+	void ActivateSelectedSearchResult ()
+	{
+		int idx = searchResultsList?.SelectedIndex ?? -1;
+		if (idx < 0 || idx >= searchResults.Count)
+			return;
+		HideSearchPopup ();
+		ToolbarSearch!.Text = "";
+		searchResults [idx].Activate ();
+	}
+
+	void HideSearchPopup ()
+	{
+		if (searchPopupHost is not null)
+			searchPopupHost.IsVisible = false;
+	}
+
 	void OnToolbarSearchKeyDown (object? sender, KeyEventArgs e)
 	{
 		if (sender is not TextBox box)
 			return;
 		if (e.Key == Key.Escape) {
 			box.Text = "";
+			HideSearchPopup ();
 			return;
 		}
-		if (e.Key != Key.Enter)
+		// Arrow keys walk the live results when the popup is visible.
+		if ((e.Key == Key.Down || e.Key == Key.Up) && searchPopupHost is { IsVisible: true } && searchResultsList is not null) {
+			int count = searchResults.Count;
+			if (count > 0) {
+				int delta = e.Key == Key.Down ? 1 : -1;
+				searchResultsList.SelectedIndex = Math.Clamp ((searchResultsList.SelectedIndex < 0 ? 0 : searchResultsList.SelectedIndex) + delta, 0, count - 1);
+				e.Handled = true;
+			}
 			return;
-		var term = box.Text?.Trim () ?? "";
-		if (term.Length == 0)
-			return;
-		// ':c'/'commands:' → command search stays in the popup path (not migrated
-		// yet); ':f'/':s' → open Find in Files with the term, like the legacy
-		// SearchInSolutionSearchCategory double-click path.
-		var cat = term.StartsWith (":c", StringComparison.OrdinalIgnoreCase) ? "commands"
-			: term.StartsWith (":f", StringComparison.OrdinalIgnoreCase) ? "files"
-			: term.StartsWith (":s", StringComparison.OrdinalIgnoreCase) ? "search"
-			: null;
-		if (cat is not null && cat != "commands")
-			term = term.Substring (2).TrimStart ();
-		Output ($"[search] category={cat ?? "all"} term='{term}'");
-		if (term.Length > 0) {
-			_ = new FindInFilesDialog { SearchTextOverride = term }.ShowDialog (this);
-			box.Text = "";
 		}
-		e.Handled = true;
+		if (e.Key == Key.Enter) {
+			ActivateSelectedSearchResult ();
+			e.Handled = true;
+		}
 	}
 
 	// No debug-all fallback: a missing stock id must not silently make three
@@ -5265,8 +5564,17 @@ public partial class MainWindow : Window
 					Walk (e.Children);
 					continue;
 				}
-				if (!string.IsNullOrEmpty (e.CommandId) && !list.Exists (x => x.Item1 == e.CommandId))
-					list.Add ((e.CommandId!, e.Label.Replace ("_", "")));
+				// CommandId is filled by ApplyShortcuts on the BUILT menu; a fresh
+				// BuildMainMenu here has it null. The implicit CommandAction→Action
+				// conversion wraps the action, so the delegate Target is the closure
+				// of CommandAction.Run — recover the id from its captured "this".
+				string? id = e.CommandId;
+				if (id is null && e.OnClick?.Target is { } target) {
+					id = target.GetType ().GetProperty ("Id")?.GetValue (target) as string ??
+						target.GetType ().GetField ("id")?.GetValue (target) as string;
+				}
+				if (!string.IsNullOrEmpty (id) && !list.Exists (x => x.Item1 == id))
+					list.Add ((id!, e.Label.Replace ("_", "")));
 			}
 		}
 		Walk (MenuService.BuildMainMenu (RecentSolutions.GetAll ().Select (r => r.Path).ToList ()));

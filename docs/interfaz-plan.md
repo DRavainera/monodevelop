@@ -1527,3 +1527,61 @@ la matriz empírica de M16e/M16f/M16g).
 - `IPopupWindowBackend` registrado en AvaloniaEngine (PopupWindowBackend:
   Window sin decoraciones, SizeToContent, Topmost, Esc → ClosePopup +
   `Sink.OnClosed`); deja listo el popup Xwt para los menús widget.
+
+## M23 — Search de la toolbar en vivo + Rename/Delete/RowActivated sobre el árbol Xwt
+
+### Toolbar search: popup de resultados en vivo (SearchPopupWindow legacy)
+
+- El box de la toolbar (`ToolbarSearch`) ahora lleva icono de lupa (md-find,
+  sobre un Grid con padding izquierdo) y búsqueda EN VIVO: cada TextChanged
+  reconstruye un popup dropdown anclado bajo el box (Border ZIndex=100 como
+  hijo del panel raíz de la ventana — dentro del Grid del box quedaba bajo el
+  resto del árbol).
+- Categorías legacy: texto plano → files primero (documentos abiertos con
+  "(open document)", luego la solution completa con ranking nombre>ruta, cap
+  12) + commands; `:c <término>` solo comandos; `:f <término>` solo archivos;
+  `:s <término>` la entrada "Search for '…' in Solution" que abre Find in
+  Files (SearchInSolutionSearchCategory).
+- Comandos desde `MenuCommandBindings()` — dos fixes: (1) el id se recupera
+  del closure (`e.OnClick.Target` → reflexión de la propiedad `Id` capturada)
+  porque la conversión implícita CommandAction→Action envuelve el delegado y
+  el Target ya NO es el CommandAction; (2) los label-matches se listan antes
+  que los id-matches (el catálogo tiene ~178 comandos y el cap hambrientaba
+  "Build").
+- Navegación: ↑/↓ mueven la selección (Enter activa, Esc limpia y cierra,
+  click/double-tap en la fila activa; LostFocus cierra con 150ms de gracia).
+- **Validación `--searchpopup`**: "Prog" → `Program.cs | TestProj/Program.cs`
+  visible=True; `:c build` → 4 resultados (Build All primero, bindings=178);
+  `:s TODO` → la entrada de Find in Files; activación → tab Program.cs
+  seleccionada. Visual: popup con el ítem resaltado (azul #3563a3) capturado
+  tras tipear con XTEST.
+
+### Rename/Delete y RowActivated sobre el árbol Xwt real
+
+- `DeleteContextNode`/`RenameContextNode` resuelven el nodo desde la
+  SELECCIÓN VIVA (`SelectedNodeType()` → SelectedXwtNode) en lugar del
+  `contextNodePath` del árbol Avalonia muerto; `ContextTargetDirectory`
+  despoja TODOS los prefijos tag (`project:`/`solution:`/`references:`) antes
+  de cualquier operación de path — `GetDirectoryName("project:/home/…")`
+  producía una ruta relativa basura y la carpeta nacía en un literal
+  `project:/` bajo el CWD.
+- `OnXwtSolutionRowActivated` (double-click) abre el documento y loguea el
+  paso — hook `--rowactivate`: selecciona la fila de Program.cs por tag,
+  invoca el handler con `TreeViewRowEventArgs(pos)` y verifica `opened=True
+  tab=Program.cs`.
+
+### Add → New Folder verificado de punta a punta
+
+- Hook `--ctxnewfolder`: selecciona la fila del proyecto, ejecuta
+  `ProjectCommands.NewFolder` (el handler del menú) con auto-confirmación del
+  dialog (`dialogAutoConfirmFolder`), verifica directorio + refresh del árbol
+  y limpia. Resultado: `created=True treeRefreshed=True` (tras el fix del
+  prefijo `project:`, que era el bug real que la primera pasada destapó).
+- Nota de entorno: el flyout del menú es una superficie X11 popup separada de
+  Avalonia — no aparece en el pixmap de la ventana ni en grabs de pantalla
+  (bloqueados por mutter/XWayland), así que la verificación es funcional
+  (hook) y no visual.
+
+### Otros
+
+- `--searchpopup`, `--rowactivate`, `--ctxnewfolder` registrados en `QaDialogArg`.
