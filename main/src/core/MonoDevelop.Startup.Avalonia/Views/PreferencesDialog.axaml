@@ -37,7 +37,7 @@
 
   <Grid RowDefinitions="Auto,*,Auto">
     <!-- Custom chrome (Avalonia border like the rest of the migrated dialogs) -->
-    <Border Grid.Row="0" Background="{DynamicResource IdeChromeBgBrush}"
+    <Border Grid.Row="0" Classes="dialogchrome" Background="{DynamicResource IdeChromeBgBrush}"
             BorderBrush="{DynamicResource IdeBorderBrush}" BorderThickness="0,0,0,1">
       <Grid ColumnDefinitions="*,Auto">
         <TextBlock Text="Preferences" Margin="12,6" FontWeight="SemiBold" />

@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using Avalonia;
+using Avalonia.Media;
 
 namespace MonoDevelop.AvaloniaShell;
 
@@ -118,7 +119,7 @@ internal static class Program
 				a is "--about" or "--prefs" or "--addins" or "--find" or "--build" or "--run"
 					or "--goto" or "--tasks" or "--tool" or "--editops" or "--windocs" or "--navhist"
 					or "--bookmarks" or "--addref" or "--brace" or "--buildone" or "--mcaret" or "--fmt" or "--diff" or "--fold" or "--viewcmds" or "--bubbles" or "--compl" or "--tool" or "--ctxmenu" or "--filter" or "--props" or "--dirtyfiles" or "--editqa" or "--totd" or "--progress" or "--encodings" or "--newconfig" or "--newconfig-real" or "--openimport" or "--activeconfig" or "--newproject" or "--bmkpad" or "--bkpad" or "--locals" or "--attachdlg" or "--watch" or "--condbp" or "--attachreal" or "--step" or "--tree" or "--imm"
-						or "--gutterbp" or "--frame" or "--immcompl" or "--persistqa" or "--watchedit" or "--pinwatch" or "--legacyqa" or "--xruncfg"
+						or "--gutterbp" or "--frame" or "--immcompl" or "--persistqa" or "--watchedit" or "--pinwatch" or "--legacyqa" or "--xruncfg" or "--addrefdlg" or "--extensionsdlg" or "--collapse" or "--qaresults" or "--newfolder" or "--exmode"
 				|| a.StartsWith ("--prefs=", StringComparison.Ordinal)
 				|| a.StartsWith ("--gotoline", StringComparison.Ordinal)) ?? "";
 
@@ -135,5 +136,11 @@ internal static class Program
 	public static AppBuilder BuildAvaloniaApp ()
 		=> AppBuilder.Configure<App> ()
 			.UsePlatformDetect ()
+			.With (new FontManagerOptions {
+				// Selawik (SIL OFL 1.1, metric-compatible with Segoe UI) as the default
+				// UI face — open source, embedded in Assets/Fonts; falls back to fontconfig
+				// families when a glyph is missing.
+				DefaultFamilyName = "Selawik"
+			})
 			.LogToTrace ();
 }

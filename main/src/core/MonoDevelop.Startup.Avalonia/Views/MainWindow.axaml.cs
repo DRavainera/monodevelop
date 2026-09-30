@@ -32,6 +32,79 @@ public partial class MainWindow : Window
 	bool welcomeVisible = true;
 	bool solutionLoaded;
 
+	// Wave-3 editor-tab chrome: breadcrumb row (hidden until a file document is
+	// selected) and its segment stack.
+	Border? BreadcrumbRow;
+	StackPanel? BreadcrumbBar;
+	int lastBreadCaretLine = -1;
+
+	// Wave-3 real Xwt.TreeView in the Solution pad: created lazily (the Xwt engine
+	// initializes on demand); the pad hosts its native Avalonia control.
+	DockPanel? xwtSolutionHost;
+	Control? xwtPlaceholder;
+	Xwt.TreeView? xwtSolutionTree;
+	Xwt.TreeStore? xwtSolutionStore;
+	Xwt.DataField<string> xwtSolTextField = new ();
+	Xwt.DataField<Xwt.Drawing.Image> xwtSolIconField = new ();
+	Xwt.DataField<string> xwtSolTagField = new ();
+	Dictionary<string, Xwt.TreeNavigator> xwtSolutionNodes = new (); // tag → navigator
+
+	/// <summary>
+	/// Creates the real Xwt.TreeView (Xwt.Avalonia backend) once, embeds its native
+	/// Avalonia control in the Solution pad, and wires activation/selection to the
+	/// same handlers the Avalonia preview tree used.
+	/// </summary>
+	void EnsureXwtSolutionTree ()
+	{
+		if (xwtSolutionTree is not null || xwtSolutionHost is null)
+			return;
+		Xwt.Application.Initialize ("Xwt.AvaloniaBackend.AvaloniaEngine, Xwt.Avalonia");
+		xwtSolutionStore = new Xwt.TreeStore (xwtSolIconField, xwtSolTextField, xwtSolTagField);
+		xwtSolutionTree = new Xwt.TreeView {
+			DataSource = xwtSolutionStore,
+			HeadersVisible = false,
+			BorderVisible = false,
+		};
+		var iconCol = new Xwt.ListViewColumn { Title = "" };
+		iconCol.Views.Add (new Xwt.ImageCellView (xwtSolIconField));
+		var textCol = new Xwt.ListViewColumn { Title = "Node" };
+		textCol.Views.Add (new Xwt.TextCellView (xwtSolTextField));
+		xwtSolutionTree.Columns.Add (iconCol);
+		xwtSolutionTree.Columns.Add (textCol);
+		xwtSolutionTree.RowActivated += OnXwtSolutionRowActivated;
+		xwtSolutionTree.SelectionChanged += (_, _) => UpdatePropertiesPad ();
+
+		if (Xwt.Toolkit.CurrentEngine.GetNativeWidget (xwtSolutionTree) is Control native) {
+			xwtSolutionHost.Children.Remove (xwtPlaceholder!);
+			xwtSolutionHost.Children.Add (native);
+		}
+	}
+
+	/// <summary>Legacy stock icon resource → Xwt.Drawing.Image. The PNGs live in
+	/// IconService.IconsDirectory on disk (the IconService TYPE compiles into the
+	/// shell assembly, so FromResource(itsAssembly) cannot see MonoDevelop.Ide's
+	/// embedded icons) — load by file, fallback to file-source-16.png.</summary>
+	Xwt.Drawing.Image XwtStockIcon (string stockResource)
+	{
+		try {
+			var dir = MonoDevelop.Ide.Services.IconService.IconsDirectory;
+			if (dir is not null)
+				return Xwt.Drawing.Image.FromFile (Path.Combine (dir, stockResource)).WithSize (16, 16);
+		} catch { }
+		try {
+			var dir = MonoDevelop.Ide.Services.IconService.IconsDirectory;
+			if (dir is not null)
+				return Xwt.Drawing.Image.FromFile (Path.Combine (dir, "file-source-16.png")).WithSize (16, 16);
+		} catch { }
+		return Xwt.Drawing.Image.FromStream (new System.IO.MemoryStream (new byte[] {
+			0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,
+			0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06, 0x00, 0x00, 0x00, 0x1F, 0x15, 0xC4,
+			0x89, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9C, 0x62, 0x00, 0x01, 0x00, 0x00,
+			0x05, 0x00, 0x01, 0x0D, 0x0A, 0x2D, 0xB4, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4E, 0x44, 0xAE,
+			0x42, 0x60, 0x82,
+		})).WithSize (16, 16); // 1x1 transparent PNG placeholder
+	}
+
 	public MainWindow ()
 	{
 		InitializeComponent ();
@@ -47,6 +120,32 @@ public partial class MainWindow : Window
 		// Tab clicks swap the mounted document in DocContent (and show the empty
 		// host when the selection is cleared).
 		DocTabs.SelectionChanged += OnDocSelectionChanged;
+
+		// Document strip nudge buttons (legacy DocumentPad ‹ ›): SHIFT the clipped tab
+		// row when the tabs' total width exceeds the strip viewport; the buttons only
+		// exist (IsVisible) while there is overflow. Template parts are reached through
+		// the visual tree once the TabControl template is applied (deferred post).
+		Avalonia.Threading.Dispatcher.UIThread.Post (() => {
+			foreach (var b in DocTabs!.GetVisualDescendants ().OfType<Button> ()) {
+				if (b.Name == "DocScrollLeft")
+					b.Click += (_, _) => NudgeTabStrip (-1);
+				else if (b.Name == "DocScrollRight")
+					b.Click += (_, _) => NudgeTabStrip (1);
+			}
+			if (DocTabsPresenter is not null)
+				DocTabsPresenter.RenderTransform = new Avalonia.Media.TranslateTransform ();
+			UpdateTabScrollButtons ();
+			// Overflow state changes with window resizes too.
+			if (TabStripViewport is { } vp)
+				vp.SizeChanged += (_, _) => UpdateTabScrollButtons ();
+			if (DocTabsPresenter is { } row)
+				row.SizeChanged += (_, _) => UpdateTabScrollButtons ();
+		}, Avalonia.Threading.DispatcherPriority.Background);
+
+		// Breadcrumb (legacy SourceEditor widget): the row lives in the XAML between
+		// the tab strip and the content; code only fills the segment stack.
+		BreadcrumbRow = BreadcrumbHostRow;
+		BreadcrumbBar = BreadcrumbSegments;
 
 		// Full legacy main menu: same structure/order/labels/icons/shortcuts as the GTK UI.
 		BuildMenu ();
@@ -69,6 +168,14 @@ public partial class MainWindow : Window
 			ToolbarRow.DoubleTapped += (s, e) => ToggleMaximize ();
 		}
 
+		// Win11-style edge/corner resize: the gutter zones around the frame start the
+		// native resize loop; maximized/fullscreen hides them along with the frame.
+		AttachResizeCursors ();
+		PropertyChanged += (s, e) => {
+			if (e.Property == WindowStateProperty)
+				UpdateResizeChrome ();
+		};
+
 		// Toolbar content mirrors the GTK MainToolbar: run button, configuration/run
 		// configuration/runtime combos and the search box on the right.
 		RunConfigCombo!.PlaceholderText = "Default";
@@ -79,9 +186,7 @@ public partial class MainWindow : Window
 		ConfigCombo!.Items.Add ("Debug");
 		ConfigCombo.Items.Add ("Release");
 		ConfigCombo.SelectedIndex = 0;
-		RuntimeCombo!.PlaceholderText = "Default (Mono)";
-		foreach (var rt in new[] { "Mono", ".NET" })
-			RuntimeCombo.Items.Add (rt);
+		// The legacy runtime combo was dropped: runtimes are selected per project.
 
 		// The placement convention (mac left, Windows/Linux right) is handled in
 		// OnOpened by re-parenting the caption buttons to the requested side; the
@@ -89,6 +194,7 @@ public partial class MainWindow : Window
 		Opened += async (s, e) => {
 			// The window is up: disarm the startup watchdog (Program.cs).
 			Program.StartupWatchdogDone.Cancel ();
+			UpdateResizeChrome ();
 			if (IsMac)
 				MoveCaptionButtonsLeft ();
 			ApplyThemeVariant (Application.Current?.ActualThemeVariant ?? ThemeVariant.Dark);
@@ -121,6 +227,47 @@ public partial class MainWindow : Window
 				// Remove/Up/Down and persistence to ConversionEncodings.
 				new SelectEncodingsDialog { WindowStartupLocation = WindowStartupLocation.CenterOwner }.ShowDialog (this);
 				Output ("[encodings] dialog closed");
+			} else if (qa == "--newfolder") {
+				// QA: New Folder — default name, live validation (illegal chars,
+				// duplicate) and the Add action creating the directory.
+				var baseDir = Path.Combine (Path.GetTempPath (), "QAFolder", Guid.NewGuid ().ToString ("N"));
+				Directory.CreateDirectory (baseDir);
+				var dlg = new NewFolderDialog (baseDir);
+				Output ("[newfolder] default='" + dlg.FolderNameForQa + "' addEnabled=" + dlg.IsAddEnabledForQa);
+				dlg.FolderNameForQa = "bad/name";
+				dlg.ValidateForQa ();
+				Output ("[newfolder] illegal: addEnabled=" + dlg.IsAddEnabledForQa + " warning='" + dlg.WarningForQa + "'");
+				dlg.FolderNameForQa = "Created";
+				dlg.ValidateForQa ();
+				dlg.AcceptForQa ();
+				Output ("[newfolder] created=" + Directory.Exists (Path.Combine (baseDir, "Created")) + " result='" + dlg.NewFolderCreated + "'");
+				try { Directory.Delete (baseDir, true); } catch { }
+			} else if (qa == "--exmode") {
+				// QA: Execution Mode Selector — two configs, a two-mode set nested
+				// under its parent and a lone mode hoisted to the root (legacy
+				// single-child cleanup), preselection and the Run action.
+				var dlg = new ExecutionModeSelectorDialog ();
+				dlg.Load (
+					new[] {
+						new ExecutionModeSelectorDialog.RunConfig { Name = "Default" },
+						new ExecutionModeSelectorDialog.RunConfig { Name = "Custom" },
+					},
+					new[] {
+						new ExecutionModeSelectorDialog.ModeEntry { Name = ".NET Core", Id = "dotnet", SetName = ".NET Core" },
+						new ExecutionModeSelectorDialog.ModeEntry { Name = "Mono", Id = "mono", SetName = "Mono" },
+					},
+					selectedModeId: "mono");
+				Output ("[exmode] configs=" + dlg.ConfigCountForQa + " modes=" + dlg.ModeCountForQa + " runEnabled=" + dlg.IsRunEnabledForQa + " label='" + dlg.RunLabelForQa + "' selMode=" + dlg.SelectedModeIdForQa);
+				// Modal loop with an automated tick responding the run command after
+				// 2s — the same pattern --xruncfg uses to exercise the dialog live.
+				var autoRun = new Avalonia.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds (2) };
+				autoRun.Tick += (s, e) => {
+					autoRun.Stop ();
+					dlg.AcceptForQa ();
+				};
+				autoRun.Start ();
+				await dlg.ShowDialog (this);
+				Output ("[exmode] closed result=" + (dlg.Result is { } r ? r.Config.Name + "→" + r.Mode.Name : "null"));
 			} else if (qa == "--newconfig") {
 				// QA: New Configuration — name/platform combos with the legacy
 				// validation; OK persists the config in the loaded .sln/.csproj.
@@ -1056,6 +1203,178 @@ public partial class MainWindow : Window
 			} else if (qa == "--diff") {
 				// QA: VersionControl.Commands.Diff over the opened solution (git).
 				_ = ShowDiffAsync ();
+			} else if (qa == "--collapse") {
+				// QA: leave the LEFT pad collapsed so screenshots/XTEST verify the rail
+				// visually (the restore path is driven by real chevron clicks).
+				Output ($"[collapse-qa] before: LeftPads collapsed={LeftPads.IsCollapsed} width={LeftPads.Width}");
+				LeftPads.ToggleCollapse ();
+				Output ($"[collapse-qa] left collapsed, width={LeftPads.Width} — waiting for visual QA");
+			} else if (qa == "--qaresults") {
+				// QA: log the window/root position (includes GNOME's top-bar offset) and
+				// install a capture listener that reports WHICH control actually receives
+				// a pointer press anywhere in the window — distinguishes "the click never
+				// arrives" from "the wiring does not fire" without guessing coordinates.
+				Output ($"[qaresults] window client size: {ClientSize}");
+				Output ($"[qaresults] window root position: {Position}");
+				Output ($"[qaresults] LeftPads: collapsed={LeftPads.IsCollapsed} bounds={LeftPads.Bounds} visible={LeftPads.IsVisible}");
+				Output ($"[qaresults] pad tabs: " + string.Join (", ", LeftPads.Tabs.Select (t => $"{t.Id}[hdr={(t.HeaderButton?.IsVisible == true ? 1 : 0)}]")));
+				PointerPressed += (_, e) => {
+					if (e.Source is not Visual src)
+						return;
+					var chain = new List<string> ();
+					for (Visual? v = src; v is not null && v != this; v = v.GetVisualParent ())
+						chain.Add (v.GetType ().Name + (v is Control c && !string.IsNullOrEmpty (c.Name) ? $"#{c.Name}" : ""));
+					Output ($"[qaresults] press at {e.GetCurrentPoint (this).Position} → {string.Join (" < ", chain)}");
+				};
+				// Screen-space rects of the collapse/restore chrome (PointToScreen already
+				// includes the GNOME top-bar offset — no manual geometry math needed).
+				void LogPadButtons ()
+				{
+					foreach (var (host, hostName) in new[] { (LeftPads, "left"), (BottomPads, "bottom"), (RightPads, "right") }) {
+						foreach (var b in host.GetVisualDescendants ().OfType<Button> ()) {
+							if (ToolTip.GetTip (b) is not string tip || (!tip.StartsWith ("Collapse pad") && !tip.StartsWith ("Expand pad")))
+								continue;
+							var tl = b.PointToScreen (new Point (0, 0));
+							Output ($"[qaresults] padbtn[{hostName}] '{tip}' screen {tl.X},{tl.Y} size {b.Bounds.Width}x{b.Bounds.Height}");
+						}
+					}
+				}
+				LogPadButtons ();
+				// Report collapse-state transitions as they happen (real user/XTEST clicks).
+				bool lastCollapsed = LeftPads.IsCollapsed;
+				var stateTimer = new Avalonia.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds (400) };
+				stateTimer.Tick += (_, _) => {
+					if (LeftPads.IsCollapsed == lastCollapsed)
+						return;
+					lastCollapsed = LeftPads.IsCollapsed;
+					Output ($"[qaresults] state changed: collapsed={lastCollapsed} width={LeftPads.Width}");
+					LogPadButtons ();
+				};
+				stateTimer.Start ();
+				// Definitive hit-map of the collapsed restore row: InputHitTest per pixel
+				// (window coords) shows exactly which control owns each point — settles
+				// "hit area != visual area" complaints without XTEST flakiness. A one-shot
+				// timer guarantees the collapse arrange pass has run; the probe line is
+				// derived from the button's own PointToScreen so no offsets are guessed.
+				// The editor-tab probes need a real document tab; the first QA flag wins
+				// the dispatch, so open one here instead of relying on --bubbles.
+				var probeFile = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile),
+					"TestProj", "TestProj", "Program.cs");
+				if (File.Exists (probeFile))
+					OpenFileDocument (probeFile);
+				var hitTimer = new Avalonia.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds (300) };
+				hitTimer.Tick += (_, _) => {
+					hitTimer.Stop ();
+					// Sanity control: same probe against the EXPANDED collapse button
+					// (known click-working) — proves the probe's coordinate mapping.
+					foreach (var b in LeftPads.GetVisualDescendants ().OfType<Button> ())
+						if (ToolTip.GetTip (b) is "Collapse pad") {
+							var ctl = b.PointToScreen (new Point (0, 0));
+							int cx = ctl.X - Position.X, cy = ctl.Y - Position.Y;
+							var hx = this.InputHitTest (new Point (cx + (int)b.Bounds.Width / 2, cy + (int)b.Bounds.Height / 2));
+							Output ($"[qaresults] sanity collapse btn win=({cx},{cy}) hit={(hx is null ? "none" : hx.GetType ().Name)}");
+						}
+					LeftPads.ToggleCollapse ();
+					// LeftPads probe runs after the collapse layout pass (Background).
+					Avalonia.Threading.Dispatcher.UIThread.Post (() => {
+						var win = Position;
+						Button? rb = null;
+						foreach (var b in LeftPads.GetVisualDescendants ().OfType<Button> ())
+							if (ToolTip.GetTip (b) is "Expand pad")
+								rb = b;
+						if (rb is Button restore) {
+							var tl = restore.PointToScreen (new Point (0, 0));
+							int bx = tl.X - win.X, by = tl.Y - win.Y;
+							int bw = (int)restore.Bounds.Width, bh = (int)restore.Bounds.Height;
+							static string HitName (Visual? h)
+							{
+								if (h is null)
+									return "none";
+								for (Visual? a = h; a is not null; a = a.GetVisualParent ())
+									if (a is Button ab && ToolTip.GetTip (ab) is string t && (t == "Expand pad" || t == "Collapse pad"))
+										return t == "Expand pad" ? "RESTORE-BTN" : "COLLAPSE-BTN";
+								return h.GetType ().Name;
+							}
+							var sb = new System.Text.StringBuilder ();
+							int y = by + bh / 2;
+							for (int wx = bx - 12; wx <= bx + bw + 12; wx += 2) {
+								var hit = this.InputHitTest (new Point (wx, y));
+								sb.Append ($"{wx}:{HitName (hit as Visual)} ");
+							}
+							Output ($"[qaresults] hitmap restore y{y} btn=({bx},{by}) {bw}x{bh}: " + sb);
+						} else {
+							Output ("[qaresults] hitmap: restore button not found");
+						}
+						LeftPads.ToggleCollapse (); // leave expanded
+					}, Avalonia.Threading.DispatcherPriority.Background);
+					// Bottom dock: square 34x34 expand corner probe (after layout).
+					BottomPads.ToggleCollapse ();
+					Avalonia.Threading.Dispatcher.UIThread.Post (() => {
+						foreach (var b in BottomPads.GetVisualDescendants ().OfType<Button> ())
+							if (ToolTip.GetTip (b) is "Expand pad" && b.Parent is Border row) {
+								var tl3 = row.PointToScreen (new Point (0, 0));
+								int bx3 = tl3.X - Position.X, by3 = tl3.Y - Position.Y;
+								int bw3 = (int)row.Bounds.Width, bh3 = (int)row.Bounds.Height;
+								var corner = this.InputHitTest (new Point (bx3 + bw3 / 2, by3 + bh3 / 2));
+								Output ($"[qaresults] bottom square corner win=({bx3},{by3}) {bw3}x{bh3} centerHit={(corner is null ? "none" : corner.GetType ().Name)}");
+							}
+						BottomPads.ToggleCollapse ();
+					}, Avalonia.Threading.DispatcherPriority.Background);
+					// Xwt solution tree probe: backend internals via reflection —
+					// proves where the chain breaks (columns / source / expanded / rows).
+					if (xwtSolutionTree is not null) {
+						var backend = Xwt.Toolkit.CurrentEngine.GetSafeBackend (xwtSolutionTree);
+						static System.Reflection.FieldInfo? F (Type t, string name)
+						{
+							for (var x = t; x is not null; x = x.BaseType)
+								foreach (var f in x.GetFields (System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance))
+									if (f.Name == name)
+										return f;
+							return null;
+						}
+						static object? CountOf (object? o)
+						{
+							if (o is null)
+								return null;
+							if (o is System.Collections.IEnumerable en)
+								return en.OfType<object> ().Count ();
+							return o.GetType ().GetProperty ("Count")?.GetValue (o);
+						}
+						var bt = backend.GetType ();
+						var cols = F (bt, "columns")?.GetValue (backend);
+						var source = F (bt, "treeSource")?.GetValue (backend);
+						var expanded = F (bt, "expanded")?.GetValue (backend);
+						var host = F (bt, "Host")?.GetValue (backend);
+						object? rows = null;
+						object? panelKids = null;
+						if (host is not null) {
+							rows = CountOf (host.GetType ().GetProperty ("Rows")?.GetValue (host) ?? host.GetType ().GetField ("Rows")?.GetValue (host));
+							panelKids = host.GetType ().GetProperty ("Panel")?.GetValue (host) is Avalonia.Controls.Panel pp ? pp.Children.Count : null;
+						}
+						int rootKids = source is Xwt.TreeStore ts ? ts.GetFirstNode () is { } fn ? WalkCount (ts, fn.CurrentPosition) : 0 : -1;
+						static int WalkCount (Xwt.TreeStore store, Xwt.TreePosition pos)
+						{
+							int total = 0;
+							var ds = (Xwt.ITreeDataSource)store;
+							int n = ds.GetChildrenCount (pos);
+							total += n;
+							for (int i = 0; i < n; i++)
+								total += WalkCount (store, ds.GetChild (pos, i));
+							return total;
+						}
+						Output ($"[qaresults] xwtbackend: type={bt.Name} cols={CountOf (cols)} source={source is not null} expanded={CountOf (expanded)} hostRows={rows} panelKids={panelKids} storeNodes={rootKids + 1}");
+					}
+				};
+				hitTimer.Start ();
+				// Log window geometry + pad-button rects whenever the WindowState changes
+				// (maximized windows sit shifted under GNOME's top bar — the pad chrome
+				// rects move with it and the QA log must show where they REALLY are).
+				PropertyChanged += (_, e) => {
+					if (e.Property == Window.WindowStateProperty) {
+						Output ($"[qaresults] window state={WindowState} rootpos={Position} clientsize={ClientSize}");
+						Avalonia.Threading.Dispatcher.UIThread.Post (LogPadButtons, Avalonia.Threading.DispatcherPriority.Loaded);
+					}
+				};
 			} else if (qa == "--viewcmds") {
 				// QA: ViewCommands — find results → ShowNext/ShowPrevious with wrap;
 				// SingleMode hides pads, SideBySideMode restores them.
@@ -1333,7 +1652,7 @@ public partial class MainWindow : Window
 				// QA: exercise AddReference against the real csproj.
 				var proj = ResolveActiveProject ();
 				if (proj is not null) {
-					var dlg = new AddReferenceDialog (proj);
+					var dlg = new AddReferenceDialog (proj, loadedSolutionPath);
 					// Deterministic QA path: add a known reference programmatically.
 					bool ok = dlg.TryAddReference ("System.Json");
 					Output ($"[addref-qa] TryAddReference(System.Json) → {ok}");
@@ -1345,6 +1664,16 @@ public partial class MainWindow : Window
 					Output ("[addref-qa] csproj reverted");
 				} else
 					Output ("[addref-qa] no project");
+			} else if (qa == "--addrefdlg") {
+				// QA: show the rebuilt Add Reference dialog for visual inspection.
+				var proj = ResolveActiveProject ();
+				if (proj is not null)
+					_ = new AddReferenceDialog (proj, loadedSolutionPath).ShowDialog (this);
+				else
+					Output ("[addrefdlg-qa] no project");
+			} else if (qa == "--extensionsdlg") {
+				// QA: show the Extensions (Add-in Manager) dialog with the chrome frame.
+				_ = new AddinManagerDialog { WindowStartupLocation = WindowStartupLocation.CenterOwner }.ShowDialog (this);
 			} else if (qa == "--bookmarks") {
 				// QA: exercise bookmark toggle/next/prev/clear with pixel-visible marks.
 				var file = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile),
@@ -1599,11 +1928,10 @@ public partial class MainWindow : Window
 		// the file in an island editor tab). Right-click selects the node under the
 		// pointer and opens the ProjectPadContextMenu (ProjectPadContextMenu.addin.xml)
 		// replicated per node type.
-		solutionTreeView = new TreeView { Background = Brushes.Transparent };
-		solutionTreeView.Bind (TreeView.ForegroundProperty, Application.Current.GetResourceObservable ("IdeFgBrush"));
-		solutionTreeView.DoubleTapped += OnSolutionOpen;
-		solutionTreeView.PointerReleased += OnSolutionPadContextMenu;
-		solutionTreeView.SelectionChanged += (_, _) => UpdatePropertiesPad ();
+		// Wave-3: the REAL Xwt.TreeView on the Xwt.Avalonia backend (ListBackends
+		// TreeViewBackend), embedded by its native Avalonia control — same widget
+		// class the legacy GTK UI used, now driven by a TreeStore with (icon, text,
+		// tag) fields. Solution Folders nest their child projects (dependencies).
 
 		// Search box over the tree (legacy SearchEntry with "Search…" empty message
 		// and live filtering: matches stay, ancestors of matches stay expanded).
@@ -1616,10 +1944,20 @@ public partial class MainWindow : Window
 				ApplySolutionTreeFilter (solutionSearchBox.Text ?? "");
 		};
 
-		var solutionHost = new DockPanel ();
+		// The Xwt.TreeView is instantiated lazily on first use (its engine must be
+		// initialized); the pad hosts the control returned by GetNativeWidget.
+		xwtSolutionHost = new DockPanel ();
 		DockPanel.SetDock (solutionSearchBox, Dock.Top);
-		solutionHost.Children.Add (solutionSearchBox);
-		solutionHost.Children.Add (solutionTreeView);
+		xwtSolutionHost.Children.Add (solutionSearchBox);
+		xwtPlaceholder = new TextBlock {
+			Text = "No solution loaded",
+			Opacity = 0.55,
+			HorizontalAlignment = HorizontalAlignment.Center,
+			VerticalAlignment = VerticalAlignment.Center,
+			Margin = new Thickness (12),
+		};
+		xwtSolutionHost.Children.Add (xwtPlaceholder);
+		var solutionHost = xwtSolutionHost;
 		LeftPads.AddTab (new PadHost.PadTab { Id = "solution", Label = "Solution", Icon = "md-solution-pad", Content = solutionHost });
 
 		// Classes pad (legacy ClassPad, auto-hidden by default like Pads.addin.xml).
@@ -1940,12 +2278,32 @@ public partial class MainWindow : Window
 			header.Children.Add (label);
 		}
 
+		// Legacy tab style: file-type stock icon before the label.
+		var tabIcon = FileTabIcon (tag);
+		if (tabIcon is not null) {
+			var iconImg = new Avalonia.Controls.Image { Source = tabIcon, Width = 16, Height = 16, VerticalAlignment = VerticalAlignment.Center };
+			var row = header.Children.Count > 0 && header.Children [0] is StackPanel sp ? sp : null;
+			if (row is not null) {
+				row.Children.Insert (0, iconImg);
+			} else {
+				var iconRow = new StackPanel { Orientation = Orientation.Horizontal, Children = { iconImg, label } };
+				header.Children.Clear ();
+				header.Children.Add (iconRow);
+			}
+		}
+
 		var tab = new TabItem {
 			Header = header,
 			Tag = tag,
 			Classes = { "island" },
 		};
 		DocTabs!.Items.Add (tab);
+
+		// After the strip re-measures, refresh the ‹ › visibility and the breadcrumb.
+		Avalonia.Threading.Dispatcher.UIThread.Post (() => {
+			UpdateTabScrollButtons ();
+			UpdateBreadcrumb ();
+		}, Avalonia.Threading.DispatcherPriority.Background);
 
 		if (select) {
 			DocTabs.SelectedItem = tab; // SelectionChanged mounts the content
@@ -1963,6 +2321,8 @@ public partial class MainWindow : Window
 				if (doc.Content is MonoDevelop.Ide.Controls.SkTextEditor ed && !string.IsNullOrEmpty (ed.FilePath))
 					StatusText!.Text = ed.FilePath;
 			}
+			lastBreadCaretLine = -1;
+			UpdateBreadcrumb ();
 		} else {
 			ShowEmptyEditorHost (); // legacy: editor pad stays open with no tabs
 		}
@@ -1987,6 +2347,122 @@ public partial class MainWindow : Window
 			SelectDocument ((string)first.Tag!);
 		else
 			ShowEmptyEditorHost (); // legacy: the editor pad stays open with no tabs
+	}
+
+	// ---- Wave-3 editor-tab chrome: scroll buttons, file icons, breadcrumb ----
+
+	double tabStripOffset; // ≤ 0; how far the tab row is shifted left
+
+	/// <summary>The strip's clipped viewport (template Border, via visual tree).</summary>
+	Border? TabStripViewport
+		=> DocTabs!.GetVisualDescendants ().OfType<Border> ().FirstOrDefault (b => b.Name == "StripViewport");
+
+	/// <summary>The element that hosts the tab row (translated to shift it).</summary>
+	Control? DocTabsPresenter
+		=> DocTabs!.GetVisualDescendants ().OfType<Avalonia.Controls.Presenters.ItemsPresenter> ().FirstOrDefault (p => p.Name == "PART_ItemsPresenter");
+
+	/// <summary>Shifts the clipped tab row (‹ › buttons): one step = half viewport.</summary>
+	void NudgeTabStrip (int dir)
+	{
+		if (TabStripViewport is not { } vp || DocTabsPresenter is not { } row)
+			return;
+		double overflow = row.Bounds.Width - vp.Bounds.Width;
+		if (overflow <= 0)
+			return;
+		tabStripOffset = System.Math.Clamp (tabStripOffset + dir * System.Math.Max (100, vp.Bounds.Width / 2), -overflow, 0);
+		if (row.RenderTransform is Avalonia.Media.TranslateTransform t)
+			t.X = tabStripOffset;
+	}
+
+	/// <summary>
+	/// Shows the ‹ › buttons ONLY while the tabs' total width exceeds the strip
+	/// viewport (legacy DocumentPad arrows); resets the shift when the tabs fit.
+	/// </summary>
+	void UpdateTabScrollButtons ()
+	{
+		var vp = TabStripViewport;
+		var row = DocTabsPresenter;
+		if (vp is null || row is null)
+			return;
+		double overflow = row.Bounds.Width - vp.Bounds.Width;
+		bool over = overflow > 1;
+		tabStripOffset = System.Math.Clamp (tabStripOffset, -System.Math.Max (0, overflow), 0);
+		if (row.RenderTransform is Avalonia.Media.TranslateTransform t)
+			t.X = tabStripOffset;
+		foreach (var b in DocTabs!.GetVisualDescendants ().OfType<Button> ()) {
+			if (b.Name == "DocScrollLeft" || b.Name == "DocScrollRight")
+				b.IsVisible = over;
+		}
+	}
+
+	/// <summary>Legacy tab icon: md-class-file for code, md-text-file-icon otherwise.</summary>
+	static IImage? FileTabIcon (string fileName)
+	{
+		string ext = System.IO.Path.GetExtension (fileName).ToLowerInvariant ();
+		string stock = ext switch {
+			".cs" or ".java" or ".c" or ".cpp" or ".h" or ".py" or ".vala" => "md-class-file",
+			".xml" or ".xaml" or ".axaml" or ".csproj" or ".sln" or ".props" or ".targets" or ".config" => "md-xml-file-icon",
+			".txt" or ".md" or ".log" => "md-text-file-icon",
+			_ => "md-empty-file-icon",
+		};
+		return IconService.GetImage (stock) ?? IconService.GetResourceImage (stock);
+	}
+
+	/// <summary>
+	/// Legacy SourceEditor breadcrumb: one chevron-text pair per path segment of the
+	/// active file (sol • proj • dir • name); rebuilt on selection or caret move.
+	/// </summary>
+	void UpdateBreadcrumb ()
+	{
+		var bar = BreadcrumbBar;
+		var row = BreadcrumbRow;
+		if (bar is null || row is null)
+			return;
+		var editor = DocTabs.SelectedItem is TabItem { Tag: string tag } && docs.TryGetValue (tag, out var ed) ? ed : null;
+		if (editor is null || string.IsNullOrEmpty (editor.FilePath)) {
+			row.IsVisible = false;
+			return;
+		}
+
+		int line = editor.CurrentLine + 1;
+		bool caretMovedOnly = row.IsVisible && line == lastBreadCaretLine;
+		lastBreadCaretLine = line;
+		if (caretMovedOnly)
+			return; // only the caret moved — segments are unchanged
+
+		bar.Children.Clear ();
+		string abs = editor.FilePath;
+		string solName = loadedSolutionPath is not null ? System.IO.Path.GetFileNameWithoutExtension (loadedSolutionPath) : "";
+		var segs = new List<string> ();
+		if (solName.Length > 0)
+			segs.Add (solName);
+		try {
+			var full = System.IO.Path.GetFullPath (abs);
+			var solDir = loadedSolutionPath is not null ? System.IO.Path.GetDirectoryName (System.IO.Path.GetFullPath (loadedSolutionPath)) : null;
+			string rel = solDir is not null && full.StartsWith (solDir, StringComparison.OrdinalIgnoreCase)
+				? full [(solDir.Length + 1)..]
+				: System.IO.Path.GetFileName (abs);
+			segs.AddRange (rel.Split ('/', '\\'));
+		} catch {
+			segs.Add (System.IO.Path.GetFileName (abs));
+		}
+
+		for (int i = 0; i < segs.Count; i++) {
+			if (i > 0) {
+				var chev = new TextBlock { Text = "›", FontSize = 10, Opacity = 0.5, VerticalAlignment = VerticalAlignment.Center };
+				chev.Bind (TextBlock.ForegroundProperty, Application.Current!.GetResourceObservable ("IdeFgBrush"));
+				bar.Children.Add (chev);
+			}
+			var seg = new TextBlock {
+				Text = segs [i],
+				FontSize = 11,
+				Opacity = i == segs.Count - 1 ? 1.0 : 0.65,
+				VerticalAlignment = VerticalAlignment.Center,
+			};
+			seg.Bind (TextBlock.ForegroundProperty, Application.Current!.GetResourceObservable ("IdeFgBrush"));
+			bar.Children.Add (seg);
+		}
+		row.IsVisible = true;
 	}
 
 	// Legacy SourceEditor bookmark pad menu: navigation + removal.
@@ -2547,35 +3023,46 @@ public partial class MainWindow : Window
 			// The solution-open flow must not re-show the welcome overlay afterwards.
 			welcomeVisible = false;
 
-			// Solution pad = legacy ProjectPad TreeView (Solution ▸ Projects ▸ files).
-			if (solutionTreeView is not null) {
-				solutionTreeView.Items.Clear ();
-				// Legacy tree anatomy (SolutionNodeBuilder → ProjectNodeBuilder →
-				// ProjectReferenceFolderNodeBuilder/ProjectFolderNodeBuilder):
-				// solution → project → [References, folders…, files…] with stock icons.
-				var root = new TreeViewItem {
-					Header = TreeHeader ("md-solution", title),
-					IsExpanded = true,
-					Tag = path,
-				};
-				foreach (var p in projects.Where (p => !p.IsFolder)) {
-					var proj = new TreeViewItem {
-						Header = TreeHeader ("md-project", p.Name),
-						Tag = p.ProjectPath,
-						IsExpanded = true,
-					};
-				var dir = Path.GetDirectoryName (p.ProjectPath);
-				if (!string.IsNullOrEmpty (dir) && Directory.Exists (dir)) {
-					projectFileBeingLoaded = p.ProjectPath;
-					// References node (ProjectReferenceFolderNodeBuilder: first child).
-					proj.Items.Add (BuildReferencesNode (p.ProjectPath));
-						// Folders and files (ProjectFolderNodeBuilder ordering).
-						foreach (var child in BuildFolderChildren (dir, 0))
-							proj.Items.Add (child);
-					}
-					root.Items.Add (proj);
+			// Solution pad = the REAL Xwt.TreeView (ProjectPad): solution ▸ solution
+			// folders ▸ projects ▸ [References, files…]. Folder nesting = legacy
+			// solution-folder dependencies (ParentProjectGuid).
+			EnsureXwtSolutionTree ();
+			if (xwtSolutionStore is not null && xwtSolutionTree is not null) {
+				xwtSolutionStore.Clear ();
+				xwtSolutionNodes.Clear ();
+
+					var rootNav = xwtSolutionStore.AddNode ();
+				rootNav.SetValues (xwtSolIconField, XwtStockIcon ("solution-16.png"),
+					xwtSolTextField, title, xwtSolTagField, "solution:" + path);
+				xwtSolutionNodes ["solution"] = rootNav;
+
+				// Folders first (they may parent projects), then flat projects.
+				var folderNavs = new Dictionary<string, Xwt.TreeNavigator> ();
+				foreach (var folder in projects.Where (p => p.IsFolder && p.Parent is null)) {
+					var nav = rootNav.AddChild ();
+					nav.SetValues (xwtSolIconField, XwtStockIcon ("folder-solution-16.png"),
+						xwtSolTextField, folder.Name, xwtSolTagField, "folder:" + folder.Name);
+					folderNavs [folder.Name] = nav;
 				}
-				solutionTreeView.Items.Add (root);
+
+				foreach (var p in projects.Where (p => !p.IsFolder)) {
+					var parentNav = p.Parent is not null && folderNavs.TryGetValue (p.Parent, out var fn)
+						? fn : rootNav;
+					var nav = parentNav.AddChild ();
+					nav.SetValues (xwtSolIconField, XwtStockIcon ("project-16.png"),
+						xwtSolTextField, p.Name, xwtSolTagField, "project:" + p.ProjectPath);
+					xwtSolutionNodes ["project:" + p.ProjectPath] = nav;
+
+					var dir = Path.GetDirectoryName (p.ProjectPath);
+					if (!string.IsNullOrEmpty (dir) && Directory.Exists (dir)) {
+						projectFileBeingLoaded = p.ProjectPath;
+						// References node first (ProjectReferenceFolderNodeBuilder), then
+							// folders/files (ProjectFolderNodeBuilder ordering).
+							AddXwtReferencesNode (nav, p.ProjectPath);
+							BuildXwtFolderChildren (nav, dir, 0); // adds rows through the nav
+					}
+					xwtSolutionTree.ExpandRow (nav.CurrentPosition, false);
+				}					xwtSolutionTree.ExpandRow (rootNav.CurrentPosition, false);
 			}
 			RecentSolutions.Add (path);
 
@@ -2691,6 +3178,98 @@ public partial class MainWindow : Window
 	}
 
 	string? projectFileBeingLoaded;
+
+	// ---- Xwt.TreeView builders (real ProjectPad tree) ----
+
+	// ProjectReferenceFolderNodeBuilder equivalent: References node with one row per
+	// Reference/PackageReference plus ProjectReference (md-reference icons).
+	void AddXwtReferencesNode (Xwt.TreeNavigator projNav, string projectPath)
+	{
+		var refsNav = projNav.AddChild ();			refsNav.SetValues (xwtSolIconField, XwtStockIcon ("folder-generic-16.png"),
+			xwtSolTextField, "References", xwtSolTagField, "references:" + projectPath);
+		try {
+			var doc = System.Xml.Linq.XDocument.Load (projectPath);
+			var ns = doc.Root?.Name.Namespace ?? System.Xml.Linq.XNamespace.None;
+			var refs = new List<string> ();
+			foreach (var el in doc.Descendants (ns + "Reference")) {
+				var name = el.Attribute ("Include")?.Value;
+				if (!string.IsNullOrEmpty (name))
+					refs.Add (name.Split (',') [0]);
+			}
+			foreach (var el in doc.Descendants (ns + "PackageReference")) {
+				var id = el.Attribute ("Include")?.Value;
+				if (!string.IsNullOrEmpty (id))
+					refs.Add (id);
+			}
+			foreach (var el in doc.Descendants (ns + "ProjectReference")) {
+				var inc = el.Attribute ("Include")?.Value;
+				if (!string.IsNullOrEmpty (inc))
+					refs.Add (Path.GetFileNameWithoutExtension (inc));
+			}
+			foreach (var r in refs.OrderBy (r => r).Distinct ())
+			{
+				var nav = refsNav.AddChild ();
+				nav.SetValues (xwtSolIconField, XwtStockIcon ("reference-16.png"),
+					xwtSolTextField, r, xwtSolTagField, "reference:" + r);
+			}
+		} catch {
+			// Unreadable project file: leave References empty (legacy tolerance).
+		}
+	}
+
+	// ProjectFolderNodeBuilder equivalent over Xwt nodes: folders first (bin/obj
+	// hidden), then files — each added directly to the parent navigator.
+	void BuildXwtFolderChildren (Xwt.TreeNavigator parentNav, string dir, int depth)
+	{
+		if (depth > 8)
+			return;
+		try {
+			foreach (var sub in Directory.GetDirectories (dir).OrderBy (d => d, StringComparer.OrdinalIgnoreCase)) {
+				var name = Path.GetFileName (sub);
+				if (name is "bin" or "obj")
+					continue;
+				var nav = parentNav.AddChild ();
+				nav.SetValues (xwtSolIconField, XwtStockIcon ("folder-generic-16.png"),
+					xwtSolTextField, name, xwtSolTagField, "folder:" + sub);
+				BuildXwtFolderChildren (nav, sub, depth + 1);
+			}
+			foreach (var f in Directory.GetFiles (dir).OrderBy (f => f, StringComparer.OrdinalIgnoreCase)) {
+				var fname = Path.GetFileName (f);
+				if (fname == Path.GetFileName (projectFileBeingLoaded))
+					continue;
+				if (fname.EndsWith (".sln", StringComparison.OrdinalIgnoreCase) || fname.EndsWith (".slnf", StringComparison.OrdinalIgnoreCase))
+					continue;
+				var nav = parentNav.AddChild ();
+				nav.SetValues (xwtSolIconField, XwtStockIcon (FileIconResource (fname)),
+					xwtSolTextField, fname, xwtSolTagField, f);
+			}
+		} catch {
+			// permission errors: skip silently like the legacy tree does
+		}
+	}
+
+	// DesktopService.GetIconForFile equivalent → embedded icon resource name.
+	static string FileIconResource (string fileName)
+	{
+		var ext = Path.GetExtension (fileName).ToLowerInvariant ();			return ext switch {
+				".cs" => "file-source-16.png",
+				".csproj" or ".props" or ".targets" => "project-16.png",
+				".sln" => "solution-16.png",
+				_ => "file-text-16.png",
+			};
+	}
+
+	// RowActivated on the real Xwt tree: opens files (same path the Avalonia
+	// DoubleTapped used: OnSolutionOpen semantics).
+	void OnXwtSolutionRowActivated (object? sender, Xwt.TreeViewRowEventArgs e)
+	{
+		if (xwtSolutionStore is null)
+			return;
+		var nav = xwtSolutionStore.GetNavigatorAt (e.Position);
+		var tag = nav.GetValue (xwtSolTagField);
+		if (File.Exists (tag))
+			OpenFileDocument (tag);
+	}
 
 	// DesktopService.GetIconForFile equivalent over the migrated icon set.
 	static string FileIconId (string fileName)
@@ -3265,7 +3844,7 @@ public partial class MainWindow : Window
 	/// <summary>macOS: caption buttons live at the left edge of the menu bar row.</summary>
 	void MoveCaptionButtonsLeft ()
 	{
-		var grid = TitleBarRow?.Children.OfType<Grid> ().FirstOrDefault ();
+		var grid = TitleBarRow?.Child as Grid;
 		if (grid is null || CaptionButtons is null)
 			return;
 
@@ -3287,6 +3866,70 @@ public partial class MainWindow : Window
 	}
 
 	void OnMinimize (object? sender, RoutedEventArgs e) => WindowState = WindowState.Minimized;
+
+	// ---- Win11 chrome (rounded corners + thin toolbar-colored border + edge resize) ----
+
+	void UpdateResizeChrome ()
+	{
+		bool flat = WindowState is WindowState.Maximized or WindowState.FullScreen;
+		if (ResizeGrip is not null)
+			ResizeGrip.IsVisible = !flat;
+		if (WindowFrame is not null) {
+			WindowFrame.Margin = flat ? new Thickness (0) : new Thickness (6);
+			WindowFrame.CornerRadius = new CornerRadius (flat ? 0 : 8);
+		}
+		if (TitleBarRow is not null)
+			TitleBarRow.CornerRadius = new CornerRadius (flat ? 0 : 8, flat ? 0 : 8, 0, 0);
+		if (StatusBarBorder is not null)
+			StatusBarBorder.CornerRadius = new CornerRadius (0, 0, flat ? 0 : 8, flat ? 0 : 8);
+		if (RestoreStripHost is not null)
+			RestoreStripHost.CornerRadius = new CornerRadius (0, 0, flat ? 0 : 8, flat ? 0 : 8);
+	}
+
+	// The X11 backend does not map every StdCursor at XAML parse time
+	// ("Unrecognized cursor type 'SizeNorthwestSoutheast'"), so the resize zones get
+	// their cursors here, ignoring per-zone failures.
+	void AttachResizeCursors ()
+	{
+		if (ResizeGrip is null)
+			return;
+		foreach (var b in ResizeGrip.Children.OfType<Border> ()) {
+			if (b.Tag is not string tag)
+				continue;
+			try {
+				b.Cursor = new Cursor (tag switch {
+					"North" or "South" => StandardCursorType.SizeNorthSouth,
+					"East" or "West" => StandardCursorType.SizeWestEast,
+					"NorthWest" or "SouthEast" => StandardCursorType.TopLeftCorner,
+					_ => StandardCursorType.TopRightCorner,
+				});
+			} catch (Exception) {
+				// cursor cosmetic only — resize still works
+			}
+		}
+	}
+
+	void OnResizeGripPressed (object? sender, PointerPressedEventArgs e)
+	{
+		if (WindowState is not WindowState.Normal)
+			return;
+		if (sender is not Border b || b.Tag is not string tag)
+			return;
+		var edge = tag switch {
+			"North" => WindowEdge.North,
+			"South" => WindowEdge.South,
+			"West" => WindowEdge.West,
+			"East" => WindowEdge.East,
+			"NorthEast" => WindowEdge.NorthEast,
+			"SouthEast" => WindowEdge.SouthEast,
+			"NorthWest" => WindowEdge.NorthWest,
+			"SouthWest" => WindowEdge.SouthWest,
+			_ => WindowEdge.SouthEast,
+		};
+		BeginResizeDrag (edge, e);
+	}
+
+	// --------------------------------------------
 
 	void OnMaximize (object? sender, RoutedEventArgs e) => ToggleMaximize ();
 
@@ -3345,8 +3988,10 @@ public partial class MainWindow : Window
 		if (Application.Current is null)
 			return;
 		Application.Current.RequestedThemeVariant = variant;
-		Background = new SolidColorBrush (
-			variant == ThemeVariant.Light ? Color.Parse ("#FFFFFF") : Color.Parse ("#1E1E1E"));
+		// The window background must stay transparent: the Win11 frame (WindowFrame)
+		// paints its own rounded border inside a small gutter, and an opaque window
+		// background would show through it as a second, square "rigid" border.
+		Background = Brushes.Transparent;
 		SetToolbarIcons ();
 	}
 
@@ -3363,15 +4008,57 @@ public partial class MainWindow : Window
 		SetIfAvailable (StepOutIcon, "md-step-out-debug");
 	}
 
-	// Step icons fall back to the debug icon when the legacy PNG has no variant.
+	// Legacy MainToolbar behavior: the debug step buttons live right of the
+	// configuration combos, hidden by default; they appear only while a debug
+	// session is alive and hide again when it terminates.
+	void SetDebugButtonsVisible (bool visible)
+	{
+		if (DebugButtonsRow is not null)
+			DebugButtonsRow.IsVisible = visible;
+	}
+
+	// Legacy MainToolbarController search behavior: ':' switches/locks the search
+	// category (":c" = commands, ":f" = files, ":s" = search in solution), plain text
+	// searches across the categories, Enter opens the corresponding dialog
+	// (FindInFiles for the search-in-solution category) and Escape clears.
+	void OnToolbarSearchKeyDown (object? sender, KeyEventArgs e)
+	{
+		if (sender is not TextBox box)
+			return;
+		if (e.Key == Key.Escape) {
+			box.Text = "";
+			return;
+		}
+		if (e.Key != Key.Enter)
+			return;
+		var term = box.Text?.Trim () ?? "";
+		if (term.Length == 0)
+			return;
+		// ':c'/'commands:' → command search stays in the popup path (not migrated
+		// yet); ':f'/':s' → open Find in Files with the term, like the legacy
+		// SearchInSolutionSearchCategory double-click path.
+		var cat = term.StartsWith (":c", StringComparison.OrdinalIgnoreCase) ? "commands"
+			: term.StartsWith (":f", StringComparison.OrdinalIgnoreCase) ? "files"
+			: term.StartsWith (":s", StringComparison.OrdinalIgnoreCase) ? "search"
+			: null;
+		if (cat is not null && cat != "commands")
+			term = term.Substring (2).TrimStart ();
+		Output ($"[search] category={cat ?? "all"} term='{term}'");
+		if (term.Length > 0) {
+			_ = new FindInFilesDialog { SearchTextOverride = term }.ShowDialog (this);
+			box.Text = "";
+		}
+		e.Handled = true;
+	}
+
+	// No debug-all fallback: a missing stock id must not silently make three
+	// different buttons show the same glyph (the old step-icons bug).
 	static void SetIfAvailable (Avalonia.Controls.Image? target, string stock)
 	{
 		if (target is null)
 			return;
 		if (MonoDevelop.Ide.Services.IconService.GetImage (stock) is Avalonia.Media.Imaging.Bitmap bmp)
 			target.Source = bmp;
-		else if (MonoDevelop.Ide.Services.IconService.GetImage ("md-debug-all") is Avalonia.Media.Imaging.Bitmap fallback)
-			target.Source = fallback;
 	}
 
 	static bool IsToolbarInteractive (Avalonia.Visual v)
@@ -3623,7 +4310,7 @@ public partial class MainWindow : Window
 				Output ("[refs] no project loaded");
 				return;
 			}
-			var dlg = new AddReferenceDialog (proj);
+			var dlg = new AddReferenceDialog (proj, loadedSolutionPath);
 			dlg.Closed += (_, _) => {
 				if (dlg.AddedReference is not null)
 					Output ($"[refs] added '{dlg.AddedReference}' to {Path.GetFileName (proj)}");
@@ -4303,12 +4990,18 @@ public partial class MainWindow : Window
 	public void Output (string message)
 	{
 		Console.WriteLine (message);
+		Console.Out.Flush (); // stdout redirected to a file is block-buffered — flush so QA greps see lines immediately
 		if (outputTextBox is null)
 			return;
 		outputTextBox.Text = string.IsNullOrEmpty (outputTextBox.Text)
 			? message
 			: outputTextBox.Text + "\n" + message;
 		StatusText!.Text = message;
+		// Legacy StatusArea.ShowMessage: the toolbar center mirrors the status message.
+		// The TextBlock is currently commented out of the XAML — resolve it by name
+		// so the mirror resumes automatically if it is re-enabled.
+		if (this.FindControl<TextBlock> ("ToolbarStatus") is { } toolbarStatus)
+			toolbarStatus.Text = message;
 	}
 
 	/// <summary>Rebuilds the main menu (public for the KeyBindings preferences panel).</summary>
@@ -4779,8 +5472,11 @@ public partial class MainWindow : Window
 		session.Terminated += (_, _) => Avalonia.Threading.Dispatcher.UIThread.Post (() => {
 			Output ("[debug] terminated");
 			debugPaused = false;
+			SetDebugButtonsVisible (false);
 			ClearExecutionLineHighlight ();
 		});
+		// Legacy MainToolbar: the step buttons only exist while a debug session runs.
+		SetDebugButtonsVisible (true);
 		var ok = await session.StartAsync (dll, Path.GetDirectoryName (proj)!, bps);
 		Output (ok ? "[debug] session started" : "[debug] failed to start netcoredbg session");
 	}
@@ -4808,6 +5504,7 @@ public partial class MainWindow : Window
 	void OnDebuggerStopped (MonoDevelop.Debugger.Services.DebugStopInfo stop)
 	{
 		debugPaused = true;
+		SetDebugButtonsVisible (true);
 		var frame = stop.Frames.FirstOrDefault ();
 		if (frame is not null && File.Exists (frame.File)) {
 			OpenFileDocumentAtLine (frame.File, frame.Line);
@@ -5392,8 +6089,11 @@ public partial class MainWindow : Window
 		session.Terminated += (_, _) => Avalonia.Threading.Dispatcher.UIThread.Post (() => {
 			Output ("[debug] terminated");
 			debugPaused = false;
+			SetDebugButtonsVisible (false);
 			ClearExecutionLineHighlight ();
 		});
+		// Legacy MainToolbar: the step buttons only exist while a debug session runs.
+		SetDebugButtonsVisible (true);
 		var bps = CollectPersistedBreakpoints ();
 		var ok = await session.AttachAsync (pid, bps);
 		Output (ok

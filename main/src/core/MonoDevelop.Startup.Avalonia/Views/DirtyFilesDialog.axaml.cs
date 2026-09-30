@@ -39,6 +39,7 @@ public partial class DirtyFilesDialog : Window
 	public DirtyFilesDialog ()
 	{
 		InitializeComponent ();
+		MonoDevelop.AvaloniaShell.Controls.DialogWindow.Apply (this);
 	}
 
 	/// <summary>Populates the tree. Call before ShowDialog.</summary>

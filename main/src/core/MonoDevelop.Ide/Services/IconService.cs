@@ -104,16 +104,24 @@ public static class IconService
 		["about-md-16"] = "about-md-16",
 	};
 
-	// Version Control addin stock ids → its own icons directory.
+	// Addin stock ids → (resource, addin icons directory under main/src/addins).
 	static readonly Dictionary<string, (string Resource, string Dir)> VcStockToResource = new () {
-		["vc-add-command"] = ("vcs-added-16", "MonoDevelop.VersionControl"),
-		["vc-remove-command"] = ("vcs-removed-16", "MonoDevelop.VersionControl"),
-		["vc-revert-command"] = ("revert-16", "MonoDevelop.VersionControl"),
-		["vc-diff"] = ("diff-16", "MonoDevelop.VersionControl"),
-		["vc-log"] = ("log-16", "MonoDevelop.VersionControl"),
-		["vc-status"] = ("local-status-16", "MonoDevelop.VersionControl"),
-		["vc-update"] = ("pull-16", "MonoDevelop.VersionControl"),
-		["vc-commit"] = ("commit-16", "MonoDevelop.VersionControl"),
+		["vc-add-command"] = ("vcs-added-16", "VersionControl/MonoDevelop.VersionControl"),
+		["vc-remove-command"] = ("vcs-removed-16", "VersionControl/MonoDevelop.VersionControl"),
+		["vc-revert-command"] = ("revert-16", "VersionControl/MonoDevelop.VersionControl"),
+		["vc-diff"] = ("diff-16", "VersionControl/MonoDevelop.VersionControl"),
+		["vc-log"] = ("log-16", "VersionControl/MonoDevelop.VersionControl"),
+		["vc-status"] = ("local-status-16", "VersionControl/MonoDevelop.VersionControl"),
+		["vc-update"] = ("pull-16", "VersionControl/MonoDevelop.VersionControl"),
+		["vc-commit"] = ("commit-16", "VersionControl/MonoDevelop.VersionControl"),
+
+		// Debugger stock ids (MonoDevelop.Debugger.addin.xml): step-in/out/over-16.png.
+		// Without this mapping the toolbar step buttons showed the missing-image glyph.
+		["md-step-into-debug"] = ("step-in-16", "MonoDevelop.Debugger"),
+		["md-step-out-debug"] = ("step-out-16", "MonoDevelop.Debugger"),
+		["md-step-over-debug"] = ("step-over-16", "MonoDevelop.Debugger"),
+		["md-continue-debug"] = ("continue-16", "MonoDevelop.Debugger"),
+		["md-pause-debug"] = ("pause-16", "MonoDevelop.Debugger"),
 	};
 
 	static readonly Dictionary<(string Resource, bool Dark, bool Disabled, int Scale), Bitmap?> cache = new ();
@@ -155,7 +163,7 @@ public static class IconService
 		string dir = iconsDir;
 		if (VcStockToResource.TryGetValue (stockId, out var vc)) {
 			resource = vc.Resource;
-			var addinsRoot = Path.GetFullPath (Path.Combine (iconsDir, "..", "..", "..", "..", "addins", "VersionControl", vc.Dir, "icons"));
+			var addinsRoot = Path.GetFullPath (Path.Combine (iconsDir, "..", "..", "..", "addins", vc.Dir, "icons"));
 			if (Directory.Exists (addinsRoot))
 				dir = addinsRoot;
 			else

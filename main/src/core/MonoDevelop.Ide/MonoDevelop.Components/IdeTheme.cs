@@ -184,6 +184,17 @@ namespace MonoDevelop.Components
 
 			string current_theme = IdeApp.Preferences.UserInterfaceThemeName;
 
+			// Never force a Gtk theme which is not installed on Linux (e.g. the Win/Mac-only
+			// "Light"/"Dark" preference values): Gtk would silently fall back to its built-in
+			// light theme. Keep the system theme instead.
+			if (Platform.IsLinux && !IsInstalledGtkTheme (current_theme)) {
+				string sysTheme = DefaultTheme ?? Gtk.Settings.Default?.ThemeName;
+				if (!string.IsNullOrEmpty (sysTheme)) {
+					LoggingService.LogInfo ("GTK: theme '{0}' is not installed, using the system theme '{1}'", current_theme, sysTheme);
+					current_theme = sysTheme;
+				}
+			}
+
 			if (!Platform.IsLinux) {
 				UserInterfaceTheme = IdeApp.Preferences.UserInterfaceThemeName == "Dark" ? Theme.Dark : Theme.Light;
 				if (current_theme != UserInterfaceTheme.ToString ()) // Only theme names allowed on Win/Mac
@@ -336,6 +347,15 @@ namespace MonoDevelop.Components
 
 		static void ValidateGtkTheme (ref string theme)
 		{
+			// The Win/Mac-only names "Light"/"Dark" (or any theme which is not installed)
+			// must never be forced as the Gtk theme on Linux: Gtk silently falls back to its
+			// built-in light theme, which makes the IDE start light even when the desktop
+			// is using a dark theme. Fall back to the system theme in that case.
+			if (Platform.IsLinux && !IsInstalledGtkTheme (theme)) {
+				LoggingService.LogInfo ("GTK: theme '{0}' is not installed, using the system theme '{1}'", theme, DefaultTheme);
+				theme = DefaultTheme;
+			}
+
 			if (!MonoDevelop.Ide.Gui.OptionPanels.IDEStyleOptionsPanelWidget.IsBadGtkTheme (theme))
 				return;
 
@@ -365,6 +385,36 @@ namespace MonoDevelop.Components
 			MessageService.GenericAlert (Gtk.Stock.DialogWarning, message, BrandingService.BrandApplicationName (detail), AlertButton.Ok);
 
 			theme = fallback ?? themes.FirstOrDefault () ?? theme;
+		}
+
+		static bool IsInstalledGtkTheme (string theme)
+		{
+			if (string.IsNullOrEmpty (theme) || DefaultTheme == null)
+				return false;
+			var searchDirs = new List<string> ();
+			string prefix = Environment.GetEnvironmentVariable ("MONO_INSTALL_PREFIX");
+			FilePath homeDir = Environment.GetFolderPath (Environment.SpecialFolder.Personal);
+
+			searchDirs.Add (homeDir.Combine (".themes"));
+			searchDirs.Add (Gtk.Rc.ThemeDir);
+			if (!string.IsNullOrEmpty (prefix))
+				searchDirs.Add (new FilePath (prefix).Combine ("share").Combine ("themes"));
+
+			string gtkrc = Path.Combine ("gtk-2.0", "gtkrc");
+			foreach (string dir in searchDirs) {
+				if (string.IsNullOrEmpty (dir) || !Directory.Exists (dir))
+					continue;
+				try {
+					foreach (string sub in Directory.GetDirectories (dir)) {
+						if (string.Compare (Path.GetFileName (sub), theme, StringComparison.OrdinalIgnoreCase) == 0 &&
+						    File.Exists (Path.Combine (sub, gtkrc)))
+							return true;
+					}
+				} catch (Exception e) {
+					LoggingService.LogError ("Error scanning theme dir " + dir, e);
+				}
+			}
+			return false;
 		}
 
 #if MAC

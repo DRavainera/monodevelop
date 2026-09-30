@@ -6,11 +6,16 @@
     <FluentTheme />
     <!-- Island tabs: browser-style detached tabs for the document well -->
     <!-- Island tabs, compact: browser-like but IDE-density (small paddings, 12px text,
-         slim vertical footprint so more tabs fit under the toolbar). -->
+         slim vertical footprint, bottom accent bar on the active tab) so more tabs fit
+         under the toolbar. -->
     <Style Selector="TabItem.island">
       <Setter Property="Foreground" Value="{DynamicResource IdeFgBrush}" />
       <Setter Property="FontSize" Value="12" />
       <Setter Property="MinHeight" Value="24" />
+      <!-- Tabs size to their content: inside the template's ScrollViewer a stretch
+           alignment made each tab swallow half the strip width. -->
+      <Setter Property="HorizontalAlignment" Value="Left" />
+      <Setter Property="Opacity" Value="0.75" />
       <Setter Property="Template">
         <ControlTemplate>
           <Border Name="TabRoot"
@@ -18,18 +23,63 @@
                   Margin="2,4,2,0"
                   Padding="10,3"
                   Background="{DynamicResource TabIdleBrush}">
-            <ContentPresenter Name="PART_ContentPresenter"
-                              Content="{TemplateBinding Header}"
-                              ContentTemplate="{TemplateBinding HeaderTemplate}" />
+            <Grid>
+              <ContentPresenter Name="PART_ContentPresenter"
+                                Content="{TemplateBinding Header}"
+                                ContentTemplate="{TemplateBinding HeaderTemplate}" />
+              <!-- Active-tab accent bar (VS-style 2px underline). NO local Opacity:
+                   local values outrank style setters, so the default/selected styles
+                   own the 0→1 flip -->
+              <Rectangle Name="TabAccent" Height="2" VerticalAlignment="Bottom"
+                         Fill="{DynamicResource IdeAccentBrush}" />
+            </Grid>
           </Border>
         </ControlTemplate>
       </Setter>
     </Style>
+    <Style Selector="TabItem.island:selected">
+      <Setter Property="Opacity" Value="1" />
+    </Style>
+    <Style Selector="TabItem.island /template/ Rectangle#TabAccent">
+      <Setter Property="Opacity" Value="0" />
+    </Style>
     <Style Selector="TabItem.island:selected /template/ Border#TabRoot">
       <Setter Property="Background" Value="{DynamicResource TabActiveBrush}" />
     </Style>
+    <Style Selector="TabItem.island:selected /template/ Rectangle#TabAccent">
+      <Setter Property="Opacity" Value="1" />
+    </Style>
     <Style Selector="TabItem.island:pointerover /template/ Border#TabRoot">
       <Setter Property="Background" Value="{DynamicResource TabHoverBrush}" />
+    </Style>
+    <!-- Document strip: clipped tab row with legacy DocumentPad-style ‹ › buttons at
+         the LEFT edge. No scrollbar: the buttons SHIFT the tab row (code sets the
+         translate offset) and are shown ONLY while the tabs' total width exceeds the
+         strip viewport. Content is mounted by code into DocContent, so the template
+         only needs the strip plus a selected-content stub. -->
+    <Style Selector="TabControl#DocTabs">
+      <Setter Property="Template">
+        <ControlTemplate>
+          <DockPanel>
+            <Border DockPanel.Dock="Top" Background="Transparent">
+              <DockPanel LastChildFill="True">
+                <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" VerticalAlignment="Center" Margin="4,0">
+                  <Button Name="DocScrollLeft" Classes="chromebtn" Width="18" Height="18" Padding="0"
+                          FontSize="10" Content="‹" HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+                          ToolTip.Tip="Previous tabs" IsVisible="False" />
+                  <Button Name="DocScrollRight" Classes="chromebtn" Width="18" Height="18" Padding="0" Margin="2,0,0,0"
+                          FontSize="10" Content="›" HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+                          ToolTip.Tip="More tabs" IsVisible="False" />
+                </StackPanel>
+                <Border Name="StripViewport" ClipToBounds="True">
+                  <ItemsPresenter Name="PART_ItemsPresenter" />
+                </Border>
+              </DockPanel>
+            </Border>
+            <ContentPresenter Name="PART_SelectedContentHost" Content="{TemplateBinding SelectedContent}" />
+          </DockPanel>
+        </ControlTemplate>
+      </Setter>
     </Style>
     <!-- Caption buttons (min/max/close merged with the menu bar) -->
     <!-- Toolbar run button: small round-ish accent button (legacy RoundButton). -->
@@ -43,13 +93,16 @@
     <Style Selector="Button.runbutton:pointerover /template/ ContentPresenter">
       <Setter Property="Background" Value="{DynamicResource CaptionHoverBrush}" />
     </Style>
-    <!-- Caption buttons (min/max/close merged with the menu bar) -->
+    <!-- Caption buttons (min/max/close merged with the menu bar); vector glyphs
+         + explicit content centering (text-glyph baselines sat off-center) -->
     <Style Selector="Button.caption">
       <Setter Property="Width" Value="44" />
       <Setter Property="Height" Value="30" />
       <Setter Property="Background" Value="Transparent" />
       <Setter Property="Foreground" Value="{DynamicResource IdeFgBrush}" />
-      <Setter Property="FontSize" Value="12" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="HorizontalContentAlignment" Value="Center" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
     </Style>
     <Style Selector="Button.caption:pointerover /template/ ContentPresenter">
       <Setter Property="Background" Value="{DynamicResource CaptionHoverBrush}" />
@@ -69,9 +122,33 @@
     <Style Selector="Button.welcomelink:pointerover">
       <Setter Property="Foreground" Value="{DynamicResource IdeFgBrush}" />
     </Style>
+    <!-- Dialog action buttons on the dark chrome: the Fluent enabled-button palette
+         paints a light pill whose own foreground wins over a local Foreground setter,
+         so the class sets both through the template presenter. -->
+    <Style Selector="Button.chromebtn">
+      <Setter Property="Background" Value="{DynamicResource IdeChromeBgBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource IdeBorderBrush}" />
+      <Setter Property="Foreground" Value="{DynamicResource IdeFgBrush}" />
+      <Setter Property="MinHeight" Value="26" />
+    </Style>
+    <Style Selector="Button.chromebtn /template/ ContentPresenter">
+      <Setter Property="Foreground" Value="{DynamicResource IdeFgBrush}" />
+      <Setter Property="Background" Value="{DynamicResource IdeChromeBgBrush}" />
+    </Style>
+    <Style Selector="Button.chromebtn:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource IdeTabHoverBrush}" />
+    </Style>
+    <Style Selector="Button.chromebtn:pressed /template/ ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource IdeTabActiveBrush}" />
+    </Style>
   </Application.Styles>
   <Application.Resources>
     <ResourceDictionary>
+      <!-- FluentTheme 12.1.2 hardcodes fonts:Inter#Inter as ContentFontFamily (the
+           Inter package is optional and NOT referenced here) → override with the
+           embedded Selawik (OFL, metric-compatible Segoe UI replacement). -->
+      <FontFamily x:Key="ContentFontFamily">Selawik</FontFamily>
+      <FontFamily x:Key="ContentControlThemeFontFamily">Selawik</FontFamily>
       <ResourceDictionary.ThemeDictionaries>
         <ResourceDictionary x:Key="Dark">
           <Color x:Key="IdeWindowBg">#1E1E1E</Color>
@@ -81,6 +158,7 @@
           <Color x:Key="IdeFg">#E0E0E0</Color>
           <Color x:Key="IdeBorder">#3A3A3A</Color>
           <Color x:Key="IdeCaptionHover">#404040</Color>
+          <Color x:Key="IdeAccent">#379CFF</Color>
           <!-- Welcome page palette (legacy MonoDevelop.Ide.WelcomePage/Style.cs, dark) -->
           <Color x:Key="WelcomePageBg">#000000</Color>
           <Color x:Key="WelcomePadBg">#222222</Color>
@@ -95,6 +173,7 @@
           <Color x:Key="IdeFg">#1A1A1A</Color>
           <Color x:Key="IdeBorder">#D0D0D0</Color>
           <Color x:Key="IdeCaptionHover">#E0E0E0</Color>
+          <Color x:Key="IdeAccent">#0078D4</Color>
           <!-- Welcome page palette (legacy Style.cs light: base bg, pad bg, secondary text) -->
           <Color x:Key="WelcomePageBg">#F5F5F3</Color>
           <Color x:Key="WelcomePadBg">#FFFFFF</Color>
@@ -110,6 +189,7 @@
       <SolidColorBrush x:Key="IdeFgBrush" Color="{DynamicResource IdeFg}" />
       <SolidColorBrush x:Key="IdeBorderBrush" Color="{DynamicResource IdeBorder}" />
       <SolidColorBrush x:Key="CaptionHoverBrush" Color="{DynamicResource IdeCaptionHover}" />
+      <SolidColorBrush x:Key="IdeAccentBrush" Color="{DynamicResource IdeAccent}" />
       <!-- Welcome page brushes (Style.cs semantics) -->
       <SolidColorBrush x:Key="WelcomePageBgBrush" Color="{DynamicResource WelcomePageBg}" />
       <SolidColorBrush x:Key="WelcomePadBgBrush" Color="{DynamicResource WelcomePadBg}" />

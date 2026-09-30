@@ -7,29 +7,65 @@
         Width="1280" Height="800"
         WindowStartupLocation="CenterScreen"
         ExtendClientAreaToDecorationsHint="True"
-        SystemDecorations="None">
+        SystemDecorations="None"
+        Background="Transparent"
+        TransparencyLevelHint="Transparent">
 
+  <!-- Win11-style chrome: the window paints its own rounded frame (thin border in
+       the toolbar color) inside a small transparent gutter; the gutter hosts the
+       8 edge/corner resize zones. Maximizing/fullscreen flattens both. -->
+  <Panel>
+    <!-- Resize hit zones (live in the transparent gutter around the frame); the
+         resize cursors are assigned from code — the X11 backend does not map every
+         diagonal cursor name at XAML parse time -->
+    <Grid x:Name="ResizeGrip" ColumnDefinitions="6,*,6" RowDefinitions="6,*,6">
+      <Border Grid.Row="0" Grid.Column="0" Background="Transparent" Tag="NorthWest" PointerPressed="OnResizeGripPressed" />
+      <Border Grid.Row="0" Grid.Column="1" Background="Transparent" Tag="North" PointerPressed="OnResizeGripPressed" />
+      <Border Grid.Row="0" Grid.Column="2" Background="Transparent" Tag="NorthEast" PointerPressed="OnResizeGripPressed" />
+      <Border Grid.Row="1" Grid.Column="0" Background="Transparent" Tag="West" PointerPressed="OnResizeGripPressed" />
+      <Border Grid.Row="1" Grid.Column="2" Background="Transparent" Tag="East" PointerPressed="OnResizeGripPressed" />
+      <Border Grid.Row="2" Grid.Column="0" Background="Transparent" Tag="SouthWest" PointerPressed="OnResizeGripPressed" />
+      <Border Grid.Row="2" Grid.Column="1" Background="Transparent" Tag="South" PointerPressed="OnResizeGripPressed" />
+      <Border Grid.Row="2" Grid.Column="2" Background="Transparent" Tag="SouthEast" PointerPressed="OnResizeGripPressed" />
+    </Grid>
+
+    <Border x:Name="WindowFrame" Margin="6" CornerRadius="8"
+            Background="{DynamicResource IdeWindowBgBrush}"
+            BorderBrush="{DynamicResource IdeChromeBgBrush}" BorderThickness="1">
   <DockPanel>
-    <!-- Title bar row: menu bar + caption buttons (no OS title bar) -->
-    <Panel x:Name="TitleBarRow" DockPanel.Dock="Top" Background="{DynamicResource IdeChromeBgBrush}">
+    <!-- Title bar row: menu bar + caption buttons (no OS title bar). Rounded on
+         top so the menu bar itself owns the frame corners. -->
+    <Border x:Name="TitleBarRow" DockPanel.Dock="Top" Background="{DynamicResource IdeChromeBgBrush}"
+            CornerRadius="8,8,0,0">
       <Grid ColumnDefinitions="*,Auto">
         <!-- Full legacy main menu (structure/labels/icons of MainMenu.addin.xml + addins),
              built by MenuService/MenuBuilder. -->
         <Menu x:Name="MainMenu" FontSize="12" />
         <StackPanel Grid.Column="1" Orientation="Horizontal" x:Name="CaptionButtons">
-          <Button Classes="caption" Content="&#x2013;" Click="OnMinimize" />
-          <Button Classes="caption" Content="&#x25A1;" Click="OnMaximize" />
-          <Button Classes="caption captionclose" Content="&#x2715;" Click="OnClose" />
+          <!-- Win11-style 10px vector glyphs on 44x30 buttons: centered both ways,
+               unlike the text glyphs whose baselines sat visually low/left. -->
+          <Button Classes="caption" Click="OnMinimize" ToolTip.Tip="Minimize">
+            <Path Width="10" Height="10" Stretch="None" Stroke="{DynamicResource IdeFgBrush}"
+                  StrokeThickness="1" Data="M 0,5 L 10,5" />
+          </Button>
+          <Button Classes="caption" Click="OnMaximize" ToolTip.Tip="Maximize">
+            <Path Width="10" Height="10" Stretch="None" Stroke="{DynamicResource IdeFgBrush}"
+                  StrokeThickness="1" Data="M 0,0 L 10,0 L 10,10 L 0,10 Z" />
+          </Button>
+          <Button Classes="caption captionclose" Click="OnClose" ToolTip.Tip="Close">
+            <Path Width="10" Height="10" Stretch="None" Stroke="{DynamicResource IdeFgBrush}"
+                  StrokeThickness="1" Data="M 0,0 L 10,10 M 10,0 L 0,10" />
+          </Button>
         </StackPanel>
       </Grid>
-    </Panel>
+    </Border>
 
     <!-- Main toolbar: legacy MainToolbar layout (RoundButton run, configuration/run
          configuration/runtime combos, search box on the right). Doubles as a drag row,
          like the composited title bar of the GTK UI. -->
     <Border x:Name="ToolbarRow" DockPanel.Dock="Top" Background="{DynamicResource IdeChromeBgBrush}"
             BorderBrush="{DynamicResource IdeBorderBrush}" BorderThickness="0,0,0,1">
-      <DockPanel Margin="8,3" LastChildFill="False">
+      <DockPanel Margin="8,3" LastChildFill="True">
         <Button x:Name="RunButton" Classes="runbutton" Width="28" Height="22" Margin="0,0,8,0"
                 Click="OnToolbarRun" ToolTip.Tip="Start Without Debugging (Ctrl F5)">
           <Image x:Name="RunIcon" Width="16" Height="16" />
@@ -38,37 +74,53 @@
                 Click="OnToolbarDebug" ToolTip.Tip="Start Debugging (F5)">
           <Image x:Name="DebugIcon" Width="16" Height="16" />
         </Button>
-        <Button x:Name="StepOverButton" Width="28" Height="22" Margin="0,0,4,0"
-                Click="OnToolbarStepOver" ToolTip.Tip="Step Over (F10)">
-          <Image x:Name="StepOverIcon" Width="16" Height="16" />
-        </Button>
-        <Button x:Name="StepIntoButton" Width="28" Height="22" Margin="0,0,4,0"
-                Click="OnToolbarStepInto" ToolTip.Tip="Step Into (F11)">
-          <Image x:Name="StepIntoIcon" Width="16" Height="16" />
-        </Button>
-        <Button x:Name="StepOutButton" Width="28" Height="22" Margin="0,0,8,0"
-                Click="OnToolbarStepOut" ToolTip.Tip="Step Out (Shift F11)">
-          <Image x:Name="StepOutIcon" Width="16" Height="16" />
-        </Button>
         <ComboBox x:Name="RunConfigCombo" Width="150" Height="22" FontSize="12"
                   ToolTip.Tip="Run configuration" SelectionChanged="OnToolbarConfigChanged" />
         <ComboBox x:Name="ConfigCombo" Width="150" Height="22" FontSize="12" Margin="8,0"
                   ToolTip.Tip="Active configuration" SelectionChanged="OnToolbarConfigChanged" />
-        <ComboBox x:Name="RuntimeCombo" Width="150" Height="22" FontSize="12"
-                  ToolTip.Tip="Runtime" SelectionChanged="OnToolbarConfigChanged" />
-        <TextBox x:Name="ToolbarSearch" Width="240" Height="22" FontSize="12" Margin="8,0,0,0"
-                 Watermark="Search" VerticalContentAlignment="Center" />
+        <!-- Right cluster: the search box is right-most, ':' selects a category (":c"
+             commands, ":f" files) and Enter runs the search like SearchPopupWindow. -->
+        <TextBox x:Name="ToolbarSearch" DockPanel.Dock="Right" Width="220" Height="22" FontSize="12"
+                 Watermark="Search (:commands, :files)" VerticalContentAlignment="Center"
+                 KeyDown="OnToolbarSearchKeyDown" />
+        <!-- Legacy center: the ButtonBar — a segmented pill with the debug step
+             buttons (hidden by default; shown only while a debug session runs) —
+             followed by the StatusArea message text filling the remaining space. -->
+        <Border x:Name="DebugButtonsRow" HorizontalAlignment="Left" Margin="12,0,0,0"
+                CornerRadius="11" Padding="6,1" IsVisible="False"
+                Background="#2A2A2A" BorderBrush="{DynamicResource IdeBorderBrush}" BorderThickness="1">
+          <StackPanel Orientation="Horizontal">
+            <Button x:Name="StepOverButton" Width="28" Height="20"
+                    Click="OnToolbarStepOver" ToolTip.Tip="Step Over (F10)">
+              <Image x:Name="StepOverIcon" Width="16" Height="16" />
+            </Button>
+            <Rectangle Width="1" Height="16" Fill="{DynamicResource IdeBorderBrush}" Margin="2,0" />
+            <Button x:Name="StepIntoButton" Width="28" Height="20"
+                    Click="OnToolbarStepInto" ToolTip.Tip="Step Into (F11)">
+              <Image x:Name="StepIntoIcon" Width="16" Height="16" />
+            </Button>
+            <Rectangle Width="1" Height="16" Fill="{DynamicResource IdeBorderBrush}" Margin="2,0" />
+            <Button x:Name="StepOutButton" Width="28" Height="20"
+                    Click="OnToolbarStepOut" ToolTip.Tip="Step Out (Shift F11)">
+              <Image x:Name="StepOutIcon" Width="16" Height="16" />
+            </Button>
+          </StackPanel>
+        </Border>
+        <!-- <TextBlock x:Name="ToolbarStatus" Text="MonoDevelop" FontSize="12" Opacity="0.55"
+                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                   Foreground="{DynamicResource IdeFgBrush}" /> -->
       </DockPanel>
     </Border>
 
     <!-- Hidden-pad restore strip (sits right above the status bar) -->
     <Border x:Name="RestoreStripHost" DockPanel.Dock="Bottom" Padding="4,2" IsVisible="False"
-            Background="{DynamicResource IdeChromeBgBrush}">
+            Background="{DynamicResource IdeChromeBgBrush}" CornerRadius="0,0,8,8">
       <StackPanel x:Name="RestoreStrip" Orientation="Horizontal" Spacing="4" />
     </Border>
 
-    <!-- Status bar -->
-    <Border DockPanel.Dock="Bottom" Padding="6,3" Background="{DynamicResource IdeChromeBgBrush}">
+    <!-- Status bar (bottom frame corners live here) -->
+    <Border x:Name="StatusBarBorder" DockPanel.Dock="Bottom" Padding="6,3" Background="{DynamicResource IdeChromeBgBrush}"
+            CornerRadius="0,0,8,8">
       <TextBlock x:Name="StatusText" Text="Ready" FontSize="12" Foreground="{DynamicResource IdeFgBrush}" />
     </Border>
 
@@ -86,8 +138,11 @@
         <RowDefinition Height="Auto" />
       </Grid.RowDefinitions>
 
-      <!-- Left pads: Solution / Classes (legacy ProjectPad + ClassPad) -->
-      <controls:PadHost x:Name="LeftPads" Grid.Row="0" Grid.Column="0" Width="260" />
+      <!-- Left pads: Solution / Classes (legacy ProjectPad + ClassPad).
+           RowSpan=2: side pads reach the window bottom; the bottom pad now spans
+           only the editor column (same width as the editor, wave-3 layout). -->
+      <controls:PadHost x:Name="LeftPads" Grid.Row="0" Grid.RowSpan="2" Grid.Column="0"
+                        Width="260" DockOrientation="Vertical" />
 
       <!-- Center: document area (Welcome page behaves as the startup document) -->
       <Border x:Name="DocumentPane" Grid.Row="0" Grid.Column="1"
@@ -96,24 +151,34 @@
         <DockPanel>
           <!-- Document island tab strip (browser-style) -->
           <TabControl x:Name="DocTabs" DockPanel.Dock="Top" TabStripPlacement="Top" Background="Transparent" />
+          <!-- Wave-3 breadcrumb (legacy SourceEditor widget): path segments of the
+               active file; hidden until a file document is selected -->
+          <Border x:Name="BreadcrumbHostRow" DockPanel.Dock="Top" IsVisible="False">
+            <StackPanel x:Name="BreadcrumbSegments" Orientation="Horizontal" Spacing="4" Margin="10,2" VerticalAlignment="Center" />
+          </Border>
           <Panel x:Name="DocContent" />
         </DockPanel>
       </Border>
 
       <!-- Right pads: Properties / Toolbox / Document Outline / Unit Tests (the
-           legacy layout's "right dock group"). -->
-      <controls:PadHost x:Name="RightPads" Grid.Row="0" Grid.Column="2" Width="240" />
+           legacy layout's "right dock group"), full height like the left ones. -->
+      <controls:PadHost x:Name="RightPads" Grid.Row="0" Grid.RowSpan="2" Grid.Column="2"
+                        Width="240" DockOrientation="Vertical" />
 
       <GridSplitter Grid.Row="0" Grid.Column="1" Width="3" HorizontalAlignment="Left"
                     Background="Transparent" ResizeDirection="Columns" />
       <GridSplitter Grid.Row="0" Grid.Column="2" Width="3" HorizontalAlignment="Left"
                     Background="Transparent" ResizeDirection="Columns" />
+      <!-- Editor <-> bottom-pad splitter (wave-3: drag the shared edge) -->
+      <GridSplitter Grid.Row="1" Grid.Column="1" Height="3" VerticalAlignment="Top"
+                    Background="Transparent" ResizeDirection="Rows" />
 
       <!-- Bottom dock (legacy bottom group): Output | Errors | Tasks | Code Issues
            | Search Results | Call Stack | Locals | Watch | Threads | Bookmarks |
-           Breakpoints — a single bottom pad host, 4 docks total (left, center,
-           right, bottom). -->
-      <controls:PadHost x:Name="BottomPads" Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3" Height="170" />
+           Breakpoints — lives under the EDITOR column only (same width as the
+           editor, wave-3); the GridSplitter above it resizes editor/bottom pad. -->
+      <controls:PadHost x:Name="BottomPads" Grid.Row="1" Grid.Column="1" Height="170"
+                        DockOrientation="Horizontal" />
     </Grid>
 
     <!-- Welcome page overlay: covers the whole workbench (pads included) like the
@@ -124,4 +189,6 @@
     </Border>
     </Panel>
   </DockPanel>
+    </Border>
+  </Panel>
 </Window>

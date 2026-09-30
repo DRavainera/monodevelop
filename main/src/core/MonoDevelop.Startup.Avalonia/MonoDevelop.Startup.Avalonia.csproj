@@ -23,7 +23,6 @@
     <PackageReference Include="Avalonia" Version="12.1.2" />
     <PackageReference Include="Avalonia.Desktop" Version="12.1.2" />
     <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.2" />
-    <PackageReference Include="Avalonia.Fonts.Inter" Version="12.1.2" />
     <PackageReference Include="Avalonia.Skia" Version="12.1.2" />
     <PackageReference Include="SkiaSharp" Version="3.119.4" />
     <AvaloniaResource Include="branding\AboutImage.png" />
@@ -31,6 +30,26 @@
     <AvaloniaResource Include="branding\welcome-logo.png" />
     <AvaloniaResource Include="branding\welcome-logo@2x.png" />
     <AvaloniaResource Include="branding\welcome-tile.png" />
+    <!-- Selawik font family (SIL OFL 1.1 — metric-compatible Segoe UI replacement,
+         github.com/microsoft/Selawik release 1.01): embedded as avalonia resources
+         under Fonts/ (the EmbeddedFontCollection only scans /Fonts/*.ttf),
+         referenced as fonts:MonoDevelop.AvaloniaShell#Selawik. -->
+    <AvaloniaResource Include="Fonts\selawk.ttf" />
+    <AvaloniaResource Include="Fonts\selawkb.ttf" />
+    <AvaloniaResource Include="Fonts\selawksb.ttf" />
+    <AvaloniaResource Include="Fonts\selawkl.ttf" />
+    <AvaloniaResource Include="Fonts\selawksl.ttf" />
+    <!-- Mono.Addins.Gui icons (same resources the legacy GTK dialog loads with
+         Gdk.Pixbuf.LoadFromResource): tab icons, tree plugin icon, overlays. -->
+    <AvaloniaResource Include="Addins\plugin-32.png" />
+    <AvaloniaResource Include="Addins\plugin-avail-32.png" />
+    <AvaloniaResource Include="Addins\plugin-22.png" />
+    <AvaloniaResource Include="Addins\plugin-update-22.png" />
+    <AvaloniaResource Include="Addins\update-16.png" />
+    <AvaloniaResource Include="Addins\download-16.png" />
+    <AvaloniaResource Include="Addins\installed-overlay-16.png" />
+    <AvaloniaResource Include="Addins\update-available-overlay-16.png" />
+    <AvaloniaResource Include="Addins\web-search-16.png" />
     <AvaloniaResource Include="branding\welcome-tile@2x.png" />
   </ItemGroup>
   <ItemGroup>

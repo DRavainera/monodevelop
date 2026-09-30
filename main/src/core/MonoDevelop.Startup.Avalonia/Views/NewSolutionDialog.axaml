@@ -1,7 +1,7 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="MonoDevelop.AvaloniaShell.Views.NewSolutionDialog"
-        Title="New Solution"
+        Title="Create a New Solution"
         Width="920" Height="600"
         WindowStartupLocation="CenterOwner"
         SystemDecorations="None"
@@ -10,12 +10,12 @@
 
   <Grid RowDefinitions="Auto,*,Auto">
     <!-- Avalonia chrome -->
-    <Border Grid.Row="0" Background="{DynamicResource IdeChromeBgBrush}"
+    <Border Grid.Row="0" Classes="dialogchrome" Background="{DynamicResource IdeChromeBgBrush}"
             BorderBrush="{DynamicResource IdeBorderBrush}" BorderThickness="0,0,0,1">
       <Grid ColumnDefinitions="*,Auto">
-        <TextBlock Text="Create a New Solution" Margin="12,6" FontWeight="SemiBold"
+        <!-- <TextBlock Text="Create a New Solution" Margin="12,6" FontWeight="SemiBold"
                    Foreground="{DynamicResource IdeFgBrush}" />
-        <Button Grid.Column="1" Classes="caption captionclose" Content="&#x2715;" Click="OnCancel" />
+        <Button Grid.Column="1" Classes="caption captionclose" Content="&#x2715;" Click="OnCancel" /> -->
       </Grid>
     </Border>
 

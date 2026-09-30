@@ -52,6 +52,7 @@ public partial class NewSolutionDialog : Window
 	public NewSolutionDialog (string? preselectTemplate, string? forcedLocation)
 	{
 		InitializeComponent ();
+		MonoDevelop.AvaloniaShell.Controls.DialogWindow.Apply (this);
 		IconConsole.Source = IconService.GetImage ("project-console-32");
 		IconLibrary.Source = IconService.GetImage ("project-library-32");
 		IconTest.Source = IconService.GetImage ("file-unit-test-32");

@@ -64,6 +64,7 @@ public partial class PreferencesDialog : Window
 	public PreferencesDialog ()
 	{
 		InitializeComponent ();
+		MonoDevelop.AvaloniaShell.Controls.DialogWindow.Apply (this);
 		ThemeDarkRadio!.IsCheckedChanged += OnThemeRadioChecked;
 		ThemeLightRadio!.IsCheckedChanged += OnThemeRadioChecked;
 		LoadSectionIcons ();

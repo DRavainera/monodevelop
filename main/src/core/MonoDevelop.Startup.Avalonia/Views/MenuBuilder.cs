@@ -70,11 +70,15 @@ public static class MenuBuilder
 	// Legacy icons live in the IconPresenter slot (Fluent theme part name in Avalonia 12).
 	static void SetIcon (MenuItem item, string? iconId)
 	{
-		if (iconId is null || !IconService.IsKnown (iconId))
+		if (iconId is null || !IconService.IsKnown (iconId)) {
+			Console.Error.WriteLine ($"[menu-icon] '{iconId}' skipped (known={iconId is not null && IconService.IsKnown (iconId)})");
 			return;
+		}
 		var image = IconService.GetImage (iconId);
-		if (image is null)
+		if (image is null) {
+			Console.Error.WriteLine ($"[menu-icon] '{iconId}' resolved to NULL");
 			return;
+		}
 		var host = new Panel { Width = 22, Height = 18 };
 		var img = new Avalonia.Controls.Image {
 			Source = image,

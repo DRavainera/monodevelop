@@ -3,79 +3,191 @@
         xmlns:views="using:MonoDevelop.AvaloniaShell.Views"
         x:Class="MonoDevelop.AvaloniaShell.Views.AddinManagerDialog"
         Title="Add-in Manager"
-        Width="860" Height="600"
+        Width="920" Height="640"
         WindowStartupLocation="CenterOwner"
-        SystemDecorations="None"
-        ExtendClientAreaToDecorationsHint="True"
         Background="{DynamicResource IdeWindowBgBrush}">
 
   <Window.Styles>
-    <!-- Tab headers styled as plain toggle-ish labels -->
     <Style Selector="ListBox.addintabs ListBoxItem">
-      <Style Selector="^:selected /template/ ContentPresenter#PART_ContentPresenter">
-        <Setter Property="Background" Value="{DynamicResource IdeTabActiveBrush}"/>
-      </Style>
+      <Setter Property="Padding" Value="8,4" />
+      <Setter Property="Foreground" Value="{DynamicResource IdeFgBrush}" />
+    </Style>
+    <Style Selector="ListBox.addintabs ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource IdeTabActiveBrush}"/>
+    </Style>
+    <!-- Addin tree rows: name + secondary description like the legacy markup cell -->
+    <Style Selector="ListBox.addinlist ListBoxItem">
+      <Setter Property="Padding" Value="6,4" />
+      <Setter Property="MinHeight" Value="40" />
+    </Style>
+    <Style Selector="ListBox.addinlist ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource IdeTabActiveBrush}"/>
     </Style>
   </Window.Styles>
 
-  <Grid RowDefinitions="Auto,Auto,*">
-    <!-- Custom Avalonia chrome row (same as About/Preferences): dialog title + close -->
-    <Border Grid.Row="0" Background="{DynamicResource IdeChromeBgBrush}"
+  <Grid RowDefinitions="Auto,*,Auto">
+    <!-- Custom Avalonia chrome row: dialog title + close (drag handle via dialogchrome) -->
+    <Border Grid.Row="0" Classes="dialogchrome" Background="{DynamicResource IdeChromeBgBrush}"
             BorderBrush="{DynamicResource IdeBorderBrush}" BorderThickness="0,0,0,1">
-      <Grid x:Name="ChromeGrid" ColumnDefinitions="*,Auto">
+      <Grid ColumnDefinitions="*,Auto">
         <TextBlock Text="Add-in Manager" Margin="12,6" FontWeight="SemiBold"
                    Foreground="{DynamicResource IdeFgBrush}" />
         <Button Grid.Column="1" Classes="caption captionclose" Content="&#x2715;" Click="OnCloseClicked" />
       </Grid>
     </Border>
 
-    <!-- Main content -->
-    <Grid Grid.Row="1" RowDefinitions="Auto,*">
-      <!-- Tab row -->
-      <ListBox x:Name="TabList" Grid.Row="0" Classes="addintabs" SelectionMode="Single,Toggle"
-               SelectionChanged="OnTabSelected" Margin="12,10,12,0" Background="Transparent">
-        <ListBoxItem Tag="installed" IsSelected="True"><TextBlock Text="Installed"/></ListBoxItem>
-        <ListBoxItem Tag="updates"><TextBlock Text="Updates"/></ListBoxItem>
-        <ListBoxItem Tag="gallery"><TextBlock Text="Gallery"/></ListBoxItem>
-        <ListBoxItem IsEnabled="False">
-          <TextBlock x:Name="TabCountLabel" Text="" Foreground="{DynamicResource IdeFgBrush}" Opacity="0.7"/>
+    <!-- Notebook: Installed | Updates | Gallery (legacy top tabs) + page:
+         left = repo/updates header + tree, right = AddinInfoView (fixed width) -->
+    <Grid Grid.Row="1" RowDefinitions="Auto,*" Margin="0,0,0,0">
+
+      <!-- Tab row (legacy notebook tabs with icons) -->
+      <ListBox x:Name="TabList" Classes="addintabs" Grid.Row="0" SelectionMode="Single"
+               SelectionChanged="OnTabSelected" Margin="8,8,8,0" Background="Transparent" BorderThickness="0">
+        <ListBox.ItemsPanel>
+          <ItemsPanelTemplate><StackPanel Orientation="Horizontal" Spacing="4"/></ItemsPanelTemplate>
+        </ListBox.ItemsPanel>
+        <ListBoxItem Tag="installed" IsSelected="True">
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <Image Width="22" Height="22" Name="TabIconInstalled" />
+            <TextBlock Text="Installed" VerticalAlignment="Center" Foreground="{DynamicResource IdeFgBrush}"/>
+          </StackPanel>
+        </ListBoxItem>
+        <ListBoxItem Tag="updates">
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <Image Width="22" Height="22" Name="TabIconUpdates" />
+            <TextBlock x:Name="UpdatesTabLabel" Text="Updates" VerticalAlignment="Center" Foreground="{DynamicResource IdeFgBrush}"/>
+          </StackPanel>
+        </ListBoxItem>
+        <ListBoxItem Tag="gallery">
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <Image Width="16" Height="16" Name="TabIconGallery" />
+            <TextBlock Text="Gallery" VerticalAlignment="Center" Foreground="{DynamicResource IdeFgBrush}"/>
+          </StackPanel>
         </ListBoxItem>
       </ListBox>
 
-      <!-- Filter row -->
-      <TextBox x:Name="FilterBox" Grid.Row="1" Watermark="Filter add-ins" Margin="12,8,12,4"/>
-
-      <!-- List + details -->
-      <Grid Grid.Row="2" ColumnDefinitions="2*,*" Margin="12,4,12,0">
-        <ListBox x:Name="AddinList" Grid.Column="0" SelectionChanged="OnAddinSelected">
-          <ListBox.ItemTemplate>
-            <DataTemplate x:DataType="views:AddinItem">
-              <StackPanel Margin="2,4">
-                <TextBlock Text="{Binding Name}" FontWeight="SemiBold" Foreground="{DynamicResource IdeFgBrush}"/>
-                <TextBlock Text="{Binding Subtitle}" Foreground="{DynamicResource IdeFgBrush}" Opacity="0.65" FontSize="11"/>
+      <!-- Page content: left tree column + right details (legacy hbox2/hbox8) -->
+      <Grid Grid.Row="1" ColumnDefinitions="*,300" Margin="8,6,8,8">
+        <Grid Grid.Column="0" RowDefinitions="Auto,Auto,*">
+          <!-- Repo / updates header row (legacy eboxRepo / eboxRepoUpdates HeaderBox) -->
+          <Border Grid.Row="0" Background="{DynamicResource IdeChromeBgBrush}" Padding="8,5"
+                  BorderBrush="{DynamicResource IdeBorderBrush}" BorderThickness="0,0,0,1"
+                  CornerRadius="3">
+            <Grid ColumnDefinitions="*,Auto">
+              <StackPanel Orientation="Horizontal" Spacing="8">
+                <TextBlock x:Name="PageHeaderLabel" Text="" VerticalAlignment="Center"
+                           Foreground="{DynamicResource IdeFgBrush}"/>
+                <Button x:Name="UpdateAllButton" Padding="6,2" MinHeight="24" Click="OnUpdateAllClicked" IsVisible="False">
+                  <StackPanel Orientation="Horizontal" Spacing="4">
+                    <Image Width="16" Height="16" Source="avares://MonoDevelop.AvaloniaShell/Addins/download-16.png"/>
+                    <TextBlock Text="Update All"/>
+                  </StackPanel>
+                </Button>
               </StackPanel>
-            </DataTemplate>
-          </ListBox.ItemTemplate>
-        </ListBox>
+              <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
+                <!-- Legacy repoCombo (Gallery page) -->
+                <Button x:Name="RepoCombo" Content="All repositories" Padding="8,2" MinHeight="24"
+                        Click="OnRepoMenuClicked" IsVisible="False" />
+                <Button x:Name="RefreshButton" Padding="6,2" MinHeight="24" Click="OnRefreshClicked" IsVisible="False">
+                  <StackPanel Orientation="Horizontal" Spacing="4">
+                    <Image Width="16" Height="16" Source="avares://MonoDevelop.AvaloniaShell/Addins/update-16.png"/>
+                    <TextBlock Text="Refresh"/>
+                  </StackPanel>
+                </Button>
+                <!-- Legacy SearchEntry floats at the notebook top-right -->
+                <TextBox x:Name="FilterBox" Watermark="Search" Width="200" Height="26"/>
+              </StackPanel>
+            </Grid>
+          </Border>
 
-        <ScrollViewer Grid.Column="1" Margin="12,0,0,0">
-          <StackPanel x:Name="DetailsPanel" Spacing="6">
-            <TextBlock x:Name="DetailsName" FontWeight="Bold" FontSize="16" TextWrapping="Wrap" Foreground="{DynamicResource IdeFgBrush}"/>
-            <TextBlock x:Name="DetailsVersion" Opacity="0.8" Foreground="{DynamicResource IdeFgBrush}"/>
-            <TextBlock x:Name="DetailsAuthor" Opacity="0.8" Foreground="{DynamicResource IdeFgBrush}"/>
-            <TextBlock x:Name="DetailsDesc" TextWrapping="Wrap" Foreground="{DynamicResource IdeFgBrush}"/>
-            <CheckBox x:Name="EnableCheck" Content="Enabled" IsCheckedChanged="OnEnableToggled"/>
-            <Button x:Name="UninstallButton" Content="Uninstall" HorizontalAlignment="Left"/>
-          </StackPanel>
-        </ScrollViewer>
+          <!-- Addin list with categories -->
+          <ListBox x:Name="AddinList" Classes="addinlist" Grid.Row="2" Margin="0,6,0,0"
+                   SelectionChanged="OnAddinSelected" Background="Transparent">
+            <ListBox.ItemTemplate>
+              <DataTemplate x:DataType="views:AddinItem">
+                <Grid ColumnDefinitions="Auto,*">
+                  <Panel Width="32" Height="32" VerticalAlignment="Top">
+                    <Image Source="avares://MonoDevelop.AvaloniaShell/Addins/plugin-32.png"
+                           IsVisible="{Binding IsInstalled}" Width="32" Height="32"/>
+                    <Image Source="avares://MonoDevelop.AvaloniaShell/Addins/plugin-avail-32.png"
+                           IsVisible="{Binding IsAvailable}" Width="32" Height="32"/>
+                    <Image Source="avares://MonoDevelop.AvaloniaShell/Addins/update-available-overlay-16.png"
+                           IsVisible="{Binding HasUpdate}" Width="16" Height="16"
+                           HorizontalAlignment="Right" VerticalAlignment="Bottom"/>
+                  </Panel>
+                  <StackPanel Grid.Column="1" Margin="8,0,0,0" VerticalAlignment="Center">
+                    <TextBlock Text="{Binding DisplayName}" TextWrapping="Wrap"
+                               Foreground="{Binding NameBrush}"/>
+                    <TextBlock Text="{Binding SecondaryText}" FontSize="11" Opacity="0.6"
+                               TextTrimming="CharacterEllipsis" Foreground="{DynamicResource IdeFgBrush}"/>
+                  </StackPanel>
+                </Grid>
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
+        </Grid>
+
+        <!-- Details panel (AddinInfoView) -->
+        <Border x:Name="DetailsPanel" Grid.Column="1" Margin="8,0,0,0"
+                Background="{DynamicResource IdeChromeBgBrush}" CornerRadius="3"
+                BorderBrush="{DynamicResource IdeBorderBrush}" BorderThickness="1">
+          <Grid RowDefinitions="Auto,Auto,*,Auto">
+            <!-- Status header (boxHeader: warning icon + message) -->
+            <Border Grid.Row="0" Background="{DynamicResource IdeTabHoverBrush}" Padding="8,4"
+                    IsVisible="False" x:Name="DetailsHeader">
+              <StackPanel Orientation="Horizontal" Spacing="6">
+                <Image x:Name="DetailsHeaderIcon" Width="16" Height="16"/>
+                <TextBlock x:Name="DetailsHeaderText" TextWrapping="Wrap" MaxWidth="240"
+                           Foreground="{DynamicResource IdeFgBrush}"/>
+              </StackPanel>
+            </Border>
+            <!-- Title -->
+            <StackPanel Grid.Row="1" Margin="12,10,12,2">
+              <TextBlock x:Name="DetailsName" FontSize="16" FontWeight="Bold" TextWrapping="Wrap"
+                         Foreground="{DynamicResource IdeFgBrush}"/>
+              <TextBlock x:Name="DetailsVersion" Opacity="0.8" Foreground="{DynamicResource IdeFgBrush}"/>
+            </StackPanel>
+            <!-- Description + author + More information -->
+            <ScrollViewer Grid.Row="2" Margin="12,4,12,0">
+              <StackPanel Spacing="6">
+                <TextBlock x:Name="DetailsAuthor" Opacity="0.8" Foreground="{DynamicResource IdeFgBrush}"/>
+                <TextBlock x:Name="DetailsDesc" TextWrapping="Wrap" Foreground="{DynamicResource IdeFgBrush}"/>
+                <Button x:Name="UrlButton" Classes="welcomelink" HorizontalAlignment="Left" Padding="0"
+                        Click="OnUrlClicked" IsVisible="False">
+                  <StackPanel Orientation="Horizontal" Spacing="4">
+                    <Image Width="16" Height="16" Source="avares://MonoDevelop.AvaloniaShell/Addins/web-search-16.png"/>
+                    <TextBlock Text="More information"/>
+                  </StackPanel>
+                </Button>
+              </StackPanel>
+            </ScrollViewer>
+            <!-- Action buttons (legacy btnInstall/btnUpdate/btnDisable/btnUninstall) -->
+            <StackPanel Grid.Row="3" Orientation="Horizontal" Spacing="6" Margin="12,6,12,10">
+              <Button x:Name="InstallButton" Click="OnInstallClicked" IsVisible="False">
+                <StackPanel Orientation="Horizontal" Spacing="4">
+                  <Image Width="16" Height="16" Source="avares://MonoDevelop.AvaloniaShell/Addins/download-16.png"/>
+                  <TextBlock Text="Install..."/>
+                </StackPanel>
+              </Button>
+              <Button x:Name="UpdateButton" Click="OnUpdateClicked" IsVisible="False">
+                <StackPanel Orientation="Horizontal" Spacing="4">
+                  <Image Width="16" Height="16" Source="avares://MonoDevelop.AvaloniaShell/Addins/update-16.png"/>
+                  <TextBlock Text="Update"/>
+                </StackPanel>
+              </Button>
+              <Button x:Name="DisableButton" Classes="chromebtn" Click="OnEnableDisableClicked" IsVisible="False" Content="Disable"/>
+              <Button x:Name="EnableButton" Classes="chromebtn" Click="OnEnableDisableClicked" IsVisible="False" Content="Enable"/>
+              <Button x:Name="UninstallButton" Classes="chromebtn" Click="OnUninstallClicked" IsVisible="False" Content="Uninstall..."/>
+            </StackPanel>
+          </Grid>
+        </Border>
       </Grid>
     </Grid>
 
-    <!-- Bottom action bar -->
+    <!-- Bottom action bar (legacy ActionArea: Install from file..., Close) -->
     <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="12,8">
-      <Button x:Name="InstallFromFileButton" Content="Install from file..." Width="130"/>
-      <Button x:Name="RefreshButton" Content="Refresh" Width="90"/>
-      <Button x:Name="CloseButton" Content="Close" Width="90" Click="OnCloseClicked"/>
+      <Button x:Name="InstallFromFileButton" Classes="chromebtn" Content="Install from file..." Width="140" Click="OnInstallFromFileClicked"/>
+      <Button x:Name="CloseButton" Classes="chromebtn" Content="Close" Width="90" Click="OnCloseClicked"/>
     </StackPanel>
   </Grid>
 </Window>

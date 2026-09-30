@@ -27,6 +27,7 @@ public partial class FindInFilesDialog : Window
 	public FindInFilesDialog ()
 	{
 		InitializeComponent ();
+		MonoDevelop.AvaloniaShell.Controls.DialogWindow.Apply (this);
 		var mask = MaskCombo!;
 		foreach (var m in new[] { "*", "*.cs", "*.cs;*.xaml;*.axaml;*.json;*.csproj", "*.md;*.txt" })
 			mask.Items.Add (new ComboBoxItem { Content = m });

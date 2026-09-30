@@ -1,5 +1,7 @@
 # Issue upstream SkiaSharp — colgado del font manager fontconfig con WOFF/WOFF2
 
+**PUBLICADO: https://github.com/mono/SkiaSharp/issues/5210**
+
 Listo para copiar a https://github.com/mono/SkiaSharp/issues (texto en inglés,
 como se publica upstream). Datos extraídos de docs/interfaz-plan.md §M16e/M16f/M16g.
 

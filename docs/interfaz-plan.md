@@ -1286,3 +1286,152 @@ es el del TextEntry. Smoke del backend 19/19; build del shell 0 errores.
 Arnés: `env -i` + `DISPLAY=:0` (Xwayland del usuario; el :1 del arnés
 anterior ya no sirve — la sesión es Wayland/Xwayland :0) y fontconfig
 sanitizado o por entorno.
+
+## M20 — PREVIO: el IDE GTK legacy respetaba el tema del SO (fix de UserInterfaceTheme no instalado)
+
+**Síntoma**: con el escritorio en oscuro (`gsettings color-scheme=prefer-dark`,
+`gtk-theme=Win11-round-Dark`), el IDE legacy GTK arrancaba claro.
+
+**Causa raíz** (probada con un probe gtk-sharp net10 y con el IDE real):
+- `IdeApp.Preferences.UserInterfaceThemeName` estaba guardada como `"Dark"`
+  (`~/.config/MonoDevelop/9.0/MonoDevelopProperties.xml`) — valor pensado para
+  Win/Mac, donde `IdeTheme.UpdateGtkTheme` solo acepta `Light`/`Dark`.
+- En Linux, `SetupGtkTheme`/`UpdateGtkTheme` fuertan
+  `Gtk.Settings.Default.ThemeName = "Dark"`. **No existe ningún tema GTK
+  llamado `Dark`** en el sistema (solo `Win11-round-Dark` en `~/.themes`);
+  GTK2 *silenciosamente* cae a su tema builtin **claro**.
+- Dato del probe: un widget realizado resuelve `bg #333333` (oscuro, brillo
+  0.447 → `UpdateStyles` decidiría Dark), pero el IDE entero quedaba claro
+  porque la gtkrc del tema no se carga (ThemeName inexistente).
+
+**Fix** (`MonoDevelop.Components/IdeTheme.cs`):
+- `ValidateGtkTheme` + `UpdateGtkTheme`: en Linux, si el tema pedido no está
+  instalado (`IsInstalledGtkTheme`: escanea `~/.themes`, `Gtk.Rc.ThemeDir` y
+  `$MONO_INSTALL_PREFIX/share/themes` buscando `<tema>/gtk-2.0/gtkrc`,
+  igual que `IDEStyleOptionsPanelWidget.InstalledThemes`), se usa el tema del
+  SO (`DefaultTheme`) en vez de forzar uno inexistente. El menú de la UI
+  sigue mostrando Light/Dark de la preferencia; solo se corrige el tema GTK
+  efectivo.
+- Debe existir en `SetupGtkTheme` (arranque) **y** en `UpdateGtkTheme`
+  (re-lectura de la preferencia), o el segundo desharía al primero.
+
+**Staging**: el runtime legacy está en `main/build/` (árbol plano compartido
+con `MonoDevelop.AvaloniaShell.dll`; **`main/build/net10run/` está obsoleto**):
+`dotnet build src/core/MonoDevelop.Ide/MonoDevelop.Ide.csproj
+-p:BuildProjectReferences=false
+-p:MonoFrameworkNet45Directory=$HOME/opencode/mdrefs45`
+y copiar `obj/Debug/net10.0/MonoDevelop.Ide.dll` → `main/build/`.
+
+**Validación** (relay completo, arnés `env -i` + `DISPLAY=:0`):
+```
+dotnet MonoDevelop.AvaloniaShell.dll --old-gui
+→ log: GTK: theme 'Dark' is not installed, using the system theme 'Win11-round-Dark'
+→ GTK: Using Gtk theme from /usr/share/themes/Win11-round-Dark
+→ captura 0x2000003: menubar (41,41,41), toolbar (66,66,66), brillo medio 10.7 → OSCURO
+```
+Antes del fix el mismo relay arrancaba claro (tema builtin de GTK2).
+
+## M21 — Solution pad sobre Xwt.TreeView real + fixes de pads/tabs + ports NewFolder/ExecutionMode
+
+### Solution pad: conexión al Xwt.TreeView real (oleada de los pads, M18)
+
+El pad Solution deja el placeholder Avalonia y embede un `Xwt.TreeView` real
+(`GetNativeWidget` sobre el host Avalonia), poblado desde el parser de solutions
+(`SolutionLoader.SolutionEntry(Name, ProjectPath, IsFolder, Parent)`):
+
+- Jerarquía: raíz solution (icono solution-16) → solution folders anidan los
+  proyectos por `Parent` (ParentProjectGuid) → cada proyecto con su nodo
+  References + los archivos/carpertas físicas del proyecto.
+- Iconos: los PNG viven como recursos planos en `MonoDevelop.Ide.dll`; como
+  `IconService` se compila DENTRO de MonoDevelop.AvaloniaShell.dll,
+  `typeof(IconService).Assembly` NO los tiene — hay que usar
+  `IconService.IconsDirectory` + `Xwt.Drawing.Image.FromFile(...).WithSize(16,16)`
+  (fallback file-source-16, placeholder 1x1 si falla todo).
+- `RowActivated` abre el archivo (documentos en tabs), `SelectionChanged` listo
+  para el PropertyGrid.
+
+**Causa raíz del bug de expansión (el HashSet por identidad de handles)**: el
+backend guardaba en un HashSet el handle devuelto por `ExpandRow(rootNav.CurrentPosition)`
+pero `FlattenTree` consultaba `GetChild(null,0)`, que devuelve OTRA instancia de
+`TreeNodeHandle` (Equals por ParentList+NodeId del DefaultTreeStoreBackend, pero
+los handles de navegación no son los mismos objetos que los de flatten) →
+`expanded.Contains(child)` siempre false → solo renderizaba 1 fila (root
+colapsado). Log de la época: `[xwtflatten] child#021766F3 isOpen=False setCount=1`
+vs `[xwtexpand] added TreeNodeHandle#00DF2F0E`.
+
+**Fix (semántica "default-expanded", como el GtkTreeView legacy)**: el backend
+GTK no guarda estado de expansión por identidad de handles (lo lleva el propio
+GtkTreeView). `TreeViewBackend` ahora mantiene un HashSet `collapsed`:
+`isOpen = !collapsed.Contains(child)` — todo visible salvo lo colapsado
+explícitamente; ToggleExpansion invierte, IsRowExpanded niega, ExpandRow remueve.
+El estado frágil por identidad desaparece.
+
+**Validación**: hook `--qaresults` con probe xwtbackend (reflection de
+cols/source/hostRows/storeNodes): `hostRows=4` (antes 1) con TestProj.sln
+cargada; captura visual: TestProj › TestProj › References › Program.cs con
+iconos.
+
+### Pads: hit-area de colapsar y botón expandir cuadrado (PadHost)
+
+- **Colapsar solo respondía en las esquinas**: el template Fluent de Button
+  solo hit-testea en las esquinas del glifo (confirmado con InputHitTest).
+  Fix: el botón interno `IsHitTestVisible=false`, y un Border wrapper
+  `collapseWrap` dueño del click (Background chrome, Cursor Hand, Tapped →
+  ToggleCollapse) — toda la superficie del botón es clicable.
+- **Botón expandir del pad inferior cuadrado**: el chevron del dock inferior
+  era una píldora lateral full-width; ahora es un botón 34x34 en la esquina
+  (Grid 2x2 del collapsedPanel: chevronRow (0,0) 34x34 alineado a la izquierda
+  en dock inferior, full-width en laterales; railHost en (1,0) con orientación
+  horizontal para el bottom).
+- **Validación XTEST**: `sanity collapse btn hit=Border` (wrapper dueño del
+  click en toda la fila), `bottom square corner win=(267,738) 34x34
+  centerHit=Border`, ciclo colapsar/restaurar por los tres docks.
+
+### Tabs del editor: sin scroller, 2 botones de navegación con overflow
+
+- **No es un scroller**: la strip de tabs (`TabControl#DocTabs`) usa
+  `StripViewport` con ClipToBounds + `TranslateTransform` controlada desde
+  code-behind; 2 botones ‹ › (`DocScrollLeft/DocScrollRight`) que se muestran
+  SOLO cuando el ancho total de tabs excede el viewport
+  (`UpdateTabScrollButtons` con SizeChanged del viewport/presenter).
+- TabItem.island: icono por tipo de archivo + close + acento azul VS-style
+  (Rectangle#TabAccent 0→1 en selected; OJO: no poner Opacity local en el XAML
+  del template porque pisa el setter del estilo; IdeAccent #379CFF dark /
+  #0078D4 light) + `HorizontalAlignment=Left` (si no cada tab se estira a media
+  pantalla).
+- Breadcrumb sol›proj›dir›name bajo la strip (`BreadcrumbSegments`), actualizado
+  con la tab activa.
+- **Validación**: tab compacta 121x26 con icono+texto+close, acento 97/97 px
+  #379CFF, breadcrumb 241 px visibles, botones ‹ › solo con overflow.
+
+### Ports Avalonia: NewFolderDialog + ExecutionModeSelectorDialog (hooks QA)
+
+- `Views/NewFolderDialog.cs`: port del Xwt NewFolderDialog — entry con el
+  primer "New Folder[NN]" libre, validación en vivo (vacío, caracteres
+  ilegales, nombre en uso → warning ámbar inline + Add disabled) y Add que
+  crea el directorio. QA: `FolderNameForQa`/`ValidateForQa`/`AcceptForQa`/
+  `IsAddEnabledForQa`/`WarningForQa`, hook `--newfolder` (valida illegal →
+  disabled, crea "Created" en temp y lo borra).
+- `Views/ExecutionModeSelectorDialog.cs`: port del Xwt ExecutionModeSelectorDialog
+  — lista de Run Configurations + árbol de Execution Modes (sets anidan modos;
+  set con un solo modo se eleva a raíz como el cleanup MoveNext/Remove legacy),
+  preselección del modo actual y Run/Cancel; el label de Run pasa a ser el
+  nombre del set seleccionado (legacy UpdateButtons). QA: `AcceptForQa`/
+  `IsRunEnabledForQa`/`RunLabelForQa`/`SelectedModeIdForQa` + contadores, hook
+  `--exmode` (2 configs, 2 modos, timer que responde a los 2s como `--xruncfg`).
+- Trampa de lifecycle (costó un QA falso-negativo): las preselecciones hechas
+  ANTES del attach se pierden cuando el TreeView/ListBox materializa containers
+  en ShowDialog → re-afirmar en `Opened` + recordar el último par válido
+  (lastModeId/lastConfig) como fallback del Run. Y ShowDialog es Task: sin
+  `await` el código posterior corre antes de cerrar el dialog.
+- Nota de flags: `QaDialogArg` toma el PRIMER flag de la lista; `--qaresults --newfolder`
+  ejecuta solo --qaresults (usar un flag por corrida).
+
+### Issue upstream SkiaSharp publicado
+
+El colgado de arranque por WOFF/WOFF2 en los directorios de fuentes del usuario
+(`SkFontMgr_fontconfig::GetFamilyNames` → `FcPatternGetString` sin retorno,
+100% CPU antes de pintar UI) está documentado y publicado upstream:
+<https://github.com/mono/SkiaSharp/issues/5210> (texto completo en
+`docs/skiasharp-fontconfig-issue.md`, con el workaround FontconfigSanitizer y
+la matriz empírica de M16e/M16f/M16g).
