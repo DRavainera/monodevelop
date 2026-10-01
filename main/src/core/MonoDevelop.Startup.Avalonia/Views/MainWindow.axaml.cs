@@ -206,6 +206,14 @@ public partial class MainWindow : Window
 			if (slnArg.Length > 0)
 				OpenSolutionInWindow (slnArg);
 
+			// QA: after layout settles, log the on-screen rects of every pad's collapse
+			// chrome — one authoritative coordinate dump per launch for pixel checks.
+			Avalonia.Threading.Dispatcher.UIThread.Post (() => {
+				LeftPads.LogCollapseChrome ();
+				BottomPads.LogCollapseChrome ();
+				RightPads.LogCollapseChrome ();
+			}, Avalonia.Threading.DispatcherPriority.Background);
+
 			// Automated QA: open the requested dialog directly.
 			var qa = Program.QaDialogArg;
 			if (qa == "--prefs") {
@@ -312,6 +320,15 @@ public partial class MainWindow : Window
 				Output ("[searchpopup] ':c build' results=" + searchResults.Count + " bindings=" + MenuCommandBindings ().Count + " first=" + (searchResults.Count > 0 ? searchResults [0].Title : "-"));
 				OnToolbarSearchTextChanged (":s TODO");
 				Output ("[searchpopup] ':s TODO' results=" + searchResults.Count + " first=" + (searchResults.Count > 0 ? searchResults [0].Title : "-"));
+				// Type symbols (legacy RoslynSearchCategory): ':t Class' matches the
+				// solution's class/interface/struct/enum declarations; activating the
+				// first hit opens its file and jumps to the declaration line.
+				OnToolbarSearchTextChanged (":t Program");
+				Output ("[searchpopup] ':t Program' results=" + searchResults.Count + " first=" + (searchResults.Count > 0 ? searchResults [0].Title + " | " + searchResults [0].Subtitle + " | tip=" + searchResults [0].Tip : "-"));
+				if (searchResults.Count > 0) {
+					ActivateSelectedSearchResult ();
+					Output ("[searchpopup] ':t Program' activated → open tab=" + (DocTabs.SelectedItem is TabItem ti2 ? ti2.Tag : "none"));
+				}
 				// Open the file, search again — the open document ranks first — and
 				// activate it (Enter path) verifying the tab selection.
 				var proj = ResolveActiveProject ();
@@ -361,6 +378,48 @@ public partial class MainWindow : Window
 					Output ("[ctxnewfolder] created=" + created + " name=" + qaName + " treeRefreshed=" + (xwtSolutionNodes.Count > 0));
 					if (created)
 						Directory.Delete (Path.Combine (dir, qaName));
+				}
+			} else if (qa == "--ctxmenu-visual") {
+				// QA: open the ProjectPad flyout and LEAVE IT OPEN for 5s — mutter
+				// blocks automatic X11 grabs (XGetImage fails, x11grab captures black),
+				// so the capture is manual: GNOME's PrtScr tool while the flyout is up.
+				Avalonia.Threading.Dispatcher.UIThread.Post (async () => {
+					await System.Threading.Tasks.Task.Delay (800); // let the tree finish its first render
+					var flyout = new MenuFlyout { ItemsSource = BuildProjectPadMenu () };
+					flyout.ShowAt (xwtSolutionHost!, true);
+					Output ("[ctxvisual] flyout open for 5s — capture with PrtScr");
+					await System.Threading.Tasks.Task.Delay (5000);
+					flyout.Hide ();
+					Output ("[ctxvisual] flyout closed");
+				});
+			} else if (qa == "--delcsproj") {
+				// QA: the Delete flow's .csproj half — delete Program.cs and strip its
+				// <Compile Include="..."> item through the SAME code the context-menu
+				// Delete runs, verify both, then RESTORE the fixture.
+				var proj = ResolveActiveProject ();
+				var progFile = proj is null ? null : Path.Combine (Path.GetDirectoryName (proj)!, "Program.cs");
+				if (proj is null || progFile is null || !File.Exists (progFile)) {
+					Output ("[delcsproj] no Program.cs project");
+				} else {
+					var csprojBackup = File.ReadAllText (proj);
+					var fileBackup = File.ReadAllBytes (progFile);
+					// SDK projects compile implicitly — seed an EXPLICIT Compile entry so
+					// the removal has something real to remove (legacy-style csproj).
+					var seeded = csprojBackup.Replace ("<ItemGroup></ItemGroup>",
+						$"<ItemGroup>{Environment.NewLine}    <Compile Include=\"Program.cs\" />{Environment.NewLine}  </ItemGroup>");
+					File.WriteAllText (proj, seeded);
+					File.Delete (progFile);
+					var rel = Path.GetRelativePath (Path.GetDirectoryName (proj)!, progFile);
+					RemoveProjectItemEntries (proj, rel, isFolder: false);
+					var csprojText = File.ReadAllText (proj);
+					bool gone = !csprojText.Contains ($"Include=\"{rel}\"", StringComparison.OrdinalIgnoreCase);
+					bool docIntact = csprojText.Contains ("Microsoft.CSharp") && csprojText.Contains ("<Project Sdk=");
+					Output ("[delcsproj] Program.cs deleted=" + !File.Exists (progFile)
+						+ " compileEntryGone=" + gone + " restOfDocIntact=" + docIntact);
+					File.WriteAllText (proj, csprojBackup);
+					File.WriteAllBytes (progFile, fileBackup);
+					RefreshSolutionTree ();
+					Output ("[delcsproj] fixture restored");
 				}
 			} else if (qa == "--selpad") {
 				// QA: the Xwt tree selection drives the Properties pad — select
@@ -1316,6 +1375,12 @@ public partial class MainWindow : Window
 				Output ($"[collapse-qa] before: LeftPads collapsed={LeftPads.IsCollapsed} width={LeftPads.Width}");
 				LeftPads.ToggleCollapse ();
 				Output ($"[collapse-qa] left collapsed, width={LeftPads.Width} — waiting for visual QA");
+			} else if (qa == "--collapsebottom") {
+				// QA: leave the BOTTOM pad collapsed (tabs stay in the strip row, expand
+				// chevron at its right end) and log the chrome rects for XTEST/pixel QA.
+				Output ($"[collapse-qa] before: BottomPads collapsed={BottomPads.IsCollapsed} height={BottomPads.Height}");
+				BottomPads.ToggleCollapse ();
+				Output ($"[collapse-qa] bottom collapsed, height={BottomPads.Height} — waiting for visual QA");
 			} else if (qa == "--qaresults") {
 				// QA: log the window/root position (includes GNOME's top-bar offset) and
 				// install a capture listener that reports WHICH control actually receives
@@ -3270,38 +3335,45 @@ public partial class MainWindow : Window
 				xwtSolutionStore.Clear ();
 				xwtSolutionNodes.Clear ();
 
-					var rootNav = xwtSolutionStore.AddNode ();
+				// Position-based population (TreeNavigator.AddChild MUTATES the nav to
+				// the new child — reusing a nav in a loop chained every row into a
+				// single branch). AddNode(parentPos) returns an independent nav each
+				// time; we keep TreePositions and re-wrap when needed.
+				var rootPos = xwtSolutionStore.AddNode ().CurrentPosition;
+				var rootNav = xwtSolutionStore.GetNavigatorAt (rootPos);
 				rootNav.SetValues (xwtSolIconField, XwtStockIcon ("solution-16.png"),
 					xwtSolTextField, title, xwtSolTagField, "solution:" + path);
 				xwtSolutionNodes ["solution"] = rootNav;
 
 				// Folders first (they may parent projects), then flat projects.
-				var folderNavs = new Dictionary<string, Xwt.TreeNavigator> ();
+				var folderPositions = new Dictionary<string, Xwt.TreePosition> ();
 				foreach (var folder in projects.Where (p => p.IsFolder && p.Parent is null)) {
-					var nav = rootNav.AddChild ();
+					var nav = xwtSolutionStore.AddNode (rootPos);
 					nav.SetValues (xwtSolIconField, XwtStockIcon ("folder-solution-16.png"),
 						xwtSolTextField, folder.Name, xwtSolTagField, "folder:" + folder.Name);
-					folderNavs [folder.Name] = nav;
+					folderPositions [folder.Name] = nav.CurrentPosition;
 				}
 
 				foreach (var p in projects.Where (p => !p.IsFolder)) {
-					var parentNav = p.Parent is not null && folderNavs.TryGetValue (p.Parent, out var fn)
-						? fn : rootNav;
-					var nav = parentNav.AddChild ();
+					var parentPos = p.Parent is not null && folderPositions.TryGetValue (p.Parent, out var fp)
+						? fp : rootPos;
+					var nav = xwtSolutionStore.AddNode (parentPos);
 					nav.SetValues (xwtSolIconField, XwtStockIcon ("project-16.png"),
 						xwtSolTextField, p.Name, xwtSolTagField, "project:" + p.ProjectPath);
 					xwtSolutionNodes ["project:" + p.ProjectPath] = nav;
+					var projPos = nav.CurrentPosition;
 
 					var dir = Path.GetDirectoryName (p.ProjectPath);
 					if (!string.IsNullOrEmpty (dir) && Directory.Exists (dir)) {
 						projectFileBeingLoaded = p.ProjectPath;
 						// References node first (ProjectReferenceFolderNodeBuilder), then
-							// folders/files (ProjectFolderNodeBuilder ordering).
-							AddXwtReferencesNode (nav, p.ProjectPath);
-							BuildXwtFolderChildren (nav, dir, 0); // adds rows through the nav
+						// folders/files (ProjectFolderNodeBuilder ordering).
+						AddXwtReferencesNode (projPos, p.ProjectPath);
+						BuildXwtFolderChildren (projPos, dir, 0);
 					}
-					xwtSolutionTree.ExpandRow (nav.CurrentPosition, false);
-				}					xwtSolutionTree.ExpandRow (rootNav.CurrentPosition, false);
+					xwtSolutionTree.ExpandRow (projPos, false);
+				}
+				xwtSolutionTree.ExpandRow (rootPos, false);
 			}
 			RecentSolutions.Add (path);
 
@@ -3422,10 +3494,12 @@ public partial class MainWindow : Window
 
 	// ProjectReferenceFolderNodeBuilder equivalent: References node with one row per
 	// Reference/PackageReference plus ProjectReference (md-reference icons).
-	void AddXwtReferencesNode (Xwt.TreeNavigator projNav, string projectPath)
+	void AddXwtReferencesNode (Xwt.TreePosition projPos, string projectPath)
 	{
-		var refsNav = projNav.AddChild ();			refsNav.SetValues (xwtSolIconField, XwtStockIcon ("folder-generic-16.png"),
+		var refsNav = xwtSolutionStore!.AddNode (projPos);
+		refsNav.SetValues (xwtSolIconField, XwtStockIcon ("folder-generic-16.png"),
 			xwtSolTextField, "References", xwtSolTagField, "references:" + projectPath);
+		var refsPos = refsNav.CurrentPosition;
 		try {
 			var doc = System.Xml.Linq.XDocument.Load (projectPath);
 			var ns = doc.Root?.Name.Namespace ?? System.Xml.Linq.XNamespace.None;
@@ -3445,9 +3519,8 @@ public partial class MainWindow : Window
 				if (!string.IsNullOrEmpty (inc))
 					refs.Add (Path.GetFileNameWithoutExtension (inc));
 			}
-			foreach (var r in refs.OrderBy (r => r).Distinct ())
-			{
-				var nav = refsNav.AddChild ();
+			foreach (var r in refs.OrderBy (r => r).Distinct ()) {
+				var nav = xwtSolutionStore!.AddNode (refsPos);
 				nav.SetValues (xwtSolIconField, XwtStockIcon ("reference-16.png"),
 					xwtSolTextField, r, xwtSolTagField, "reference:" + r);
 			}
@@ -3457,8 +3530,9 @@ public partial class MainWindow : Window
 	}
 
 	// ProjectFolderNodeBuilder equivalent over Xwt nodes: folders first (bin/obj
-	// hidden), then files — each added directly to the parent navigator.
-	void BuildXwtFolderChildren (Xwt.TreeNavigator parentNav, string dir, int depth)
+	// hidden), then files — each added under the parent POSITION (AddNode never
+	// mutates, unlike TreeNavigator.AddChild).
+	void BuildXwtFolderChildren (Xwt.TreePosition parentPos, string dir, int depth)
 	{
 		if (depth > 8)
 			return;
@@ -3467,10 +3541,10 @@ public partial class MainWindow : Window
 				var name = Path.GetFileName (sub);
 				if (name is "bin" or "obj")
 					continue;
-				var nav = parentNav.AddChild ();
+				var nav = xwtSolutionStore!.AddNode (parentPos);
 				nav.SetValues (xwtSolIconField, XwtStockIcon ("folder-generic-16.png"),
 					xwtSolTextField, name, xwtSolTagField, "folder:" + sub);
-				BuildXwtFolderChildren (nav, sub, depth + 1);
+				BuildXwtFolderChildren (nav.CurrentPosition, sub, depth + 1);
 			}
 			foreach (var f in Directory.GetFiles (dir).OrderBy (f => f, StringComparer.OrdinalIgnoreCase)) {
 				var fname = Path.GetFileName (f);
@@ -3478,7 +3552,7 @@ public partial class MainWindow : Window
 					continue;
 				if (fname.EndsWith (".sln", StringComparison.OrdinalIgnoreCase) || fname.EndsWith (".slnf", StringComparison.OrdinalIgnoreCase))
 					continue;
-				var nav = parentNav.AddChild ();
+				var nav = xwtSolutionStore!.AddNode (parentPos);
 				nav.SetValues (xwtSolIconField, XwtStockIcon (FileIconResource (fname)),
 					xwtSolTextField, fname, xwtSolTagField, f);
 			}
@@ -4117,10 +4191,19 @@ public partial class MainWindow : Window
 			try {
 				if (isFolder)
 					Directory.Delete (path, recursive: true);
-				else {						var tabName = Path.GetFileName (path);
+				else {
+						var tabName = Path.GetFileName (path);
 						if (docs.ContainsKey (tabName))
 							CloseDocument (tabName);
 					File.Delete (path);
+				}
+				// Legacy ProjectFileNodeBuilder.DeleteFromProject: the deleted file
+				// also leaves the owning .csproj (its <Compile Include=...> item).
+				var projectFile = FindOwningProject (path, string.IsNullOrEmpty (loadedSolutionPath)
+					? null : Path.GetDirectoryName (loadedSolutionPath));
+				if (projectFile is not null) {
+					var rel = Path.GetRelativePath (Path.GetDirectoryName (projectFile)!, path);
+					RemoveProjectItemEntries (projectFile, rel, isFolder);
 				}
 				contextNodePath = null;
 				RefreshSolutionTree ();
@@ -4131,6 +4214,54 @@ public partial class MainWindow : Window
 		};
 		_ = msg.ShowDialog (this);
 		return true;
+	}
+
+	// The owning project = the nearest ancestor directory of the deleted node
+	// that holds a .csproj (never walking above the solution directory).
+	static string? FindOwningProject (string filePath, string? solutionDir)
+	{
+		var dir = Path.GetDirectoryName (Path.GetFullPath (filePath));
+		var solFull = string.IsNullOrEmpty (solutionDir) ? null : Path.GetFullPath (solutionDir);
+		while (!string.IsNullOrEmpty (dir)) {
+			var csproj = Directory.EnumerateFiles (dir, "*.csproj").FirstOrDefault ();
+			if (csproj is not null)
+				return csproj;
+			if (solFull is not null && dir.TrimEnd ('/').Equals (solFull.TrimEnd ('/'), StringComparison.OrdinalIgnoreCase))
+				break;
+			var parent = Path.GetDirectoryName (dir);
+			if (parent == dir || parent is null)
+				break;
+			dir = parent;
+		}
+		return null;
+	}
+
+	// Removes the project items (Compile and the other file build actions) whose
+	// Include matches the deleted file — or everything under a deleted folder —
+	// editing the .csproj as TEXT so the rest of the document survives untouched.
+	void RemoveProjectItemEntries (string projectFile, string relPath, bool isFolder)
+	{
+		if (!File.Exists (projectFile))
+			return;
+		var text = File.ReadAllText (projectFile);
+		var norm = relPath.Replace ('\\', '/').TrimEnd ('/');
+		var rx = new System.Text.RegularExpressions.Regex (
+			"^[ \\t]*<(Compile|None|Content|EmbeddedResource)\\s+Include=\"([^\"]+)\"[^>]*>[ \\t]*\\r?\\n?",
+			System.Text.RegularExpressions.RegexOptions.Multiline | System.Text.RegularExpressions.RegexOptions.Compiled);
+		int removed = 0;
+		var result = rx.Replace (text, m => {
+			var inc = m.Groups [2].Value.Replace ('\\', '/').TrimEnd ('/');
+			bool match = isFolder
+				? inc.StartsWith (norm + "/", StringComparison.OrdinalIgnoreCase)
+				: inc.Equals (norm, StringComparison.OrdinalIgnoreCase);
+			if (!match)
+				return m.Value;
+			removed++;
+			return "";
+		});
+		if (removed > 0)
+			File.WriteAllText (projectFile, result);
+		Output ($"[delete] {Path.GetFileName (projectFile)}: {removed} item(s) removed ({norm})");
 	}
 
 	public async System.Threading.Tasks.Task OpenNewSolutionDialogAsync ()
@@ -4372,12 +4503,15 @@ public partial class MainWindow : Window
 
 	Border? searchPopupHost;
 	ListBox? searchResultsList;
-	readonly List<(string Icon, string Title, string Subtitle, Action Activate)> searchResults = new ();
+	// Tip: the row tooltip — the FULL absolute path (with line for symbols) so the
+	// truncated subtitle never hides which file a result points at.
+	readonly List<(string Icon, string Title, string Subtitle, Action Activate, string Tip)> searchResults = new ();
 	bool searchPopupUpdating;
 
 	/// <summary>A category-filtered live search, mirroring SearchPopupWindow:
 	/// "text" searches everything, ":c text" commands, ":f text" files,
-	/// ":s text" opens Find in Files like the legacy double-click path.</summary>
+	/// ":t text" type symbols, ":s text" opens Find in Files like the legacy
+	/// double-click path.</summary>
 	void OnToolbarSearchTextChanged (string? raw)
 	{
 		if (searchPopupUpdating)
@@ -4393,6 +4527,7 @@ public partial class MainWindow : Window
 			var tag = (sp < 0 ? term [1..] : term [1..sp]).ToLowerInvariant ();
 			category = tag is "c" or "command" or "commands" ? "commands"
 				: tag is "f" or "file" or "files" ? "files"
+				: tag is "t" or "type" or "types" ? "types"
 				: tag is "s" or "search" ? "search"
 				: "all";
 			term = sp < 0 ? "" : term [(sp + 1)..].Trim ();
@@ -4403,13 +4538,15 @@ public partial class MainWindow : Window
 			searchResults.Clear ();
 			searchResults.Add (("md-find", $"Search for '{term}' in Solution", "Opens the Find in Files dialog", () => {
 				_ = new FindInFilesDialog { SearchTextOverride = term }.ShowDialog (this);
-			}));
+			}, "Find in Files"));
 			ShowSearchPopup ();
 			return;
 		}
 		searchResults.Clear ();
 		if (category is "all" or "files")
 			CollectFileResults (term);
+		if (category is "all" or "types")
+			CollectSymbolResults (term);
 		if (category is "all" or "commands")
 			CollectCommandResults (term);
 		ShowSearchPopup ();
@@ -4451,14 +4588,71 @@ public partial class MainWindow : Window
 		if (searchResults.Any (r => r.Subtitle == relPath))
 			return;
 		var path = relPath == "(open document)" && docs.TryGetValue (name, out var ed) && !string.IsNullOrEmpty (ed.FilePath) ? ed.FilePath : null;
+		var target = path ?? System.IO.Path.Combine (
+			Path.GetDirectoryName (loadedSolutionPath!)!, relPath);
 		searchResults.Add (("md-class-file", name, relPath, () => {
-			var target = path ?? System.IO.Path.Combine (
-				Path.GetDirectoryName (loadedSolutionPath!)!, relPath);
 			if (File.Exists (target))
 				OpenFileDocument (target);
 			else
 				Output ("[search] file not found: " + target);
-		}));
+		}, target));
+	}
+
+	// Legacy RoslynSearchCategory: type declarations (class/interface/struct/enum)
+	// across the solution's .cs files. This shell has no Roslyn compilation, so the
+	// scan is a cheap anchored regex over the sources, cached per file until its
+	// timestamp changes; activation opens the document and jumps to the line.
+	static readonly System.Text.RegularExpressions.Regex typeDeclRegex = new (
+		@"^\s*(?:\[[^\]]*\]\s*)*((?:public|private|protected|internal|static|sealed|abstract|partial|readonly|ref)\s+)*\b(class|interface|struct|enum)\s+([A-Za-z_][A-Za-z0-9_]*)",
+		System.Text.RegularExpressions.RegexOptions.Compiled);
+	readonly Dictionary<string, (DateTime Stamp, List<(string Kind, string Name, int Line)> Symbols)> symbolIndex = new ();
+
+	void CollectSymbolResults (string term)
+	{
+		var projDir = string.IsNullOrEmpty (loadedSolutionPath) ? null : Path.GetDirectoryName (loadedSolutionPath);
+		if (projDir is null || term.Length == 0)
+			return;
+		var hits = new List<(string Kind, string Name, string File, int Line, int Rank)> ();
+		foreach (var file in Directory.EnumerateFiles (projDir, "*.cs", SearchOption.AllDirectories)) {
+			if (file.Contains ("/obj/") || file.Contains ("/bin/") || file.Contains ("/.git/"))
+				continue;
+			List<(string Kind, string Name, int Line)> syms;
+			try {
+				var stamp = File.GetLastWriteTimeUtc (file);
+				if (symbolIndex.TryGetValue (file, out var cached) && cached.Stamp == stamp) {
+					syms = cached.Symbols;
+				} else {
+					syms = new List<(string, string, int)> ();
+					int ln = 0;
+					foreach (var lineText in File.ReadLines (file)) {
+						ln++;
+						var m = typeDeclRegex.Match (lineText);
+						if (m.Success)
+							syms.Add ((m.Groups [2].Value, m.Groups [3].Value, ln));
+					}
+					symbolIndex [file] = (stamp, syms);
+				}
+			} catch {
+				continue; // unreadable files just don't contribute symbols
+			}
+			foreach (var (kind, name, line) in syms) {
+				bool starts = name.StartsWith (term, StringComparison.OrdinalIgnoreCase);
+				if (starts || name.Contains (term, StringComparison.OrdinalIgnoreCase))
+					hits.Add ((kind, name, file, line, starts ? 0 : 1));
+			}
+			if (hits.Count > 60) // bound the scan on huge trees
+				break;
+		}
+		foreach (var (kind, name, file, line, _) in hits.OrderBy (h => h.Rank).ThenBy (h => h.Name).Take (12))
+			AddSymbolResult (kind, name, file, line);
+	}
+
+	void AddSymbolResult (string kind, string name, string file, int line)
+	{
+		var projDir = Path.GetDirectoryName (loadedSolutionPath!) ?? "";
+		var rel = Path.GetRelativePath (projDir, file);
+		searchResults.Add (($"md-{kind.ToLowerInvariant ()}", $"{name} ({kind})", $"{rel} : {line}",
+			() => OpenFileDocumentAtLine (file, line), $"{file} : {line}"));
 	}
 
 	// Legacy CommandSearchCategory over the menu catalog: label matches first
@@ -4476,7 +4670,7 @@ public partial class MainWindow : Window
 				idHits.Add (b);
 		}
 		foreach (var (commandId, label) in labelHits.Concat (idHits))
-			searchResults.Add (("md-execute", label, commandId, () => OnMenuCommand (commandId)));
+			searchResults.Add (("md-execute", label, commandId, () => OnMenuCommand (commandId), commandId));
 	}
 
 	/// <summary>Shows the dropdown under the search box (a plain Border popup like
@@ -4522,7 +4716,8 @@ public partial class MainWindow : Window
 		if (searchResultsList is null)
 			return;
 		searchResultsList.Items.Clear ();
-		foreach (var (icon, title, subtitle, _) in searchResults) {
+		for (int i = 0; i < searchResults.Count; i++) {
+			var (icon, title, subtitle, _, tip) = searchResults [i];
 			var sp = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6, Margin = new Thickness (2) };
 			if (IconService.GetImage (icon) is { } img)
 				sp.Children.Add (new Image { Source = img, Width = 16, Height = 16 });
@@ -4534,6 +4729,14 @@ public partial class MainWindow : Window
 			col.Children.Add (t);
 			col.Children.Add (s);
 			sp.Children.Add (col);
+			// Legacy popup behaviors: hovering a row moves the selection to it, and
+			// the tooltip carries the FULL absolute path (subtitle stays truncated).
+			var idx = i;
+			sp.PointerEntered += (_, _) => {
+				if (searchResultsList is { } list)
+					list.SelectedIndex = idx;
+			};
+			ToolTip.SetTip (sp, tip);
 			searchResultsList.Items.Add (sp);
 		}
 		if (searchResults.Count == 0) {
@@ -4576,8 +4779,19 @@ public partial class MainWindow : Window
 			if (count > 0) {
 				int delta = e.Key == Key.Down ? 1 : -1;
 				searchResultsList.SelectedIndex = Math.Clamp ((searchResultsList.SelectedIndex < 0 ? 0 : searchResultsList.SelectedIndex) + delta, 0, count - 1);
+				if (searchResultsList.SelectedItem is { } sel)
+					searchResultsList.ScrollIntoView (sel);
 				e.Handled = true;
 			}
+			return;
+		}
+		// PageUp/PageDown page the selection like the legacy SearchPopupWindow.
+		if ((e.Key == Key.PageUp || e.Key == Key.PageDown) && searchPopupHost is { IsVisible: true } && searchResultsList is not null && searchResults.Count > 0) {
+			int delta = (e.Key == Key.PageDown ? 1 : -1) * 5;
+			searchResultsList.SelectedIndex = Math.Clamp ((searchResultsList.SelectedIndex < 0 ? 0 : searchResultsList.SelectedIndex) + delta, 0, searchResults.Count - 1);
+			if (searchResultsList.SelectedItem is { } sel2)
+				searchResultsList.ScrollIntoView (sel2);
+			e.Handled = true;
 			return;
 		}
 		if (e.Key == Key.Enter) {

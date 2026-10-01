@@ -1585,3 +1585,108 @@ la matriz empírica de M16e/M16f/M16g).
 ### Otros
 
 - `--searchpopup`, `--rowactivate`, `--ctxnewfolder` registrados en `QaDialogArg`.
+
+## M24 — Jerarquía Xwt por posiciones, close en pads, colapso bottom, search :t, Delete → .csproj
+
+### FIX: la jerarquía del Solution pad (TreeNavigator MUTA)
+
+- CAUSA RAÍZ del árbol "todo anidado como hijos": `TreeNavigator.AddChild()`
+  MUTA el navigator al hijo (`pos = backend.AddChild(pos); return this;` —
+  TreeNavigator.cs:113). Reusar `parentNav` en un bucle encadenaba cada fila
+  como hija de la anterior (escalera de indentación +16px por fila).
+- FIX: población por POSICIONES inmutables — `xwtSolutionStore.AddNode
+  (parentPos)` (TreeStore.cs:90 devuelve un navigator INDEPENDIENTE);
+  `AddXwtReferencesNode(Xwt.TreePosition projPos, …)` y
+  `BuildXwtFolderChildren(Xwt.TreePosition parentPos, …)` reescritas; en
+  `OpenSolutionInWindow`: `rootPos = store.AddNode().CurrentPosition`, dict
+  `folderPositions`, `projPos = nav.CurrentPosition`, `ExpandRow(projPos)`.
+  Los navegadores guardados MUTAN al construir hijos — para LEER sirve un
+  walk con el navigator mutante (`FindXwtRowByTag`), para POBLAR hay que usar
+  posiciones siempre.
+- Verificado por análisis de píxeles (soltree_fixed.png): hermanos al mismo
+  nivel (escalera 9→30→46→63→63→86px terminada).
+
+### Close (✕) en las pestañas de los pads + colapso del pad inferior
+
+- `PadHost.AddTab`: header con icono + label + `closeBtn` (✕, FontSize 8,
+  Padding 3,0, ToolTip "Close pad", `Tag = tab.Id`). Click →
+  `SetTabVisible(id,false)` + nuevo evento `PadTabClosed` (el shell puede
+  reflejarlo en View > Pads como el legacy `DockItem.Closed`).
+- Colapsado del pad INFERIOR reescrito: ya no usa el panel 2x2
+  (corner+rail). `ApplyCollapseState` para `DockOrientation == Horizontal`:
+  `Height = 34`, `contentHost` oculto, la MISMA fila de tabs sigue visible y
+  el chevron (ahora TextBlock ‹/› dentro de `collapseWrap`) queda dockado a
+  la DERECHA de esa fila con `MinWidth = 34` — sin rail, sin segundo renglón,
+  sin nada debajo. Restore: `Height = savedHeight`; la fila nunca se movió.
+- Chevron de los pads: el Button de Fluent TRAGABA el glifo (el Border
+  pintaba, el content nunca) — reemplazado por un `TextBlock` con
+  `Foreground` explícito. Además el chevron mide 34px de ancho SIEMPRE
+  (`collapseWrap.MinWidth = 34` en el ctor): el pedido del usuario — igual
+  ancho expandido que colapsado. Dump autoritativo (`[padchrome]` en cada
+  arranque, PointToScreen): left 34x31, bottom 34x31, right 34x29.
+- Geometría real del workbench (para futuras QAs): el pad bottom expandido
+  (170px) ocupa window-y 602-772 con la fila de tabs ARRIBA (602-633);
+  colapsado queda bottom-anchored (738-772). La banda chrome 772-793 es la
+  BARRA DE ESTADO, no el pad. Verificado por píxeles: colapso = una fila de
+  34px con tabs en su sitio + chevron a la derecha (cluster 998-1031 ×
+  738-768); click XTEST en el chevron restaura (`toggle → collapsed=False`),
+  contenido reaparece, fila intacta.
+
+### Search popup: categoría :t (RoslynSearchCategory) + teclado completo
+
+- `:t` / `:type` / `:types`: escaneo de declaraciones
+  class/interface/struct/enum sobre los .cs de la solución con un regex
+  anclado por línea (`typeDeclRegex`; Groups[2] = keyword, Groups[3] = nombre
+  — Groups[1] son los modificadores), cacheado por archivo con
+  `LastWriteTimeUtc` (`symbolIndex`), ranking startsWith > contains, cap 12.
+  Activar → `OpenFileDocumentAtLine (file, line)` (1-based). Incluida en la
+  búsqueda "all" (tras archivos). Icono `md-<kind>` (fallback silencioso si
+  el stock no existe).
+- Las filas del popup llevan TOOLTIP con la RUTA COMPLETA (para símbolos
+  `path : línea`) — la tupla de resultados ganó el campo `Tip`; el subtitle
+  sigue truncable.
+- Hover sobre una fila MUEVE la selección (PointerEntered → SelectedIndex) y
+  PageUp/PageDown mueven la selección por páginas de 5 con `ScrollIntoView`,
+  como el legacy SearchPopupWindow.
+- Hook `--searchpopup` extendido: `':t Program'` → `Program (class) |
+  TestProj/Program.cs : 6 | tip=<ruta completa>`, activación abre el tab
+  (open tab=Program.cs). ':c build' → 4 hits; ':s TODO' → 1.
+
+### Delete del context menu también limpia el .csproj
+
+- `DeleteContextNode` ahora localiza el proyecto dueño (`FindOwningProject`:
+  sube desde el archivo hasta el primer directorio con *.csproj, sin pasar
+  del directorio de la solución) y elimina del .csproj los items
+  `<Compile|None|Content|EmbeddedResource Include="...">` que coinciden
+  (archivo exacto o todo lo de debajo si es carpeta) — `RemoveProjectItemEntries`
+  edita el .csproj como TEXTO con regex por línea para preservar el resto del
+  documento byte a byte (el equivalente a `ProjectFileNodeBuilder
+  .DeleteFromProject`).
+- Hook `--delcsproj`: SIEMBRA una entrada `<Compile Include="Program.cs" />`
+  en el .csproj (los SDK projects compilan implícito — sin siembra el test es
+  vacuo), borra Program.cs, corre el MISMO código del Delete del menú,
+  verifica `compileEntryGone=True restOfDocIntact=True` (el PackageReference
+  y el Project Sdk quedan) y RESTAURA el fixture. Resultado: `1 item(s)
+  removed (Program.cs)`.
+
+### --ctxmenu-visual (captura manual del flyout)
+
+- Hook `--ctxmenu-visual`: abre el flyout del Solution pad
+  (`BuildProjectPadMenu` + `ShowAt (xwtSolutionHost)`) y lo deja ABIERTO 5
+  segundos (log "[ctxvisual] flyout open for 5s — capture with PrtScr") para
+  capturarlo MANUALMENTE con PrtScr de GNOME — mutter bloquea los grabs
+  automáticos (XGetImage falla con error 8; x11grab captura negro) y el
+  flyout es superficie X11 popup separada que no sale en el pixmap de la
+  ventana. Verificado: mensajes open/closed en el log y app viva.
+
+### Otros
+
+- `--ctxmenu-visual`, `--delcsproj` y `--collapsebottom` registrados en
+  `QaDialogArg`; dump `[padchrome]` en cada arranque (rects PointToScreen de
+  ambos targets de colapso por pad).
+- Lección de entorno re-aprendida: NUNCA combinar `pkill -f` y el launch del
+  dll en el mismo bash — el cmdline del bash contiene el path del dll y
+  `pgrep -f`/`pkill -f` se auto-matan (el log no llega a crearse). Separar
+  siempre en llamadas. También: el fixture fontconfig de /tmp se regenera tras
+  cada reinicio (tmpfs) y el XAUTHORITY de mutter cambia de nombre — revisar
+  ambos si `XOpenDisplay failed` o el arranque excede 30s.

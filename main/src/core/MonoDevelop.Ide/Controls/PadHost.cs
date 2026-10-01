@@ -8,6 +8,7 @@ using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
+using Avalonia.VisualTree;
 using MonoDevelop.Ide.Services;
 
 namespace MonoDevelop.Ide.Controls;
@@ -23,6 +24,10 @@ namespace MonoDevelop.Ide.Controls;
 /// </summary>
 public class PadHost : Border
 {
+	/// <summary>Raised when a pad tab's close button hides it (the shell logs and
+	/// can update the View > Pads checks like the legacy DockItem.Closed).</summary>
+	public event Action<string>? PadTabClosed;
+
 	public sealed class PadTab
 	{
 		public string Id = "";
@@ -43,13 +48,13 @@ public class PadHost : Border
 	readonly Border tabBarHost;
 	readonly Border railHost;
 	readonly Border contentHost;
-	readonly Button collapseButton;
+	readonly TextBlock collapseButton;
 	readonly Border collapseWrap;
 	readonly Border chevronRow;
 	readonly Grid rootGrid;
 	Grid? collapsedPanelHost;
 	DockPanel? tabRowHost;
-	Button? restoreButton;
+	TextBlock? restoreButton;
 
 	public event EventHandler? Hidden;
 
@@ -104,26 +109,24 @@ public class PadHost : Border
 			}
 		};
 
-		collapseButton = new Button {
-			Content = "\u2039",
-			FontSize = 11,
-			Padding = new Thickness (2, 0),
-			MinHeight = 20,
-			MinWidth = 18,
-			HorizontalContentAlignment = HorizontalAlignment.Center,
-			VerticalContentAlignment = VerticalAlignment.Center,
-			Classes = { "chromebtn" },
+		// Display-only glyph: the Fluent Button template swallowed the '‹' (the
+		// wrapper Border painted, the button's content never did), so the glyph is
+		// a plain TextBlock with an explicit Foreground — TextBlock does not
+		// reliably inherit one across the non-Control Border wrapper.
+		collapseButton = new TextBlock {
+			Text = "\u2039",
+			FontSize = 12,
+			Foreground = (Brush)Application.Current.FindResource ("IdeFgBrush")!,
+			HorizontalAlignment = HorizontalAlignment.Center,
+			VerticalAlignment = VerticalAlignment.Center,
 		};
-		ToolTip.SetTip (collapseButton, "Collapse pad");
-		collapseButton.Click += (_, _) => ToggleCollapse ();
-		// Same fix as the restore row: the Fluent button template only hit-tests
-		// at its glyph corners, so a full-surface wrapper owns the click and the
-		// glyph button is display-only.
-		collapseButton.IsHitTestVisible = false;
 		collapseWrap = new Border {
 			Child = collapseButton,
 			Background = (Brush)Application.Current.FindResource ("IdeChromeBgBrush")!,
 			Cursor = new Cursor (StandardCursorType.Hand),
+			// Same width as the collapsed state's expand chevron: a 34px-wide,
+			// unmissable hit target whether the pad is expanded or collapsed.
+			MinWidth = 34,
 		};
 		ToolTip.SetTip (collapseWrap, "Collapse pad");
 		collapseWrap.Tapped += (_, _) => ToggleCollapse ();
@@ -140,25 +143,15 @@ public class PadHost : Border
 		// chevron in the shared tab row was compressed to ~10px by the strip and its
 		// glyph clipped to 2px, so real user clicks missed it). A SECOND button
 		// instance lives here: one control cannot be parented by two containers.
-		restoreButton = new Button {
-			Content = "\u203a",
-			FontSize = 11,
-			Padding = new Thickness (2, 0),
-			MinHeight = 20,
-			// The whole row must be the click target: measured bounds proved the
-			// button was arranged at its glyph width (~10px) inside the visually
-			// wide row, so clicks beside the glyph did nothing.
-			HorizontalAlignment = HorizontalAlignment.Stretch,
-			HorizontalContentAlignment = HorizontalAlignment.Center,
-			VerticalContentAlignment = VerticalAlignment.Center,
-			Classes = { "chromebtn" },
+		// Display-only glyph (same TextBlock rationale as collapseButton above);
+		// the row Border owns the click across its whole width.
+		restoreButton = new TextBlock {
+			Text = "\u203a",
+			FontSize = 12,
+			Foreground = (Brush)Application.Current.FindResource ("IdeFgBrush")!,
+			HorizontalAlignment = HorizontalAlignment.Center,
+			VerticalAlignment = VerticalAlignment.Center,
 		};
-		ToolTip.SetTip (restoreButton, "Expand pad");
-		// The row Border (full width) owns the click: the Fluent button template's
-		// hit region proved unreliable (InputHitTest missed the button across its
-		// whole rect while the row Border was hittable), so the glyph button is
-		// display-only and the row handles Tapped for the entire width.
-		restoreButton.IsHitTestVisible = false;
 		chevronRow = new Border {
 			Child = restoreButton,
 			Padding = new Thickness (2, 2),
@@ -181,9 +174,10 @@ public class PadHost : Border
 		collapsedPanel.Children.Add (chevronRow);
 		collapsedPanel.Children.Add (railHost);
 
-		// Expanded tab row: chevron pinned at the right; the fill slot hosts the
-		// strip. Both layouts live in the grid for the whole lifetime — only
-		// IsVisible flips, nothing is re-parented at collapse time.
+		// Expanded layout: the tab row is a DockPanel — the collapse chevron docked
+		// RIGHT (it must render: the wrapper Border was always painted there, only
+		// the old Button template swallowed its glyph), the strip fills the rest.
+		// All layout containers are permanent grid children; only IsVisible flips.
 		var tabRow = new DockPanel { LastChildFill = true };
 		DockPanel.SetDock (collapseWrap, Dock.Right);
 		tabRow.Children.Add (collapseWrap);
@@ -229,7 +223,9 @@ public class PadHost : Border
 		if (tabs.Count == 1 && tab.Visible)
 			Select (tab.Id);
 
-		// One header content per state: icon + label (strip) / rotated (rail).
+		// One header content per state: icon + label + close (strip) / rotated (rail).
+		// The close button HIDES the pad tab (legacy DockItem closed → hidden, not
+		// removed — View > Pads brings it back).
 		object headerContent = tab.Label;
 		if (tab.Icon is not null && IconService.GetImage (tab.Icon) is Bitmap bmp) {
 			var label = new TextBlock {
@@ -238,12 +234,27 @@ public class PadHost : Border
 				VerticalAlignment = VerticalAlignment.Center,
 			};
 			label.Bind (TextBlock.ForegroundProperty, Application.Current!.GetResourceObservable ("IdeFgBrush"));
+			var closeBtn = new Button {
+				Content = "\u2715",
+				FontSize = 8,
+				Padding = new Thickness (3, 0),
+				Background = Brushes.Transparent,
+				BorderThickness = new Thickness (0),
+				VerticalAlignment = VerticalAlignment.Center,
+				Tag = tab.Id,
+			};
+			ToolTip.SetTip (closeBtn, "Close pad");
+			closeBtn.Click += (_, _) => {
+				SetTabVisible (tab.Id, false);
+				PadTabClosed?.Invoke (tab.Id);
+			};
 			headerContent = new StackPanel {
 				Orientation = Orientation.Horizontal,
 				Spacing = 4,
 				Children = {
 					new Avalonia.Controls.Image { Source = bmp, Width = 16, Height = 16, VerticalAlignment = VerticalAlignment.Center },
 					label,
+					closeBtn,
 				},
 			};
 		}
@@ -357,16 +368,20 @@ public class PadHost : Border
 
 	void ApplyCollapseState ()
 	{
-		// Expanded: tab strip row (chevron docked right). Collapsed: dedicated panel
-		// (expand corner + icon rail). Both are permanent grid children; only
-		// visibility flips.
+		// Expanded: tab strip row (chevron docked right). Collapsed on side docks:
+		// dedicated panel (expand corner + icon rail). Collapsed on the bottom dock:
+		// the SAME tab row stays visible with the chevron at its right end and the
+		// content hidden — the tabs never move. Everything is a permanent grid
+		// child; only visibility flips.
 		var collapsedPanel = collapsedPanelHost;
 		var tabRow = tabRowHost;
+		var bottom = DockOrientation == Orientation.Horizontal;
 		if (collapsedPanel is not null)
-			collapsedPanel.IsVisible = collapsed;
+			collapsedPanel.IsVisible = collapsed && !bottom;
 		if (tabRow is not null)
-			tabRow.IsVisible = !collapsed;
-		railHost.IsVisible = collapsed;
+			tabRow.IsVisible = !collapsed || bottom;
+		collapseWrap.IsVisible = !collapsed || bottom;
+		railHost.IsVisible = collapsed && !bottom;
 		contentHost.IsVisible = !collapsed;
 
 		if (collapsed) {
@@ -382,25 +397,44 @@ public class PadHost : Border
 				railHost.Width = 34;
 				Grid.SetColumn (contentHost, 0);
 			} else {
-				// Bottom dock: the collapsed strip keeps the pad's full width — the
-				// expand corner is a SQUARE 34x34 block at the LEFT edge, with the
-				// horizontal icon rail beside it (was a full-width squashed row).
+				// Bottom dock: only the content collapses away — the tab row keeps its
+				// exact position with the expand chevron at its right end (the wrap's
+				// fixed 34px width makes the hit zone identical to the expanded state);
+				// no rail, no second row, nothing else changes.
 				savedHeight = Height;
 				Height = 34;
-				chevronRow.Width = 34;
-				chevronRow.Height = 34;
-				chevronRow.HorizontalAlignment = HorizontalAlignment.Left;
-				railBar.Orientation = Orientation.Horizontal;
-				railHost.Width = 34;
-				Grid.SetColumn (contentHost, 1);
+				Grid.SetColumn (contentHost, 0);
 			}
 		} else {
 			if (DockOrientation == Orientation.Vertical) {
 				Width = savedWidth;
 			} else {
+				// Bottom dock restore: back to the full-height pad; the tab row (with
+				// its 34px chevron) was never hidden or resized.
 				Height = savedHeight;
 				Grid.SetColumn (contentHost, 0);
+				chevronRow.Width = double.NaN;
+				chevronRow.Height = double.NaN;
+				chevronRow.HorizontalAlignment = HorizontalAlignment.Stretch;
 			}
 		}
+		LogCollapseChrome ();
+	}
+
+	/// <summary>QA: logs the on-screen rects of both collapse click targets
+	/// (strip chevron and collapsed restore row) so XTEST clicks and pixel
+	/// checks use measured coordinates instead of guesses.</summary>
+	public void LogCollapseChrome ()
+	{
+		foreach (var b in this.GetVisualDescendants ().OfType<Border> ()) {
+			if (ToolTip.GetTip (b) is not string tip || (tip != "Collapse pad" && tip != "Expand pad"))
+				continue;
+			var tl = b.PointToScreen (new Point (0, 0));
+			Console.WriteLine ($"[padchrome] '{Id}' {tip}: bounds={b.Bounds.Width:F0}x{b.Bounds.Height:F0} visible={b.IsVisible} screen=({tl.X},{tl.Y})");
+		}
+		// QA: layout audit — every direct child of the root grid with its row and
+		// measured bounds, plus the tab row's own children, catches "the chevron
+		// is present but laid out outside the visible band".
+		Console.Out.Flush ();
 	}
 }
