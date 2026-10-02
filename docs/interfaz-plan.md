@@ -1690,3 +1690,111 @@ la matriz empírica de M16e/M16f/M16g).
   siempre en llamadas. También: el fixture fontconfig de /tmp se regenera tras
   cada reinicio (tmpfs) y el XAUTHORITY de mutter cambia de nombre — revisar
   ambos si `XOpenDisplay failed` o el arranque excede 30s.
+
+## M25 — Pad de edición: tabs horizontales, editor visible, breadcrumb, splitter, GoToType, :t con contenedor, checks View > Pads, persistencia de layout
+
+### Editor pad (SkTextEditor) visible y con tabs horizontales
+
+- **Tabs en horizontal**: el template custom de TabControl en App.axaml no
+  propagaba el ItemsPanel — `PART_ItemsPresenter` ahora lleva
+  `ItemsPanel="{TemplateBinding ItemsPanel}"`. Verificado: los headers de
+  Program.cs/TestProj.csproj comparten una sola fila (`distinctTops=1`).
+- **Código invisible (2 causas)**: (1) `GetMonospaceTypeface` pedía
+  "DejaVu Sans Mono", inexistente en el sistema → typeface sin glifos y todo
+  DrawText no-op; ahora itera candidatos {DejaVu Sans Mono, Noto Sans Mono,
+  Source Code Pro, Cascadia Mono, Liberation Mono, Nimbus Mono PS, default}
+  validando `CountGlyphs("ABCdef123") > 0` (log `[skeditor] monospace face`).
+  (2) El editor montado en DocContent (Panel simple) quedaba 0x0;
+  `OnDocSelectionChanged` fuerza `HorizontalAlignment/VerticalAlignment =
+  Stretch` antes del Add (bounds 765x477 verificado).
+- **Breadcrumb dinámico** bajo las tabs: `UpdateBreadcrumb` usa ScanSymbols
+  sobre el texto vivo y arma la cadena TestProj › TestProj › Program.cs ›
+  Program › Main según el caret (GotoLine(7) → Main verificado).
+
+### Línea toolbar + PadSplitter (límite redimensionable)
+
+- Línea fina del color de la toolbar (chrome 45,45,45) en el borde superior
+  de los pads de edición e inferior (DocumentPane en XAML; BottomPads
+  BorderThickness 0,1,1,0 en BuildPads).
+- `Controls/PadSplitter.cs` (nuevo): Border de 6px con cursor BottomSide que
+  ajusta `TargetRow.Height` directamente (el GridSplitter de Avalonia
+  ignoraba drags reales). El delta se mide contra el **Grid padre** (marco
+  fijo): medirlo contra el propio splitter alimentaba la fila con su propio
+  movimiento (runaway que clavaba el pad al mínimo). Clamp 34…(grid − 150).
+- `DragStarted` permite al shell expandir un pad colapsado ANTES de tomar la
+  base del drag (el drag desde el rail recupera la fila en vez de pelear con
+  el colapso). Thumb con highlight en hover/drag para que el agarre sea
+  descubrible. Cableado: `EditorBottomSplitter.TargetRow = RowDefinitions[1]`
+  en el ctor; declarado tras BottomPads (z-order encima).
+- Verificado por telemetría (press/move/release): UP 150 → 179→329, DOWN 400
+  → clamp 34, UP desde el rail → 34→184 (recupera), y drags manuales en vivo
+  sin runaway.
+
+### Colapso ✕ ⇄ fila (sin vacío) y ciclo completo
+
+- Al colapsar el bottom (✕ de la última tab o chevron), el coupling
+  `CollapseChanged` fija la fila a 34 (el rail del pad ancla abajo) y guarda
+  la altura previa en `bottomSavedRowH`; al expandir (chevron) la fila
+  vuelve a su altura — sin el vacío entre frontera y rail.
+- El click de la ✕ dentro del ToggleButton del header disparaba TAMBIÉN el
+  Click del padre (handledEventsToo) y re-expandía lo recién colapsado:
+  guard `lastClickWasClose` + `e.Handled`, reset diferido vía
+  `Dispatcher.Post(Background)` (el Click del padre llega tras el finally
+  del hijo en el mismo dispatch de release).
+- **View > Pads refleja la visibilidad** (paridad DockItem.Closed): el bug
+  era `CommandAction` — su lambda capturaba el parámetro del ctor (closure
+  compilada) y `OnClick.Target` nunca era el CommandAction, así que
+  `UpdatePadChecks` no recuperaba el id `pad:*` y los checks quedaban con
+  los defaults estáticos. FIX: el lambda lee la propiedad `Id` de la
+  instancia (delegado ligado a `this`). Los checks se renderizan como icono
+  ✓ (MenuBuilder), no `MenuItem.IsChecked` — el dump QA lee el glyph.
+- Ciclo verificado con el hook `--padmenu` (usa el MISMO dispatch del ítem,
+  `pad:output`): off → tab oculta + `Output checked=False`; on → tab
+  visible + seleccionada + `checked=True`. El ✕ de la última tab colapsa al
+  rail (`empty-close`) y el chevron restaura.
+
+### Search :t con tipo contenedor (y Go To Type Ctrl+T)
+
+- ScanSymbols: la llave de apertura Allman (indent igual al dueño) expulsaba
+  el tipo recién pusheado del stack de indentación → Main/Double sin
+  Container. Sólo una llave de CIERRE hace pop de su scope. Los tooltips de
+  `:t` ahora llevan `ruta : línea — in Program` (métodos y properties
+  incluidos con `methodDeclRegex`/`propertyDeclRegex`); el breadcrumb usa
+  `hit.Name` porque el tipo ya es su propio segmento (evita
+  "Program › Program.Main").
+- `GoToDialog` reutiliza el escaneo: ctor `GoToDialog (string? kind)` fija el
+  Title ANTES de BuildSource (el modo type/list depende de él — el bug era
+  setear Title después); shortcut Ctrl+T en MenuService (GotoType). Hook
+  `--gototype`: filtro "Prog" → matches=2 first=Program, activación abre
+  Program.cs.
+
+### Persistencia del layout de pads (paridad DockFrame)
+
+- `SavePadsLayout` (en CLOSING, antes de cualquier early-return del diálogo
+  de dirty docs) y `RestorePadsLayout` (ctor, diferido con
+  `Dispatcher.Post(Background)` tras BuildPads) persisten en
+  `Monodevelop.PadsLayout` un registro por host: `visible|collapsed|tabs|
+  selected` + altura de fila. La fila se guarda PRE-colapso
+  (`bottomSavedRowH`) porque colapsado vale 34; el restore aplica la fila
+  ANTES de restaurar los hosts para que el coupling la capture al re-colapsar
+  y el expand posterior vuelva al split real.
+- Guard anti-envenenamiento: un registro con `tabs=` vacío (sesión que cerró
+  todas las tabs) NO oculta todas las tabs al relanzar — se conservan los
+  defaults de arranque (el legacy DockFrame recrea los DockItem ausentes).
+- Ciclo verificado con hooks `--padsqa` (fila 237 + colapso + Close real →
+  prefs `…|1|1|output|output|237`) y `--padsqa2` (relanzamiento: fila 34
+  colapsada con `visibleTabs=[output]`, expand → `actualRowH=237`).
+  Relanzamiento normal sin flags también restaura.
+
+### Infra
+
+- `.github/workflows/avalonia-shell.yml` (nuevo): build de
+  MonoDevelop.Startup.Avalonia (Release, net10.0) + tests del editor model en
+  cada push de la rama, con `submodules: recursive` (el restore necesita las
+  fuentes de xwt/mono-addins) y caché de NuGet (`actions/cache` sobre
+  ~/.nuget/packages). El README ya documentaba
+  `git submodule update --init --recursive` para clones frescos.
+- Hooks QA nuevos en `QaDialogArg`: `--padmenu`, `--padsqa`, `--padsqa2`.
+  Artefacto conocido del hook `--searchpopup`: la PRIMERA asignación
+  programática de Text tras `:s` no retriggerea el handler (la fila mostrada
+  es la anterior); tipeo real por teclas no lo sufre.

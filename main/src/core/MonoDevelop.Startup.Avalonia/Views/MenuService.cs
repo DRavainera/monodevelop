@@ -292,7 +292,7 @@ public static class MenuService
 			}),
 			Sub ("Go To", new List<MenuEntry> {
 				Item ("_File...", shortcut: "Alt Shift O", click: Command ("MonoDevelop.Ide.Commands.SearchCommands.GotoFile")),
-				Item ("_Type...", shortcut: "Ctrl Shift T", click: Command ("MonoDevelop.Ide.Commands.SearchCommands.GotoType")),
+				Item ("_Type...", shortcut: "Ctrl T", click: Command ("MonoDevelop.Ide.Commands.SearchCommands.GotoType")),
 				Item ("_Line...", icon: "md-go-to-line", shortcut: "Ctrl I", click: Command ("MonoDevelop.Ide.Commands.SearchCommands.GotoLineNumber")),
 				Sep (),
 				Item ("_Cursor Position", click: Command ("MonoDevelop.Ide.Commands.ViewCommands.CenterAndFocusCurrentDocument")),
@@ -615,7 +615,11 @@ public sealed class CommandAction
 	public CommandAction (string id)
 	{
 		Id = id;
-		Run = () => MainWindow.Instance?.OnMenuCommand (id);
+		// Read the instance property (NOT the ctor param): a lambda that only
+		// touches `this` compiles onto the instance itself, so delegates derived
+		// from Run keep Target == this CommandAction — MenuBuilder/UpdatePadChecks
+		// recover the command id from the delegate Target.
+		Run = () => MainWindow.Instance?.OnMenuCommand (Id);
 	}
 
 	public static implicit operator Action (CommandAction c) => c.Run;

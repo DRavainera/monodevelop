@@ -20,7 +20,7 @@ namespace MonoDevelop.AvaloniaShell.Views;
 /// </summary>
 public class GoToDialog : Window
 {
-	readonly record struct Item (string Name, string Path, bool IsType, string Detail);
+	readonly record struct Item (string Name, string Path, bool IsType, string Detail, int Line);
 
 	readonly List<Item> allItems = new ();
 	readonly ListBox list = new () { Background = Brushes.Transparent };
@@ -29,9 +29,12 @@ public class GoToDialog : Window
 
 	public string Kind => Title?.Contains ("Type", StringComparison.Ordinal) == true ? "Type" : "File";
 
-	public GoToDialog ()
+	// kind = window title selecting the mode: null → "Go To File", "Go To Type" (Ctrl T).
+	public GoToDialog (string? kind = null)
 	{
-		Title = "Go To File";
+		// The title must be set BEFORE BuildSource: it decides whether the .cs
+		// scan for types runs at all.
+		Title = string.IsNullOrEmpty (kind) ? "Go To File" : kind;
 		Width = 560;
 		Height = 420;
 		WindowStartupLocation = WindowStartupLocation.CenterOwner;
@@ -118,28 +121,22 @@ public class GoToDialog : Window
 				|| f.EndsWith (".xml", StringComparison.Ordinal))
 			.Take (5000);
 		foreach (var f in files)
-			allItems.Add (new Item (Path.GetFileName (f), f, IsType: false, Path.GetRelativePath (dir, f)));
+			allItems.Add (new Item (Path.GetFileName (f), f, IsType: false, Path.GetRelativePath (dir, f), 0));
 
 		if (Kind == "Type") {
+			// Same scanner the search popup uses (SearchPopupWindow RoslynSearchCategory
+			// parity): line numbers + container for the detail column.
 			foreach (var f in allItems.Select (i => i.Path).Where (p => p.EndsWith (".cs", StringComparison.Ordinal)).ToList ()) {
 				try {
-					foreach (var (name, kind) in ScanTypes (File.ReadAllText (f))) {
+					foreach (var hit in MainWindow.ScanSymbols (File.ReadAllText (f))) {
+						if (hit.Kind is not ("class" or "interface" or "struct" or "enum"))
+							continue;
 						var rel = Path.GetRelativePath (dir, f);
-						allItems.Add (new Item (name, f, IsType: true, $"{kind} — {rel}"));
+						allItems.Add (new Item (hit.Name, f, IsType: true, $"{hit.Kind} — {rel} : {hit.Line}", hit.Line));
 					}
 				} catch { }
 			}
 		}
-	}
-
-	// Quick regex scan of type declarations (same purpose as the Roslyn category).
-	static IEnumerable<(string Name, string Kind)> ScanTypes (string text)
-	{
-		var rx = new System.Text.RegularExpressions.Regex (
-			@"\b(class|interface|struct|enum|record)\s+([A-Za-z_][A-Za-z0-9_]*)",
-			System.Text.RegularExpressions.RegexOptions.Compiled);
-		foreach (System.Text.RegularExpressions.Match m in rx.Matches (text))
-			yield return (m.Groups [2].Value, m.Groups [1].Value);
 	}
 
 	void Filter (string pattern)
@@ -199,8 +196,31 @@ public class GoToDialog : Window
 	void ActivateSelected ()
 	{
 		if (list.SelectedItem is ListBoxItem { Tag: Item it }) {
-			MainWindow.Instance?.OpenFileDocument (it.Path);
+			if (it.IsType && it.Line > 0)
+				MainWindow.Instance?.OpenFileDocumentAtLine (it.Path, it.Line);
+			else
+				MainWindow.Instance?.OpenFileDocument (it.Path);
 			Close ();
 		}
+	}
+
+	// ----- QA hooks (automated runs drive the dialog without UI navigation) -----
+
+	/// <summary>QA: applies the filter and returns the number of matches.</summary>
+	public int QaFilter (string pattern)
+	{
+		Filter (pattern);
+		return current.Count;
+	}
+
+	/// <summary>QA: name + detail of the first match after QaFilter.</summary>
+	public string QaFirstItem => current.Count > 0 ? $"{current [0].Name} | {current [0].Detail}" : "-";
+
+	/// <summary>QA: selects the first row and runs the activation path.</summary>
+	public void QaActivateFirst ()
+	{
+		if (list.ItemCount > 0)
+			list.SelectedIndex = 0;
+		ActivateSelected ();
 	}
 }

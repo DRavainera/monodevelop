@@ -1,0 +1,41 @@
+# Avalonia shell CI: builds MonoDevelop.Startup.Avalonia (net10.0) and runs its
+# editor-model tests on every push of the migration branch. Complements the
+# repo-wide dotnet.yml (which runs on the same branch) by keeping the NuGet
+# cache for the shell's restore and pinning the exact SDK the tree expects.
+name: Avalonia Shell
+
+on:
+  push:
+    branches: [ "agents/sub-agent-senior-dev-role-report" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        # The shell references the xwt/mono-addins submodule sources; a fresh
+        # clone without them fails the restore/build.
+        submodules: recursive
+
+    - name: Setup .NET (pinned by global.json)
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 10.0.x
+
+    # Restore between runs: the Avalonia + Xwt package set is large and the
+    # build is the only step that needs it.
+    - name: Cache NuGet packages
+      uses: actions/cache@v4
+      with:
+        path: ~/.nuget/packages
+        key: nuget-avalonia-shell-${{ runner.os }}-${{ hashFiles('main/src/core/MonoDevelop.Startup.Avalonia/*.csproj', '**/global.json') }}
+        restore-keys: |
+          nuget-avalonia-shell-${{ runner.os }}-
+
+    - name: Build Avalonia shell (net10.0)
+      run: dotnet build main/src/core/MonoDevelop.Startup.Avalonia/MonoDevelop.Startup.Avalonia.csproj -c Release -f net10.0 -v q
+
+    - name: Test Avalonia shell (editor model)
+      run: dotnet test main/tests/AvaloniaShell.Editor.Tests/AvaloniaShell.Editor.Tests.csproj -v normal

@@ -36,7 +36,21 @@ public partial class MainWindow : Window
 	// selected) and its segment stack.
 	Border? BreadcrumbRow;
 	StackPanel? BreadcrumbBar;
+
+	// QA snapshot of the breadcrumb text (segments joined with " › ") as of the
+	// latest UpdateBreadcrumb — automated runs assert the scope chain without UI.
+	public string BreadcrumbSegmentsForQa =>
+		BreadcrumbBar is { } bar
+			? string.Join (" › ", bar.Children.OfType<TextBlock> ().Where (t => t.Text != "›").Select (t => t.Text))
+			: "";
 	int lastBreadCaretLine = -1;
+
+	// Bottom-pad collapse coupling: while the pad is collapsed the dock row pins
+	// to the 34px rail (no dead gap under the splitter) and expanding returns the
+	// row to its previous height; a splitter drag on a collapsed pad expands it
+	// WITHOUT the height restore so the drag itself grows the row from the rail.
+	double? bottomSavedRowH;
+	bool dragExpandingBottom;
 
 	// Wave-3 real Xwt.TreeView in the Solution pad: created lazily (the Xwt engine
 	// initializes on demand); the pad hosts its native Avalonia control.
@@ -113,6 +127,9 @@ public partial class MainWindow : Window
 		Output ("MonoDevelop Avalonia shell initialized.");
 
 		BuildPads ();
+		// Restore the persisted pad layout (visible tabs, collapse, active tab,
+		// row height) once the dispatcher runs — hosts exist and settings are loaded.
+		Avalonia.Threading.Dispatcher.UIThread.Post (RestorePadsLayout, Avalonia.Threading.DispatcherPriority.Background);
 
 		// Legacy DirtyFilesDialog gate: closing the window with modified documents
 		// shows "Save Files" before quitting (Workbench.OnDeleteEvent).
@@ -147,6 +164,43 @@ public partial class MainWindow : Window
 		// the tab strip and the content; code only fills the segment stack.
 		BreadcrumbRow = BreadcrumbHostRow;
 		BreadcrumbBar = BreadcrumbSegments;
+
+		// Editor <-> bottom-pad resize: the thumb directly drives the bottom row's
+		// height (row 1 is the bottom pad, declared Auto-like via PadSplitter).
+		EditorBottomSplitter.TargetRow = WorkbenchGrid.RowDefinitions [1];
+
+		// Collapse ⇄ row coupling (legacy DockFrame: a collapsed bottom dock leaves
+		// only its rail; reopening restores the previous split).
+		BottomPads.CollapseChanged += collapsed => {
+			var row = WorkbenchGrid.RowDefinitions [1];
+			if (collapsed) {
+				if (row.Height.IsAbsolute && row.Height.Value > 34)
+					bottomSavedRowH = row.Height.Value;
+				row.Height = new GridLength (34);
+			} else if (!dragExpandingBottom) {
+				row.Height = new GridLength (bottomSavedRowH ?? 170);
+			}
+		};
+		EditorBottomSplitter.DragStarted += () => {
+			if (!BottomPads.IsCollapsed)
+				return;
+			dragExpandingBottom = true;
+			BottomPads.ToggleCollapse ("splitter-drag");
+			dragExpandingBottom = false;
+		};
+
+		// The breadcrumb follows the caret like the legacy widget: SkTextEditor has
+		// no caret-changed event, so poll the active editor's line and refresh the
+		// scope chain only when it moved (typing/clicks/keys all move it).
+		var breadcrumbTimer = new Avalonia.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds (250) };
+		breadcrumbTimer.Tick += (_, _) => {
+			if (DocTabs.SelectedItem is TabItem { Tag: string tag } && docs.TryGetValue (tag, out var ed)
+				&& !string.IsNullOrEmpty (ed.FilePath) && ed.CurrentLine + 1 != lastBreadCaretLine) {
+				lastBreadCaretLine = ed.CurrentLine + 1;
+				UpdateBreadcrumb ();
+			}
+		};
+		breadcrumbTimer.Start ();
 
 		// Full legacy main menu: same structure/order/labels/icons/shortcuts as the GTK UI.
 		BuildMenu ();
@@ -322,9 +376,14 @@ public partial class MainWindow : Window
 				Output ("[searchpopup] ':s TODO' results=" + searchResults.Count + " first=" + (searchResults.Count > 0 ? searchResults [0].Title : "-"));
 				// Type symbols (legacy RoslynSearchCategory): ':t Class' matches the
 				// solution's class/interface/struct/enum declarations; activating the
-				// first hit opens its file and jumps to the declaration line.
-				OnToolbarSearchTextChanged (":t Program");
-				Output ("[searchpopup] ':t Program' results=" + searchResults.Count + " first=" + (searchResults.Count > 0 ? searchResults [0].Title + " | " + searchResults [0].Subtitle + " | tip=" + searchResults [0].Tip : "-"));
+				// first hit opens its file and jumps to the declaration line.					OnToolbarSearchTextChanged (":t Program");
+					Output ("[searchpopup] ':t Program' results=" + searchResults.Count + " first=" + (searchResults.Count > 0 ? searchResults [0].Title + " | " + searchResults [0].Subtitle + " | tip=" + searchResults [0].Tip : "-"));
+					// Method/property hits (M25: the scan now covers member declarations);
+					// the tooltip carries the enclosing container.
+					OnToolbarSearchTextChanged (":t Main");
+					Output ("[searchpopup] ':t Main' results=" + searchResults.Count + " first=" + (searchResults.Count > 0 ? searchResults [0].Title + " | " + searchResults [0].Subtitle + " | tip=" + searchResults [0].Tip : "-"));
+					OnToolbarSearchTextChanged (":t Double");
+					Output ("[searchpopup] ':t Double' results=" + searchResults.Count + " first=" + (searchResults.Count > 0 ? searchResults [0].Title + " | " + searchResults [0].Subtitle + " | tip=" + searchResults [0].Tip : "-"));
 				if (searchResults.Count > 0) {
 					ActivateSelectedSearchResult ();
 					Output ("[searchpopup] ':t Program' activated → open tab=" + (DocTabs.SelectedItem is TabItem ti2 ? ti2.Tag : "none"));
@@ -1820,6 +1879,103 @@ public partial class MainWindow : Window
 				_ = RunStartupProjectAsync ();
 			} else if (qa == "--goto") {
 				_ = new GoToDialog ().ShowDialog (this);
+			} else if (qa == "--gototype") {
+				// QA: Go To Type (Ctrl T) end to end — filter "Prog", log the ranked
+				// matches, activate the first row (Program class) and verify the
+				// document tab opened through OpenFileDocumentAtLine.
+				Avalonia.Threading.Dispatcher.UIThread.Post (() => {
+					var dlg = new GoToDialog ("Go To Type");
+					_ = dlg.ShowDialog (this);
+					int n = dlg.QaFilter ("Prog");
+					Output ("[gototype] matches=" + n + " first=" + dlg.QaFirstItem);
+					dlg.QaActivateFirst ();
+					Output ("[gototype] tab=" + ((DocTabs.SelectedItem as TabItem)?.Tag as string ?? "none") + " expected=Program.cs");
+				}, Avalonia.Threading.DispatcherPriority.Background);
+			} else if (qa == "--editorpad") {
+				// QA: editor pad end to end — open Program.cs AND TestProj.csproj,
+				// verify the horizontal tab strip (both headers inside the row's
+				// height), the file breadcrumb, the caret scope chain after moving
+				// the caret into Main, and a tab close that updates View > Pads.
+				Avalonia.Threading.Dispatcher.UIThread.Post (() => {
+					var proj = ResolveActiveProject ();
+					var dir = proj is null ? null : Path.GetDirectoryName (proj);
+					var prog = dir is null ? null : Path.Combine (dir, "Program.cs");
+					var csproj = dir is null ? null : Path.Combine (dir, "TestProj.csproj");
+					if (prog is null || csproj is null || !File.Exists (prog) || !File.Exists (csproj)) {
+						Output ("[editorpad] fixture missing");
+						return;
+					}
+					OpenFileDocument (prog);
+					OpenFileDocument (csproj); // a second tab so the strip has two headers
+					// Measure after a layout pass (Background runs post-render).
+					Avalonia.Threading.Dispatcher.UIThread.Post (() => {
+						// Horizontal strip: DocTabs headers must share one row — same top,
+						// lefts increasing (the default panel stacked them vertically).
+						var items = DocTabs.Items.OfType<TabItem> ().ToList ();
+						int tops = items.Select (i => i.Bounds.Top).Distinct ().Count ();
+						var lefts = items.Select (i => i.Bounds.Left).ToList ();
+						bool horizontal = items.Count >= 2 && tops == 1 && lefts.SequenceEqual (lefts.OrderBy (l => l));
+						Output ("[editorpad] tabs=" + items.Count + " distinctTops=" + tops + " horizontal=" + horizontal);
+					// Select Program.cs and move the caret into Main (line 8): the
+					// breadcrumb must show the file and the class.method scope chain.
+					var progItem = items.FirstOrDefault (i => i.Tag as string == "Program.cs");
+					if (progItem is not null)
+						DocTabs.SelectedItem = progItem;
+					UpdateBreadcrumb ();
+					Output ("[editorpad] breadcrumb file=" + BreadcrumbSegmentsForQa);
+					if (docs.TryGetValue ("Program.cs", out var ed)) {
+						ed.GotoLine (7);
+						UpdateBreadcrumb ();
+					}
+					Output ("[editorpad] breadcrumb main=" + BreadcrumbSegmentsForQa);
+					// Doc area actually mounted and sized, and the splitter row live.
+					Output ("[editorpad] DocContent bounds=" + Math.Round (DocContent!.Bounds.Width, 0) + "x" + Math.Round (DocContent.Bounds.Height, 0));
+					Output ("[editorpad] rowH=" + Math.Round (WorkbenchGrid.RowDefinitions [1].ActualHeight, 0));
+					Output ("[editorpad] done");
+					}, Avalonia.Threading.DispatcherPriority.Background);
+				}, Avalonia.Threading.DispatcherPriority.Background);
+			} else if (qa == "--padmenu") {
+				// QA: View > Pads toggle cycle through the SAME dispatch the menu item
+				// uses (pad:output) — off hides the tab and unchecks the item, on shows
+				// it again and re-checks. Logs the menu dump after each step.
+				Avalonia.Threading.Dispatcher.UIThread.Post (() => {
+					Output ("[padmenu] start visible=" + IsPadVisible ("output"));
+					OnMenuCommand ("pad:output");
+					Avalonia.Threading.Dispatcher.UIThread.Post (() => {
+						Output ("[padmenu] after-off visible=" + IsPadVisible ("output") + " visibleTabs=[" + string.Join (",", BottomPads.Tabs.Where (t => t.Visible).Select (t => t.Id)) + "]");
+						DumpPadsMenuChecks ("padmenu-off");
+						OnMenuCommand ("pad:output");
+						Avalonia.Threading.Dispatcher.UIThread.Post (() => {
+							Output ("[padmenu] after-on visible=" + IsPadVisible ("output") + " selected=" + (BottomPads.SelectedId ?? "none"));
+							DumpPadsMenuChecks ("padmenu-on");
+							Output ("[padmenu] done");
+						}, Avalonia.Threading.DispatcherPriority.Background);
+					}, Avalonia.Threading.DispatcherPriority.Background);
+				}, Avalonia.Threading.DispatcherPriority.Background);
+			} else if (qa == "--padsqa") {
+				// QA pads persistence, phase 1: set a distinctive layout (row 237 +
+				// bottom collapsed to the rail), let the REAL close path persist it
+				// (Closing → SavePadsLayout) and exit.
+				Avalonia.Threading.Dispatcher.UIThread.Post (() => {
+					WorkbenchGrid.RowDefinitions [1].Height = new GridLength (237);
+					if (!BottomPads.IsCollapsed)
+						BottomPads.ToggleCollapse ("padsqa");
+					Output ("[padsqa] set rowH=237 collapsed=" + BottomPads.IsCollapsed);
+					Avalonia.Threading.Dispatcher.UIThread.Post (Close, Avalonia.Threading.DispatcherPriority.Background);
+				}, Avalonia.Threading.DispatcherPriority.Background);
+			} else if (qa == "--padsqa2") {
+				// Phase 2: log what RestorePadsLayout produced, then expand the pad
+				// and confirm the row keeps the persisted height.
+				Avalonia.Threading.Dispatcher.UIThread.Post (() => {
+					Output ("[padsqa2] rowH=" + Math.Round (WorkbenchGrid.RowDefinitions [1].Height.Value, 0) + " collapsed=" + BottomPads.IsCollapsed
+						+ " visibleTabs=[" + string.Join (",", BottomPads.Tabs.Where (t => t.Visible).Select (t => t.Id)) + "]");
+					if (BottomPads.IsCollapsed)
+						BottomPads.ToggleCollapse ("padsqa2-expand");
+					Avalonia.Threading.Dispatcher.UIThread.Post (() => {
+						Output ("[padsqa2] after-expand actualRowH=" + Math.Round (WorkbenchGrid.RowDefinitions [1].ActualHeight, 0) + " collapsed=" + BottomPads.IsCollapsed);
+						Output ("[padsqa2] done");
+					}, Avalonia.Threading.DispatcherPriority.Background);
+				}, Avalonia.Threading.DispatcherPriority.Background);
 			} else if (qa == "--addref") {
 				// QA: exercise AddReference against the real csproj.
 				var proj = ResolveActiveProject ();
@@ -1827,8 +1983,9 @@ public partial class MainWindow : Window
 					var dlg = new AddReferenceDialog (proj, loadedSolutionPath);
 					// Deterministic QA path: add a known reference programmatically.
 					bool ok = dlg.TryAddReference ("System.Json");
-					Output ($"[addref-qa] TryAddReference(System.Json) → {ok}");
-					var text = File.ReadAllText (proj);						Output ($"[addref-qa] csproj contains reference: {text.Contains ("System.Json")}");
+				Output ($"[addref-qa] TryAddReference(System.Json) → {ok}");
+				var text = File.ReadAllText (proj);
+				Output ($"[addref-qa] csproj contains reference: {text.Contains ("System.Json")}");
 					// Revert so the project stays clean.
 					var clean = System.Text.RegularExpressions.Regex.Replace (
 						text, "\\s*<Reference Include=\"System.Json\" />", "");
@@ -2095,8 +2252,99 @@ public partial class MainWindow : Window
 	}
 	}
 
+	// Legacy DockFrame layout persistence: visible tabs, collapsed state, each
+	// host's active tab and the editor/bottom row split survive restarts (one
+	// pipe-separated settings entry, four segments per pad host + row height).
+	void SavePadsLayout ()
+	{
+		try {
+			string HostState (PadHost host) => string.Join ("|",
+				host.IsVisible ? "1" : "0",
+				host.IsCollapsed ? "1" : "0",
+				string.Join (",", host.Tabs.Where (t => t.Visible).Select (t => t.Id)),
+				host.SelectedId ?? "");
+			var rowH = 170.0;
+			if (BottomPads.Parent is Grid g && g.RowDefinitions.Count > 1 && g.RowDefinitions [1].Height.IsAbsolute)
+				rowH = g.RowDefinitions [1].Height.Value;
+			// Collapsed pins the row at 34 — persist the PRE-collapse height so a
+			// restore (and its later expand) returns to the real split.
+			if (BottomPads.IsCollapsed && bottomSavedRowH is { } saved)
+				rowH = saved;
+			SettingsStore.SetString ("Monodevelop.PadsLayout",
+				$"{HostState (LeftPads)}|{HostState (RightPads)}|{HostState (BottomPads)}|{(int)Math.Round (rowH)}");
+		} catch (Exception ex) {
+			Console.WriteLine ($"[pads] layout save failed: {ex.Message}");
+		}
+	}
+
+	void RestorePadsLayout ()
+	{
+		try {
+			// The collapse QA hooks toggle from the startup state — a restored
+			// collapsed flag would make their toggle EXPAND instead.
+			if (Program.QaDialogArg is "--collapse" or "--collapsebottom")
+				return;
+			var raw = SettingsStore.GetString ("Monodevelop.PadsLayout");
+			if (string.IsNullOrWhiteSpace (raw))
+				return;
+			var segs = raw.Split ('|');
+			if (segs.Length < 12)
+				return;
+			void RestoreHost (PadHost host, string visible, string collapsed, string tabIds, string selected) {
+				host.IsVisible = visible == "1";
+				var visibleIds = tabIds.Split (',', StringSplitOptions.RemoveEmptyEntries);
+				// An empty record (e.g. a session that closed every tab) must NOT hide
+				// every tab on the next launch — keep the startup defaults instead,
+				// like the legacy DockFrame recreating absent DockItems.
+				if (visibleIds.Length > 0)
+					foreach (var t in host.Tabs)
+						host.SetTabVisible (t.Id, visibleIds.Contains (t.Id));
+				if (!string.IsNullOrEmpty (selected))
+					host.Select (selected);
+				if (collapsed == "1" && !host.IsCollapsed)
+					host.ToggleCollapse ("layout-restore");
+			}
+			// Row height FIRST: collapsing the bottom host below saves it into
+			// bottomSavedRowH via the CollapseChanged coupling, so expanding after a
+			// restart returns to the persisted split.
+			if (int.TryParse (segs [12], out var h) && h >= 34
+				&& BottomPads.Parent is Grid g && g.RowDefinitions.Count > 1)
+				g.RowDefinitions [1].Height = new GridLength (h);
+			RestoreHost (LeftPads, segs [0], segs [1], segs [2], segs [3]);
+			RestoreHost (RightPads, segs [4], segs [5], segs [6], segs [7]);
+			RestoreHost (BottomPads, segs [8], segs [9], segs [10], segs [11]);
+			Output ("[pads] layout restored: rowH=" + segs [12] + " bottom=[vis=" + segs [8] + " coll=" + segs [9] + " tabs=" + segs [10] + " sel=" + segs [11] + "]");
+			UpdateRestoreStrip ();
+			BuildMenu (); // checks mirror the restored visibility
+		} catch (Exception ex) {
+			Console.WriteLine ($"[pads] layout restore failed: {ex.Message}");
+		}
+	}
+
 	// View > Pads checkmarks mirror the real pad visibility on every rebuild, like the
 	// legacy pad toggle items (Gtk.CheckMenuItem.Active from DockItem.Visible).
+	// QA: dumps the REAL built menu items' checked states after every change —
+	// settles "do the checks reflect visibility" without popup screenshots.
+	void DumpPadsMenuChecks (string when)
+	{
+		foreach (var top in MainMenu!.Items.OfType<Avalonia.Controls.MenuItem> ()) {
+			if ((top.Header as string)?.Replace ("_", "") != "View")
+				continue;
+			foreach (var sub in top.Items.OfType<Avalonia.Controls.MenuItem> ()) {
+				if ((sub.Header as string)?.Replace ("_", "")?.Contains ("Pads") != true)
+					continue;
+				foreach (var it in sub.Items.OfType<Avalonia.Controls.MenuItem> ()) {
+					if (it.Header is string h && h.Length > 0) {
+						// MenuBuilder renders the check as a ✓ Icon glyph (legacy
+						// CheckMenuItem.Active parity), not via MenuItem.IsChecked.
+						var check = it.Icon is Avalonia.Controls.TextBlock tb && tb.Text == "\u2713";
+						Output ($"[pads-menu] ({when}) '{h.Replace ("_", "")}' checked={check} enabled={it.IsEnabled}");
+					}
+				}
+			}
+		}
+	}
+
 	void UpdatePadChecks (System.Collections.Generic.IReadOnlyList<MenuService.MenuEntry> entries)
 	{
 		foreach (var e in entries) {
@@ -2170,6 +2418,25 @@ public partial class MainWindow : Window
 		LeftPads.Id = "left"; LeftPads.Title = "Solution";
 		RightPads.Id = "right"; RightPads.Title = "Properties";
 		BottomPads.Id = "bottom"; BottomPads.Title = "Output";
+
+		// Thin toolbar-colored line on the bottom dock (the editor pad's twin line
+		// is on DocumentPane in the XAML).
+		BottomPads.BorderThickness = new Thickness (0, 1, 1, 0);
+		BottomPads.BorderBrush = (Brush)Application.Current!.FindResource ("IdeChromeBgBrush")!;
+
+		// View > Pads mirrors every close like the legacy DockItem.Closed → menu
+		// check refresh (plus the hidden-pads restore strip).
+		LeftPads.PadTabClosed += _ => { UpdateRestoreStrip (); BuildMenu (); DumpPadsMenuChecks ("closed"); };
+		RightPads.PadTabClosed += _ => { UpdateRestoreStrip (); BuildMenu (); DumpPadsMenuChecks ("closed"); };
+		BottomPads.PadTabClosed += _ => {
+			UpdateRestoreStrip ();
+			BuildMenu ();
+			// Last tab ✕-closed → collapse to the rail (row 34 via CollapseChanged)
+			// instead of leaving an empty expanded pad; View > Pads reopens it.
+			if (!BottomPads.IsCollapsed && BottomPads.Tabs.All (t => !t.Visible))
+				BottomPads.ToggleCollapse ("empty-close");
+			DumpPadsMenuChecks ("closed");
+		};
 
 		// Solution pad (legacy ProjectPad): tree of the loaded solution.
 		// Legacy ProjectPad is a TreeView: Solution ▸ project ▸ files (double-click opens
@@ -2402,19 +2669,22 @@ public partial class MainWindow : Window
 	{
 		var (host, _) = FindPad (padId);
 		if (host is null)
-			return;
-		if (visible) {
-			host.IsVisible = true;
-			host.SetTabVisible (padId, true);
-			host.Select (padId);
-		} else {
-			host.SetTabVisible (padId, false);
-			// Hide the whole host when no visible tabs remain (legacy empty dock hides).
-			if (host.Tabs.All (t => !t.Visible))
-				host.IsVisible = false;
+			return;			if (visible) {
+				host.IsVisible = true;
+				if (host.IsCollapsed)
+					host.ToggleCollapse ("menu-show"); // reopening a rail-collapsed pad restores its size
+				host.SetTabVisible (padId, true);
+				host.Select (padId);
+			} else {
+				host.SetTabVisible (padId, false);
+				// Hide the whole host when no visible tabs remain (legacy empty dock hides).
+				if (host.Tabs.All (t => !t.Visible))
+					host.IsVisible = false;
+			}
+			UpdateRestoreStrip ();
+			BuildMenu ();
+			DumpPadsMenuChecks ($"SetPadVisible {padId}={visible}");
 		}
-		UpdateRestoreStrip ();
-	}
 
 	public bool IsPadVisible (string padId)
 	{
@@ -2565,6 +2835,11 @@ public partial class MainWindow : Window
 			var doc = documents.FirstOrDefault (d => d.Tag == tag);
 			if (doc.Content is not null) {
 				DocContent!.Children.Clear ();
+				// DocContent is a plain Panel: children arrange at their desired size,
+				// and the editor's desired size is 0x0 (no content children) — stretch
+				// it to the panel or the code renders nowhere.
+				doc.Content.HorizontalAlignment = HorizontalAlignment.Stretch;
+				doc.Content.VerticalAlignment = VerticalAlignment.Stretch;
 				DocContent.Children.Add (doc.Content);
 				if (doc.Content is MonoDevelop.Ide.Controls.SkTextEditor ed && !string.IsNullOrEmpty (ed.FilePath))
 					StatusText!.Text = ed.FilePath;
@@ -2710,10 +2985,7 @@ public partial class MainWindow : Window
 		}
 
 		int line = editor.CurrentLine + 1;
-		bool caretMovedOnly = row.IsVisible && line == lastBreadCaretLine;
 		lastBreadCaretLine = line;
-		if (caretMovedOnly)
-			return; // only the caret moved — segments are unchanged
 
 		bar.Children.Clear ();
 		string abs = editor.FilePath;
@@ -2732,6 +3004,27 @@ public partial class MainWindow : Window
 			segs.Add (System.IO.Path.GetFileName (abs));
 		}
 
+		// Legacy breadcrumb scope chain: the type and member enclosing the caret,
+		// from the same scan the search popup uses (live editor text, not the file
+		// on disk). The chain mirrors the scanner's indent stack (siblings pop each
+		// other); a blank caret line borrows the nearest non-blank line's indent.
+		int caretIndent = CaretIndentAt (editor, line - 1);
+		var chain = new List<(int Indent, int Line, string Text)> ();
+		foreach (var hit in ScanSymbols (editor.Text)) {
+			if (hit.Line > line)
+				break;
+			// Each hit is its own segment; the enclosing type is already in the
+			// chain ahead of it (the scanner's stack guarantees that), so using
+			// hit.Container here would duplicate it ("Program › Program.Main").
+			while (chain.Count > 0 && chain [^1].Indent >= hit.Indent)
+				chain.RemoveAt (chain.Count - 1);
+			chain.Add ((hit.Indent, hit.Line, hit.Name));
+		}
+		foreach (var c in chain) {
+			if (c.Line == line || caretIndent > c.Indent)
+				segs.Add (c.Text);
+		}
+
 		for (int i = 0; i < segs.Count; i++) {
 			if (i > 0) {
 				var chev = new TextBlock { Text = "›", FontSize = 10, Opacity = 0.5, VerticalAlignment = VerticalAlignment.Center };
@@ -2748,6 +3041,19 @@ public partial class MainWindow : Window
 			bar.Children.Add (seg);
 		}
 		row.IsVisible = true;
+	}
+
+	// Indentation the caret sits at (blank lines borrow the nearest non-blank
+	// line above, so a blank row inside a method keeps the method's scope).
+	static int CaretIndentAt (MonoDevelop.Ide.Controls.SkTextEditor ed, int zeroBasedLine)
+	{
+		var lines = ed.Text.Split ('\n');
+		for (int i = Math.Clamp (zeroBasedLine, 0, lines.Length - 1); i >= 0; i--) {
+			var t = lines [i].TrimEnd ('\r');
+			if (t.Trim ().Length > 0)
+				return t.Length - t.TrimStart ().Length;
+		}
+		return 0;
 	}
 
 	// Legacy SourceEditor bookmark pad menu: navigation + removal.
@@ -3325,7 +3631,11 @@ public partial class MainWindow : Window
 			solutionLoaded = true;
 			loadedSolutionPath = path;
 			// The solution-open flow must not re-show the welcome overlay afterwards.
-			welcomeVisible = false;
+			// HideWelcomePage, not just the flag: the ctor's ShowWelcomePage already
+			// mounted the overlay — leaving it visible keeps it covering the document
+			// area (the "code invisible" regression), and the later guard in
+			// OpenFileDocument then sees welcomeVisible==false and never dismisses it.
+			HideWelcomePage ();
 
 			// Solution pad = the REAL Xwt.TreeView (ProjectPad): solution ▸ solution
 			// folders ▸ projects ▸ [References, files…]. Folder nesting = legacy
@@ -4414,6 +4724,9 @@ public partial class MainWindow : Window
 	/// the DirtyFilesDialog when documents have unsaved changes.</summary>
 	async void OnMainWindowClosing (object? sender, WindowClosingEventArgs e)
 	{
+		// Persist the pad layout on EVERY close attempt (before any dirty-files
+		// dialog early-returns) like the legacy DockFrame layout save.
+		SavePadsLayout ();
 		// Only intercept user-initiated closes; programmatic closes after the
 		// dialog already ran must go through.
 		if (e.IsProgrammatic || closeConfirmed)
@@ -4598,61 +4911,118 @@ public partial class MainWindow : Window
 		}, target));
 	}
 
-	// Legacy RoslynSearchCategory: type declarations (class/interface/struct/enum)
-	// across the solution's .cs files. This shell has no Roslyn compilation, so the
-	// scan is a cheap anchored regex over the sources, cached per file until its
-	// timestamp changes; activation opens the document and jumps to the line.
+	// Legacy RoslynSearchCategory: symbol declarations across the solution's .cs
+	// files. This shell has no Roslyn compilation, so the scan is a cheap anchored
+	// regex over the sources, cached per file until its timestamp changes; the
+	// breadcrumb scope chain and Go To Type reuse the same scanner.
 	static readonly System.Text.RegularExpressions.Regex typeDeclRegex = new (
-		@"^\s*(?:\[[^\]]*\]\s*)*((?:public|private|protected|internal|static|sealed|abstract|partial|readonly|ref)\s+)*\b(class|interface|struct|enum)\s+([A-Za-z_][A-Za-z0-9_]*)",
+		@"^([ \t]*)(?:\[[^\]]*\][ \t]*)*((?:public|private|protected|internal|static|sealed|abstract|partial|readonly|ref)\s+)*\b(class|interface|struct|enum)\s+([A-Za-z_][A-Za-z0-9_]*)",
 		System.Text.RegularExpressions.RegexOptions.Compiled);
-	readonly Dictionary<string, (DateTime Stamp, List<(string Kind, string Name, int Line)> Symbols)> symbolIndex = new ();
+	static readonly System.Text.RegularExpressions.Regex methodDeclRegex = new (
+		@"^([ \t]*)(?:\[[^\]]*\][ \t]*)*((?:public|private|protected|internal|static|async|virtual|override|sealed|abstract|partial|readonly|extern|unsafe|new)\s+)*[\w<>\[\],\.\?\s]+?\s([A-Za-z_][A-Za-z0-9_]*)\s*\([^;]*\)\s*(\{|=>|$)",
+		System.Text.RegularExpressions.RegexOptions.Compiled);
+	static readonly System.Text.RegularExpressions.Regex propertyDeclRegex = new (
+		@"^([ \t]*)(?:\[[^\]]*\][ \t]*)*((?:public|private|protected|internal|static|async|virtual|override|sealed|abstract|partial|readonly|new|required|event)\s+)*[\w<>\[\],\.\?\s]+?\s([A-Za-z_][A-Za-z0-9_]*)\s*(\{|=>)",
+		System.Text.RegularExpressions.RegexOptions.Compiled);
+	readonly Dictionary<string, (DateTime Stamp, List<SymbolHit> Symbols)> symbolIndex = new ();
+
+	public sealed record SymbolHit (string Kind, string Name, int Line, int Indent, string? Container);
+
+	/// <summary>One pass over C# source: type declarations plus methods and
+	/// properties, each with its line and INDENT — the container chain (breadcrumb
+	/// scope, Go To Type detail) falls out of an indentation stack.</summary>
+	public static List<SymbolHit> ScanSymbols (string text)
+	{
+		var hits = new List<SymbolHit> ();
+		var stack = new List<(int Indent, string Name)> (); // enclosing scopes
+		int ln = 0;
+		foreach (var raw in text.Split ('\n')) {
+			ln++;
+			var line = raw.TrimEnd ('\r');
+			var trimmed = line.TrimStart ();
+			if (trimmed.Length == 0 || trimmed.StartsWith ("//", StringComparison.Ordinal) || trimmed.StartsWith ("*", StringComparison.Ordinal))
+				continue;
+			var indent = line.Length - trimmed.Length;
+			// A lone opening brace (Allman style) sits at the SAME indent as its
+			// owner — popping scopes on it would evict the type pushed by the very
+			// previous line (Main/Double lost their container that way); only a
+			// CLOSING brace pops its own scope.
+			if (trimmed.StartsWith ("{", StringComparison.Ordinal))
+				continue;
+			if (trimmed.StartsWith ("}", StringComparison.Ordinal)) {
+				PopScopes (indent);
+				continue;
+			}
+			PopScopes (indent);
+			var tm = typeDeclRegex.Match (line);
+			if (tm.Success) {
+				var container = stack.Count > 0 ? stack [^1].Name : null;
+				hits.Add (new SymbolHit (tm.Groups [3].Value, tm.Groups [4].Value, ln, indent, container));
+				stack.Add ((indent, tm.Groups [4].Value));
+				continue;
+			}
+			var mm = methodDeclRegex.Match (line);
+			string? kind = mm.Success ? "method" : null;
+			if (!mm.Success) {
+				var pm = propertyDeclRegex.Match (line);
+				if (pm.Success)
+					(kind, mm) = ("property", pm);
+			}
+			if (kind is null)
+				continue;
+			var mContainer = stack.Count > 0 ? stack [^1].Name : null;
+			hits.Add (new SymbolHit (kind, mm.Groups [3].Value, ln, indent, mContainer));
+			stack.Add ((indent, mm.Groups [3].Value));
+		}	
+		return hits;
+
+		void PopScopes (int indent)
+		{
+			while (stack.Count > 0 && stack [^1].Indent >= indent)
+				stack.RemoveAt (stack.Count - 1);
+		}
+	}
 
 	void CollectSymbolResults (string term)
 	{
 		var projDir = string.IsNullOrEmpty (loadedSolutionPath) ? null : Path.GetDirectoryName (loadedSolutionPath);
 		if (projDir is null || term.Length == 0)
 			return;
-		var hits = new List<(string Kind, string Name, string File, int Line, int Rank)> ();
+		var hits = new List<(SymbolHit Hit, string File, int Rank)> ();
 		foreach (var file in Directory.EnumerateFiles (projDir, "*.cs", SearchOption.AllDirectories)) {
 			if (file.Contains ("/obj/") || file.Contains ("/bin/") || file.Contains ("/.git/"))
 				continue;
-			List<(string Kind, string Name, int Line)> syms;
+			List<SymbolHit> syms;
 			try {
 				var stamp = File.GetLastWriteTimeUtc (file);
 				if (symbolIndex.TryGetValue (file, out var cached) && cached.Stamp == stamp) {
 					syms = cached.Symbols;
 				} else {
-					syms = new List<(string, string, int)> ();
-					int ln = 0;
-					foreach (var lineText in File.ReadLines (file)) {
-						ln++;
-						var m = typeDeclRegex.Match (lineText);
-						if (m.Success)
-							syms.Add ((m.Groups [2].Value, m.Groups [3].Value, ln));
-					}
+					syms = ScanSymbols (File.ReadAllText (file));
 					symbolIndex [file] = (stamp, syms);
 				}
 			} catch {
 				continue; // unreadable files just don't contribute symbols
 			}
-			foreach (var (kind, name, line) in syms) {
-				bool starts = name.StartsWith (term, StringComparison.OrdinalIgnoreCase);
-				if (starts || name.Contains (term, StringComparison.OrdinalIgnoreCase))
-					hits.Add ((kind, name, file, line, starts ? 0 : 1));
+			foreach (var hit in syms) {
+				bool starts = hit.Name.StartsWith (term, StringComparison.OrdinalIgnoreCase);
+				if (starts || hit.Name.Contains (term, StringComparison.OrdinalIgnoreCase))
+					hits.Add ((hit, file, starts ? 0 : 1));
 			}
 			if (hits.Count > 60) // bound the scan on huge trees
 				break;
 		}
-		foreach (var (kind, name, file, line, _) in hits.OrderBy (h => h.Rank).ThenBy (h => h.Name).Take (12))
-			AddSymbolResult (kind, name, file, line);
+		foreach (var (hit, file, _) in hits.OrderBy (h => h.Rank).ThenBy (h => h.Hit.Name).ThenBy (h => h.Hit.Line).Take (12))
+			AddSymbolResult (hit, file);
 	}
 
-	void AddSymbolResult (string kind, string name, string file, int line)
+	void AddSymbolResult (SymbolHit hit, string file)
 	{
 		var projDir = Path.GetDirectoryName (loadedSolutionPath!) ?? "";
 		var rel = Path.GetRelativePath (projDir, file);
-		searchResults.Add (($"md-{kind.ToLowerInvariant ()}", $"{name} ({kind})", $"{rel} : {line}",
-			() => OpenFileDocumentAtLine (file, line), $"{file} : {line}"));
+		searchResults.Add (($"md-{hit.Kind.ToLowerInvariant ()}", $"{hit.Name} ({hit.Kind})", $"{rel} : {hit.Line}",
+			() => OpenFileDocumentAtLine (file, hit.Line),
+			hit.Container is null ? $"{file} : {hit.Line}" : $"{file} : {hit.Line} — in {hit.Container}"));
 	}
 
 	// Legacy CommandSearchCategory over the menu catalog: label matches first
@@ -5417,7 +5787,7 @@ public partial class MainWindow : Window
 			_ = new GoToDialog ().ShowDialog (this);
 			return;
 		case "MonoDevelop.Ide.Commands.SearchCommands.GotoType":
-			_ = new GoToDialog { Title = "Go To Type" }.ShowDialog (this);
+			_ = new GoToDialog ("Go To Type").ShowDialog (this);
 			return;
 		case "MonoDevelop.Ide.Commands.SearchCommands.GotoLineNumber": {
 			// Legacy GotoLineNumber: editor overlay widget parsing "N", "N:C", "+N/-N".

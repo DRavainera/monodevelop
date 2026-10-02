@@ -52,6 +52,9 @@ public class CompletionPopup : Window
 		list.MaxHeight = 200;
 		list.ItemTemplate = new FuncDataTemplate<Item> ((it, _) => {
 			var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
+			// Avalonia re-builds containers with a null item while recycling (ClearContainerForItemOverride).
+			if (it is null)
+				return row;
 			var img = IconService.GetResourceImage (it.IconStock, 2);
 			if (img is not null)
 				row.Children.Add (new Image { Source = img, Width = 16, Height = 16, VerticalAlignment = VerticalAlignment.Center });

@@ -131,7 +131,7 @@
     <Panel>
     <!-- Tool panes + document area (legacy DockFrame anatomy: left pad, center docs,
          right pad, bottom pad; each pad has tabs and can be hidden/restored) -->
-    <Grid>
+    <Grid x:Name="WorkbenchGrid">
       <Grid.ColumnDefinitions>
         <ColumnDefinition Width="Auto" />
         <ColumnDefinition Width="*" />
@@ -139,7 +139,7 @@
       </Grid.ColumnDefinitions>
       <Grid.RowDefinitions>
         <RowDefinition Height="*" />
-        <RowDefinition Height="Auto" />
+        <RowDefinition Height="170" />
       </Grid.RowDefinitions>
 
       <!-- Left pads: Solution / Classes (legacy ProjectPad + ClassPad).
@@ -151,10 +151,19 @@
       <!-- Center: document area (Welcome page behaves as the startup document) -->
       <Border x:Name="DocumentPane" Grid.Row="0" Grid.Column="1"
               Background="{DynamicResource IdeWindowBgBrush}"
-              BorderBrush="{DynamicResource IdeBorderBrush}" BorderThickness="0,0,1,0">
+              BorderBrush="{DynamicResource IdeChromeBgBrush}" BorderThickness="0,1,1,0">
         <DockPanel>
-          <!-- Document island tab strip (browser-style) -->
-          <TabControl x:Name="DocTabs" DockPanel.Dock="Top" TabStripPlacement="Top" Background="Transparent" />
+          <!-- Document island tab strip (browser-style). The custom template
+               bypasses the Fluent TabControl template, whose default ItemsPanel
+               stacked the tab items VERTICALLY (pushing the code out of view) —
+               pin the strip to a horizontal panel. -->
+          <TabControl x:Name="DocTabs" DockPanel.Dock="Top" TabStripPlacement="Top" Background="Transparent">
+            <TabControl.ItemsPanel>
+              <ItemsPanelTemplate>
+                <StackPanel Orientation="Horizontal" />
+              </ItemsPanelTemplate>
+            </TabControl.ItemsPanel>
+          </TabControl>
           <!-- Wave-3 breadcrumb (legacy SourceEditor widget): path segments of the
                active file; hidden until a file document is selected -->
           <Border x:Name="BreadcrumbHostRow" DockPanel.Dock="Top" IsVisible="False">
@@ -173,16 +182,18 @@
                     Background="Transparent" ResizeDirection="Columns" />
       <GridSplitter Grid.Row="0" Grid.Column="2" Width="3" HorizontalAlignment="Left"
                     Background="Transparent" ResizeDirection="Columns" />
-      <!-- Editor <-> bottom-pad splitter (wave-3: drag the shared edge) -->
-      <GridSplitter Grid.Row="1" Grid.Column="1" Height="3" VerticalAlignment="Top"
-                    Background="Transparent" ResizeDirection="Rows" />
 
       <!-- Bottom dock (legacy bottom group): Output | Errors | Tasks | Code Issues
            | Search Results | Call Stack | Locals | Watch | Threads | Bookmarks |
            Breakpoints — lives under the EDITOR column only (same width as the
-           editor, wave-3); the GridSplitter above it resizes editor/bottom pad. -->
-      <controls:PadHost x:Name="BottomPads" Grid.Row="1" Grid.Column="1" Height="170"
+           editor, wave-3); the GridSplitter BELOW (declared after, so it stays on
+           top of the pad's tab strip) resizes editor/bottom pad. -->
+      <controls:PadHost x:Name="BottomPads" Grid.Row="1" Grid.Column="1"
                         DockOrientation="Horizontal" />
+      <!-- Editor <-> bottom-pad splitter (wave-3: drag the shared edge).
+           Custom PadSplitter: the GridSplitter ignored real pointer drags at this
+           edge; this one adjusts the row height directly (wired in the ctor). -->
+      <controls:PadSplitter x:Name="EditorBottomSplitter" Grid.Row="1" Grid.Column="1" />
     </Grid>
 
     <!-- Welcome page overlay: covers the whole workbench (pads included) like the

@@ -475,8 +475,23 @@ public class SkTextEditor : Control
 	static SKTypeface GetMonospaceTypeface ()
 	{
 		lock (fontLock) {
-			typeface ??= SKTypeface.FromFamilyName ("DejaVu Sans Mono", SKFontStyle.Normal)
-				?? SKTypeface.FromFamilyName ("Consolas") ?? SKTypeface.Default;
+			if (typeface is not null)
+				return typeface;
+			// Name-only resolution can land on a face with NO glyphs (restricted
+			// fontconfig fixtures may not carry the asked family — rects still paint
+			// but every DrawText is a no-op). Accept the first candidate that maps
+			// basic ASCII, verified, instead of trusting the family name.
+			foreach (var family in new[] { "DejaVu Sans Mono", "Noto Sans Mono", "Source Code Pro", "Cascadia Mono", "Liberation Mono", "Nimbus Mono PS", "" }) {
+				using var t = family.Length == 0 ? null : SKTypeface.FromFamilyName (family, SKFontStyle.Normal);
+				var face = t is not null && t.CountGlyphs ("ABCdef123") > 0 ? t : family.Length == 0 && SKTypeface.Default.CountGlyphs ("ABCdef123") > 0 ? SKTypeface.Default : null;
+				if (face is not null) {
+					typeface = face;
+					Console.WriteLine ("[skeditor] monospace face: " + face.FamilyName);
+					return typeface;
+				}
+			}
+			typeface = SKTypeface.Default;
+			Console.WriteLine ("[skeditor] monospace face: <default> glyphs=" + typeface.CountGlyphs ("ABCdef123"));
 			return typeface;
 		}
 	}
@@ -2508,10 +2523,27 @@ public class SkTextEditor : Control
 		ToolTip.SetTip (this, new TextBlock { Text = text, FontSize = 11 });
 	}
 
+	// QA introspection: text/line state and the size of the last painted frame
+	// (automated runs assert the editor actually rendered its content).
+	public int QaTextLength => Text?.Length ?? 0;
+	public int QaLineCount => lines.Count;
+	public (int W, int H) QaLastRender => (lastRenderW, lastRenderH);
+	public int QaRenderCount => renderCount;
+	int lastRenderW, lastRenderH, renderCount;
+
+	// A size change alone must end in a repaint: when the editor is mounted into
+	// a plain Panel it is first arranged at 0x0, and if the compositor treats the
+	// later resize as already-painted the code never reaches the screen.
+	protected override void OnSizeChanged (SizeChangedEventArgs e) => InvalidateVisual ();
+
 	public override void Render (DrawingContext context)
 	{
 		int w = Math.Max (1, (int)Math.Ceiling (Bounds.Width));
 		int h = Math.Max (1, (int)Math.Ceiling (Bounds.Height));
+		if (renderCount < 3)
+			Console.WriteLine ($"[skrender] #{renderCount} {w}x{h} attached={this.IsAttachedToVisualTree ()} text={Text?.Length ?? 0}");
+		lastRenderW = w; lastRenderH = h;
+		renderCount++;
 		if (dirty || front is null || bufferW != w || bufferH != h) {
 			// Render each frame into a FRESH bitmap: the compositor may still read
 			// the previous frame's bitmap while Avalonia re-runs Render (typing

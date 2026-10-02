@@ -72,7 +72,7 @@
                           ToolTip.Tip="More tabs" IsVisible="False" />
                 </StackPanel>
                 <Border Name="StripViewport" ClipToBounds="True">
-                  <ItemsPresenter Name="PART_ItemsPresenter" />
+                  <ItemsPresenter Name="PART_ItemsPresenter" ItemsPanel="{TemplateBinding ItemsPanel}" />
                 </Border>
               </DockPanel>
             </Border>

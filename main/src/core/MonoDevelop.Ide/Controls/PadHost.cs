@@ -28,6 +28,12 @@ public class PadHost : Border
 	/// can update the View > Pads checks like the legacy DockItem.Closed).</summary>
 	public event Action<string>? PadTabClosed;
 
+	/// <summary>Raised after the pad collapsed or expanded (true = collapsed) so
+	/// the owning shell can resize the dock row: a collapsed bottom pad pins its
+	/// row to the 34px rail (no dead gap under the splitter) and expanding
+	/// returns the row to its previous height.</summary>
+	public event Action<bool>? CollapseChanged;
+
 	public sealed class PadTab
 	{
 		public string Id = "";
@@ -62,6 +68,10 @@ public class PadHost : Border
 	public Orientation DockOrientation { get; set; } = Orientation.Vertical;
 
 	bool collapsed;
+	// The ✕ lives INSIDE the tab's ToggleButton, and the toggle's own Click
+	// (rail-restore when collapsed) fires after the ✕'s in the same release
+	// dispatch — without this flag a last-tab ✕ collapse was instantly undone.
+	bool lastClickWasClose;
 	double savedWidth = double.NaN;
 	double savedHeight = double.NaN;
 	public bool IsCollapsed => collapsed;
@@ -99,7 +109,8 @@ public class PadHost : Border
 		// the rail buttons' bounds — the toggle templates' own hit region proved
 		// unreliable (InputHitTest missed buttons across their whole rect).
 		railHost.Tapped += (_, e) => {
-			ToggleCollapse (); // expand
+			e.Handled = true;
+			ToggleCollapse ("rail"); // expand
 			var p = e.GetPosition (railBar);
 			foreach (var t in tabs) {
 				if (t.RailButton is { } rb && rb.Bounds.Contains (p)) {
@@ -129,7 +140,7 @@ public class PadHost : Border
 			MinWidth = 34,
 		};
 		ToolTip.SetTip (collapseWrap, "Collapse pad");
-		collapseWrap.Tapped += (_, _) => ToggleCollapse ();
+		collapseWrap.Tapped += (_, e) => { e.Handled = true; ToggleCollapse ("chevron"); };
 
 		tabBarHost = new Border {
 			Child = tabScroller,
@@ -160,7 +171,7 @@ public class PadHost : Border
 			Cursor = new Cursor (StandardCursorType.Hand),
 		};
 		ToolTip.SetTip (chevronRow, "Expand pad");
-		chevronRow.Tapped += (_, _) => ToggleCollapse ();
+		chevronRow.Tapped += (_, e) => { e.Handled = true; ToggleCollapse ("restore"); };
 		// 2x2 grid: (0,0) expand corner — full-width row on side docks, a SQUARE
 		// 34x34 corner on the bottom dock — and the icon rail filling the rest.
 		var collapsedPanel = new Grid {
@@ -225,39 +236,45 @@ public class PadHost : Border
 
 		// One header content per state: icon + label + close (strip) / rotated (rail).
 		// The close button HIDES the pad tab (legacy DockItem closed → hidden, not
-		// removed — View > Pads brings it back).
-		object headerContent = tab.Label;
+		// removed — View > Pads brings it back). It exists for EVERY tab — an
+		// unresolvable icon stock id (e.g. Properties) must not also remove the ✕.
+		var label = new TextBlock {
+			Text = tab.Label,
+			FontSize = 11,
+			VerticalAlignment = VerticalAlignment.Center,
+		};
+		label.Bind (TextBlock.ForegroundProperty, Application.Current!.GetResourceObservable ("IdeFgBrush"));
+		var closeBtn = new Button {
+			Content = "\u2715",
+			FontSize = 9,
+			Padding = new Thickness (2, 0),
+			MinWidth = 16,
+			MinHeight = 16,
+			HorizontalContentAlignment = HorizontalAlignment.Center,
+			VerticalContentAlignment = VerticalAlignment.Center,
+			Background = Brushes.Transparent,
+			BorderThickness = new Thickness (0),
+			VerticalAlignment = VerticalAlignment.Center,
+			Tag = tab.Id,
+		};
+		ToolTip.SetTip (closeBtn, "Close pad");
+		closeBtn.Click += (_, _) => {
+			lastClickWasClose = true;
+			SetTabVisible (tab.Id, false);
+			PadTabClosed?.Invoke (tab.Id);
+			// The owning ToggleButton (registered for handled events too) raises its
+			// own Click AFTER this handler within the same release dispatch — clear
+			// the guard only once that pass is done.
+			Avalonia.Threading.Dispatcher.UIThread.Post (() => lastClickWasClose = false,
+				Avalonia.Threading.DispatcherPriority.Background);
+		};
+		var headerRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4 };
 		if (tab.Icon is not null && IconService.GetImage (tab.Icon) is Bitmap bmp) {
-			var label = new TextBlock {
-				Text = tab.Label,
-				FontSize = 11,
-				VerticalAlignment = VerticalAlignment.Center,
-			};
-			label.Bind (TextBlock.ForegroundProperty, Application.Current!.GetResourceObservable ("IdeFgBrush"));
-			var closeBtn = new Button {
-				Content = "\u2715",
-				FontSize = 8,
-				Padding = new Thickness (3, 0),
-				Background = Brushes.Transparent,
-				BorderThickness = new Thickness (0),
-				VerticalAlignment = VerticalAlignment.Center,
-				Tag = tab.Id,
-			};
-			ToolTip.SetTip (closeBtn, "Close pad");
-			closeBtn.Click += (_, _) => {
-				SetTabVisible (tab.Id, false);
-				PadTabClosed?.Invoke (tab.Id);
-			};
-			headerContent = new StackPanel {
-				Orientation = Orientation.Horizontal,
-				Spacing = 4,
-				Children = {
-					new Avalonia.Controls.Image { Source = bmp, Width = 16, Height = 16, VerticalAlignment = VerticalAlignment.Center },
-					label,
-					closeBtn,
-				},
-			};
+			headerRow.Children.Add (new Avalonia.Controls.Image { Source = bmp, Width = 16, Height = 16, VerticalAlignment = VerticalAlignment.Center });
 		}
+		headerRow.Children.Add (label);
+		headerRow.Children.Add (closeBtn);
+		object headerContent = headerRow;
 
 		var btn = new ToggleButton {
 			Content = headerContent,
@@ -268,8 +285,8 @@ public class PadHost : Border
 		};
 		tab.HeaderButton = btn;
 		btn.Click += (_, _) => {
-			if (collapsed)
-				ToggleCollapse (); // rail click restores (legacy pinned-pad behavior)
+			if (collapsed && !lastClickWasClose)
+				ToggleCollapse ("rail-tab"); // rail click restores (legacy pinned-pad behavior)
 			Select (tab.Id);
 		};
 		tabBar.Children.Add (btn);
@@ -355,14 +372,14 @@ public class PadHost : Border
 	/// Collapse/restore: swap the strip for the rail and hide the content. Widths
 	/// are saved/restored so the pad returns to its exact previous size.
 	/// </summary>
-	public void ToggleCollapse ()
+	public void ToggleCollapse (string? reason = null)
 	{
 		collapsed = !collapsed;
 		ApplyCollapseState ();
-		// QA (log-only when a console exists): every collapse/restore transition,
-		// with the button rects at that moment — distinguishes "the click landed
-		// outside the button" from "the handler never ran".
-		Console.WriteLine ($"[padhost] '{Id}' toggle → collapsed={collapsed} restoreBtn={(restoreButton is null ? "null" : $"{restoreButton.Bounds.Width:F0}x{restoreButton.Bounds.Height:F0} visible={restoreButton.IsVisible}")}");
+		// QA (log-only when a console exists): every collapse/restore transition
+		// with its trigger and the button rects at that moment — distinguishes
+		// "the click landed outside the button" from "the handler never ran".
+		Console.WriteLine ($"[padhost] '{Id}' toggle({reason ?? "api"}) → collapsed={collapsed} restoreBtn={(restoreButton is null ? "null" : $"{restoreButton.Bounds.Width:F0}x{restoreButton.Bounds.Height:F0} visible={restoreButton.IsVisible}")}");
 		Console.Out.Flush ();
 	}
 
@@ -400,24 +417,31 @@ public class PadHost : Border
 				// Bottom dock: only the content collapses away — the tab row keeps its
 				// exact position with the expand chevron at its right end (the wrap's
 				// fixed 34px width makes the hit zone identical to the expanded state);
-				// no rail, no second row, nothing else changes.
+				// no rail, no second row, nothing else changes. The pad lives in a
+				// splitter-resized grid row, so "collapsed" pins THIS control to 34px
+				// anchored bottom (no fixed XAML height to fight the splitter with).
 				savedHeight = Height;
 				Height = 34;
+				VerticalAlignment = VerticalAlignment.Bottom;
 				Grid.SetColumn (contentHost, 0);
 			}
 		} else {
 			if (DockOrientation == Orientation.Vertical) {
 				Width = savedWidth;
 			} else {
-				// Bottom dock restore: back to the full-height pad; the tab row (with
-				// its 34px chevron) was never hidden or resized.
+				// Bottom dock restore: back to the full-height pad — Height returns to
+				// whatever it was (NaN = follow the splitter-resized grid row) and the
+				// alignment back to stretch. The tab row (with its 34px chevron) was
+				// never hidden or resized.
 				Height = savedHeight;
+				VerticalAlignment = VerticalAlignment.Stretch;
 				Grid.SetColumn (contentHost, 0);
 				chevronRow.Width = double.NaN;
 				chevronRow.Height = double.NaN;
 				chevronRow.HorizontalAlignment = HorizontalAlignment.Stretch;
 			}
 		}
+		CollapseChanged?.Invoke (collapsed);
 		LogCollapseChrome ();
 	}
 
