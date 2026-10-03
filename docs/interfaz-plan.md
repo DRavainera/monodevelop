@@ -2237,3 +2237,35 @@ Control, NuGet, .NET Runtimes, SDK Locations/.NET Core, Debugger, GTK# Designer,
 Performance, F#, Color Theme, Code Snippets, Language Bundles, Source Analysis,
 XML Schemas) siguen como placeholder con label/icono correctos; se portarán por
 módulos igual que el Text Editor.
+
+## M29 — Text Editor: Color Theme + Code Snippets + Language Bundles
+
+Continuación del grupo Text Editor (2026-10-02). Los tres paneles GTK dependen
+de `SyntaxHighlightingService` (parsea `.tmTheme`/`.sublime-syntax`, con deps de
+NRefactory) y `CodeTemplateService`; en el shell se portan conciliando las
+**mismas carpetas y claves** de usuario (`UserDataRoot` = `~/.local/share/
+MonoDevelop/9.0`), sin arrastrar esos servicios.
+
+- **Color Theme** (`colortheme`, legacy `HighlightingPanel`): lista los built-in
+  {Light, Dark, High Contrast Dark, High Contrast Light} + temas de usuario de
+  `ColorThemes/` (`*.json`/`*.vssettings`/`*.tmtheme`), con Add (import por copia)
+  / Remove (no borra built-ins) / Open folder. Persiste en **`ColorScheme`**
+  (UI light) o **`ColorScheme-Dark`** (UI dark), las claves de
+  `IdePreferences.ThemeConfigurationProperty`.
+- **Code Snippets** (`codesnippets`, legacy `CodeTemplatePane`): lista los
+  `<Shortcut>.template.xml` de `Snippets/`, muestra el código en preview y
+  Remove borra el archivo (Add/Edit —que abre el `EditTemplateDialog`— queda
+  pendiente).
+- **Language Bundles** (`languagebundles`, legacy
+  `TextMateBundleOptionsPanelWidget`): lista los bundles de usuario de
+  `LanguageBundles/` con Add (copia) / Remove; los built-in los provee el IDE.
+
+### QA (§18.5, 2 rondas)
+
+Tester QA Senior: ronda 1 → **H1 bloqueante** (el `SnippetPreview` con
+`FontFamily="monospace"` lanzaba `Could not create glyphTypeface` y abortaba la
+app con fontconfig mínimo) + H2/H3 del harness QA; corregidos (fuente por
+defecto del diálogo, script QA case-insensitive/sin truncar) y ronda 2 → **APTO**
+(6/6 escenarios adversariales de Code Snippets sin crash). Build 0 errores;
+53/53 tests; 3 paneles `placeholder=False`, fixtures listadas
+(`themes=5`, `count=1`, `count=1`).

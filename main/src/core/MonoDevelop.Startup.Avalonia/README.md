@@ -348,8 +348,10 @@ comparar la UI contra la legacy GTK en vivo (ver bitácoras en
   Visual Style (tema + idioma), Author, Key Bindings, Fonts, Updates, Tasks,
   External Tools, Load/Save, Build, **Errors and Warnings** (`BuildMessagePanel`),
   Feedback, Maintenance y el grupo **Text Editor** portado del add-in
-  SourceEditor2 (General, Markers and Rulers, Behavior, IntelliSense) con las
-  mismas claves `DefaultSourceEditorOptions`/`EditorPreferences`. El resto
+  SourceEditor2 (General, Markers and Rulers, Behavior, IntelliSense, Color
+  Theme, Code Snippets, Language Bundles) con las mismas claves
+  `DefaultSourceEditorOptions`/`EditorPreferences` y las mismas carpetas de
+  usuario (`ColorThemes`/`Snippets`/`LanguageBundles`). El resto
   (paneles de add-in) figura en el árbol con label/icono pero como placeholder
   hasta portar su stack.
 - **Persistencia de la sesión de debug**: breakpoints, watches (pad + pins

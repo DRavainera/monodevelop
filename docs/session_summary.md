@@ -856,3 +856,24 @@ Build 0 errores; tests **53/53**; 4 paneles `placeholder=False`, 0 FATAL.
 (+ README) y commit+push. Deuda: el resto de paneles de add-in siguen como
 placeholder con label/icono, a portar por módulos.
 
+## 2026-10-02 (d) — M29: Text Editor — Color Theme + Code Snippets + Language Bundles
+
+Los tres paneles GTK dependen de `SyntaxHighlightingService`/`CodeTemplateService`
+(pesados); portados conciliando las mismas carpetas/claves de `UserDataRoot`
+(`~/.local/share/MonoDevelop/9.0`):
+- `colortheme` (HighlightingPanel): built-ins + `ColorThemes/`; Add/Remove/Open
+  folder; persiste `ColorScheme` (light) / `ColorScheme-Dark` (dark).
+- `codesnippets` (CodeTemplatePane): lista `Snippets/*.template.xml`, preview,
+  Remove (Add/Edit pendiente del EditTemplateDialog).
+- `languagebundles` (TextMateBundleOptionsPanelWidget): lista `LanguageBundles/`,
+  Add/Remove; built-ins los provee el IDE.
+
+**QA (§18.5, 2 rondas)**: ronda 1 → H1 bloqueante (`FontFamily="monospace"` en
+`SnippetPreview` abortaba con fontconfig mínimo) + H2/H3 del harness; corregidos
+(fuente por defecto, script QA case-insensitive/sin truncar) → ronda 2 **APTO**
+(6/6 adversariales sin crash). Build 0 errores; tests **53/53**; 3 paneles
+`placeholder=False`.
+
+**Cierre**: documentación M29 en `interfaz-plan.md`/`migration-status-report.md`
+(+ README) y commit+push.
+

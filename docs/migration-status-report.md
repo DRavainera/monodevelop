@@ -280,6 +280,12 @@ El bucle de migración Gtk → Avalonia continúa por módulos (detalle por hito
   SourceEditor2 a Avalonia (`general`, `markers`, `behavior`, `intellisense`)
   con las mismas claves legacy. QA §18.5 en 3 rondas hasta limpio. Build 0
   errores, 53/53 tests. Detalle en `docs/interfaz-plan.md` § M28.
+- **M29 completado (2026-10-02)**: portados los paneles **Color Theme**,
+  **Code Snippets** y **Language Bundles** del Text Editor a Avalonia,
+  conciliando las mismas carpetas/claves de usuario (`ColorThemes`,
+  `Snippets`, `LanguageBundles`; `ColorScheme`/`ColorScheme-Dark`). QA §18.5 en
+  2 rondas (H1 crash de Code Snippets corregido). Build 0 errores, 53/53 tests.
+  Detalle en `docs/interfaz-plan.md` § M29.
 
 Nota operativa: el binario de la UI Avalonia es
 `src/core/MonoDevelop.Startup.Avalonia/bin/Debug/net10.0/MonoDevelop.AvaloniaShell.dll`;

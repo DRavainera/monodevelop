@@ -10,6 +10,7 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Media.Imaging;
+using Avalonia.Platform.Storage;
 using Avalonia.Styling;
 using MonoDevelop.Ide.Services;
 
@@ -67,6 +68,7 @@ public partial class PreferencesDialog : Window
 		"externaltools", "loadsave", "build", "buildmessages", "feedback", "maintenance",
 		// Text editor group (ported from the SourceEditor2 add-in panels, same keys).
 		"general", "markers", "behavior", "intellisense",
+		"colortheme", "codesnippets", "languagebundles",
 	};
 
 	string? pendingLanguage;
@@ -99,6 +101,9 @@ public partial class PreferencesDialog : Window
 		LoadMarkersPanel ();
 		LoadBehaviorPanel ();
 		LoadIntelliSensePanel ();
+		LoadColorThemePanel ();
+		LoadSnippetsPanel ();
+		LoadLanguageBundlesPanel ();
 		GenWordWrap!.IsCheckedChanged += (_, _) => GenWordWrapGlyphs!.IsEnabled = GenWordWrap.IsChecked == true;
 		BhAutoInsertBrace!.IsCheckedChanged += (_, _) => BhSmartSemicolon!.IsEnabled = BhAutoInsertBrace.IsChecked == true;
 		BuildSectionTree ();
@@ -848,6 +853,190 @@ public partial class PreferencesDialog : Window
 		SettingsStore.SetBool ("ForceCompletionSuggestionMode", IsSuggestionMode!.IsChecked == true);
 	}
 
+	// ---------- Color Theme / Code Snippets / Language Bundles ----------
+	// The GTK panels read these from SyntaxHighlightingService / CodeTemplateService,
+	// which are heavy (they parse .tmTheme/.sublime-syntax with NRefactory deps). The
+	// shell reconciles the SAME user directories and settings keys instead.
+
+	static string UserDataRoot {
+		get {
+			var xdg = Environment.GetEnvironmentVariable ("XDG_DATA_HOME");
+			var baseDir = string.IsNullOrEmpty (xdg)
+				? Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile), ".local", "share")
+				: xdg;
+			return Path.Combine (baseDir, "MonoDevelop", "9.0");
+		}
+	}
+	static string ColorThemesDir => Path.Combine (UserDataRoot, "ColorThemes");
+	static string LanguageBundlesDir => Path.Combine (UserDataRoot, "LanguageBundles");
+	static string SnippetsDir => Path.Combine (UserDataRoot, "Snippets");
+
+	static readonly string[] BuiltInThemes = { "Light", "Dark", "High Contrast Dark", "High Contrast Light" };
+
+	static bool IsDarkUi => Application.Current?.ActualThemeVariant == ThemeVariant.Dark;
+	// ThemeConfigurationProperty stores the light scheme under "ColorScheme" and the
+	// dark one under "ColorScheme-Dark" (IdePreferences.ThemeConfigurationProperty).
+	static string ColorSchemeKey => IsDarkUi ? "ColorScheme-Dark" : "ColorScheme";
+
+	static readonly HashSet<string> themeExtensions = new (StringComparer.OrdinalIgnoreCase) { ".json", ".vssettings", ".tmtheme" };
+	static string ThemeFileToName (string file)
+	{
+		var n = Path.GetFileName (file);
+		foreach (var ext in new[] { ".tmTheme", ".vssettings", ".json" })
+			if (n.EndsWith (ext, StringComparison.OrdinalIgnoreCase))
+				return n[..^ext.Length];
+		return Path.GetFileNameWithoutExtension (n);
+	}
+
+	void LoadColorThemePanel ()
+	{
+		ThemeList!.Items.Clear ();
+		var names = new List<string> (BuiltInThemes);
+		try {
+			if (Directory.Exists (ColorThemesDir))
+				foreach (var f in Directory.EnumerateFiles (ColorThemesDir).Where (f => themeExtensions.Contains (Path.GetExtension (f))))
+					if (!names.Contains (ThemeFileToName (f)))
+						names.Add (ThemeFileToName (f));
+		} catch { /* unreadable dir */ }
+		foreach (var n in names)
+			ThemeList.Items.Add (n);
+		var current = SettingsStore.GetString (ColorSchemeKey) ?? (IsDarkUi ? "Dark" : "Light");
+		ThemeList.SelectedItem = names.FirstOrDefault (n => n.Equals (current, StringComparison.OrdinalIgnoreCase));
+		MainWindow.Instance?.Output ($"[prefs-colortheme] key={ColorSchemeKey} themes={names.Count} selected={current}");
+	}
+
+	void StoreColorThemePanel ()
+	{
+		if (ThemeList!.SelectedItem is string theme)
+			SettingsStore.SetString (ColorSchemeKey, theme);
+	}
+
+	async void OnThemeAdd (object? sender, RoutedEventArgs e)
+	{
+		var top = TopLevel.GetTopLevel (this);
+		if (top?.StorageProvider is not { } sp)
+			return;
+		var files = await sp.OpenFilePickerAsync (new Avalonia.Platform.Storage.FilePickerOpenOptions {
+			AllowMultiple = false,
+			FileTypeFilter = new [] { new Avalonia.Platform.Storage.FilePickerFileType ("Color themes") { Patterns = new [] { "*.json", "*.vssettings", "*.tmTheme", "*.tmtheme" } } },
+		});
+		if (files.Count == 0)
+			return;
+		if (files [0].TryGetLocalPath () is not { } src)
+			return;
+		Directory.CreateDirectory (ColorThemesDir);
+		File.Copy (src, Path.Combine (ColorThemesDir, Path.GetFileName (src)));
+		LoadColorThemePanel ();
+	}
+
+	void OnThemeRemove (object? sender, RoutedEventArgs e)
+	{
+		if (ThemeList!.SelectedItem is not string name || BuiltInThemes.Contains (name))
+			return;
+		try {
+			var file = Directory.EnumerateFiles (ColorThemesDir).FirstOrDefault (f => ThemeFileToName (f).Equals (name, StringComparison.OrdinalIgnoreCase));
+			if (file is not null)
+				File.Delete (file);
+		} catch { /* dir gone / unreadable */ }
+		LoadColorThemePanel ();
+	}
+
+	void OnThemeOpenFolder (object? sender, RoutedEventArgs e)
+	{
+		try {
+			Directory.CreateDirectory (ColorThemesDir);
+			System.Diagnostics.Process.Start (new System.Diagnostics.ProcessStartInfo ("xdg-open", ColorThemesDir) { UseShellExecute = true });
+		} catch (Exception ex) { MainWindow.Instance?.Output ("[prefs] open folder failed: " + ex.Message); }
+	}
+
+	// Code Snippets: the legacy stores one <Shortcut>.template.xml per user template in
+	// the Snippets folder (CodeTemplateService.TemplatePath).
+	readonly Dictionary<string, (string Shortcut, string Group, string Description, string Code)> snippets = new ();
+
+	void LoadSnippetsPanel ()
+	{
+		snippets.Clear ();
+		try {
+			if (Directory.Exists (SnippetsDir)) {
+				foreach (var f in Directory.EnumerateFiles (SnippetsDir, "*.xml")) {
+					try {
+						var root = XDocument.Load (f).Root;
+						if (root is null)
+							continue;
+						var shortcut = (string?)root.Element ("Shortcut") ?? Path.GetFileNameWithoutExtension (f);
+						snippets [f] = (shortcut,
+							(string?)root.Element ("Group") ?? "",
+							(string?)root.Element ("Description") ?? "",
+							(string?)root.Element ("Code") ?? "");
+					} catch { /* malformed template */ }
+				}
+			}
+		} catch { /* unreadable dir */ }
+		SnippetList!.Items.Clear ();
+		foreach (var kv in snippets.OrderBy (s => s.Value.Group, StringComparer.OrdinalIgnoreCase).ThenBy (s => s.Value.Shortcut, StringComparer.OrdinalIgnoreCase))
+			SnippetList.Items.Add (new ListBoxItem { Tag = kv.Key, Content = $"[{kv.Value.Group}] {kv.Value.Shortcut}" });
+		MainWindow.Instance?.Output ($"[prefs-snippets] count={snippets.Count}");
+	}
+
+	void OnSnippetSelected (object? sender, SelectionChangedEventArgs e)
+	{
+		if (SnippetList?.SelectedItem is ListBoxItem { Tag: string file } && snippets.TryGetValue (file, out var t))
+			SnippetPreview!.Text = t.Code;
+		else if (SnippetPreview is not null)
+			SnippetPreview.Text = "";
+	}
+
+	void OnSnippetRemove (object? sender, RoutedEventArgs e)
+	{
+		if (SnippetList?.SelectedItem is not ListBoxItem { Tag: string file })
+			return;
+		try { File.Delete (file); } catch { }
+		LoadSnippetsPanel ();
+	}
+
+	// Language Bundles: user bundles under the LanguageBundles folder; built-in bundles
+	// ship with the IDE (the shell lists the user ones it can add/remove).
+	void LoadLanguageBundlesPanel ()
+	{
+		BundleList!.Items.Clear ();
+		try {
+			if (Directory.Exists (LanguageBundlesDir))
+				foreach (var f in Directory.EnumerateFileSystemEntries (LanguageBundlesDir).OrderBy (f => f, StringComparer.OrdinalIgnoreCase))
+					BundleList.Items.Add (Path.GetFileName (f));
+		} catch { /* unreadable dir */ }
+		MainWindow.Instance?.Output ($"[prefs-bundles] count={BundleList.Items.Count}");
+	}
+
+	async void OnBundleAdd (object? sender, RoutedEventArgs e)
+	{
+		var top = TopLevel.GetTopLevel (this);
+		if (top?.StorageProvider is not { } sp)
+			return;
+		var files = await sp.OpenFilePickerAsync (new Avalonia.Platform.Storage.FilePickerOpenOptions {
+			AllowMultiple = false,
+			FileTypeFilter = new [] { new Avalonia.Platform.Storage.FilePickerFileType ("Bundles") { Patterns = new [] { "*.tmBundle", "*.sublime-package", "*.tmbundle", "*.zip" } } },
+		});
+		if (files.Count == 0)
+			return;
+		if (files [0].TryGetLocalPath () is not { } src)
+			return;
+		Directory.CreateDirectory (LanguageBundlesDir);
+		File.Copy (src, Path.Combine (LanguageBundlesDir, Path.GetFileName (src)));
+		LoadLanguageBundlesPanel ();
+	}
+
+	void OnBundleRemove (object? sender, RoutedEventArgs e)
+	{
+		if (BundleList?.SelectedItem is not string name)
+			return;
+		try {
+			var path = Path.Combine (LanguageBundlesDir, name);
+			if (Directory.Exists (path)) Directory.Delete (path, true);
+			else if (File.Exists (path)) File.Delete (path);
+		} catch { /* dir gone / unreadable */ }
+		LoadLanguageBundlesPanel ();
+	}
+
 	// ---------- Panel switching (OptionsDialog.SelectPanel) ----------
 	void OnSectionSelected (object? sender, SelectionChangedEventArgs e)
 	{
@@ -882,6 +1071,9 @@ public partial class PreferencesDialog : Window
 		PanelMarkers!.IsVisible = id == "markers";
 		PanelBehavior!.IsVisible = id == "behavior";
 		PanelIntelliSense!.IsVisible = id == "intellisense";
+		PanelColorTheme!.IsVisible = id == "colortheme";
+		PanelCodeSnippets!.IsVisible = id == "codesnippets";
+		PanelLanguageBundles!.IsVisible = id == "languagebundles";
 		PanelPlaceholder!.IsVisible = !functionalPanels.Contains (id);
 
 		HeaderTitle!.Text = node.Label;
@@ -926,6 +1118,7 @@ public partial class PreferencesDialog : Window
 		StoreMarkersPanel ();
 		StoreBehaviorPanel ();
 		StoreIntelliSensePanel ();
+		StoreColorThemePanel ();
 		Close ();
 	}
 
