@@ -1010,3 +1010,14 @@ Disabled="True">`, no un elemento; la shell solo leía el elemento (interop
 GTK→shell rota). Corregido: lee atributo primero (fallback elemento) y escribe el
 atributo canónico eliminando el hijo; repositorios preservados. **PASA LIMPIO**.
 Build 0 errores, 53/53 tests.
+
+## 2026-10-03 (f) — Preferences: Version Control → Commit Message Style
+
+Panel portado del add-in (`VersionControlPolicyPanel`/`CommitMessageStylePanelWidget`):
+header + 8 checkboxes que mapean a los campos de `CommitMessageStyle`; preview
+aproximado; persiste en el policy set global (`<VersionControlPolicy><CommitMessageStyle>`).
+**QA (§18.5, 2 rondas)**: H1 (media-alta) — `XDocument.Load` sin
+`LoadOptions.PreserveWhitespace` descartaba `<Indent>\t</Indent>`; corregido en
+`LoadGlobalPolicy`/`StoreGlobalPolicies`. Formato **compatible** con el policy
+framework GTK (verificado con probe del serializador real). **PASA LIMPIO**.
+Build 0 errores, 53/53 tests.

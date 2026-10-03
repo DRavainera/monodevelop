@@ -1309,7 +1309,7 @@ public partial class PreferencesDialog : Window
 		try {
 			if (!File.Exists (GlobalPolicyFile))
 				return null;
-			var root = XDocument.Load (GlobalPolicyFile).Root;
+			var root = XDocument.Load (GlobalPolicyFile, LoadOptions.PreserveWhitespace).Root;
 			// PolicyService.LoadPolicy accepts both <Policies><PolicySet> and a bare <PolicySet> root.
 			var ps = root?.Name == "PolicySet" ? root : root?.Element ("PolicySet");
 			return ps?.Element (elementName);
@@ -1324,7 +1324,7 @@ public partial class PreferencesDialog : Window
 			var dir = Path.Combine (UserDataRoot, "Policies");
 			Directory.CreateDirectory (dir);
 			XDocument doc;
-			try { doc = File.Exists (GlobalPolicyFile) ? XDocument.Load (GlobalPolicyFile) : new XDocument (); } catch { doc = new XDocument (); }
+			try { doc = File.Exists (GlobalPolicyFile) ? XDocument.Load (GlobalPolicyFile, LoadOptions.PreserveWhitespace) : new XDocument (); } catch { doc = new XDocument (); }
 			var root = doc.Root;
 			if (root is null) {
 				root = new XElement ("Policies");
