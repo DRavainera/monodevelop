@@ -83,4 +83,10 @@
 			are the first genuine MonoDevelop dialogs off the GTK stack. -->
 		<Compile Include="..\MonoDevelop.Ide\MonoDevelop.Ide.Projects\NewSolutionRunConfigurationDialog.cs" />
 	</ItemGroup>
+	<!-- Key Bindings: reuse the non-GTK backend from MonoDevelop.Ide. GTK-only
+	     members are wrapped in #if !AVALONIA_SHELL with non-GTK equivalents in the
+	     same .cs (step 1: KeyboardShortcut). -->
+	<ItemGroup>
+		<Compile Include="..\MonoDevelop.Ide\MonoDevelop.Components\GtkWorkarounds.cs" />
+	</ItemGroup>
 </Project>

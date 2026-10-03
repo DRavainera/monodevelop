@@ -25,14 +25,16 @@
 //
 
 using System;
-using System.Drawing;
 using System.Runtime.InteropServices;
 using System.Collections.Generic;
 using System.Reflection;
 using System.Reflection.Emit;
+#if !AVALONIA_SHELL
+using System.Drawing;
 using Gtk;
-using MonoDevelop.Core;
 using MonoDevelop.Ide.Editor.Highlighting;
+#endif
+using MonoDevelop.Core;
 using System.Text.RegularExpressions;
 
 #if MAC
@@ -46,6 +48,7 @@ using System.Windows.Input;
 
 namespace MonoDevelop.Components
 {
+#if !AVALONIA_SHELL
 	public static partial class GtkWorkarounds
 	{
 		const string USER32DLL = "User32.dll";
@@ -1405,7 +1408,9 @@ public static int RunDialogWithNotification (Gtk.Dialog dialog)
 				gdk_event_free (raw);
 		}
 	}
+#endif
 
+#if !AVALONIA_SHELL
 	public readonly struct KeyboardShortcut : IEquatable<KeyboardShortcut>
 	{
 		public static readonly KeyboardShortcut Empty = new KeyboardShortcut ((Gdk.Key) 0, (Gdk.ModifierType) 0);
@@ -1440,5 +1445,43 @@ public static int RunDialogWithNotification (Gtk.Dialog dialog)
 			return other.Key == Key && other.Modifier == Modifier;
 		}
 	}
+#else
+	/// <summary>Non-GTK equivalent for the Avalonia shell (AVALONIA_SHELL): keys and
+	/// modifiers are plain ints instead of Gdk.Key/Gdk.ModifierType. Same type and
+	/// file as the GTK version, which is kept intact under the inverse guard.</summary>
+	public readonly struct KeyboardShortcut : IEquatable<KeyboardShortcut>
+	{
+		public static readonly KeyboardShortcut Empty = new KeyboardShortcut (0, 0);
+
+		public KeyboardShortcut (int key, int modifier)
+		{
+			Modifier = modifier;
+			Key = key;
+		}
+
+		public int Key { get; }
+
+		public int Modifier { get; }
+
+		public bool IsEmpty {
+			get { return Key == 0; }
+		}
+
+		public override bool Equals (object? obj)
+		{
+			return obj is KeyboardShortcut other && Equals (other);
+		}
+
+		public override int GetHashCode ()
+		{
+			return Key ^ Modifier;
+		}
+
+		public bool Equals (KeyboardShortcut other)
+		{
+			return other.Key == Key && other.Modifier == Modifier;
+		}
+	}
+#endif
 
 }
