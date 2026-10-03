@@ -1021,3 +1021,14 @@ aproximado; persiste en el policy set global (`<VersionControlPolicy><CommitMess
 `LoadGlobalPolicy`/`StoreGlobalPolicies`. Formato **compatible** con el policy
 framework GTK (verificado con probe del serializador real). **PASA LIMPIO**.
 Build 0 errores, 53/53 tests.
+
+## 2026-10-03 (g) — Preferences: Version Control → ChangeLog Integration
+
+Refactor: `CmStyleEditor` compartido (header + 8 toggles + preview) entre Commit
+Message Style y ChangeLog. ChangeLogPanel: radios UpdateMode + checkboxes
+VcsIntegration + editor CM incrustado; persiste `<ChangeLogPolicy>`.
+**QA (§18.5, 2 rondas)**: H1 (bloqueante) — el `[ItemProperty]` se nombra por la
+**propiedad**, así `ChangeLogPolicy.MessageStyle` es `<MessageStyle>` (no
+`<CommitMessageStyle>`); parametrizado `BuildElement(name)`. H2 sensibilidad
+(Integrate/Require según UpdateMode) y H3 telemetría corregidos. **PASA LIMPIO**.
+Build 0 errores, 53/53 tests.

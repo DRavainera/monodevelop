@@ -1525,7 +1525,7 @@ public partial class PreferencesDialog : Window
 			UpdatePreview ();
 		}
 
-		public XElement BuildElement ()
+		public XElement BuildElement (string elementName)
 		{
 			// Order matters: prefix before align (mirrors UpdateBullets).
 			firstFilePrefix = UseBullets.IsChecked == true ? "* " : "";
@@ -1537,7 +1537,7 @@ public partial class PreferencesDialog : Window
 			includeDirs = IncludeDirs.IsChecked == true;
 			wrap = Wrap.IsChecked == true;
 			header = !string.IsNullOrEmpty (Header.Text) ? FromCString (Header.Text) + "\n\n" : "";
-			return new XElement ("CommitMessageStyle",
+			return new XElement (elementName,
 				new XElement ("Header", header),
 				new XElement ("Indent", indent),
 				new XElement ("FirstFilePrefix", firstFilePrefix),
@@ -1583,10 +1583,14 @@ public partial class PreferencesDialog : Window
 	// ---------- Version Control → Commit Message Style (global policy) ----------
 
 	void LoadCommitMessagePanel ()
-		=> cmEditor.Load (LoadGlobalPolicy ("VersionControlPolicy")?.Element ("CommitMessageStyle"), "", "", 2);
+	{
+		var cs = LoadGlobalPolicy ("VersionControlPolicy")?.Element ("CommitMessageStyle");
+		cmEditor.Load (cs, "", "", 2);
+		MainWindow.Instance?.Output ($"[prefs-cm] element={cs?.Name.ToString () ?? "(default)"}");
+	}
 
 	void StoreCommitMessagePanel ()
-		=> StoreGlobalPolicies (("VersionControlPolicy", el => el.Add (cmEditor.BuildElement ())));
+		=> StoreGlobalPolicies (("VersionControlPolicy", el => el.Add (cmEditor.BuildElement ("CommitMessageStyle"))));
 
 	void UpdateCmPreview () => cmEditor.UpdatePreview ();
 
@@ -1603,6 +1607,9 @@ public partial class PreferencesDialog : Window
 		cmEditor.Hook (UpdateCmPreview);
 		clEditor.Hook (() => clEditor.UpdatePreview ());
 		ClIntegrate!.IsCheckedChanged += (_, _) => UpdateChangeLogEnable ();
+		foreach (var rb in new [] { ClModeNone, ClModeNearest, ClModeProjectRoot, ClModeDirectory })
+			if (rb is not null)
+				rb.IsCheckedChanged += (_, _) => UpdateChangeLogEnable ();
 	}
 
 	// ---------- Version Control → ChangeLog Integration (global policy) ----------
@@ -1628,7 +1635,12 @@ public partial class PreferencesDialog : Window
 		MainWindow.Instance?.Output ($"[prefs-changelog] mode={(string?)policy?.Element ("UpdateMode") ?? "None"} vcs={vcs}");
 	}
 
-	void UpdateChangeLogEnable () => ClRequireOnCommit!.IsEnabled = ClIntegrate!.IsChecked == true;
+	void UpdateChangeLogEnable ()
+	{
+		var none = ClModeNone!.IsChecked == true;
+		ClIntegrate!.IsEnabled = !none;
+		ClRequireOnCommit!.IsEnabled = !none && ClIntegrate.IsChecked == true;
+	}
 
 	void StoreChangeLogPanel ()
 	{
@@ -1640,7 +1652,7 @@ public partial class PreferencesDialog : Window
 		StoreGlobalPolicies (("ChangeLogPolicy", el => {
 			el.Add (new XElement ("UpdateMode", mode));
 			el.Add (new XElement ("VcsIntegration", vcs));
-			el.Add (clEditor.BuildElement ());
+			el.Add (clEditor.BuildElement ("MessageStyle"));
 		}));
 	}
 
