@@ -982,3 +982,19 @@ correcto y sin borrados GTK. **La UI GTK no se rompe.**
 crash. Hallazgos 1–3 cosméticos/nits (cerrados/documentados), 4 limitación de
 entorno preexistente (MDBuildTasks net472).
 
+
+## 2026-10-03 (d) — Visual Style: opción "System" (sigue el tema del SO)
+
+Añadido el radio **System** (junto a Dark/Light) al panel Visual Style.
+Persiste en la clave legacy `MonoDevelop.Ide.UserInterfaceTheme` (`""`=System/
+Default — default en Linux, `"Dark"`, `"Light"`), igual que la UI GTK; System →
+`ThemeVariant.Default`. Se aplica al arranque (`App`) y en vivo al cambiar el
+radio; `StoreThemePanel` en OK.
+
+**QA (§18.5, 2 rondas)**: H1 (ALTA) — `MainWindow.OnOpened` fijaba
+`RequestedThemeVariant` con el valor concreto, anulando `Default`/System (la UI
+arrancaba clara en SO oscuro); corregido (no pin; refresco vía
+`ActualThemeVariantChanged`). Verificado: con System y SO `prefer-dark` arranca
+oscuro y `variant=Default`; Dark/Light OK; round-trip con click real OK; H2
+(System persiste como clave ausente) aceptado como equivalente al default legacy.
+Build 0 errores, 53/53 tests, 0 FATAL. **PASA LIMPIO.**

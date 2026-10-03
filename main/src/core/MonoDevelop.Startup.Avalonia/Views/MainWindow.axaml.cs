@@ -266,8 +266,14 @@ public partial class MainWindow : Window
 			UpdateResizeChrome ();
 			if (IsMac)
 				MoveCaptionButtonsLeft ();
-			ApplyThemeVariant (Application.Current?.ActualThemeVariant ?? ThemeVariant.Dark);
+			// Do NOT pin RequestedThemeVariant here: with System/Default it must keep
+			// following the OS (Avalonia reports the platform variant asynchronously —
+			// first Light, then Dark on a dark OS). Only apply the chrome that depends
+			// on the current variant, and refresh it when the platform variant changes.
+			Background = Brushes.Transparent;
 			SetToolbarIcons ();
+			if (Application.Current is not null)
+				Application.Current.ActualThemeVariantChanged += (_, _) => SetToolbarIcons ();
 
 			// Load a real solution into the Solution pad when requested (--sln=<path>).
 			var slnArg = Program.SolutionArg;
