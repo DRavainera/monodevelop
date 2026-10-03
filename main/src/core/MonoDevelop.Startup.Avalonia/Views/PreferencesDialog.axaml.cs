@@ -71,6 +71,7 @@ public partial class PreferencesDialog : Window
 		"general", "markers", "behavior", "intellisense",
 		"colortheme", "codesnippets", "languagebundles",
 		"naming", "standardheader",
+		"vcgeneral",
 	};
 
 	string? pendingLanguage;
@@ -108,6 +109,7 @@ public partial class PreferencesDialog : Window
 		LoadLanguageBundlesPanel ();
 		LoadNamingPanel ();
 		LoadStandardHeaderPanel ();
+		LoadVcGeneralPanel ();
 		GenWordWrap!.IsCheckedChanged += (_, _) => GenWordWrapGlyphs!.IsEnabled = GenWordWrap.IsChecked == true;
 		BhAutoInsertBrace!.IsCheckedChanged += (_, _) => BhSmartSemicolon!.IsEnabled = BhAutoInsertBrace.IsChecked == true;
 		NmAssociate!.IsCheckedChanged += (_, _) => UpdateNamingEnable ();
@@ -1430,6 +1432,49 @@ public partial class PreferencesDialog : Window
 		}
 	}
 
+	// ---------- Version Control → General (global config) ----------
+	// VersionControlService persists VersionControlConfiguration with XmlDataSerializer
+	// into ~/.config/MonoDevelop/9.0/VersionControl.config; the Disabled flag is a
+	// [ItemProperty] rendered as a <Disabled> element (StoreAllInElements=false). We edit
+	// only that element, preserving repositories and any other content byte-for-byte.
+
+	static string VcConfigFile => Path.Combine (
+		Environment.GetFolderPath (Environment.SpecialFolder.UserProfile),
+		".config", "MonoDevelop", "9.0", "VersionControl.config");
+
+	void LoadVcGeneralPanel ()
+	{
+		var disabled = false;
+		try {
+			if (File.Exists (VcConfigFile))
+				disabled = XDocument.Load (VcConfigFile).Root?.Element ("Disabled") is { } el
+					&& bool.TryParse (el.Value, out var b) && b;
+		} catch { /* unreadable */ }
+		VcDisableCheck!.IsChecked = disabled;
+		MainWindow.Instance?.Output ($"[prefs-vc] disabled={disabled}");
+	}
+
+	void StoreVcGeneralPanel ()
+	{
+		try {
+			Directory.CreateDirectory (Path.GetDirectoryName (VcConfigFile)!);
+			XDocument doc;
+			try { doc = File.Exists (VcConfigFile) ? XDocument.Load (VcConfigFile) : new XDocument (); } catch { doc = new XDocument (); }
+			var root = doc.Root;
+			if (root is null) {
+				root = new XElement ("VersionControlConfiguration");
+				doc = new XDocument (root);
+			}
+			var value = VcDisableCheck!.IsChecked == true ? "True" : "False";
+			var el = root.Element ("Disabled");
+			if (el is null)
+				root.Add (new XElement ("Disabled", value));
+			else
+				el.Value = value;
+			doc.Save (VcConfigFile);
+		} catch (Exception ex) { MainWindow.Instance?.Output ("[prefs] vc save failed: " + ex.Message); }
+	}
+
 	// ---------- Panel switching (OptionsDialog.SelectPanel) ----------
 	void OnSectionSelected (object? sender, SelectionChangedEventArgs e)
 	{
@@ -1469,6 +1514,7 @@ public partial class PreferencesDialog : Window
 		PanelLanguageBundles!.IsVisible = id == "languagebundles";
 		PanelNaming!.IsVisible = id == "naming";
 		PanelStandardHeader!.IsVisible = id == "standardheader";
+		PanelVcGeneral!.IsVisible = id == "vcgeneral";
 		PanelPlaceholder!.IsVisible = !functionalPanels.Contains (id);
 
 		HeaderTitle!.Text = node.Label;
@@ -1527,6 +1573,7 @@ public partial class PreferencesDialog : Window
 		StoreIntelliSensePanel ();
 		StoreColorThemePanel ();
 		StoreSourceCodePolicies ();
+		StoreVcGeneralPanel ();
 		StoreThemePanel ();
 		Close ();
 	}

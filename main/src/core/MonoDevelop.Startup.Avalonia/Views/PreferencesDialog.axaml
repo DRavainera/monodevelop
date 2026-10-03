@@ -438,8 +438,15 @@
                          Text="Stored as the StandardHeader entry of the global policy set (Policies/UserDefault.mdpolicy.xml), same as the GTK UI." />
             </StackPanel>
 
+            <!-- ===== Version Control → General (legacy VersionControlGeneralOptionsPanel) ===== -->
+            <StackPanel x:Name="PanelVcGeneral" Margin="16" Spacing="8" IsVisible="False">
+              <CheckBox x:Name="VcDisableCheck" Content="Disable Version Control globally" />
+              <TextBlock Margin="0,6,0,0" Opacity="0.7" FontSize="11" TextWrapping="Wrap"
+                         Text="Stored in VersionControl.config (same file the GTK UI reads; repositories are preserved)." />
+            </StackPanel>
+
             <StackPanel x:Name="PanelPlaceholder" Margin="16" IsVisible="False" Spacing="8">
-              <TextBlock Text="This options panel is provided by an add-in and has not been wired to the new UI yet. Its settings remain available through the legacy interface until the cutover."
+              <TextBlock Text="This options panel is provided by an add-in and has not been wired to the new UI yet."
                          TextWrapping="Wrap" Opacity="0.7" />
             </StackPanel>
           </Panel>
