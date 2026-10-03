@@ -438,7 +438,33 @@
                          Text="Stored as the StandardHeader entry of the global policy set (Policies/UserDefault.mdpolicy.xml), same as the GTK UI." />
             </StackPanel>
 
-            <!-- ===== Version Control → Git (legacy GitOptionsPanel) ===== -->
+            <!-- ===== Version Control → ChangeLog Integration (legacy ProjectOptionPanel) ===== -->
+            <StackPanel x:Name="PanelChangeLog" Margin="16" Spacing="5" IsVisible="False">
+              <TextBlock Text="ChangeLog update mode" FontWeight="SemiBold" />
+              <RadioButton x:Name="ClModeNone" GroupName="clmode" Content="Do not generate ChangeLog entries" />
+              <RadioButton x:Name="ClModeNearest" GroupName="clmode" Content="Use the nearest ChangeLog file" />
+              <RadioButton x:Name="ClModeProjectRoot" GroupName="clmode" Content="One ChangeLog in the project root directory" />
+              <RadioButton x:Name="ClModeDirectory" GroupName="clmode" Content="One ChangeLog in each directory" />
+              <CheckBox x:Name="ClIntegrate" Content="Integrate with version control" Margin="0,6,0,0" />
+              <CheckBox x:Name="ClRequireOnCommit" Content="Require ChangeLog entries for all files when committing" Margin="16,0,0,0" />
+              <TextBlock Text="Message header" FontWeight="SemiBold" Margin="0,6,0,0" />
+              <TextBox x:Name="ClHeader" />
+              <CheckBox x:Name="ClUseBullets" Content="Use bullets for each entry" />
+              <CheckBox x:Name="ClIndentEntries" Content="Indent each entry" />
+              <CheckBox x:Name="ClIndent" Content="Align the message text" />
+              <CheckBox x:Name="ClLineSep" Content="Add a blank line between messages" />
+              <CheckBox x:Name="ClOneLine" Content="Add one line per file changed" />
+              <CheckBox x:Name="ClMsgNewLine" Content="Keep the file name and messages on separate lines" />
+              <CheckBox x:Name="ClIncludeDirs" Content="Include file directories" />
+              <CheckBox x:Name="ClWrap" Content="Wrap the lines at 60 characters" />
+              <TextBlock Text="Preview" FontWeight="SemiBold" Margin="0,6,0,0" />
+              <Border BorderBrush="{DynamicResource IdeBorderBrush}" BorderThickness="1" CornerRadius="3" Padding="6">
+                <TextBlock x:Name="ClPreview" TextWrapping="Wrap" FontSize="11" />
+              </Border>
+              <TextBlock Margin="0,6,0,0" Opacity="0.7" FontSize="11" TextWrapping="Wrap"
+                         Text="Stored as the ChangeLogPolicy entry of the global policy set, same as the GTK UI." />
+            </StackPanel>
+
             <StackPanel x:Name="PanelGit" Margin="16" Spacing="8" IsVisible="False">
               <CheckBox x:Name="GitRebase" Content="Use the Rebase option for merging" />
               <CheckBox x:Name="GitStashUpdate" Content="Automatically stash/unstash local changes" />
