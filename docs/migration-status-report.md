@@ -292,6 +292,13 @@ El bucle de migración Gtk → Avalonia continúa por módulos (detalle por hito
   `PolicyService`/`PolicySet` (elementos `DotNetNamingPolicy`/`StandardHeader`).
   Code Formatting queda placeholder. QA §18.5 en 3 rondas. Build 0 errores,
   53/53 tests. Detalle en `docs/interfaz-plan.md` § M30.
+- **Key Bindings completado (2026-10-03)**: integrado el backend real de
+  `MonoDevelop.Ide` en la shell **sin GTK** (guardas `#if !AVALONIA_SHELL` +
+  equivalentes no-GTK en el mismo `.cs`): `KeyboardShortcut`, `KeyBindingManager`/
+  `KeyBinding`, `CommandManager.ToCommandId` + modelo de comandos, `KeyBindingSet`/
+  `KeyBindingScheme`/`KeyBindingService`/`SchemeExtensionNode`. Cableado de HotKeys
+  (`entry.Shortcut`→`InputGesture`) y panel fiel sobre el backend. Verificado que
+  **la UI GTK no se rompe**. QA §18.5 APROBADO; build 0 errores, 53/53 tests.
 
 Nota operativa: el binario de la UI Avalonia es
 `src/core/MonoDevelop.Startup.Avalonia/bin/Debug/net10.0/MonoDevelop.AvaloniaShell.dll`;

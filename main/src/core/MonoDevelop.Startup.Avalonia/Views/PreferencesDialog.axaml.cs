@@ -556,7 +556,7 @@ public partial class PreferencesDialog : Window
 		MainWindow.Instance?.RebuildMenu ();
 	}
 
-	void OnKbRemove (object? sender, RoutedEventArgs e)
+	void OnKbAddRemove (object? sender, RoutedEventArgs e)
 	{
 		if (KbTree?.SelectedItem is not TreeViewItem { Tag: KbCommand c })
 			return;

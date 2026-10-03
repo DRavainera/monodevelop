@@ -951,3 +951,34 @@ Por eso el orden de pasos es:
 
 Estado: árbol **verde** (define añadido, sin archivos del backend aún).
 
+## 2026-10-03 (c) — Key Bindings COMPLETO (backend reuse sin GTK + panel fiel)
+
+Cadena ejecutada por pasos (todos verdes y commiteados), reutilizando el backend
+real de `MonoDevelop.Ide` **sin añadir GTK** (guardas `#if !AVALONIA_SHELL` +
+equivalente no-GTK **en el mismo `.cs`**):
+- **Paso 1** `GtkWorkarounds.cs`: `KeyboardShortcut` sin GTK (Key/Modifier int).
+- **Paso 2** `KeyBindingManager.cs`/`KeyBinding`: equivalentes no-GTK
+  (`Binding`/`FixChordSeparators`/`BindingToDisplayLabel` + modelo).
+- **Paso 3** `CommandManager.cs` (solo `ToCommandId`) + `Command`/`ActionCommand`/
+  `ActionType`/`CommandHandler`/`CommandInfo(Set)`/`CommandArrayInfo`.
+- **Paso 4** `KeyBindingSet`/`KeyBindingScheme`/`KeyBindingService`/
+  `SchemeExtensionNode` (backend completo compilando en la shell).
+- **Paso 5a** HotKeys: `MenuBuilder` parsea `entry.Shortcut`→`InputGesture`
+  (antes nunca se aplicaba: los atajos no existían).
+- **Paso 5b** panel fiel (`PreferencesDialog.axaml(.cs)`): combo de esquemas +
+  Custom, separador, búsqueda, caja de aviso + View Conflicts, árbol
+  Command/Key Binding/Description con chips y color de duplicado, mensaje inline,
+  Edit Binding + Apply/Add-Delete. Usa `Command`/`KeyBindingSet` (+
+  `CheckKeyBindingConflicts`)/`KeyBindingManager`; esquemas desde `options/*.xml`
+  con `KeyBindingSet.LoadScheme`; `MainWindow.MenuCommandCatalog` agrupa por
+  categoría. QA: `commands=178 schemes=5 conflicts=2`, 0 FATAL.
+
+**Garantía GTK**: el Tester QA Senior reconstruyó cada archivo compartido sin
+`AVALONIA_SHELL` y lo comparó con el original: los cuerpos GTK son **idénticos**
+(solo diferencias cosméticas de `using`/líneas en blanco), balance de guardas
+correcto y sin borrados GTK. **La UI GTK no se rompe.**
+
+**QA (§18.5)**: APROBADO. Build 0 errores, 53/53 tests, 4 casos adversariales sin
+crash. Hallazgos 1–3 cosméticos/nits (cerrados/documentados), 4 limitación de
+entorno preexistente (MDBuildTasks net472).
+

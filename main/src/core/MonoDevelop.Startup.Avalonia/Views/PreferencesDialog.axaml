@@ -123,7 +123,7 @@
                 <TextBlock Text="Edit Binding" VerticalAlignment="Center" />
                 <TextBox x:Name="KbAccelEntry" Width="220" KeyDown="OnKbAccelKeyDown" />
                 <Button x:Name="KbApplyBtn" Content="Apply" Click="OnKbUpdate" />
-                <Button x:Name="KbAddBtn" Content="Add" Click="OnKbRemove" />
+                <Button x:Name="KbAddBtn" Content="Add" Click="OnKbAddRemove" />
               </StackPanel>
             </Grid>
 
