@@ -438,7 +438,15 @@
                          Text="Stored as the StandardHeader entry of the global policy set (Policies/UserDefault.mdpolicy.xml), same as the GTK UI." />
             </StackPanel>
 
-            <!-- ===== Version Control → Commit Message Style (legacy VersionControlPolicyPanel) ===== -->
+            <!-- ===== Version Control → Git (legacy GitOptionsPanel) ===== -->
+            <StackPanel x:Name="PanelGit" Margin="16" Spacing="8" IsVisible="False">
+              <CheckBox x:Name="GitRebase" Content="Use the Rebase option for merging" />
+              <CheckBox x:Name="GitStashUpdate" Content="Automatically stash/unstash local changes" />
+              <CheckBox x:Name="GitStashBranch" Content="Automatically stash/unstash changes when switching branches" />
+              <TextBlock Margin="0,6,0,0" Opacity="0.7" FontSize="11" TextWrapping="Wrap"
+                         Text="Stored with the legacy keys MonoDevelop.VersionControl.Git.* in MonoDevelopProperties.xml." />
+            </StackPanel>
+
             <StackPanel x:Name="PanelCommitMessage" Margin="16" Spacing="6" IsVisible="False">
               <TextBlock Text="Message header" FontWeight="SemiBold" />
               <TextBox x:Name="CmHeader" Watermark="(none)" />

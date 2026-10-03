@@ -72,7 +72,7 @@ public partial class PreferencesDialog : Window
 		"general", "markers", "behavior", "intellisense",
 		"colortheme", "codesnippets", "languagebundles",
 		"naming", "standardheader",
-		"vcgeneral", "vccommit",
+		"vcgeneral", "vccommit", "git",
 	};
 
 	string? pendingLanguage;
@@ -112,6 +112,7 @@ public partial class PreferencesDialog : Window
 		LoadStandardHeaderPanel ();
 		LoadVcGeneralPanel ();
 		LoadCommitMessagePanel ();
+		LoadGitPanel ();
 		foreach (var cb in new[] { CmUseBullets, CmIndentEntries, CmIndent, CmLineSep, CmOneLine, CmMsgNewLine, CmIncludeDirs, CmWrap })
 			if (cb is not null)
 				cb.IsCheckedChanged += (_, _) => UpdateCmPreview ();
@@ -1569,6 +1570,21 @@ public partial class PreferencesDialog : Window
 		CmPreview.Text = sb.ToString ();
 	}
 
+	// ---------- Version Control → Git (flat settings keys) ----------
+	void LoadGitPanel ()
+	{
+		GitRebase!.IsChecked = SettingsStore.GetBool ("MonoDevelop.VersionControl.Git.UseRebaseOptionWhenPulling", true);
+		GitStashUpdate!.IsChecked = SettingsStore.GetBool ("MonoDevelop.VersionControl.Git.StashUnstashWhenUpdating", false);
+		GitStashBranch!.IsChecked = SettingsStore.GetBool ("MonoDevelop.VersionControl.Git.StashUnstashWhenSwitchingBranches", false);
+	}
+
+	void StoreGitPanel ()
+	{
+		SettingsStore.SetBool ("MonoDevelop.VersionControl.Git.UseRebaseOptionWhenPulling", GitRebase!.IsChecked == true);
+		SettingsStore.SetBool ("MonoDevelop.VersionControl.Git.StashUnstashWhenUpdating", GitStashUpdate!.IsChecked == true);
+		SettingsStore.SetBool ("MonoDevelop.VersionControl.Git.StashUnstashWhenSwitchingBranches", GitStashBranch!.IsChecked == true);
+	}
+
 	// ---------- Panel switching (OptionsDialog.SelectPanel) ----------
 	void OnSectionSelected (object? sender, SelectionChangedEventArgs e)
 	{
@@ -1610,6 +1626,7 @@ public partial class PreferencesDialog : Window
 		PanelStandardHeader!.IsVisible = id == "standardheader";
 		PanelVcGeneral!.IsVisible = id == "vcgeneral";
 		PanelCommitMessage!.IsVisible = id == "vccommit";
+		PanelGit!.IsVisible = id == "git";
 		PanelPlaceholder!.IsVisible = !functionalPanels.Contains (id);
 
 		HeaderTitle!.Text = node.Label;
@@ -1670,6 +1687,7 @@ public partial class PreferencesDialog : Window
 		StoreSourceCodePolicies ();
 		StoreVcGeneralPanel ();
 		StoreCommitMessagePanel ();
+		StoreGitPanel ();
 		StoreThemePanel ();
 		Close ();
 	}
