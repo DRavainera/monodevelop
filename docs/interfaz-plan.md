@@ -2112,6 +2112,65 @@ aceptación.
 - Cada pad portado tiene su inventario de funcionalidades legacy documentado y
   su QA determinista (hook `--<pad>` en `QaDialogArg`) con evidencia en el log.
 - 0 diferencias funcionales contra el pad Gtk de referencia.
-- Build del shell en 0 errores y los 46 tests del editor en verde.
+- Build del shell en 0 errores y los 53 tests del editor en verde.
 - Documentación actualizada (`interfaz-plan.md`, `session_summary.md`,
   `migration-status-report.md`) + commit + push.
+
+## M27 — Preferences: paridad con el árbol legacy + panel "Errors and Warnings"
+
+Segunda pasada sobre la ventana Preferences (2026-10-02), tras M4/`--prefs`.
+Se analizó la Preferences GTK legacy (`OptionsDialog` +
+`ExtensionModel/GlobalOptionsDialog.addin.xml` + las extensiones de add-ins de
+Debugger, SourceEditor2/TextEditor, Refactoring, Xml, VersionControl(+Git),
+PackageManagement, DotNetCore, GtkCore, ChangeLog, PerformanceDiagnostics y
+FSharp) para reconstruir el árbol de secciones, el header de panel y los
+componentes/iconos.
+
+### Cambios
+
+- **Navegación jerárquica real** (`TreeView`, antes un `ListBox` plano):
+  categorías (Environment, Projects, Text Editor, Source Code, Version Control,
+  NuGet, Other, Performance Diagnostics) → secciones → subpaneles, fiel al
+  orden/labels del addin.xml. El modelo vive en `PreferencesDialog.axaml.cs`
+  (`PrefsNode`/`BuildModel`) y el árbol se construye con `TreeViewItem`
+  (icono 16px + label).
+- **Header de panel** (icono 28px + título) como el `OptionsDialogHeader` legacy;
+  se quitaron los títulos duplicados de cada página.
+- **Iconos**: se corrigieron `Feedback`/`MonoDevelop Maintenance` (usaban
+  `md-prefs-generic` teniendo `md-prefs-feedback`/`md-prefs-maintenance`) y se
+  mapeó cada sección a su `md-prefs-*` (los que no existen en
+  `StockIcons.addin.xml` caen a `md-prefs-generic`). Verificado: 0 `(missing)`.
+- **Panel nuevo `Build → Errors and Warnings`** (legacy `BuildMessagePanel`):
+  combos JumpToFirst (`MonoDevelop.Ide.NewJumpToFirstErrorOrWarning`:
+  Error/ErrorOrWarning), ShowErrorPadAfterBuild
+  (`MonoDevelop.Ide.NewShowErrorPadAfterBuild`:
+  Always/OnErrors/OnErrorsOrWarnings) y ShowMessageBubbles
+  (`MonoDevelop.Ide.NewShowMessageBubbles`: ForErrors/ForErrorsAndWarnings).
+  El legacy tenía un off-by-one (su combo omitía `Never` pero casteaba el índice
+  al enum); aquí se mapea correctamente por nombre de enum.
+- **Subpaneles y secciones faltantes** añadidos al árbol: `IntelliSense →
+  Behavior/Appearance`, `Source Analysis → C#`, `XML Schemas`, `F# Settings`.
+  El selector de idioma se movió **dentro de Visual Style** (como el legacy
+  `IDEStyleOptionsPanelWidget`), no como sección propia.
+- **QA**: hook `--prefs-tree` (dump `[prefs-tree]` con id/label/icono y si
+  resuelve) + telemetría `[prefs-panel]` al seleccionar; `--prefs=<id>` sigue
+  permitiendo abrir cualquier panel (incluidos los anidados).
+
+### Estado / deuda
+
+Los paneles provistos por add-ins (Text Editor General/Markers/Behavior/Color
+Theme/Formatting/Code Snippets/Language Bundles/Source Analysis; Source Code
+naming/formatting/header; Version Control; NuGet; .NET Runtimes; SDK
+Locations/.NET Core; Debugger; GTK# Designer; Performance; F#) aparecen en el
+árbol con label/icono correctos pero como **placeholder**: su lógica usa el
+stack de add-in (Roslyn, VersionControl, NuGet, policy framework) que el shell
+no referencia. El bucle por módulos los irá portando uno a uno. Desviación
+deliberada documentada: `.NET Runtimes` (legacy bajo `Condition FeatureSwitch
+RUNTIME_SELECTOR optIn`) se muestra siempre en el shell net10-only.
+
+### QA (§18.5, 2 rondas)
+
+Tester QA Senior: ronda 1 → 4 hallazgos menores (idioma como sección propia,
+subpaneles omitidos, F# ausente, dead code) corregidos; ronda 2 → **PASA
+limpio** (0 bloqueantes/mayores/menores). Build 0 errores; 53/53 tests. Logs
+`~/opencode/prefs_qa_{tree,buildmessages}.log`, captura `prefs_tree.png`.

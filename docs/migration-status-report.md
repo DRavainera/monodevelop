@@ -268,6 +268,12 @@ El bucle de migración Gtk → Avalonia continúa por módulos (detalle por hito
   strings, `throw new`/`yield return` como métodos, `record`, indexers) en 3
   rondas hasta aprobar limpio. Build 0 errores, 53/53 tests.
   Detalle en `docs/interfaz-plan.md` § M26.
+- **M27 completado (2026-10-02)**: Preferences con **árbol jerárquico** fiel a
+  `GlobalOptionsDialog.addin.xml` (+ extensiones de add-ins), **header de panel**
+  (icono + título) como el legacy, iconos `md-prefs-*` corregidos y el panel
+  nuevo **Build → "Errors and Warnings"** (`BuildMessagePanel`). QA §18.5 en 2
+  rondas hasta aprobar limpio. Build 0 errores, 53/53 tests. Detalle en
+  `docs/interfaz-plan.md` § M27.
 
 Nota operativa: el binario de la UI Avalonia es
 `src/core/MonoDevelop.Startup.Avalonia/bin/Debug/net10.0/MonoDevelop.AvaloniaShell.dll`;

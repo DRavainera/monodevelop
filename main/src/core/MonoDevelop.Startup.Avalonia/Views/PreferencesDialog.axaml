@@ -2,7 +2,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="MonoDevelop.AvaloniaShell.Views.PreferencesDialog"
         Title="Preferences"
-        Width="860" Height="600"
+        Width="900" Height="620"
         WindowStartupLocation="CenterOwner"
         SystemDecorations="None"
         ExtendClientAreaToDecorationsHint="True"
@@ -27,10 +27,10 @@
     <Style Selector="ComboBox">
       <Setter Property="Foreground" Value="{DynamicResource IdeFgBrush}" />
     </Style>
-    <Style Selector="ListBoxItem">
+    <Style Selector="TreeViewItem">
       <Setter Property="Foreground" Value="{DynamicResource IdeFgBrush}" />
     </Style>
-    <Style Selector="ListBox">
+    <Style Selector="TreeView">
       <Setter Property="Background" Value="Transparent" />
     </Style>
   </Window.Styles>
@@ -45,337 +45,248 @@
       </Grid>
     </Border>
 
-    <!-- Section tree + panel (legacy OptionsDialog layout: tree column | panel column) -->
-    <Grid Grid.Row="1" ColumnDefinitions="230,*">
-      <ListBox x:Name="SectionList" Margin="8" SelectionChanged="OnSectionSelected">
-        <ListBoxItem Content="Environment" IsEnabled="False" FontWeight="Bold" />
-        <ListBoxItem Tag="style">
-          <StackPanel Orientation="Horizontal" Spacing="8">
-            <Image Width="16" Height="16" x:Name="IconStyle" />
-            <TextBlock Text="Visual Style" />
-          </StackPanel>
-        </ListBoxItem>
-        <ListBoxItem Tag="language">
-          <StackPanel Orientation="Horizontal" Spacing="8">
-            <Image Width="16" Height="16" x:Name="IconLanguage" />
-            <TextBlock Text="User Interface Language" />
-          </StackPanel>
-        </ListBoxItem>
-        <ListBoxItem Tag="author">
-          <StackPanel Orientation="Horizontal" Spacing="8">
-            <Image Width="16" Height="16" x:Name="IconAuthor" />
-            <TextBlock Text="Author Information" />
-          </StackPanel>
-        </ListBoxItem>
-        <ListBoxItem Tag="keybindings">
-          <StackPanel Orientation="Horizontal" Spacing="8">
-            <Image Width="16" Height="16" x:Name="IconKeyBindings" />
-            <TextBlock Text="Key Bindings" />
-          </StackPanel>
-        </ListBoxItem>
-        <ListBoxItem Tag="fonts">
-          <StackPanel Orientation="Horizontal" Spacing="8">
-            <Image Width="16" Height="16" x:Name="IconFonts" />
-            <TextBlock Text="Fonts" />
-          </StackPanel>
-        </ListBoxItem>
-        <ListBoxItem Tag="updates">
-          <StackPanel Orientation="Horizontal" Spacing="8">
-            <Image Width="16" Height="16" x:Name="IconUpdates" />
-            <TextBlock Text="Updates" />
-          </StackPanel>
-        </ListBoxItem>
-        <ListBoxItem Tag="tasks">
-          <StackPanel Orientation="Horizontal" Spacing="8">
-            <Image Width="16" Height="16" x:Name="IconTasks" />
-            <TextBlock Text="Tasks" />
-          </StackPanel>
-        </ListBoxItem>
-        <ListBoxItem Tag="externaltools">
-          <StackPanel Orientation="Horizontal" Spacing="8">
-            <Image Width="16" Height="16" x:Name="IconExternalTools" />
-            <TextBlock Text="External Tools" />
-          </StackPanel>
-        </ListBoxItem>
-        <ListBoxItem Tag="feedback">
-          <StackPanel Orientation="Horizontal" Spacing="8">
-            <Image Width="16" Height="16" x:Name="IconFeedback" />
-            <TextBlock Text="Feedback" />
-          </StackPanel>
-        </ListBoxItem>
-        <ListBoxItem Content="Projects" IsEnabled="False" FontWeight="Bold" />
-        <ListBoxItem Tag="loadsave">
-          <StackPanel Orientation="Horizontal" Spacing="8">
-            <Image Width="16" Height="16" x:Name="IconLoadSave" />
-            <TextBlock Text="Load/Save" />
-          </StackPanel>
-        </ListBoxItem>
-        <ListBoxItem Tag="build">
-          <StackPanel Orientation="Horizontal" Spacing="8">
-            <Image Width="16" Height="16" x:Name="IconBuild" />
-            <TextBlock Text="Build" />
-          </StackPanel>
-        </ListBoxItem>
-        <ListBoxItem Tag="sdklocations">
-          <StackPanel Orientation="Horizontal" Spacing="8">
-            <Image Width="16" Height="16" x:Name="IconSdkLocations" />
-            <TextBlock Text="SDK Locations" />
-          </StackPanel>
-        </ListBoxItem>
-        <ListBoxItem Content="Text Editor" IsEnabled="False" FontWeight="Bold" />
-        <ListBoxItem Tag="formatting">
-          <StackPanel Orientation="Horizontal" Spacing="8">
-            <Image Width="16" Height="16" x:Name="IconFormatting" />
-            <TextBlock Text="Formatting" />
-          </StackPanel>
-        </ListBoxItem>
-        <ListBoxItem Tag="codesnippets">
-          <StackPanel Orientation="Horizontal" Spacing="8">
-            <Image Width="16" Height="16" x:Name="IconCodeSnippets" />
-            <TextBlock Text="Code Snippets" />
-          </StackPanel>
-        </ListBoxItem>
-        <ListBoxItem Content="Source Code" IsEnabled="False" FontWeight="Bold" />
-        <ListBoxItem Tag="naming">
-          <StackPanel Orientation="Horizontal" Spacing="8">
-            <Image Width="16" Height="16" x:Name="IconNaming" />
-            <TextBlock Text=".NET Naming Policies" />
-          </StackPanel>
-        </ListBoxItem>
-        <ListBoxItem Tag="codeformatting">
-          <StackPanel Orientation="Horizontal" Spacing="8">
-            <Image Width="16" Height="16" x:Name="IconCodeFormatting" />
-            <TextBlock Text="Code Formatting" />
-          </StackPanel>
-        </ListBoxItem>
-        <ListBoxItem Tag="standardheader">
-          <StackPanel Orientation="Horizontal" Spacing="8">
-            <Image Width="16" Height="16" x:Name="IconStandardHeader" />
-            <TextBlock Text="Standard Header" />
-          </StackPanel>
-        </ListBoxItem>
-        <ListBoxItem Content="Other" IsEnabled="False" FontWeight="Bold" />
-        <ListBoxItem Tag="maintenance">
-          <StackPanel Orientation="Horizontal" Spacing="8">
-            <Image Width="16" Height="16" x:Name="IconMaintenance" />
-            <TextBlock Text="Maintenance" />
-          </StackPanel>
-        </ListBoxItem>
-      </ListBox>
+    <!-- Category tree | panel with header (legacy OptionsDialog layout: TreeView column
+         + icon/title header + panel page). The tree is built in code from the
+         GlobalOptionsDialog.addin.xml section order plus the add-in extensions. -->
+    <Grid Grid.Row="1" ColumnDefinitions="250,*">
+      <TreeView x:Name="SectionTree" Margin="8" SelectionChanged="OnSectionSelected" />
 
-      <ScrollViewer Grid.Column="1" Margin="8" BorderBrush="{DynamicResource IdeBorderBrush}"
-                    BorderThickness="1,1,0,0">
-        <Panel>
+      <Grid Grid.Column="1" RowDefinitions="Auto,Auto,*">
+        <StackPanel x:Name="PanelHeader" Grid.Row="0" Orientation="Horizontal" Spacing="10"
+                    Margin="16,14,16,8">
+          <Image x:Name="HeaderIcon" Width="28" Height="28" VerticalAlignment="Center" />
+          <TextBlock x:Name="HeaderTitle" FontSize="15" FontWeight="SemiBold"
+                     VerticalAlignment="Center" TextWrapping="Wrap" />
+        </StackPanel>
+        <Border Grid.Row="1" BorderBrush="{DynamicResource IdeBorderBrush}" BorderThickness="0,0,0,1"
+                Margin="12,0,12,4" />
 
-          <!-- ===== Visual Style (legacy IDEStyleOptionsPanel: theme switcher) ===== -->
-          <StackPanel x:Name="PanelStyle" Margin="16" Spacing="10" IsVisible="False">
-            <TextBlock Text="User Interface Theme" FontWeight="SemiBold" />
-            <RadioButton x:Name="ThemeDarkRadio" GroupName="uitheme" Content="Dark" />
-            <RadioButton x:Name="ThemeLightRadio" GroupName="uitheme" Content="Light" />
-          </StackPanel>
+        <ScrollViewer Grid.Row="2" Margin="8,0,8,8">
+          <Panel>
 
-          <!-- ===== User Interface Language (legacy IdeApp.Preferences.UserInterfaceLanguage,
-               stored as MonoDevelop.Ide.UserInterfaceLanguage; restart to apply) ===== -->
-          <StackPanel x:Name="PanelLanguage" Margin="16" Spacing="10" IsVisible="False">
-            <TextBlock Text="User Interface Language" FontWeight="SemiBold" />
-            <ComboBox x:Name="LanguageCombo" MinWidth="260" />
-            <TextBlock x:Name="LanguageRestartNote"
-                       Text="These preferences will take effect next time you start MonoDevelop"
-                       TextWrapping="Wrap" Opacity="0.8" />
-            <StackPanel x:Name="LanguageRestartRow" Orientation="Horizontal" Spacing="8" IsVisible="False">
-              <Button x:Name="LanguageRestartButton" Content="Restart MonoDevelop" Click="OnRestartClicked" />
-            </StackPanel>
-          </StackPanel>
-
-          <!-- ===== Author Information (legacy GlobalAuthorInformationPanel; keys
-               Author.Name / Author.Email / Author.Copyright / Author.Company / Author.Trademark) ===== -->
-          <StackPanel x:Name="PanelAuthor" Margin="16" Spacing="8" IsVisible="False">
-            <TextBlock Text="Author Information" FontWeight="SemiBold" />
-            <TextBlock Text="Name" Opacity="0.8" />
-            <TextBox x:Name="AuthName" />
-            <TextBlock Text="Email" Opacity="0.8" />
-            <TextBox x:Name="AuthEmail" />
-            <TextBlock Text="Copyright" Opacity="0.8" />
-            <TextBox x:Name="AuthCopyright" />
-            <TextBlock Text="Company" Opacity="0.8" />
-            <TextBox x:Name="AuthCompany" />
-            <TextBlock Text="Trademark" Opacity="0.8" />
-            <TextBox x:Name="AuthTrademark" />
-          </StackPanel>
-
-          <!-- ===== Key Bindings (legacy KeyBindingsPanel: scheme "current" editable in
-               Custom.kb.xml. Select command, capture accelerator, Update/Add.) ===== -->
-          <Grid x:Name="PanelKeyBindings" Margin="16" RowDefinitions="Auto,*,Auto,Auto"
-                ColumnDefinitions="*,160" IsVisible="False">
-            <TextBlock Grid.Row="0" Grid.ColumnSpan="2" Text="Key Bindings" FontWeight="SemiBold"
-                       Margin="0,0,0,6" />
-            <ListBox x:Name="KbCommandsList" Grid.Row="1" Grid.ColumnSpan="2" MinHeight="200"
-                     MaxHeight="260" />
-            <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="8" Margin="0,8,0,0">
-              <TextBlock Text="Accelerator:" VerticalAlignment="Center" />
-              <TextBox x:Name="KbAccelEntry" Width="180" KeyDown="OnKbAccelKeyDown"
-                       Watermark="Press keys…" />
-              <Button x:Name="KbUpdateBtn" Content="Update" Click="OnKbUpdate" />
-              <Button x:Name="KbRemoveBtn" Content="Remove" Click="OnKbRemove" />
-            </StackPanel>
-            <TextBlock x:Name="KbHint" Grid.Row="3" Margin="0,6,0,0" Opacity="0.7" FontSize="11"
-                       Text="Overrides are stored in KeyBindings/Custom.kb.xml (legacy scheme 'current'). Press Enter in the box to capture a key combination." />
-          </Grid>
-
-          <!-- ===== Fonts (legacy FontsPanel: FontProperties nested property with
-               Editor / Pad / OutputPad roles, "Family Size" specs) ===== -->
-          <StackPanel x:Name="PanelFonts" Margin="16" Spacing="8" IsVisible="False">
-            <TextBlock Text="Fonts" FontWeight="SemiBold" Margin="0,0,0,4" />
-            <Grid ColumnDefinitions="110,*">
-              <TextBlock Text="Text Editor" VerticalAlignment="Center" />
-              <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
-                <ComboBox x:Name="FontEditorCombo" MinWidth="240" />
-                <TextBox x:Name="FontEditorSize" Width="52" />
-              </StackPanel>
-            </Grid>
-            <Grid ColumnDefinitions="110,*">
-              <TextBlock Text="Pad" VerticalAlignment="Center" />
-              <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
-                <ComboBox x:Name="FontPadCombo" MinWidth="240" />
-                <TextBox x:Name="FontPadSize" Width="52" />
-              </StackPanel>
-            </Grid>
-            <Grid ColumnDefinitions="110,*">
-              <TextBlock Text="Output Pad" VerticalAlignment="Center" />
-              <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
-                <ComboBox x:Name="FontOutputCombo" MinWidth="240" />
-                <TextBox x:Name="FontOutputSize" Width="52" />
-              </StackPanel>
-            </Grid>
-            <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,6,0,0">
-              <Button x:Name="FontApplyBtn" Content="Apply to open editors" Click="OnFontApply" />
-              <Button x:Name="FontResetBtn" Content="Reset to defaults" Click="OnFontReset" />
-            </StackPanel>
-            <TextBlock Margin="0,6,0,0" Opacity="0.7" FontSize="11"
-                       Text="Stored as FontProperties (nested) in MonoDevelopProperties.xml, same keys as the GTK UI." />
-          </StackPanel>
-
-          <!-- ===== Updates (legacy AutoCheckForUpdates checkbox) ===== -->
-          <StackPanel x:Name="PanelUpdates" Margin="16" Spacing="10" IsVisible="False">
-            <TextBlock Text="Updates" FontWeight="SemiBold" />
-            <CheckBox x:Name="UpdatesCheck" Content="Automatically check for updates"
-                      IsChecked="True" />
-          </StackPanel>
-
-          <!-- ===== Tasks (legacy TasksOptionsPanel: user task priority colors) ===== -->
-          <StackPanel x:Name="PanelTasks" Margin="16" Spacing="8" IsVisible="False">
-            <TextBlock Text="Task List" FontWeight="SemiBold" />
-            <TextBlock Text="Colors for user-defined tasks, as #RRGGBB." Opacity="0.8" />
-            <Grid ColumnDefinitions="140,*">
-              <TextBlock Text="High priority" VerticalAlignment="Center" />
-              <TextBox x:Name="TaskHighEntry" Grid.Column="1" MaxWidth="140" HorizontalAlignment="Left" />
-            </Grid>
-            <Grid ColumnDefinitions="140,*">
-              <TextBlock Text="Normal priority" VerticalAlignment="Center" />
-              <TextBox x:Name="TaskNormalEntry" Grid.Column="1" MaxWidth="140" HorizontalAlignment="Left" />
-            </Grid>
-            <Grid ColumnDefinitions="140,*">
-              <TextBlock Text="Low priority" VerticalAlignment="Center" />
-              <TextBox x:Name="TaskLowEntry" Grid.Column="1" MaxWidth="140" HorizontalAlignment="Left" />
-            </Grid>
-          </StackPanel>
-
-          <!-- ===== External Tools (legacy MonoDevelop-tools.xml editor) ===== -->
-          <Grid x:Name="PanelExternalTools" Margin="16" RowDefinitions="Auto,*,Auto"
-                ColumnDefinitions="*,160" IsVisible="False">
-            <TextBlock Grid.Row="0" Grid.ColumnSpan="2" Text="External Tools" FontWeight="SemiBold" Margin="0,0,0,6" />
-            <ListBox x:Name="ToolsList" Grid.Row="1" Grid.ColumnSpan="2" MinHeight="140" MaxHeight="180" />
-            <StackPanel Grid.Row="2" Orientation="Vertical" Spacing="6" Margin="0,8,0,0">
-              <Grid ColumnDefinitions="130,*">
-                <TextBlock Text="Menu Command" VerticalAlignment="Center" />
-                <TextBox x:Name="ToolMenuCommand" Grid.Column="1" />
-              </Grid>
-              <Grid ColumnDefinitions="130,*">
-                <TextBlock Text="Command" VerticalAlignment="Center" />
-                <TextBox x:Name="ToolCommand" Grid.Column="1" />
-              </Grid>
-              <Grid ColumnDefinitions="130,*">
-                <TextBlock Text="Arguments" VerticalAlignment="Center" />
-                <TextBox x:Name="ToolArguments" Grid.Column="1" />
-              </Grid>
-              <Grid ColumnDefinitions="130,*">
-                <TextBlock Text="Initial Directory" VerticalAlignment="Center" />
-                <TextBox x:Name="ToolInitialDirectory" Grid.Column="1" />
-              </Grid>
-              <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,4,0,0">
-                <Button Content="Add" Click="OnToolAdd" />
-                <Button Content="Remove" Click="OnToolRemove" />
+            <!-- ===== Visual Style (legacy IDEStyleOptionsPanel: theme + language +
+                 restart in one panel) ===== -->
+            <StackPanel x:Name="PanelStyle" Margin="16" Spacing="10" IsVisible="False">
+              <TextBlock Text="User Interface Theme" FontWeight="SemiBold" />
+              <RadioButton x:Name="ThemeDarkRadio" GroupName="uitheme" Content="Dark" />
+              <RadioButton x:Name="ThemeLightRadio" GroupName="uitheme" Content="Light" />
+              <TextBlock Text="The legacy GTK dialog listed the installed GTK themes; the new UI maps them to the Fluent dark/light variants."
+                         TextWrapping="Wrap" Opacity="0.7" FontSize="11" />
+              <TextBlock Text="User Interface Language" FontWeight="SemiBold" Margin="0,8,0,0" />
+              <ComboBox x:Name="LanguageCombo" MinWidth="260" HorizontalAlignment="Left" />
+              <TextBlock x:Name="LanguageRestartNote"
+                         Text="These preferences will take effect next time you start MonoDevelop"
+                         TextWrapping="Wrap" Opacity="0.8" />
+              <StackPanel x:Name="LanguageRestartRow" Orientation="Horizontal" Spacing="8" IsVisible="False">
+                <Button x:Name="LanguageRestartButton" Content="Restart MonoDevelop" Click="OnRestartClicked" />
               </StackPanel>
             </StackPanel>
-          </Grid>
 
-          <!-- ===== Feedback (legacy LogAgentOptionsPanel: report errors + usage) ===== -->
-          <StackPanel x:Name="PanelFeedback" Margin="16" Spacing="10" IsVisible="False">
-            <TextBlock Text="Feedback" FontWeight="SemiBold" />
-            <CheckBox x:Name="FbReportCheck"
-                      Content="Report errors and usage information to help MonoDevelop improve my experience." />
-          </StackPanel>
+            <!-- ===== Author Information (legacy GlobalAuthorInformationPanel; keys
+                 Author.Name / Author.Email / Author.Copyright / Author.Company / Author.Trademark) ===== -->
+            <StackPanel x:Name="PanelAuthor" Margin="16" Spacing="8" IsVisible="False">
+              <TextBlock Text="Name" Opacity="0.8" />
+              <TextBox x:Name="AuthName" />
+              <TextBlock Text="Email" Opacity="0.8" />
+              <TextBox x:Name="AuthEmail" />
+              <TextBlock Text="Copyright" Opacity="0.8" />
+              <TextBox x:Name="AuthCopyright" />
+              <TextBlock Text="Company" Opacity="0.8" />
+              <TextBox x:Name="AuthCompany" />
+              <TextBlock Text="Trademark" Opacity="0.8" />
+              <TextBox x:Name="AuthTrademark" />
+            </StackPanel>
 
-          <!-- ===== Load/Save (legacy LoadSavePanel) ===== -->
-          <StackPanel x:Name="PanelLoadSave" Margin="16" Spacing="8" IsVisible="False">
-            <TextBlock Text="Load/Save" FontWeight="SemiBold" />
-            <Grid ColumnDefinitions="180,*">
-              <TextBlock Text="Default project directory" VerticalAlignment="Center" />
-              <TextBox x:Name="LsDefaultPath" Grid.Column="1" />
+            <!-- ===== Key Bindings (legacy KeyBindingsPanel: scheme "current" editable in
+                 Custom.kb.xml. Select command, capture accelerator, Update/Add.) ===== -->
+            <Grid x:Name="PanelKeyBindings" Margin="16" RowDefinitions="Auto,*,Auto,Auto"
+                  ColumnDefinitions="*,160" IsVisible="False">
+              <ListBox x:Name="KbCommandsList" Grid.Row="0" Grid.ColumnSpan="2" MinHeight="220"
+                       MaxHeight="300" />
+              <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="8" Margin="0,8,0,0">
+                <TextBlock Text="Accelerator:" VerticalAlignment="Center" />
+                <TextBox x:Name="KbAccelEntry" Width="180" KeyDown="OnKbAccelKeyDown"
+                         Watermark="Press keys…" />
+                <Button x:Name="KbUpdateBtn" Content="Update" Click="OnKbUpdate" />
+                <Button x:Name="KbRemoveBtn" Content="Remove" Click="OnKbRemove" />
+              </StackPanel>
+              <TextBlock x:Name="KbHint" Grid.Row="2" Margin="0,6,0,0" Opacity="0.7" FontSize="11"
+                         Text="Overrides are stored in KeyBindings/Custom.kb.xml (legacy scheme 'current'). Press Enter in the box to capture a key combination." />
             </Grid>
-            <CheckBox x:Name="LsLoadUserProps" Content="Load previous user properties when opening documents" />
-            <CheckBox x:Name="LsBackupCopies" Content="Create backup copies of files before saving" />
-            <TextBlock Text="On startup" FontWeight="SemiBold" Margin="0,8,0,0" />
-            <RadioButton x:Name="LsStartupStart" GroupName="startup" Content="Show start window" />
-            <RadioButton x:Name="LsStartupPrev" GroupName="startup" Content="Load previous solution" />
-            <RadioButton x:Name="LsStartupEmpty" GroupName="startup" Content="Empty environment" />
-          </StackPanel>
 
-          <!-- ===== Build (legacy BuildPanel) ===== -->
-          <StackPanel x:Name="PanelBuild" Margin="16" Spacing="8" IsVisible="False">
-            <TextBlock Text="Build" FontWeight="SemiBold" />
-            <Grid ColumnDefinitions="200,*">
-              <TextBlock Text="Before compiling" VerticalAlignment="Center" />
-              <ComboBox x:Name="BldBeforeCompileCombo" Grid.Column="1" MinWidth="180"
-                        HorizontalAlignment="Left">
-                <ComboBoxItem Content="Do nothing" />
-                <ComboBoxItem Content="Save all files" />
-                <ComboBoxItem Content="Prompt to save" />
-              </ComboBox>
+            <!-- ===== Fonts (legacy FontsPanel: FontProperties nested property with
+                 Editor / Pad / OutputPad roles, "Family Size" specs) ===== -->
+            <StackPanel x:Name="PanelFonts" Margin="16" Spacing="8" IsVisible="False">
+              <Grid ColumnDefinitions="110,*">
+                <TextBlock Text="Text Editor" VerticalAlignment="Center" />
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
+                  <ComboBox x:Name="FontEditorCombo" MinWidth="240" />
+                  <TextBox x:Name="FontEditorSize" Width="52" />
+                </StackPanel>
+              </Grid>
+              <Grid ColumnDefinitions="110,*">
+                <TextBlock Text="Pad" VerticalAlignment="Center" />
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
+                  <ComboBox x:Name="FontPadCombo" MinWidth="240" />
+                  <TextBox x:Name="FontPadSize" Width="52" />
+                </StackPanel>
+              </Grid>
+              <Grid ColumnDefinitions="110,*">
+                <TextBlock Text="Output Pad" VerticalAlignment="Center" />
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
+                  <ComboBox x:Name="FontOutputCombo" MinWidth="240" />
+                  <TextBox x:Name="FontOutputSize" Width="52" />
+                </StackPanel>
+              </Grid>
+              <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,6,0,0">
+                <Button x:Name="FontApplyBtn" Content="Apply to open editors" Click="OnFontApply" />
+                <Button x:Name="FontResetBtn" Content="Reset to defaults" Click="OnFontReset" />
+              </StackPanel>
+              <TextBlock Margin="0,6,0,0" Opacity="0.7" FontSize="11"
+                         Text="Stored as FontProperties (nested) in MonoDevelopProperties.xml, same keys as the GTK UI." />
+            </StackPanel>
+
+            <!-- ===== Updates (legacy AddInsOptionsPanel: check for updates) ===== -->
+            <StackPanel x:Name="PanelUpdates" Margin="16" Spacing="10" IsVisible="False">
+              <CheckBox x:Name="UpdatesCheck" Content="Automatically check for updates"
+                        IsChecked="True" />
+            </StackPanel>
+
+            <!-- ===== Tasks (legacy TasksOptionsPanel: user task priority colors) ===== -->
+            <StackPanel x:Name="PanelTasks" Margin="16" Spacing="8" IsVisible="False">
+              <TextBlock Text="Colors for user-defined tasks, as #RRGGBB." Opacity="0.8" />
+              <Grid ColumnDefinitions="140,*">
+                <TextBlock Text="High priority" VerticalAlignment="Center" />
+                <TextBox x:Name="TaskHighEntry" Grid.Column="1" MaxWidth="140" HorizontalAlignment="Left" />
+              </Grid>
+              <Grid ColumnDefinitions="140,*">
+                <TextBlock Text="Normal priority" VerticalAlignment="Center" />
+                <TextBox x:Name="TaskNormalEntry" Grid.Column="1" MaxWidth="140" HorizontalAlignment="Left" />
+              </Grid>
+              <Grid ColumnDefinitions="140,*">
+                <TextBlock Text="Low priority" VerticalAlignment="Center" />
+                <TextBox x:Name="TaskLowEntry" Grid.Column="1" MaxWidth="140" HorizontalAlignment="Left" />
+              </Grid>
+            </StackPanel>
+
+            <!-- ===== External Tools (legacy MonoDevelop-tools.xml editor) ===== -->
+            <Grid x:Name="PanelExternalTools" Margin="16" RowDefinitions="Auto,*,Auto"
+                  ColumnDefinitions="*,160" IsVisible="False">
+              <ListBox x:Name="ToolsList" Grid.Row="0" Grid.ColumnSpan="2" MinHeight="140" MaxHeight="180" />
+              <StackPanel Grid.Row="1" Orientation="Vertical" Spacing="6" Margin="0,8,0,0">
+                <Grid ColumnDefinitions="130,*">
+                  <TextBlock Text="Menu Command" VerticalAlignment="Center" />
+                  <TextBox x:Name="ToolMenuCommand" Grid.Column="1" />
+                </Grid>
+                <Grid ColumnDefinitions="130,*">
+                  <TextBlock Text="Command" VerticalAlignment="Center" />
+                  <TextBox x:Name="ToolCommand" Grid.Column="1" />
+                </Grid>
+                <Grid ColumnDefinitions="130,*">
+                  <TextBlock Text="Arguments" VerticalAlignment="Center" />
+                  <TextBox x:Name="ToolArguments" Grid.Column="1" />
+                </Grid>
+                <Grid ColumnDefinitions="130,*">
+                  <TextBlock Text="Initial Directory" VerticalAlignment="Center" />
+                  <TextBox x:Name="ToolInitialDirectory" Grid.Column="1" />
+                </Grid>
+                <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,4,0,0">
+                  <Button Content="Add" Click="OnToolAdd" />
+                  <Button Content="Remove" Click="OnToolRemove" />
+                </StackPanel>
+              </StackPanel>
             </Grid>
-            <CheckBox x:Name="BldRunWithWarnings" Content="Run even when there are warnings" />
-            <CheckBox x:Name="BldBuildBeforeExec" Content="Build before executing" />
-            <CheckBox x:Name="BldBuildBeforeTests" Content="Build before running tests" />
-            <CheckBox x:Name="BldSkipUnmodified" Content="Skip building unmodified projects" />
-            <CheckBox x:Name="BldParallel" Content="Build multiple projects in parallel" />
-            <Grid ColumnDefinitions="200,*" Margin="0,4,0,0">
-              <TextBlock Text="MSBuild verbosity" VerticalAlignment="Center" />
-              <ComboBox x:Name="BldVerbosityCombo" Grid.Column="1" MinWidth="180"
-                        HorizontalAlignment="Left">
-                <ComboBoxItem Content="Quiet" />
-                <ComboBoxItem Content="Minimal" />
-                <ComboBoxItem Content="Normal" />
-                <ComboBoxItem Content="Detailed" />
-                <ComboBoxItem Content="Diagnostic" />
-              </ComboBox>
-            </Grid>
-          </StackPanel>
 
-          <!-- ===== Maintenance (legacy MaintenanceOptionsPanel) ===== -->
-          <StackPanel x:Name="PanelMaintenance" Margin="16" Spacing="10" IsVisible="False">
-            <TextBlock Text="Maintenance" FontWeight="SemiBold" />
-            <CheckBox x:Name="MtInstrumentation" Content="Enable instrumentation" />
-            <CheckBox x:Name="MtAutomatedTesting" Content="Enable automated testing" />
-          </StackPanel>
+            <!-- ===== Feedback (legacy LogAgentOptionsPanel: report errors + usage) ===== -->
+            <StackPanel x:Name="PanelFeedback" Margin="16" Spacing="10" IsVisible="False">
+              <CheckBox x:Name="FbReportCheck"
+                        Content="Report errors and usage information to help MonoDevelop improve my experience." />
+            </StackPanel>
 
-          <!-- Generic placeholder for panels not ported yet -->
-          <StackPanel x:Name="PanelPlaceholder" Margin="16" IsVisible="False" Spacing="8">
-            <TextBlock x:Name="PlaceholderTitle" FontWeight="SemiBold" />
-            <TextBlock Text="This options panel has not been ported to the new UI yet. Its settings remain available through the legacy interface until the cutover."
-                       TextWrapping="Wrap" Opacity="0.7" />
-          </StackPanel>
-        </Panel>
-      </ScrollViewer>
+            <!-- ===== Load/Save (legacy LoadSavePanel) ===== -->
+            <StackPanel x:Name="PanelLoadSave" Margin="16" Spacing="8" IsVisible="False">
+              <Grid ColumnDefinitions="180,*">
+                <TextBlock Text="Default project directory" VerticalAlignment="Center" />
+                <TextBox x:Name="LsDefaultPath" Grid.Column="1" />
+              </Grid>
+              <CheckBox x:Name="LsLoadUserProps" Content="Load previous user properties when opening documents" />
+              <CheckBox x:Name="LsBackupCopies" Content="Create backup copies of files before saving" />
+              <TextBlock Text="On startup" FontWeight="SemiBold" Margin="0,8,0,0" />
+              <RadioButton x:Name="LsStartupStart" GroupName="startup" Content="Show start window" />
+              <RadioButton x:Name="LsStartupPrev" GroupName="startup" Content="Load previous solution" />
+              <RadioButton x:Name="LsStartupEmpty" GroupName="startup" Content="Empty environment" />
+            </StackPanel>
+
+            <!-- ===== Build (legacy BuildPanel) ===== -->
+            <StackPanel x:Name="PanelBuild" Margin="16" Spacing="8" IsVisible="False">
+              <Grid ColumnDefinitions="200,*">
+                <TextBlock Text="Before compiling" VerticalAlignment="Center" />
+                <ComboBox x:Name="BldBeforeCompileCombo" Grid.Column="1" MinWidth="180"
+                          HorizontalAlignment="Left">
+                  <ComboBoxItem Content="Do nothing" />
+                  <ComboBoxItem Content="Save all files" />
+                  <ComboBoxItem Content="Prompt to save" />
+                </ComboBox>
+              </Grid>
+              <CheckBox x:Name="BldRunWithWarnings" Content="Run even when there are warnings" />
+              <CheckBox x:Name="BldBuildBeforeExec" Content="Build before executing" />
+              <CheckBox x:Name="BldBuildBeforeTests" Content="Build before running tests" />
+              <CheckBox x:Name="BldSkipUnmodified" Content="Skip building unmodified projects" />
+              <CheckBox x:Name="BldParallel" Content="Build multiple projects in parallel" />
+              <Grid ColumnDefinitions="200,*" Margin="0,4,0,0">
+                <TextBlock Text="MSBuild verbosity" VerticalAlignment="Center" />
+                <ComboBox x:Name="BldVerbosityCombo" Grid.Column="1" MinWidth="180"
+                          HorizontalAlignment="Left">
+                  <ComboBoxItem Content="Quiet" />
+                  <ComboBoxItem Content="Minimal" />
+                  <ComboBoxItem Content="Normal" />
+                  <ComboBoxItem Content="Detailed" />
+                  <ComboBoxItem Content="Diagnostic" />
+                </ComboBox>
+              </Grid>
+            </StackPanel>
+
+            <!-- ===== Errors and Warnings (legacy BuildMessagePanel, sub-panel of Build) ===== -->
+            <StackPanel x:Name="PanelBuildMessages" Margin="16" Spacing="10" IsVisible="False">
+              <Grid ColumnDefinitions="220,*">
+                <TextBlock Text="Jump to first" VerticalAlignment="Center" />
+                <ComboBox x:Name="BmJumpCombo" Grid.Column="1" MinWidth="200" HorizontalAlignment="Left">
+                  <ComboBoxItem Content="Error" />
+                  <ComboBoxItem Content="Error or Warning" />
+                </ComboBox>
+              </Grid>
+              <Grid ColumnDefinitions="220,*">
+                <TextBlock Text="Show error pad after build" VerticalAlignment="Center" />
+                <ComboBox x:Name="BmErrorPadCombo" Grid.Column="1" MinWidth="200" HorizontalAlignment="Left">
+                  <ComboBoxItem Content="Always" />
+                  <ComboBoxItem Content="On Errors" />
+                  <ComboBoxItem Content="On Errors or Warnings" />
+                </ComboBox>
+              </Grid>
+              <Grid ColumnDefinitions="220,*">
+                <TextBlock Text="Message bubbles" VerticalAlignment="Center" />
+                <ComboBox x:Name="BmBubblesCombo" Grid.Column="1" MinWidth="200" HorizontalAlignment="Left">
+                  <ComboBoxItem Content="For Errors" />
+                  <ComboBoxItem Content="For Errors and Warnings" />
+                </ComboBox>
+              </Grid>
+            </StackPanel>
+
+            <!-- ===== Maintenance (legacy MaintenanceOptionsPanel) ===== -->
+            <StackPanel x:Name="PanelMaintenance" Margin="16" Spacing="10" IsVisible="False">
+              <CheckBox x:Name="MtInstrumentation" Content="Enable instrumentation" />
+              <CheckBox x:Name="MtAutomatedTesting" Content="Enable automated testing" />
+            </StackPanel>
+
+            <!-- Generic placeholder for panels provided by add-ins that are not wired
+                 in this shell (their settings remain available through the legacy UI). -->
+            <StackPanel x:Name="PanelPlaceholder" Margin="16" IsVisible="False" Spacing="8">
+              <TextBlock Text="This options panel is provided by an add-in and has not been wired to the new UI yet. Its settings remain available through the legacy interface until the cutover."
+                         TextWrapping="Wrap" Opacity="0.7" />
+            </StackPanel>
+          </Panel>
+        </ScrollViewer>
+      </Grid>
     </Grid>
 
     <!-- OK/Cancel (OK = ApplyChanges, like OptionsDialog) -->

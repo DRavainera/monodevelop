@@ -778,3 +778,43 @@ hasta aprobar limpio):
 **Cierre**: documentación M26 en `interfaz-plan.md` (+ README del shell) y
 commit+push del bloque.
 
+## 2026-10-02 (b) — M27: Preferences, paridad con el árbol legacy + "Errors and Warnings"
+
+Segunda pasada sobre la ventana Preferences. Se analizó la Preferences GTK
+legacy (`OptionsDialog` + `ExtensionModel/GlobalOptionsDialog.addin.xml` + las
+extensiones de add-ins) para reconstruir árbol, header y componentes.
+
+**Cambios:**
+- Navegación **jerárquica real** (`TreeView`, antes `ListBox` plano): categorías
+  → secciones → subpaneles, fiel a `GlobalOptionsDialog.addin.xml`. Modelo en
+  `PreferencesDialog.axaml.cs` (`PrefsNode`/`BuildModel`).
+- **Header de panel** (icono 28px + título) como `OptionsDialogHeader` legacy;
+  títulos duplicados eliminados.
+- Iconos corregidos: `Feedback`/`MonoDevelop Maintenance` ya usan
+  `md-prefs-feedback`/`md-prefs-maintenance`; cada sección mapea su `md-prefs-*`
+  (0 `(missing)`).
+- **Panel nuevo `Build → Errors and Warnings`** (legacy `BuildMessagePanel`):
+  JumpToFirst / ShowErrorPadAfterBuild / ShowMessageBubbles con las claves
+  `MonoDevelop.Ide.NewJumpToFirstErrorOrWarning`, `NewShowErrorPadAfterBuild`,
+  `NewShowMessageBubbles` (se corrigió el off-by-one del legacy, que casteaba el
+  índice del combo al enum).
+- Secciones/subpaneles añadidos: `IntelliSense → Behavior/Appearance`,
+  `Source Analysis → C#`, `XML Schemas`, `F# Settings`; el selector de idioma se
+  movió **dentro de Visual Style** (como el legacy), no como sección propia.
+- **QA**: hook `--prefs-tree` (dump `[prefs-tree]`) + telemetría `[prefs-panel]`;
+  `--prefs=<id>` abre cualquier panel (incluidos anidados).
+
+**Deuda**: los paneles de add-in (Text Editor, Source Code, Version Control,
+NuGet, .NET Runtimes, SDK Locations, Debugger, GTK# Designer, Performance, F#)
+figuran en el árbol con label/icono correctos pero como placeholder (su lógica
+usa el stack de add-in que el shell no referencia). `.NET Runtimes` (legacy bajo
+`RUNTIME_SELECTOR optIn`) se muestra siempre (net10-only) — desviación
+documentada.
+
+**QA (§18.5, 2 rondas)**: ronda 1 → 4 hallazgos menores corregidos; ronda 2 →
+**PASA limpio**. Build 0 errores; tests **53/53**. Logs
+`~/opencode/prefs_qa_{tree,buildmessages}.log`, captura `prefs_tree.png`.
+
+**Cierre**: documentación M27 en `interfaz-plan.md`/`migration-status-report.md`
+(+ README del shell) y commit+push.
+

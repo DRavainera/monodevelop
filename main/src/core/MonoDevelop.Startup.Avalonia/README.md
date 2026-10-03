@@ -189,7 +189,7 @@ documento sucio a propósito para poder probar el diálogo visualmente
 
 | Hook | Módulo | Tag |
 |---|---|---|
-| `--about` / `--addins` / `--prefs[=panel]` / `--welcome` / `--newsolution` / `--find` | Diálogos directos | — |
+| `--about` / `--addins` / `--prefs[=panel]` / `--prefs-tree` / `--welcome` / `--newsolution` / `--find` | Diálogos directos (Preferences: árbol jerárquico de secciones; `--prefs-tree` lo volca) | — |
 | `--build` / `--buildone` / `--run` | Build/rebuild por proyecto, ejecución | `[build]`/`[run]` |
 | `--goto` / `--gotoline[:col]` | Go To File/Type/Line | `[goto]` |
 | `--tasks` | Pad Tasks (escáner TODO) | `[tasks]` |
@@ -339,6 +339,16 @@ comparar la UI contra la legacy GTK en vivo (ver bitácoras en
   (banda completa + refuerzo en la franja de breakpoints), la franja de
   iconos muestra cursor de mano y tooltip "Line N — click to toggle
   breakpoint"; al salir del gutter se limpia todo.
+- **Preferences** (`Views/PreferencesDialog.*`, M27): árbol jerárquico de
+  categorías → secciones → subpaneles fiel a
+  `MonoDevelop.Ide/ExtensionModel/GlobalOptionsDialog.addin.xml` (+ extensiones
+  de add-ins), con header de panel (icono + título) como el `OptionsDialog`
+  legacy e iconos `md-prefs-*`. Paneles cableados a las mismas claves legacy
+  (`MonoDevelopProperties.xml`, `Custom.kb.xml`, `MonoDevelop-tools.xml`):
+  Visual Style (tema + idioma), Author, Key Bindings, Fonts, Updates, Tasks,
+  External Tools, Load/Save, Build, **Errors and Warnings** (`BuildMessagePanel`),
+  Feedback y Maintenance. El resto (paneles de add-in) figura en el árbol con
+  label/icono pero como placeholder hasta portar su stack.
 - **Persistencia de la sesión de debug**: breakpoints, watches (pad + pins
   del editor) y config activa viven en `<sln>.userprefs` — los breakpoints
   con el formato Mono.Debugging (`MonoDevelop.Debugger/WatchService.cs`
@@ -353,11 +363,11 @@ comparar la UI contra la legacy GTK en vivo (ver bitácoras en
 
 Cada módulo se porta desde el código GTK listando primero sus funcionalidades,
 se implementa en Avalonia y pasa QA de paridad antes de avanzar al siguiente.
-Completado reciente (**M26**): los pads placeholder `documentoutline`, `classes`
-y `codeissues`, portados sobre `SymbolIndexService`/`CodeIssueService` con
-activación por doble clic (hooks `--outline`, `--classes`, `--codeissues`,
-`--dblclick`). Siguientes candidatos: los 3 pads cáscara restantes (`unittests`,
-`toolbox`, `help`), el desbloqueo del build completo de `Main.sln`
-(`Mono.Addins.Setup` net472/netstandard) y el runsheet In3 como gate.
+Completados recientes: **M26** (pads placeholder `documentoutline`, `classes` y
+`codeissues` sobre `SymbolIndexService`/`CodeIssueService`) y **M27**
+(Preferences: árbol jerárquico + header + panel "Errors and Warnings").
+Siguientes candidatos: los 3 pads cáscara restantes (`unittests`, `toolbox`,
+`help`), el desbloqueo del build completo de `Main.sln` (`Mono.Addins.Setup`
+net472/netstandard) y el runsheet In3 como gate.
 
-Detalle hito por hito: `docs/interfaz-plan.md` § M4–M26.
+Detalle hito por hito: `docs/interfaz-plan.md` § M4–M27.

@@ -286,6 +286,11 @@ public partial class MainWindow : Window
 			var qa = Program.QaDialogArg;
 			if (qa == "--prefs") {
 				new PreferencesDialog { WindowStartupLocation = WindowStartupLocation.CenterOwner }.ShowDialog (this);
+			} else if (qa == "--prefs-tree") {
+				// QA: dump the Preferences section tree (ids/labels/icons) and show it.
+				var dlg = new PreferencesDialog { WindowStartupLocation = WindowStartupLocation.CenterOwner };
+				dlg.DumpTreeForQa ();
+				dlg.ShowDialog (this);
 			} else if (qa.StartsWith ("--prefs=", StringComparison.Ordinal)) {
 				var arg = qa.Substring ("--prefs=".Length);
 				var dlg = new PreferencesDialog { WindowStartupLocation = WindowStartupLocation.CenterOwner };

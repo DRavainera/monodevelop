@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;	using System.Xml.Linq;
+using System.Linq;
+using System.Xml.Linq;
 using Avalonia;
+using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Controls;
 using Avalonia.Input;
@@ -14,15 +16,21 @@ using MonoDevelop.Ide.Services;
 namespace MonoDevelop.AvaloniaShell.Views;
 
 /// <summary>
-/// Port of the legacy OptionsDialog (GlobalOptionsDialog.addin.xml section order) with
-/// the panels that are wired in this shell: Visual Style, UI Language, Author, Key
-/// Bindings, Fonts, Updates, Tasks, External Tools, Feedback, Load/Save, Build and
-/// Maintenance — every one reading/writing the exact keys and file formats of the GTK UI
-/// (MonoDevelopProperties.xml, Custom.kb.xml, MonoDevelop-tools.xml), so both UIs share
-/// settings.
+/// Port of the legacy OptionsDialog: the left tree mirrors the section order of
+/// GlobalOptionsDialog.addin.xml plus the add-in extensions (categories →
+/// sections → sub-panels), and the right pane shows the section icon + title
+/// header followed by the panel page. The wired panels read/write the exact keys
+/// and file formats of the GTK UI (MonoDevelopProperties.xml, Custom.kb.xml,
+/// MonoDevelop-tools.xml), so both UIs share settings.
 /// </summary>
 public partial class PreferencesDialog : Window
 {
+	// A section-tree node. Empty Id = category heading (not a page).
+	sealed record PrefsNode (string Id, string Label, string Icon, List<PrefsNode> Children)
+	{
+		public bool IsCategory => string.IsNullOrEmpty (Id);
+	}
+
 	// Legacy language list (LocalizationService.defaultLocaleSet, same order/cultures).
 	static readonly (string Culture, string DisplayName)[] LocaleSet = {
 		("", "(Default)"),
@@ -53,6 +61,12 @@ public partial class PreferencesDialog : Window
 
 	const string LanguageKey = "MonoDevelop.Ide.UserInterfaceLanguage";
 
+	// Panel ids wired to a real page; everything else falls back to the placeholder.
+	static readonly HashSet<string> functionalPanels = new () {
+		"style", "author", "keybindings", "fonts", "updates", "tasks",
+		"externaltools", "loadsave", "build", "buildmessages", "feedback", "maintenance",
+	};
+
 	string? pendingLanguage;
 	string? storedLanguage;
 	bool updatingDetails;
@@ -67,7 +81,6 @@ public partial class PreferencesDialog : Window
 		MonoDevelop.AvaloniaShell.Controls.DialogWindow.Apply (this);
 		ThemeDarkRadio!.IsCheckedChanged += OnThemeRadioChecked;
 		ThemeLightRadio!.IsCheckedChanged += OnThemeRadioChecked;
-		LoadSectionIcons ();
 		LoadLanguagePanel ();
 		LoadAuthorPanel ();
 		LoadKeyBindingsPanel ();
@@ -78,40 +91,164 @@ public partial class PreferencesDialog : Window
 		LoadFeedbackPanel ();
 		LoadLoadSavePanel ();
 		LoadBuildPanel ();
+		LoadBuildMessagesPanel ();
 		LoadMaintenancePanel ();
+		BuildSectionTree ();
 		// Default selection: Visual Style (the first functional panel), like the GTK
 		// dialog opens on the first selectable section.
 		SelectPanel ("style");
 	}
 
-	// Section icons come from the redesigned MonoDevelop.Ide icon set (md-prefs-*),
-	// in the same spot the legacy options dialog showed them: left of each section.
-	void LoadSectionIcons ()
+	// ---------- Section tree (legacy GlobalOptionsDialog.addin.xml + addin extensions) ----------
+
+	static PrefsNode Cat (string label, params PrefsNode[] children) => new ("", label, "", children.ToList ());
+	static PrefsNode Leaf (string id, string label, string icon) => new (id, label, icon, new List<PrefsNode> ());
+
+	static List<PrefsNode> BuildModel () => new () {
+		Cat ("Environment",
+			Leaf ("style", "Visual Style", "md-prefs-visual-style"),
+			Leaf ("author", "Author Information", "md-prefs-author-information"),
+			Leaf ("keybindings", "Key Bindings", "md-prefs-key-bindings"),
+			Leaf ("fonts", "Fonts", "md-prefs-fonts"),
+			Leaf ("updates", "Updates", "md-prefs-updates"),
+			Leaf ("tasks", "Tasks", "md-prefs-task-list"),
+			Leaf ("externaltools", "External Tools", "md-prefs-external-tools")),
+		Cat ("Projects",
+			Leaf ("loadsave", "Load/Save", "md-prefs-load-save"),
+			new PrefsNode ("build", "Build", "md-prefs-build", new () {
+				Leaf ("buildmessages", "Errors and Warnings", "md-prefs-build"),
+			}),
+			// Shown by the legacy only under the RUNTIME_SELECTOR feature switch; the
+			// shell lists it always (net10-only) as an informative placeholder.
+			Leaf ("runtimes", ".NET Runtimes", "md-prefs-generic"),
+			Leaf ("sdklocations", "SDK Locations", "md-prefs-sdk-locations"),
+			Leaf ("debugger", "Debugger", "md-prefs-generic"),
+			Leaf ("gtkdesigner", "GTK# Designer", "md-prefs-generic")),
+		Cat ("Text Editor",
+			Leaf ("general", "General", "md-prefs-generic"),
+			Leaf ("markers", "Markers and Rulers", "md-prefs-generic"),
+			new PrefsNode ("behavior", "Behavior", "md-prefs-generic", new () {
+				Leaf ("xml", "XML", "md-prefs-generic"),
+				Leaf ("csharpformat", "C#", "md-prefs-code-formatting"),
+			}),
+			new PrefsNode ("intellisense", "IntelliSense", "md-prefs-generic", new () {
+				Leaf ("intellisense-behavior", "Behavior", "md-prefs-generic"),
+				Leaf ("intellisense-appearance", "Appearance", "md-prefs-generic"),
+			}),
+			Leaf ("colortheme", "Color Theme", "md-prefs-generic"),
+			Leaf ("formatting", "Formatting", "md-prefs-code-formatting"),
+			Leaf ("codesnippets", "Code Snippets", "md-prefs-code-templates"),
+			Leaf ("languagebundles", "Language Bundles", "md-prefs-generic"),
+			new PrefsNode ("analysis", "Source Analysis", "md-prefs-generic", new () {
+				Leaf ("analysis-csharp", "C#", "md-prefs-generic"),
+			}),
+			Leaf ("xmlschemas", "XML Schemas", "md-prefs-generic")),
+		Cat ("Source Code",
+			Leaf ("naming", ".NET Naming Policies", "md-prefs-dotnet-naming-policies"),
+			Leaf ("codeformatting", "Code Formatting", "md-prefs-code-formatting"),
+			Leaf ("standardheader", "Standard Header", "md-prefs-header")),
+		Cat ("Version Control",
+			Leaf ("vcgeneral", "General", "md-prefs-solution"),
+			Leaf ("vccommit", "Commit Message Style", "md-prefs-solution"),
+			Leaf ("git", "Git", "md-prefs-solution"),
+			Leaf ("changelog", "ChangeLog Integration", "md-prefs-generic")),
+		Cat ("NuGet",
+			Leaf ("nugetgeneral", "General", "md-prefs-generic"),
+			Leaf ("packagesources", "Sources", "md-prefs-generic")),
+		Cat ("Other",
+			Leaf ("feedback", "Feedback", "md-prefs-feedback"),
+			Leaf ("maintenance", "MonoDevelop Maintenance", "md-prefs-maintenance"),
+			Leaf ("fsharp", "F# Settings", "md-prefs-source")),
+		Cat ("Performance Diagnostics",
+			Leaf ("perfgeneral", "General", "md-prefs-performance")),
+	};
+
+	void BuildSectionTree ()
 	{
-		SetIcon (IconStyle!, "md-prefs-visual-style");
-		SetIcon (IconLanguage!, "md-prefs-language");
-		SetIcon (IconAuthor!, "md-prefs-author-information");
-		SetIcon (IconKeyBindings!, "md-prefs-key-bindings");
-		SetIcon (IconFonts!, "md-prefs-fonts");
-		SetIcon (IconUpdates!, "md-prefs-updates");
-		SetIcon (IconTasks!, "md-prefs-task-list");
-		SetIcon (IconExternalTools!, "md-prefs-external-tools");
-		SetIcon (IconLoadSave!, "md-prefs-load-save");
-		SetIcon (IconBuild!, "md-prefs-build");
-		SetIcon (IconSdkLocations!, "md-prefs-sdk-locations");
-		SetIcon (IconFormatting!, "md-prefs-code-formatting");
-		SetIcon (IconCodeSnippets!, "md-prefs-code-templates");
-		SetIcon (IconNaming!, "md-prefs-dotnet-naming-policies");
-		SetIcon (IconCodeFormatting!, "md-prefs-code-formatting");
-		SetIcon (IconStandardHeader!, "md-prefs-header");
-		SetIcon (IconFeedback!, "md-prefs-generic");
-		SetIcon (IconMaintenance!, "md-prefs-generic");
+		foreach (var node in BuildModel ()) {
+			var item = MakeTreeItem (node);
+			item.IsExpanded = true; // expand everything like the GTK tree
+			SectionTree!.Items.Add (item);
+		}
+	}
+
+	static TreeViewItem MakeTreeItem (PrefsNode node)
+	{
+		var header = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+		if (!string.IsNullOrEmpty (node.Icon)) {
+			var img = new Image { Width = 16, Height = 16, VerticalAlignment = VerticalAlignment.Center };
+			SetIcon (img, node.Icon);
+			header.Children.Add (img);
+		}
+		header.Children.Add (new TextBlock { Text = node.Label, VerticalAlignment = VerticalAlignment.Center });
+		var item = new TreeViewItem { Header = header, Tag = node };
+		foreach (var child in node.Children)
+			item.Items.Add (MakeTreeItem (child));
+		return item;
 	}
 
 	static void SetIcon (Image image, string stockId)
 	{
-		if (IconService.GetImage (stockId) is Bitmap bmp)
+		if (!string.IsNullOrEmpty (stockId) && IconService.GetImage (stockId) is Bitmap bmp)
 			image.Source = bmp;
+		else
+			image.Source = null;
+	}
+
+	/// <summary>Selects a section by id, mirroring OptionsDialog.SelectPanel.</summary>
+	public void SelectPanel (string panelId)
+	{
+		// Back-compat: the language selector lives inside Visual Style (legacy).
+		if (panelId == "language")
+			panelId = "style";
+		var item = FindItem (SectionTree!.Items, panelId);
+		if (item is null)
+			return;
+		ExpandAncestors (SectionTree.Items, item);
+		item.IsSelected = true;
+		SectionTree.SelectedItem = item;
+	}
+
+	static TreeViewItem? FindItem (Avalonia.Controls.ItemCollection items, string id)
+	{
+		foreach (var it in items.OfType<TreeViewItem> ()) {
+			if (it.Tag is PrefsNode { Id: var nid } && nid == id && !string.IsNullOrEmpty (id))
+				return it;
+			var sub = FindItem (it.Items, id);
+			if (sub is not null)
+				return sub;
+		}
+		return null;
+	}
+
+	static bool ExpandAncestors (Avalonia.Controls.ItemCollection items, TreeViewItem target)
+	{
+		foreach (var it in items.OfType<TreeViewItem> ()) {
+			if (ReferenceEquals (it, target))
+				return true;
+			if (ExpandAncestors (it.Items, target)) {
+				it.IsExpanded = true;
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/// <summary>QA: dumps the section tree (id, label, icon and whether the icon resolves).</summary>
+	public void DumpTreeForQa ()
+	{
+		foreach (var node in BuildModel ())
+			Dump (node, 0);
+		void Dump (PrefsNode n, int depth)
+		{
+			var pad = new string (' ', depth * 2);
+			var kind = n.IsCategory ? "cat" : "section";
+			var icon = string.IsNullOrEmpty (n.Icon) ? "-" :
+				(IconService.GetImage (n.Icon) is not null ? n.Icon : n.Icon + " (missing)");
+			MainWindow.Instance?.Output ($"[prefs-tree] {pad}{kind}: {n.Label} id={n.Id} icon={icon}");
+			foreach (var c in n.Children)
+				Dump (c, depth + 1);
+		}
 	}
 
 	// ---------- Language ----------
@@ -475,6 +612,40 @@ public partial class PreferencesDialog : Window
 			});
 	}
 
+	// ---------- Errors and Warnings (legacy BuildMessagePanel) ----------
+
+	void LoadBuildMessagesPanel ()
+	{
+		// JumpToFirst { Never, Error, ErrorOrWarning }: the legacy list shows Error /
+		// Error or Warning (index maps to Error / ErrorOrWarning).
+		var jump = SettingsStore.GetString ("MonoDevelop.Ide.NewJumpToFirstErrorOrWarning");
+		BmJumpCombo!.SelectedIndex = jump == "ErrorOrWarning" ? 1 : 0;
+		// BuildResultStates { Never, Always, OnErrors, OnErrorsOrWarnings }.
+		var pad = SettingsStore.GetString ("MonoDevelop.Ide.NewShowErrorPadAfterBuild");
+		BmErrorPadCombo!.SelectedIndex = pad switch {
+			"OnErrors" => 1,
+			"OnErrorsOrWarnings" => 2,
+			_ => 0,
+		};
+		// ShowMessageBubbles { Never, ForErrors, ForErrorsAndWarnings }.
+		var bubbles = SettingsStore.GetString ("MonoDevelop.Ide.NewShowMessageBubbles");
+		BmBubblesCombo!.SelectedIndex = bubbles == "ForErrors" ? 0 : 1;
+	}
+
+	void StoreBuildMessagesPanel ()
+	{
+		SettingsStore.SetString ("MonoDevelop.Ide.NewJumpToFirstErrorOrWarning",
+			BmJumpCombo!.SelectedIndex == 1 ? "ErrorOrWarning" : "Error");
+		SettingsStore.SetString ("MonoDevelop.Ide.NewShowErrorPadAfterBuild",
+			BmErrorPadCombo!.SelectedIndex switch {
+				1 => "OnErrors",
+				2 => "OnErrorsOrWarnings",
+				_ => "Always",
+			});
+		SettingsStore.SetString ("MonoDevelop.Ide.NewShowMessageBubbles",
+			BmBubblesCombo!.SelectedIndex == 0 ? "ForErrors" : "ForErrorsAndWarnings");
+	}
+
 	// ---------- Maintenance ----------
 
 	void LoadMaintenancePanel ()
@@ -491,24 +662,24 @@ public partial class PreferencesDialog : Window
 
 	// ---------- Panel switching (OptionsDialog.SelectPanel) ----------
 
-	/// <summary>Selects a section by id, mirroring OptionsDialog.SelectPanel.</summary>
-	public void SelectPanel (string panelId)
-	{
-		var item = SectionList?.Items.OfType<ListBoxItem> ().FirstOrDefault (i => (string?)i.Tag == panelId);
-		if (item is not null)
-			SectionList.SelectedItem = item;
-	}
-
 	void OnSectionSelected (object? sender, SelectionChangedEventArgs e)
 	{
-		if (SectionList?.SelectedItem is not ListBoxItem item)
+		var node = SectionTree?.SelectedItem switch {
+			TreeViewItem { Tag: PrefsNode n } => n,
+			PrefsNode n => n,
+			_ => null,
+		};
+		if (node is null || node.IsCategory)
 			return;
-		var id = item.Tag as string;
+		ShowPanel (node);
+	}
 
+	void ShowPanel (PrefsNode node)
+	{
+		var id = node.Id;
 		updatingDetails = true;
 
 		PanelStyle!.IsVisible = id == "style";
-		PanelLanguage!.IsVisible = id == "language";
 		PanelAuthor!.IsVisible = id == "author";
 		PanelKeyBindings!.IsVisible = id == "keybindings";
 		PanelFonts!.IsVisible = id == "fonts";
@@ -518,12 +689,13 @@ public partial class PreferencesDialog : Window
 		PanelFeedback!.IsVisible = id == "feedback";
 		PanelLoadSave!.IsVisible = id == "loadsave";
 		PanelBuild!.IsVisible = id == "build";
+		PanelBuildMessages!.IsVisible = id == "buildmessages";
 		PanelMaintenance!.IsVisible = id == "maintenance";
-		PanelPlaceholder!.IsVisible = id is not (
-			"style" or "language" or "author" or "keybindings" or "fonts" or "updates"
-			or "tasks" or "externaltools" or "feedback" or "loadsave" or "build" or "maintenance");
-		if (PanelPlaceholder.IsVisible)
-			PlaceholderTitle!.Text = ExtractSectionTitle (item.Content);
+		PanelPlaceholder!.IsVisible = !functionalPanels.Contains (id);
+
+		HeaderTitle!.Text = node.Label;
+		SetIcon (HeaderIcon!, node.Icon);
+		MainWindow.Instance?.Output ($"[prefs-panel] {id} | {node.Label} | icon={node.Icon} | placeholder={!functionalPanels.Contains (id)}");
 
 		if (id == "style") {
 			var dark = Application.Current?.ActualThemeVariant != ThemeVariant.Light;
@@ -532,13 +704,6 @@ public partial class PreferencesDialog : Window
 		}
 
 		updatingDetails = false;
-	}
-
-	static string ExtractSectionTitle (object? content)
-	{
-		if (content is StackPanel { Children: { } children })
-			return children.OfType<TextBlock> ().FirstOrDefault ()?.Text ?? "";
-		return content?.ToString ()?.Trim () ?? "";
 	}
 
 	void OnThemeRadioChecked (object? sender, RoutedEventArgs e)
@@ -564,6 +729,7 @@ public partial class PreferencesDialog : Window
 		StoreFeedbackPanel ();
 		StoreLoadSavePanel ();
 		StoreBuildPanel ();
+		StoreBuildMessagesPanel ();
 		StoreMaintenancePanel ();
 		Close ();
 	}
