@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Shapes;
+using Avalonia.Input;
 using Avalonia.Media;
 using MonoDevelop.Ide.Services;
 using Avalonia.Interactivity;
@@ -56,8 +57,38 @@ public static class MenuBuilder
 				item.Tag = ca.Id;
 				KeyboardShortcutRegistry.Register (ca.Id, item);
 			}
+			// Make the legacy shortcut a real accelerator: parse it into a KeyGesture so
+			// KeyboardShortcutRegistry.AttachHotKeys binds it and the menu shows it.
+			if (!string.IsNullOrEmpty (entry.Shortcut))
+				item.InputGesture = ParseGesture (entry.Shortcut);
 		}
 		return item;
+	}
+
+	/// <summary>Parses a legacy/shell shortcut label ("Ctrl Shift N", "Ctrl+M", chords
+	/// "Ctrl+M|N") into an Avalonia KeyGesture. Chords/alternates are not representable
+	/// by KeyGesture, so the first chord is used for the menu accelerator.</summary>
+	static KeyGesture? ParseGesture (string shortcut)
+	{
+		var s = shortcut.Replace ('+', ' ');
+		var pipe = s.IndexOf ('|');
+		if (pipe >= 0)
+			s = s.Substring (0, pipe);
+		var mods = KeyModifiers.None;
+		Key? key = null;
+		foreach (var tok in s.Split (' ', StringSplitOptions.RemoveEmptyEntries)) {
+			switch (tok.ToLowerInvariant ()) {
+			case "ctrl": case "control": mods |= KeyModifiers.Control; break;
+			case "shift": mods |= KeyModifiers.Shift; break;
+			case "alt": mods |= KeyModifiers.Alt; break;
+			case "meta": case "cmd": case "super": case "win": mods |= KeyModifiers.Meta; break;
+			default:
+				if (Enum.TryParse<Key> (tok, ignoreCase: true, out var k))
+					key = k;
+				break;
+			}
+		}
+		return key is null ? null : new KeyGesture (key.Value, mods);
 	}
 
 	static string FormatHeader (string label)
