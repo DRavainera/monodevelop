@@ -45,6 +45,12 @@ public partial class MainWindow : Window
 			: "";
 	int lastBreadCaretLine = -1;
 
+	// The Document Outline pad follows the active document: the breadcrumb timer
+	// already polls the caret, so the outline is refreshed only when the document
+	// (or its text) actually changed, not on every caret move.
+	string? lastOutlineTag;
+	string? lastOutlineText;
+
 	// Bottom-pad collapse coupling: while the pad is collapsed the dock row pins
 	// to the 34px rail (no dead gap under the splitter) and expanding returns the
 	// row to its previous height; a splitter drag on a collapsed pad expands it
@@ -198,6 +204,14 @@ public partial class MainWindow : Window
 				&& !string.IsNullOrEmpty (ed.FilePath) && ed.CurrentLine + 1 != lastBreadCaretLine) {
 				lastBreadCaretLine = ed.CurrentLine + 1;
 				UpdateBreadcrumb ();
+			}
+			// Same poll drives the Document Outline pad (SkTextEditor has no
+			// text-changed event either): refresh only when the buffer changed.
+			if (DocTabs.SelectedItem is TabItem { Tag: string otag } && docs.TryGetValue (otag, out var oed)
+				&& !string.IsNullOrEmpty (oed.FilePath) && (otag != lastOutlineTag || oed.Text != lastOutlineText)) {
+				lastOutlineTag = otag;
+				lastOutlineText = oed.Text;
+				RefreshOutlinePad ();
 			}
 		};
 		breadcrumbTimer.Start ();
@@ -376,14 +390,15 @@ public partial class MainWindow : Window
 				Output ("[searchpopup] ':s TODO' results=" + searchResults.Count + " first=" + (searchResults.Count > 0 ? searchResults [0].Title : "-"));
 				// Type symbols (legacy RoslynSearchCategory): ':t Class' matches the
 				// solution's class/interface/struct/enum declarations; activating the
-				// first hit opens its file and jumps to the declaration line.					OnToolbarSearchTextChanged (":t Program");
-					Output ("[searchpopup] ':t Program' results=" + searchResults.Count + " first=" + (searchResults.Count > 0 ? searchResults [0].Title + " | " + searchResults [0].Subtitle + " | tip=" + searchResults [0].Tip : "-"));
-					// Method/property hits (M25: the scan now covers member declarations);
-					// the tooltip carries the enclosing container.
-					OnToolbarSearchTextChanged (":t Main");
-					Output ("[searchpopup] ':t Main' results=" + searchResults.Count + " first=" + (searchResults.Count > 0 ? searchResults [0].Title + " | " + searchResults [0].Subtitle + " | tip=" + searchResults [0].Tip : "-"));
-					OnToolbarSearchTextChanged (":t Double");
-					Output ("[searchpopup] ':t Double' results=" + searchResults.Count + " first=" + (searchResults.Count > 0 ? searchResults [0].Title + " | " + searchResults [0].Subtitle + " | tip=" + searchResults [0].Tip : "-"));
+				// first hit opens its file and jumps to the declaration line.
+				OnToolbarSearchTextChanged (":t Program");
+				Output ("[searchpopup] ':t Program' results=" + searchResults.Count + " first=" + (searchResults.Count > 0 ? searchResults [0].Title + " | " + searchResults [0].Subtitle + " | tip=" + searchResults [0].Tip : "-"));
+				// Method/property hits (M25: the scan now covers member declarations);
+				// the tooltip carries the enclosing container.
+				OnToolbarSearchTextChanged (":t Main");
+				Output ("[searchpopup] ':t Main' results=" + searchResults.Count + " first=" + (searchResults.Count > 0 ? searchResults [0].Title + " | " + searchResults [0].Subtitle + " | tip=" + searchResults [0].Tip : "-"));
+				OnToolbarSearchTextChanged (":t Double");
+				Output ("[searchpopup] ':t Double' results=" + searchResults.Count + " first=" + (searchResults.Count > 0 ? searchResults [0].Title + " | " + searchResults [0].Subtitle + " | tip=" + searchResults [0].Tip : "-"));
 				if (searchResults.Count > 0) {
 					ActivateSelectedSearchResult ();
 					Output ("[searchpopup] ':t Program' activated → open tab=" + (DocTabs.SelectedItem is TabItem ti2 ? ti2.Tag : "none"));
@@ -1440,6 +1455,68 @@ public partial class MainWindow : Window
 				Output ($"[collapse-qa] before: BottomPads collapsed={BottomPads.IsCollapsed} height={BottomPads.Height}");
 				BottomPads.ToggleCollapse ();
 				Output ($"[collapse-qa] bottom collapsed, height={BottomPads.Height} — waiting for visual QA");
+			} else if (qa == "--padclose") {
+				// QA: the M24 per-tab close button (✕) on the Properties pad — the
+				// one pad whose ✕ was never verified on screen. Logs the measured
+				// screen rect of every close button, then watches the Properties tab
+				// so a REAL XTEST click on that rect reports the hide transition
+				// (SetTabVisible + PadTabClosed + View > Pads check).
+				Output ("[padclose] window client size: " + ClientSize);
+				foreach (var (host, hostName) in new[] { (LeftPads, "left"), (BottomPads, "bottom"), (RightPads, "right") }) {
+					Output ($"[padclose] host '{hostName}' selected={host.SelectedId ?? "none"} visibleTabs=[" +
+						string.Join (",", host.Tabs.Where (t => t.Visible).Select (t => t.Id)) + "]");
+					// A collapsed/empty host is not attached to the visual tree, and
+					// PointToScreen throws on an unattached visual — skip it instead of
+					// aborting the whole hook.
+					if (!host.IsAttachedToVisualTree ()) {
+						Output ($"[padclose] host '{hostName}' not attached to the visual tree — chrome rects skipped");
+						continue;
+					}
+					host.LogCollapseChrome ();
+				}
+				var propsTab = RightPads.Tabs.FirstOrDefault (t => t.Id == "properties");
+				if (propsTab?.CloseButton is { } propsClose && propsClose.IsAttachedToVisualTree ()) {
+					var tl = propsClose.PointToScreen (new Point (0, 0));
+					Output ($"[padclose] properties ✕ rect: screen=({tl.X},{tl.Y}) size={propsClose.Bounds.Width:F0}x{propsClose.Bounds.Height:F0} " +
+						$"content='{propsClose.Content}' tip='{ToolTip.GetTip (propsClose)}'");
+					// Hit-map: which control owns the centre of the ✕ rect — proves the
+					// button is the topmost hit target (not covered by the tab header).
+					// InputHitTest is unreliable for templated buttons in this codebase
+					// (see PadHost rail handling), so the bounds check is authoritative.
+					var centre = new PixelPoint ((int)(tl.X + propsClose.Bounds.Width / 2), (int)(tl.Y + propsClose.Bounds.Height / 2));
+					var hit = this.InputHitTest (this.PointToClient (centre));
+					var local = propsClose.PointToClient (centre);
+					Output ($"[padclose] hit-test at ✕ centre → {hit?.GetType ().Name ?? "null"} " +
+						$"boundsHit={new Rect (propsClose.Bounds.Size).Contains (local)} local=({local.X:F0},{local.Y:F0})");
+				} else {
+					Output ("[padclose] properties ✕ NOT FOUND");
+				}
+				// Capture listener: reports WHICH control receives the press, so a click
+				// that lands on the ✕ but does not hide the pad is distinguishable from
+				// a click that never reaches the window at all. handledEventsToo is
+				// required: Button marks PointerPressed as handled, so a plain
+				// PointerPressed subscription never sees a click on the ✕ itself.
+				this.AddHandler (PointerPressedEvent, (EventHandler<PointerPressedEventArgs>)((_, e) => {
+					if (e.Source is not Visual src)
+						return;
+					var chain = new List<string> ();
+					for (Visual? v = src; v is not null && v != this; v = v.GetVisualParent ())
+						chain.Add (v.GetType ().Name + (v is Control c && !string.IsNullOrEmpty (c.Name) ? $"#{c.Name}" : ""));
+					Output ($"[padclose] press at {e.GetCurrentPoint (this).Position} → {string.Join (" < ", chain)}");
+				}), RoutingStrategies.Tunnel | RoutingStrategies.Bubble, handledEventsToo: true);
+				bool propsWasVisible = propsTab?.Visible == true;
+				var closeTimer = new Avalonia.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds (300) };
+				closeTimer.Tick += (_, _) => {
+					bool nowVisible = propsTab?.Visible == true;
+					if (nowVisible == propsWasVisible)
+						return;
+					propsWasVisible = nowVisible;
+					Output ($"[padclose] properties tab visible={nowVisible} selected={RightPads.SelectedId ?? "none"} " +
+						$"visibleTabs=[" + string.Join (",", RightPads.Tabs.Where (t => t.Visible).Select (t => t.Id)) + "]");
+					DumpPadsMenuChecks ("padclose");
+				};
+				closeTimer.Start ();
+				Output ("[padclose] waiting for a real click on the Properties ✕ — capture with PrtScr");
 			} else if (qa == "--qaresults") {
 				// QA: log the window/root position (includes GNOME's top-bar offset) and
 				// install a capture listener that reports WHICH control actually receives
@@ -2125,6 +2202,87 @@ public partial class MainWindow : Window
 					}
 					_ = RunGitAsync ("status --short");
 				}
+			} else if (qa == "--outline" || qa.StartsWith ("--outline=", StringComparison.Ordinal)) {
+				// QA: Document Outline pad over the active document. "--outline=<path>"
+				// points it at another fixture (the default is the TestProj one).
+				var file = qa.StartsWith ("--outline=", StringComparison.Ordinal)
+					? qa ["--outline=".Length..]
+					: Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile),
+						"TestProj", "TestProj", "Program.cs");
+				if (File.Exists (file)) {
+					OpenFileDocument (file);
+					SelectDocument (Path.GetFileName (file));
+				}
+				RefreshOutlinePad ();
+				SetPadVisible ("documentoutline", true);
+				DumpOutlineTree ();
+			} else if (qa == "--classes") {
+				// QA: Classes pad over the loaded solution.
+				if (!string.IsNullOrEmpty (Program.SolutionArg))
+					OpenSolutionInWindow (Program.SolutionArg);
+				RefreshClassesPad ();
+				SetPadVisible ("classes", true);
+				DumpClassesTree ();
+			} else if (qa == "--codeissues") {
+				// QA: Code Issues pad fed with synthetic diagnostics (the shell has no
+				// Roslyn analyzer host, so the pad mirrors the build output).
+				buildErrors.Clear ();
+				errorRows.Clear ();
+				ParseBuildMessage ("/home/daniel/TestProj/TestProj/Program.cs(12,5): error CS0103: The name 'Foo' does not exist in the current context");
+				ParseBuildMessage ("/home/daniel/TestProj/TestProj/Program.cs(20,9): warning CS0219: The variable 'x' is assigned but its value is never used");
+				ParseBuildMessage ("/home/daniel/TestProj/TestProj/Program.cs(24,1): warning CS0168: The variable 'e' is declared but never used");
+				ParseBuildMessage ("/home/daniel/TestProj/TestProj/Program.cs(30,3): info CS8019: Unnecessary using directive");
+				RefreshCodeIssuesPad ();
+				SetPadVisible ("codeissues", true);
+				Output ($"[codeissues] rows={codeIssueRows.Count}");
+				DumpCodeIssueRows ();
+			} else if (qa == "--dblclick" || qa.StartsWith ("--dblclick=", StringComparison.Ordinal)) {
+				// QA: exercises the three pad double-click handlers without XTEST.
+				// Each pad selects a node with a known target and calls the same
+				// method its DoubleTapped handler calls, so the log proves the
+				// activation path (file + line) end to end.
+				if (!string.IsNullOrEmpty (Program.SolutionArg))
+					OpenSolutionInWindow (Program.SolutionArg);
+
+				RefreshClassesPad ();
+				SetPadVisible ("classes", true);
+				var classNode = FirstClassNodeWithFile (classesTree?.ItemsSource as IEnumerable<MonoDevelop.Ide.Services.SymbolIndexService.ClassNode>);
+				if (classNode is not null) {
+					classesTree!.SelectedItem = classNode;
+					ActivateClassNode (classNode);
+					VerifyCaret (classNode.File!, classNode.Line);
+				} else
+					Output ("[classes] no node with a file to activate");
+
+				var outlineFile = qa.StartsWith ("--dblclick=", StringComparison.Ordinal)
+					? qa ["--dblclick=".Length..]
+					: Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile), "TestProj", "TestProj", "Program.cs");
+				if (File.Exists (outlineFile)) {
+					OpenFileDocument (outlineFile);
+					SelectDocument (Path.GetFileName (outlineFile));
+				}
+				RefreshOutlinePad ();
+				SetPadVisible ("documentoutline", true);
+				var outlineNode = FirstOutlineNodeWithLine (outlineTree?.ItemsSource as IEnumerable<MonoDevelop.Ide.Services.SymbolIndexService.OutlineNode>);
+				if (outlineNode is not null) {
+					outlineTree!.SelectedItem = outlineNode;
+					ActivateOutlineNode (outlineNode);
+					VerifyCaret (outlineFile, outlineNode.Line);
+				} else
+					Output ("[outline] no node with a line to activate");
+
+				buildErrors.Clear ();
+				errorRows.Clear ();
+				ParseBuildMessage ("/home/daniel/TestProj/TestProj/Program.cs(12,5): error CS0103: The name 'Foo' does not exist in the current context");
+				ParseBuildMessage ("/home/daniel/TestProj/TestProj/Program.cs(20,9): warning CS0219: The variable 'x' is assigned but its value is never used");
+				RefreshCodeIssuesPad ();
+				SetPadVisible ("codeissues", true);
+				var issueRow = codeIssueRows.Keys.FirstOrDefault ();
+				if (issueRow is not null && codeIssueRows.TryGetValue (issueRow, out var issue)) {
+					ActivateCodeIssue (issue);
+					VerifyCaret (issue.File, issue.Line);
+				} else
+					Output ("[codeissues] no row to activate");
 			} else if (qa == "--tool") {
 				var first = MonoDevelop.Ide.Services.SettingsStore.LoadTools ().FirstOrDefault ();
 				if (first is not null)
@@ -2281,8 +2439,13 @@ public partial class MainWindow : Window
 	{
 		try {
 			// The collapse QA hooks toggle from the startup state — a restored
-			// collapsed flag would make their toggle EXPAND instead.
-			if (Program.QaDialogArg is "--collapse" or "--collapsebottom")
+			// collapsed flag would make their toggle EXPAND instead. The pad
+			// visibility hooks set a tab visible from the startup state too, and a
+			// restored layout would hide it again right after the hook ran.
+			var qaArg = Program.QaDialogArg;
+			if (qaArg is "--collapse" or "--collapsebottom"
+				|| qaArg.StartsWith ("--outline", StringComparison.Ordinal)
+				|| qaArg is "--classes" or "--codeissues")
 				return;
 			var raw = SettingsStore.GetString ("Monodevelop.PadsLayout");
 			if (string.IsNullOrWhiteSpace (raw))
@@ -2401,6 +2564,8 @@ public partial class MainWindow : Window
 	TreeView? watchList;
 	TextBox? immediateInput;
 	ListBox? callStackList;
+	TreeView? outlineTree;
+	TreeView? classesTree;
 
 	// Legacy DebuggingService equivalent: one DAP session over the vendored
 	// netcoredbg; Locals/Watch/Call Stack pads fill on every stop, the current
@@ -2475,11 +2640,16 @@ public partial class MainWindow : Window
 		var solutionHost = xwtSolutionHost;
 		LeftPads.AddTab (new PadHost.PadTab { Id = "solution", Label = "Solution", Icon = "md-solution-pad", Content = solutionHost });
 
-		// Classes pad (legacy ClassPad, auto-hidden by default like Pads.addin.xml).
-		var classList = new ListBox { Background = Brushes.Transparent };
-		classList.Bind (ListBox.ForegroundProperty, Application.Current.GetResourceObservable ("IdeFgBrush"));
-		classList.Items.Add ("(classes of loaded solutions)");
-		LeftPads.AddTab (new PadHost.PadTab { Id = "classes", Label = "Classes", Icon = "md-classes-pad", Content = classList, Visible = false });
+		// Classes pad (legacy ClassPad, auto-hidden by default like Pads.addin.xml):
+		// Solution ▸ Project ▸ Namespace ▸ Type ▸ Member over the symbol scan of the
+		// loaded solution (SymbolIndexService.BuildClassTree).
+		classesTree = MakeSymbolTree<MonoDevelop.Ide.Services.SymbolIndexService.ClassNode> (
+			n => SymbolHeader (n.Kind, n.Name), n => n.Children);
+		classesTree.DoubleTapped += (_, _) => {
+			if (classesTree.SelectedItem is MonoDevelop.Ide.Services.SymbolIndexService.ClassNode node)
+				ActivateClassNode (node);
+		};
+		LeftPads.AddTab (new PadHost.PadTab { Id = "classes", Label = "Classes", Icon = "md-classes-pad", Content = classesTree, Visible = false });
 
 		// Help pad (legacy HelpTree, left group, auto-hidden).
 		var helpList = new ListBox { Background = Brushes.Transparent };
@@ -2506,11 +2676,15 @@ public partial class MainWindow : Window
 		toolboxList.Items.Add ("(toolbox items)");
 		RightPads.AddTab (new PadHost.PadTab { Id = "toolbox", Label = "Toolbox", Icon = "md-toolbox-pad", Content = toolboxList, Visible = false });
 
-		// Document Outline pad (legacy DocumentOutlinePad, right group, auto-hidden).
-		var outlineList = new ListBox { Background = Brushes.Transparent };
-		outlineList.Bind (ListBox.ForegroundProperty, Application.Current.GetResourceObservable ("IdeFgBrush"));
-		outlineList.Items.Add ("(document outline)");
-		RightPads.AddTab (new PadHost.PadTab { Id = "documentoutline", Label = "Document Outline", Icon = "md-pad-document-outline", Content = outlineList, Visible = false });
+		// Document Outline pad (legacy DocumentOutlinePad, right group, auto-hidden):
+		// the declaration tree of the ACTIVE document, from the live editor buffer.
+		outlineTree = MakeSymbolTree<MonoDevelop.Ide.Services.SymbolIndexService.OutlineNode> (
+			n => SymbolHeader (n.Kind, n.Name), n => n.Children);
+		outlineTree.DoubleTapped += (_, _) => {
+			if (outlineTree.SelectedItem is MonoDevelop.Ide.Services.SymbolIndexService.OutlineNode node)
+				ActivateOutlineNode (node);
+		};
+		RightPads.AddTab (new PadHost.PadTab { Id = "documentoutline", Label = "Document Outline", Icon = "md-pad-document-outline", Content = outlineTree, Visible = false });
 
 		// Unit Tests pad (legacy TestPad, right group, auto-hidden).
 		var testList = new ListBox { Background = Brushes.Transparent };
@@ -2541,7 +2715,10 @@ public partial class MainWindow : Window
 		tasksText.Bind (TextBlock.ForegroundProperty, Application.Current.GetResourceObservable ("IdeFgBrush"));
 		BottomPads.AddTab (new PadHost.PadTab { Id = "tasks", Label = "Tasks", Icon = "md-task-list", Content = tasksText, Visible = false });
 
-		// Code Issues pad (legacy CodeIssuePad, bottom group, auto-hidden).
+		// Code Issues pad (legacy CodeIssuePad, bottom group, auto-hidden): the
+		// diagnostics collected by the build, grouped by severity. The content is
+		// rebuilt on demand (RefreshCodeIssuesPad), so the tab starts with the
+		// legacy empty state.
 		var codeIssues = new TextBlock { Padding = new Thickness (8, 6), Text = "No code issues" };
 		codeIssues.Bind (TextBlock.ForegroundProperty, Application.Current.GetResourceObservable ("IdeFgBrush"));
 		BottomPads.AddTab (new PadHost.PadTab { Id = "codeissues", Label = "Code Issues", Icon = "md-errors-list", Content = codeIssues, Visible = false });
@@ -3707,6 +3884,7 @@ public partial class MainWindow : Window
 			LeftPads.Select ("solution");
 			RefreshConfigurationSelectors (); // toolbar combo + Project > Active Configuration
 			BuildMenu (); // refresh File > Recent Solutions
+			RefreshClassesPad ();
 			Output ("Loaded " + Path.GetFileName (path));
 		} catch (Exception ex) {
 			Output ("Error loading solution: " + ex.Message);
@@ -3723,6 +3901,34 @@ public partial class MainWindow : Window
 		tb.Bind (TextBlock.ForegroundProperty, Application.Current!.GetResourceObservable ("IdeFgBrush"));
 		sp.Children.Add (tb);
 		return sp;
+	}
+
+	// Legacy ClassPad/MemberNodeBuilder icon per symbol kind (md-* stock ids).
+	static string SymbolStockId (string kind) => kind switch {
+		"class" => "md-class",
+		"namespace" => "md-name-space",
+		"interface" => "md-interface",
+		"struct" => "md-struct",
+		"enum" => "md-enum",
+		"delegate" => "md-delegate",
+		"method" => "md-method",
+		"property" => "md-property",
+		"field" => "md-field",
+		"event" => "md-event",
+		"project" => "md-project",
+		_ => "md-class",
+	};
+
+	static StackPanel SymbolHeader (string kind, string name) => TreeHeader (SymbolStockId (kind), name);
+
+	// Same shape as MakeVariableTree: a flat TreeView whose rows are built from the
+	// node records of SymbolIndexService (children resolved lazily by the template).
+	static TreeView MakeSymbolTree<T> (Func<T, Control> header, Func<T, List<T>> children)
+	{
+		var tv = new TreeView { Background = Brushes.Transparent };
+		tv.Bind (TreeView.ForegroundProperty, Application.Current!.GetResourceObservable ("IdeFgBrush"));
+		tv.ItemTemplate = new FuncTreeDataTemplate<T> ((node, _) => header (node), node => children (node));
+		return tv;
 	}
 
 	// ProjectReferenceFolderNodeBuilder: the project's first child is a References
@@ -4716,6 +4922,17 @@ public partial class MainWindow : Window
 		PersistWatches (); // last watch state before the solution path goes away
 		loadedSolutionPath = null;
 		solutionLoaded = false;
+		// The three symbol pads are solution/document scoped: reset them so a later
+		// solution does not show stale rows (legacy pads cleared on workspace close).
+		lastOutlineTag = null;
+		lastOutlineText = null;
+		if (outlineTree is not null)
+			FillSymbolTree (outlineTree, NoOutlineMessage);
+		if (classesTree is not null)
+			FillSymbolTree (classesTree, "No solution loaded");
+		buildErrors.Clear ();
+		errorRows.Clear ();
+		RefreshCodeIssuesPad ();
 		ShowWelcomePage ();
 		Output ("[window] workspace closed");
 	}
@@ -4912,98 +5129,22 @@ public partial class MainWindow : Window
 	}
 
 	// Legacy RoslynSearchCategory: symbol declarations across the solution's .cs
-	// files. This shell has no Roslyn compilation, so the scan is a cheap anchored
-	// regex over the sources, cached per file until its timestamp changes; the
-	// breadcrumb scope chain and Go To Type reuse the same scanner.
-	static readonly System.Text.RegularExpressions.Regex typeDeclRegex = new (
-		@"^([ \t]*)(?:\[[^\]]*\][ \t]*)*((?:public|private|protected|internal|static|sealed|abstract|partial|readonly|ref)\s+)*\b(class|interface|struct|enum)\s+([A-Za-z_][A-Za-z0-9_]*)",
-		System.Text.RegularExpressions.RegexOptions.Compiled);
-	static readonly System.Text.RegularExpressions.Regex methodDeclRegex = new (
-		@"^([ \t]*)(?:\[[^\]]*\][ \t]*)*((?:public|private|protected|internal|static|async|virtual|override|sealed|abstract|partial|readonly|extern|unsafe|new)\s+)*[\w<>\[\],\.\?\s]+?\s([A-Za-z_][A-Za-z0-9_]*)\s*\([^;]*\)\s*(\{|=>|$)",
-		System.Text.RegularExpressions.RegexOptions.Compiled);
-	static readonly System.Text.RegularExpressions.Regex propertyDeclRegex = new (
-		@"^([ \t]*)(?:\[[^\]]*\][ \t]*)*((?:public|private|protected|internal|static|async|virtual|override|sealed|abstract|partial|readonly|new|required|event)\s+)*[\w<>\[\],\.\?\s]+?\s([A-Za-z_][A-Za-z0-9_]*)\s*(\{|=>)",
-		System.Text.RegularExpressions.RegexOptions.Compiled);
-	readonly Dictionary<string, (DateTime Stamp, List<SymbolHit> Symbols)> symbolIndex = new ();
-
-	public sealed record SymbolHit (string Kind, string Name, int Line, int Indent, string? Container);
-
-	/// <summary>One pass over C# source: type declarations plus methods and
-	/// properties, each with its line and INDENT — the container chain (breadcrumb
-	/// scope, Go To Type detail) falls out of an indentation stack.</summary>
-	public static List<SymbolHit> ScanSymbols (string text)
-	{
-		var hits = new List<SymbolHit> ();
-		var stack = new List<(int Indent, string Name)> (); // enclosing scopes
-		int ln = 0;
-		foreach (var raw in text.Split ('\n')) {
-			ln++;
-			var line = raw.TrimEnd ('\r');
-			var trimmed = line.TrimStart ();
-			if (trimmed.Length == 0 || trimmed.StartsWith ("//", StringComparison.Ordinal) || trimmed.StartsWith ("*", StringComparison.Ordinal))
-				continue;
-			var indent = line.Length - trimmed.Length;
-			// A lone opening brace (Allman style) sits at the SAME indent as its
-			// owner — popping scopes on it would evict the type pushed by the very
-			// previous line (Main/Double lost their container that way); only a
-			// CLOSING brace pops its own scope.
-			if (trimmed.StartsWith ("{", StringComparison.Ordinal))
-				continue;
-			if (trimmed.StartsWith ("}", StringComparison.Ordinal)) {
-				PopScopes (indent);
-				continue;
-			}
-			PopScopes (indent);
-			var tm = typeDeclRegex.Match (line);
-			if (tm.Success) {
-				var container = stack.Count > 0 ? stack [^1].Name : null;
-				hits.Add (new SymbolHit (tm.Groups [3].Value, tm.Groups [4].Value, ln, indent, container));
-				stack.Add ((indent, tm.Groups [4].Value));
-				continue;
-			}
-			var mm = methodDeclRegex.Match (line);
-			string? kind = mm.Success ? "method" : null;
-			if (!mm.Success) {
-				var pm = propertyDeclRegex.Match (line);
-				if (pm.Success)
-					(kind, mm) = ("property", pm);
-			}
-			if (kind is null)
-				continue;
-			var mContainer = stack.Count > 0 ? stack [^1].Name : null;
-			hits.Add (new SymbolHit (kind, mm.Groups [3].Value, ln, indent, mContainer));
-			stack.Add ((indent, mm.Groups [3].Value));
-		}	
-		return hits;
-
-		void PopScopes (int indent)
-		{
-			while (stack.Count > 0 && stack [^1].Indent >= indent)
-				stack.RemoveAt (stack.Count - 1);
-		}
-	}
+	// files. The scan itself lives in SymbolIndexService (shared with the Document
+	// Outline and Classes pads); this alias keeps the existing call sites — the
+	// breadcrumb scope chain, Go To Type and the search popup — unchanged.
+	public static List<SymbolIndexService.SymbolHit> ScanSymbols (string text)
+		=> SymbolIndexService.ScanSymbols (text);
 
 	void CollectSymbolResults (string term)
 	{
 		var projDir = string.IsNullOrEmpty (loadedSolutionPath) ? null : Path.GetDirectoryName (loadedSolutionPath);
 		if (projDir is null || term.Length == 0)
 			return;
-		var hits = new List<(SymbolHit Hit, string File, int Rank)> ();
+		var hits = new List<(SymbolIndexService.SymbolHit Hit, string File, int Rank)> ();
 		foreach (var file in Directory.EnumerateFiles (projDir, "*.cs", SearchOption.AllDirectories)) {
 			if (file.Contains ("/obj/") || file.Contains ("/bin/") || file.Contains ("/.git/"))
 				continue;
-			List<SymbolHit> syms;
-			try {
-				var stamp = File.GetLastWriteTimeUtc (file);
-				if (symbolIndex.TryGetValue (file, out var cached) && cached.Stamp == stamp) {
-					syms = cached.Symbols;
-				} else {
-					syms = ScanSymbols (File.ReadAllText (file));
-					symbolIndex [file] = (stamp, syms);
-				}
-			} catch {
-				continue; // unreadable files just don't contribute symbols
-			}
+			var syms = SymbolIndexService.ScanFile (file);
 			foreach (var hit in syms) {
 				bool starts = hit.Name.StartsWith (term, StringComparison.OrdinalIgnoreCase);
 				if (starts || hit.Name.Contains (term, StringComparison.OrdinalIgnoreCase))
@@ -5016,7 +5157,7 @@ public partial class MainWindow : Window
 			AddSymbolResult (hit, file);
 	}
 
-	void AddSymbolResult (SymbolHit hit, string file)
+	void AddSymbolResult (SymbolIndexService.SymbolHit hit, string file)
 	{
 		var projDir = Path.GetDirectoryName (loadedSolutionPath!) ?? "";
 		var rel = Path.GetRelativePath (projDir, file);
@@ -6339,6 +6480,249 @@ public partial class MainWindow : Window
 
 	readonly Dictionary<string, MonoDevelop.Ide.Services.TaskScanner.TaskRow> taskRows = new ();
 
+	// ---------- Document Outline pad (legacy DocumentOutlinePad) ----------
+
+	// The legacy pad delegates on IOutlinedDocument of the active document and shows
+	// this exact message when the document has no outline provider.
+	const string NoOutlineMessage = "An outline is not available for the current document.";
+
+	// Rebuilds the declaration tree of the ACTIVE document from the live editor
+	// buffer (not from disk), so unsaved edits are reflected like the legacy pad.
+	public void RefreshOutlinePad ()
+	{
+		if (outlineTree is null)
+			return;
+		var tag = (DocTabs.SelectedItem as TabItem)?.Tag as string;
+		if (tag is null || !docs.TryGetValue (tag, out var ed) || string.IsNullOrEmpty (ed.FilePath)) {
+			FillSymbolTree (outlineTree, NoOutlineMessage);
+			return;
+		}
+		var nodes = MonoDevelop.Ide.Services.SymbolIndexService.BuildOutline (ed.Text);
+		if (nodes.Count == 0) {
+			FillSymbolTree (outlineTree, NoOutlineMessage);
+			return;
+		}
+		outlineTree.ItemsSource = nodes;
+		Output ($"[outline] {CountOutlineNodes (nodes)} node(s) in {Path.GetFileName (ed.FilePath)}");
+	}
+
+	static int CountOutlineNodes (List<MonoDevelop.Ide.Services.SymbolIndexService.OutlineNode> nodes)
+	{
+		var total = 0;
+		foreach (var n in nodes)
+			total += 1 + CountOutlineNodes (n.Children);
+		return total;
+	}
+
+	// Double click on the outline moves the caret of the active editor to the
+	// declaration line (the legacy pad selects the node in the document).
+	internal void ActivateOutlineNode (MonoDevelop.Ide.Services.SymbolIndexService.OutlineNode node)
+	{
+		if (node.Line <= 0) {
+			Output ($"[outline] '{node.Name}' has no line");
+			return;
+		}
+		WithActiveEditor (e => e.GotoLine (node.Line - 1));
+		Output ($"[outline] activated {node.Kind} {node.Name} @{node.Line}");
+	}
+
+	// Double click on a class node opens the declaring file at its line. Nodes
+	// without a file (project, namespace) only report the miss.
+	internal void ActivateClassNode (MonoDevelop.Ide.Services.SymbolIndexService.ClassNode node)
+	{
+		if (node.File is not { } file || node.Line <= 0) {
+			Output ($"[classes] '{node.Name}' has no file");
+			return;
+		}
+		OpenFileDocumentAtLine (file, node.Line);
+		Output ($"[classes] activated {node.Kind} {node.Name} @{Path.GetFileName (file)}:{node.Line}");
+	}
+
+	// ---------- Classes pad (legacy ClassPad) ----------
+
+	// Solution ▸ Project ▸ Namespace ▸ Type ▸ Member over every .cs of the loaded
+	// solution. The scan is cached per file timestamp in SymbolIndexService, so
+	// re-running it after a build only re-reads the files that changed.
+	public void RefreshClassesPad ()
+	{
+		if (classesTree is null)
+			return;
+		var dir = LoadedSolutionDirectory ();
+		if (dir is null) {
+			FillSymbolTree (classesTree, "No solution loaded");
+			return;
+		}
+		var sources = new List<(string Project, string File)> ();
+		foreach (var file in Directory.EnumerateFiles (dir, "*.cs", SearchOption.AllDirectories)) {
+			if (file.Contains ("/obj/") || file.Contains ("/bin/") || file.Contains ("/.git/"))
+				continue;
+			sources.Add ((ProjectNameForFile (dir, file), file));
+		}
+		var roots = MonoDevelop.Ide.Services.SymbolIndexService.BuildClassTree (sources);
+		if (roots.Count == 0) {
+			FillSymbolTree (classesTree, "No classes found");
+			return;
+		}
+		classesTree.ItemsSource = roots;
+		Output ($"[classes] {roots.Count} project(s), {sources.Count} file(s) scanned");
+	}
+
+	// Legacy ProjectNodeBuilder groups by project: the nearest ancestor directory
+	// holding a .csproj, falling back to the solution directory itself.
+	static string ProjectNameForFile (string solutionDir, string file)
+	{
+		var dir = Path.GetDirectoryName (file);
+		while (!string.IsNullOrEmpty (dir) && dir.Length > solutionDir.Length) {
+			if (Directory.EnumerateFiles (dir, "*.csproj").Any ())
+				return Path.GetFileName (dir);
+			dir = Path.GetDirectoryName (dir);
+		}
+		return Path.GetFileName (solutionDir.TrimEnd (Path.DirectorySeparatorChar));
+	}
+
+	// ---------- Code Issues pad (legacy CodeIssuePad) ----------
+
+	// The shell has no Roslyn analyzer host, so the pad mirrors the diagnostics the
+	// build already produced (buildErrors) grouped by severity, like the legacy pad
+	// groups by SeverityGroupingProvider.
+	readonly Dictionary<string, MonoDevelop.Ide.Services.CodeIssueService.CodeIssue> codeIssueRows = new ();
+
+	public void RefreshCodeIssuesPad ()
+	{
+		var issues = buildErrors
+			.Select (e => new MonoDevelop.Ide.Services.CodeIssueService.CodeIssue (e.File, e.Line, e.Col, e.Level, e.Code, e.Message))
+			.ToList ();
+		var list = new ListBox { Background = Brushes.Transparent };
+		list.Bind (ListBox.ForegroundProperty, Application.Current!.GetResourceObservable ("IdeFgBrush"));
+		var items = new System.Collections.ObjectModel.ObservableCollection<string> ();
+		codeIssueRows.Clear ();
+		foreach (var (severity, group) in MonoDevelop.Ide.Services.CodeIssueService.GroupBySeverity (issues)) {
+			var header = $"{severity} ({group.Count})";
+			items.Add (header);
+			foreach (var issue in group) {
+				var row = "    " + MonoDevelop.Ide.Services.CodeIssueService.FormatRow (issue);
+				items.Add (row);
+				codeIssueRows [row] = issue;
+			}
+		}
+		list.ItemsSource = items;
+		list.DoubleTapped += (_, _) => {
+			if (list.SelectedItem is string s && codeIssueRows.TryGetValue (s, out var hit))
+				ActivateCodeIssue (hit);
+		};
+		var summary = MonoDevelop.Ide.Services.CodeIssueService.FormatSummary (issues);
+		BottomPads.ReplaceTabContent ("codeissues", WrapWithHeader (summary, list));
+		Output ($"[codeissues] {summary}");
+	}
+
+	// Double click on a diagnostic opens the file at the reported position and
+	// puts the caret on the column, like the legacy CodeIssuePad.
+	internal void ActivateCodeIssue (MonoDevelop.Ide.Services.CodeIssueService.CodeIssue issue)
+	{
+		OpenFileDocumentAtLine (issue.File, issue.Line);
+		WithActiveEditor (e => e.GotoLinePopupColumn (issue.Col));
+		Output ($"[codeissues] activated {issue.Severity} {issue.Code} @{Path.GetFileName (issue.File)}:{issue.Line},{issue.Col}");
+	}
+
+	// Empty state shared by the two symbol trees (same shape as FillVariableList).
+	static void FillSymbolTree (TreeView tree, string message)
+	{
+		tree.ItemsSource = null;
+		tree.Items.Clear ();
+		tree.Items.Add (new TextBlock { Text = message, FontSize = 11.5, Opacity = 0.6, Margin = new Thickness (8, 6) });
+	}
+
+	// QA dumps: the pads are TreeViews over records, so the rows are printed from the
+	// bound ItemsSource instead of walking the visual tree.
+	void DumpOutlineTree ()
+	{
+		if (outlineTree?.ItemsSource is not IEnumerable<MonoDevelop.Ide.Services.SymbolIndexService.OutlineNode> nodes) {
+			Output ("[outline] (empty state)");
+			return;
+		}
+		foreach (var line in FlattenOutline (nodes, 0))
+			Output ("[outline] " + line);
+	}
+
+	static IEnumerable<string> FlattenOutline (IEnumerable<MonoDevelop.Ide.Services.SymbolIndexService.OutlineNode> nodes, int depth)
+	{
+		foreach (var n in nodes) {
+			yield return new string (' ', depth * 2) + $"{n.Kind} {n.Name} @{n.Line}";
+			foreach (var child in FlattenOutline (n.Children, depth + 1))
+				yield return child;
+		}
+	}
+
+	void DumpClassesTree ()
+	{
+		if (classesTree?.ItemsSource is not IEnumerable<MonoDevelop.Ide.Services.SymbolIndexService.ClassNode> nodes) {
+			Output ("[classes] (empty state)");
+			return;
+		}
+		foreach (var line in FlattenClasses (nodes, 0))
+			Output ("[classes] " + line);
+	}
+
+	static IEnumerable<string> FlattenClasses (IEnumerable<MonoDevelop.Ide.Services.SymbolIndexService.ClassNode> nodes, int depth)
+	{
+		foreach (var n in nodes) {
+			yield return new string (' ', depth * 2) + $"{n.Kind} {n.Name}" + (n.File is null ? "" : $" ({Path.GetFileName (n.File)}:{n.Line})");
+			foreach (var child in FlattenClasses (n.Children, depth + 1))
+				yield return child;
+		}
+	}
+
+	void DumpCodeIssueRows ()
+	{
+		if (codeIssueRows.Count == 0) {
+			Output ("[codeissues] (empty state)");
+			return;
+		}
+		foreach (var row in codeIssueRows.Keys)
+			Output ("[codeissues] " + row.Trim ());
+	}
+
+	// First node that can actually be activated: the QA double-click hook needs a
+	// deterministic target, and project/namespace nodes carry no file.
+	static MonoDevelop.Ide.Services.SymbolIndexService.ClassNode? FirstClassNodeWithFile (IEnumerable<MonoDevelop.Ide.Services.SymbolIndexService.ClassNode>? nodes)
+	{
+		if (nodes is null)
+			return null;
+		foreach (var n in nodes) {
+			if (n.File is not null && n.Line > 0)
+				return n;
+			var child = FirstClassNodeWithFile (n.Children);
+			if (child is not null)
+				return child;
+		}
+		return null;
+	}
+
+	static MonoDevelop.Ide.Services.SymbolIndexService.OutlineNode? FirstOutlineNodeWithLine (IEnumerable<MonoDevelop.Ide.Services.SymbolIndexService.OutlineNode>? nodes)
+	{
+		if (nodes is null)
+			return null;
+		foreach (var n in nodes) {
+			if (n.Line > 0)
+				return n;
+			var child = FirstOutlineNodeWithLine (n.Children);
+			if (child is not null)
+				return child;
+		}
+		return null;
+	}
+
+	// The activation methods move the caret; reading it back is what proves the
+	// double click landed on the declaration and not just opened the file.
+	void VerifyCaret (string file, int expectedLine)
+	{
+		var name = Path.GetFileName (file);
+		if (docs.TryGetValue (name, out var ed))
+			Output ($"[dblclick] caret in {name} at line {ed.CurrentLine + 1} (expected {expectedLine})");
+		else
+			Output ($"[dblclick] {name} not open");
+	}
+
 	// Legacy SearchResultWidget.Activate: opens the document and moves the caret.
 	public void OpenFileDocumentAtLine (string path, int line)
 	{
@@ -6533,6 +6917,10 @@ public partial class MainWindow : Window
 		}
 		var target = clean ? "clean" : rebuild ? "rebuild" : "build";
 		Output ($"[build] {target} {Path.GetFileName (projectFilter ?? sln)} …");
+		// Legacy BuildCycle: the ErrorListPad starts each build empty and keeps the
+		// diagnostics of the finished build on screen.
+		buildErrors.Clear ();
+		errorRows.Clear ();
 		// Build each project directly: `dotnet build <sln>` only restores the solution
 		// shell without compiling the projects in this SDK setup.
 		var slnDir = Path.GetDirectoryName (sln)!;
@@ -7335,12 +7723,16 @@ public partial class MainWindow : Window
 			var code = proc.ExitCode;
 			Avalonia.Threading.Dispatcher.UIThread.Post (() => {
 				Output ($"[process] exited with {code}");
-				buildErrors.Clear ();
-				errorRows.Clear ();
+				// SetErrors and RefreshCodeIssuesPad both read buildErrors, so the pads
+				// are filled here and the collections are reset by the caller that owns
+				// the build (RunBuildAsync), not per process — otherwise the Errors pad
+				// would always end up empty (legacy ErrorListPad kept the diagnostics of
+				// the finished build on screen).
 				if (code == 0)
 					SetErrors ("Build succeeded.");
 				else if (buildErrors.Count == 0)
 					SetErrors ($"Build FAILED with exit code {code}.");
+				RefreshCodeIssuesPad ();
 			});
 		} catch (Exception ex) {
 			Output ("[process] " + ex.Message);
@@ -7354,22 +7746,18 @@ public partial class MainWindow : Window
 
 	void ParseBuildMessage (string line)
 	{
-		var match = System.Text.RegularExpressions.Regex.Match (
-			line, "^(.+?)\\((\\d+),(\\d+)\\): (error|warning) ([A-Za-z0-9]+): (.*)$");
-		if (match.Success) {
-			buildErrors.Add ((match.Groups [1].Value, int.Parse (match.Groups [2].Value),
-				int.Parse (match.Groups [3].Value), match.Groups [4].Value,
-				match.Groups [5].Value, match.Groups [6].Value));
-			SetErrors ($"{buildErrors.Count} problem(s) — last: {match.Groups [6].Value}");
-			// Live message bubble on the affected line of the open document
-			// (legacy MessageBubble appears as soon as the error is reported).
-			var errFile = Path.GetFileName (match.Groups [1].Value);
-			if (docs.TryGetValue (errFile, out var bubbleEd)) {
-				var entry = (int.Parse (match.Groups [2].Value) - 1, // 0-based line
-					$"{match.Groups [5].Value}: {match.Groups [6].Value}",
-					match.Groups [4].Value == "error");
-				bubbleEd.SetBubbles (new [] { entry });
-			}
+		if (MonoDevelop.Ide.Services.CodeIssueService.Parse (line) is not { } issue)
+			return;
+		buildErrors.Add ((issue.File, issue.Line, issue.Col, issue.Severity, issue.Code, issue.Message));
+		SetErrors ($"{buildErrors.Count} problem(s) — last: {issue.Message}");
+		// Live message bubble on the affected line of the open document
+		// (legacy MessageBubble appears as soon as the error is reported).
+		var errFile = Path.GetFileName (issue.File);
+		if (docs.TryGetValue (errFile, out var bubbleEd)) {
+			var entry = (issue.Line - 1, // 0-based line
+				$"{issue.Code}: {issue.Message}",
+				issue.Severity == "error");
+			bubbleEd.SetBubbles (new [] { entry });
 		}
 	}
 

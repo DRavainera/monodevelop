@@ -244,6 +244,30 @@ El bucle de migración Gtk → Avalonia continúa por módulos (detalle por hito
   + verificación visual por capturas X11 contra la UI Gtk de referencia. Los QA
   del editor restauran el archivo original (no dejan residuo en el proyecto del
   usuario).
+- **M25b (cierre de pendientes de M24/M25)**: fix del resultado stale del hook
+  `--searchpopup` (la causa era código comentado por el commit `8d3c607821`, no
+  un debounce del handler) y verificación visual del ✕ del pad Properties por
+  píxeles + click XTEST real (rect `screen=(1420,242)` 16x16 → `visible=False` +
+  `View > Pads > Properties checked=False`). Hook QA nuevo `--padclose`, con
+  listener de captura `PointerPressed` (`handledEventsToo: true`, porque
+  `Button` marca el evento como handled) que reporta la cadena de controles que
+  recibe el press: el ✕ es el target real del hit-test en su centro y el
+  `ToggleButton` padre no lo intercepta. Re-validado desde arranque limpio: el
+  ✕ funciona, no hay bug de hit-test (el fallo intermedio era el host ya
+  colapsado, donde el ✕ no está en el árbol visual). Detalle en
+  `docs/interfaz-plan.md` § M25b.
+- **M26 completado (2026-10-02)**: portados los tres pads placeholder
+  `documentoutline`, `classes` y `codeissues` (Opción 1 acotada de la propuesta).
+  Nuevos servicios `SymbolIndexService` (escáner de una pasada: outline,
+  breadcrumb/GoToType/`:t` y árbol de clases) y `CodeIssueService` (diagnósticos
+  MSBuild agrupados por severidad); pads auto-ocultos con doble clic que abre
+  archivo + salta a línea; hooks QA `--outline[=<path>]`, `--classes`,
+  `--codeissues` y `--dblclick[=<path>]`. El Tester QA Senior (§18.5) halló y el
+  desarrollo corrigió 8 defectos del escáner (control de flujo indentado como
+  miembro, propiedad Allman, campo sin modificador, comentarios/verbatim/raw
+  strings, `throw new`/`yield return` como métodos, `record`, indexers) en 3
+  rondas hasta aprobar limpio. Build 0 errores, 53/53 tests.
+  Detalle en `docs/interfaz-plan.md` § M26.
 
 Nota operativa: el binario de la UI Avalonia es
 `src/core/MonoDevelop.Startup.Avalonia/bin/Debug/net10.0/MonoDevelop.AvaloniaShell.dll`;

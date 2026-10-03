@@ -43,6 +43,7 @@ public class PadHost : Border
 		public bool Visible = true;
 		internal ToggleButton? HeaderButton;
 		internal Control? RailButton;
+		internal Button? CloseButton;
 	}
 
 	readonly StackPanel tabBar;          // horizontal strip (expanded)
@@ -258,6 +259,7 @@ public class PadHost : Border
 			Tag = tab.Id,
 		};
 		ToolTip.SetTip (closeBtn, "Close pad");
+		tab.CloseButton = closeBtn;
 		closeBtn.Click += (_, _) => {
 			lastClickWasClose = true;
 			SetTabVisible (tab.Id, false);
@@ -450,11 +452,25 @@ public class PadHost : Border
 	/// checks use measured coordinates instead of guesses.</summary>
 	public void LogCollapseChrome ()
 	{
+		// PointToScreen throws on a visual that is not attached (collapsed/empty
+		// host), so bail out early rather than aborting the caller's QA hook.
+		if (!this.IsAttachedToVisualTree ())
+			return;
 		foreach (var b in this.GetVisualDescendants ().OfType<Border> ()) {
 			if (ToolTip.GetTip (b) is not string tip || (tip != "Collapse pad" && tip != "Expand pad"))
 				continue;
 			var tl = b.PointToScreen (new Point (0, 0));
 			Console.WriteLine ($"[padchrome] '{Id}' {tip}: bounds={b.Bounds.Width:F0}x{b.Bounds.Height:F0} visible={b.IsVisible} screen=({tl.X},{tl.Y})");
+		}
+		// QA: the per-tab close button rect — the M24 ✕ was never verified on
+		// screen; the measured rect lets the harness click it and diff pixels.
+		foreach (var t in tabs) {
+			// Hidden tabs keep their close button out of the visual tree, and
+			// PointToScreen throws on an unattached visual.
+			if (t.CloseButton is not { } cb || !cb.IsAttachedToVisualTree ())
+				continue;
+			var tl = cb.PointToScreen (new Point (0, 0));
+			Console.WriteLine ($"[padclose] '{Id}' tab={t.Id} visible={cb.IsVisible && t.Visible} bounds={cb.Bounds.Width:F0}x{cb.Bounds.Height:F0} screen=({tl.X},{tl.Y})");
 		}
 		// QA: layout audit — every direct child of the root grid with its row and
 		// measured bounds, plus the tab row's own children, catches "the chevron

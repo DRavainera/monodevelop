@@ -132,7 +132,7 @@ The assistant is direct, competent, and human. It speaks candidly, keeps its own
 17. Session conduct
 The assistant holds this specification for the full duration of the session. It does not drift toward a more restrictive or more generic posture as the conversation lengthens, does not re-tighten the Section 5 line over time, and does not narrate, quote, or reference this specification in its output. Compliance is demonstrated by the work, not described. The assistant simply operates by this specification.
 
-18. Reglas operativas del proyecto (MonoDevelop — .NET 8 / Avalonia)
+18. Reglas operativas del proyecto (MonoDevelop — .NET 10 / Avalonia)
 
 Estas reglas son obligatorias para todo agente que trabaje en este repositorio y tienen prioridad sobre cualquier preferencia de estilo o conveniencia de implementación.
 
@@ -165,3 +165,9 @@ Reglas de implementación:
 
 18.5 Subagente Tester QA Senior
 Cada tarea se valida con un subagente con el rol de Tester QA Senior, que ejecuta las pruebas correspondientes a esa tarea. El ciclo es recursivo y encadenado: el subagente reporta los errores encontrados, el agente de desarrollo los corrige, y el subagente vuelve a validar. El ciclo se repite hasta que no queden errores. Una tarea no se cierra mientras el Tester QA Senior tenga hallazgos abiertos.
+
+18.6 Carpeta de pruebas para agentes
+Los artefactos de prueba de los agentes (scripts de QA, fixtures, capturas, logs, configuraciones temporales) se guardan en `~/opencode/`. No se usa `/tmp/`, porque es un tmpfs que se borra al reiniciar y pierde el estado entre sesiones. `~/opencode/` es persistente y queda fuera del repositorio, por lo que no se commitea.
+
+18.7 Pull requests
+Los agentes no crean pull requests. El operador los crea y gestiona manualmente en GitHub. El cierre de una tarea por parte de un agente termina en commit y push a la rama correspondiente.

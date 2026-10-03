@@ -1612,6 +1612,14 @@ la matriz empírica de M16e/M16f/M16g).
   Padding 3,0, ToolTip "Close pad", `Tag = tab.Id`). Click →
   `SetTabVisible(id,false)` + nuevo evento `PadTabClosed` (el shell puede
   reflejarlo en View > Pads como el legacy `DockItem.Closed`).
+  - **Verificación visual completada (M25b)**: el ✕ del pad Properties se
+    verificó por píxeles y por click real. Rect medido con `PointToScreen`:
+    `screen=(1420,242) size=16x16 content='✕' tip='Close pad'`; el glifo se
+    renderiza (crop del rect: dominante `(0,120,215)` del botón + 48 px de
+    `(15,75,122)` del glifo, luminancia 62–211). Click XTEST real sobre el
+    centro → `properties tab visible=False selected=properties visibleTabs=[]`
+    y `View > Pads > Properties checked=False`; el pad desaparece del lado
+    derecho. Detalle en § M25b.
 - Colapsado del pad INFERIOR reescrito: ya no usa el panel 2x2
   (corner+rail). `ApplyCollapseState` para `DockOrientation == Horizontal`:
   `Height = 34`, `contentHost` oculto, la MISMA fila de tabs sigue visible y
@@ -1795,6 +1803,315 @@ la matriz empírica de M16e/M16f/M16g).
   ~/.nuget/packages). El README ya documentaba
   `git submodule update --init --recursive` para clones frescos.
 - Hooks QA nuevos en `QaDialogArg`: `--padmenu`, `--padsqa`, `--padsqa2`.
-  Artefacto conocido del hook `--searchpopup`: la PRIMERA asignación
-  programática de Text tras `:s` no retriggerea el handler (la fila mostrada
-  es la anterior); tipeo real por teclas no lo sufre.
+- **CORRECCIÓN (M25b) del "artefacto conocido" del hook `--searchpopup`**: el
+  diagnóstico previo ("la PRIMERA asignación programática de Text tras `:s` no
+  retriggerea el handler") era **incorrecto**. La causa real era una edición de
+  texto del commit `8d3c607821` que **fusionó la línea de comentario con la
+  llamada**: `OnToolbarSearchTextChanged (":t Program")` y su `Output` quedaron
+  DENTRO del comentario `// first hit opens its file and jumps to the
+  declaration line.` (verificado con `cat -A` y `git log -L`). Consecuencia: el
+  `Output` de `:t Program` reportaba el estado dejado por `:s TODO` (stale) y la
+  activación posterior usaba los resultados de `:t Double` (0 hits) en vez de
+  los de `:t Program`. No era debounce ni retrigger del handler. Detalle y
+  evidencia en § M25b.
+
+## M25b — Fix del hook `--searchpopup` (`:t Program` stale) y verificación visual del ✕ de Properties
+
+Cierre de los dos pendientes que M25 dejó abiertos: el resultado stale del
+primer `:t Program` en el hook `--searchpopup` y la verificación visual del
+botón de cerrar (✕) del pad Properties.
+
+### Fix: `:t Program` reportaba el estado de `:s TODO` (código comentado, no debounce)
+
+- **Síntoma**: en el hook `--searchpopup`, la línea `[searchpopup] ':t Program'`
+  imprimía los resultados de la consulta ANTERIOR (`:s TODO`) y la activación
+  posterior saltaba (`activation skipped`) porque operaba sobre los resultados
+  de `:t Double` (0 hits).
+- **Diagnóstico previo (incorrecto)**: M25 lo documentó como "la PRIMERA
+  asignación programática de Text tras `:s` no retriggerea el handler". Falso.
+- **Causa raíz real**: el commit `8d3c607821` (M25) fusionó en una sola línea el
+  comentario y la llamada —
+  `// first hit opens its file and jumps to the declaration line.\t\t\t\t\tOnToolbarSearchTextChanged (":t Program");`
+  — de modo que la llamada y su `Output` quedaron DENTRO del comentario.
+  Verificado con `cat -A` (tabs literales en la misma línea) y con
+  `git log -L` sobre el bloque. No hay debounce ni retrigger involucrado: el
+  handler nunca se invocaba para `:t Program`.
+- **Fix**: separar el comentario de la llamada y re-indentar el bloque de
+  `:t Program` / `:t Main` / `:t Double` en `MainWindow.axaml.cs`.
+- **Evidencia** (`~/opencode/searchpopup_qa.log`, hook `--searchpopup` sobre el
+  fixture `ConsoleApp-VS2010`):
+
+```
+[searchpopup] 'Prog' results=2 visible=True first=Program.cs | Program.cs
+[searchpopup] ':c build' results=4 bindings=179 first=Build All
+[searchpopup] ':s TODO' results=1 first=Search for 'TODO' in Solution
+[searchpopup] ':t Program' results=1 first=Program (class) | Program.cs : 8 | tip=<ruta completa> : 8
+[searchpopup] ':t Main' results=1 first=Main (method) | Program.cs : 10 | tip=<ruta> : 10 — in Program
+[searchpopup] ':t Double' results=0 first=-
+[searchpopup] activated → tab selected: Program.cs expected: Program.cs
+```
+
+### Verificación visual del ✕ del pad Properties (pendiente de M24)
+
+- **Instrumentación**: `PadHost.PadTab` ganó `internal Button? CloseButton`
+  (asignado en `AddTab`), y `LogCollapseChrome()` emite por cada tab con ✕:
+  `[padclose] '<host>' tab=<id> visible=... bounds=... screen=(x,y)`.
+- **Hook QA `--padclose`** (nuevo, registrado en `QaDialogArg`): loguea el
+  tamaño de cliente, itera los tres hosts (left/bottom/right), loguea el rect
+  medido del ✕ de Properties, hace hit-test en su centro y vigila con un
+  `DispatcherTimer` la transición de visibilidad de la tab + el check del menú
+  View > Pads.
+- **Rect medido**: `screen=(1420,242) size=16x16 content='✕' tip='Close pad'`.
+- **Render del glifo (análisis de píxeles)**: crop del rect (client
+  1096,81–1120,105) → dominante `(0,120,215)` ×495 (azul del botón) con 48 px
+  de `(15,75,122)` (glifo oscuro), luminancia 62–211. El ✕ **sí se dibuja**.
+- **Click real (XTEST)**: con el puntero confirmado sobre el centro del rect
+  (window-relative 1108,93), el click produjo
+  `[padclose] properties tab visible=False selected=properties visibleTabs=[]`
+  y `[pads-menu] (padclose) 'Properties' checked=False enabled=True`; el pad
+  desaparece del lado derecho (capturas `padclose_verified.png` y
+  `padclose_verified2.png`).
+- **Re-validación (arranque limpio)**: repetido desde cero con el shell recién
+  lanzado, el click sobre el ✕ vuelve a producir la transición
+  (`visible=False`, `'Properties' checked=False`) y el pad desaparece del lado
+  derecho. **El ✕ funciona; no hay bug de hit-test.**
+- **Falso negativo del intento intermedio**: en un intento previo el click no
+  disparó porque el pad derecho ya estaba **colapsado** (un click de control
+  sobre el chevron "Collapse pad" lo había plegado). Con el host colapsado el
+  ✕ no está en el árbol visual y no es hittable — el dump lo reporta como
+  `not attached to the visual tree`. Lección: el QA del ✕ debe correr sobre un
+  arranque limpio, no sobre un shell ya manipulado.
+- **Listener de captura en `--padclose`**: se añadió un `PointerPressed` con
+  `handledEventsToo: true` que imprime la cadena de controles que recibe el
+  press (`[padclose] press at (x,y) → ...`), para distinguir "el click no llega
+  a la ventana" de "el click llega pero el handler no corre" sin adivinar
+  coordenadas. **Hallazgo**: un `PointerPressed +=` normal **nunca** ve el click
+  sobre el ✕ porque `Button` marca el evento como handled; hay que usar
+  `AddHandler (PointerPressedEvent, ..., RoutingStrategies.Tunnel | Bubble,
+  handledEventsToo: true)`. Con eso, el press se reporta como
+  `AccessText < ContentPresenter < Button < StackPanel < ContentPresenter <
+  ToggleButton < ... < PadHost#RightPads` — es decir, el ✕ **sí** es el target
+  del hit-test en su centro (window-relative 1108,93), y el `ToggleButton`
+  padre no lo intercepta.
+- **Hallazgo de instrumentación**: `InputHitTest` devuelve `null` para el ✕
+  aunque el click real funcione (confirma la nota ya existente en
+  `PadHost.cs:111`). El hook usa el **bounds** como autoritativo:
+  `new Rect (propsClose.Bounds.Size).Contains (local)` — `Visual.Bounds` está
+  en coordenadas del PADRE, no propias, así que comparar contra
+  `propsClose.Bounds` directamente da falso negativo.
+- **Guard obligatorio**: `PointToScreen` lanza
+  `ArgumentException: Visual does not belong to a visual tree` si el visual no
+  está attached. Todo el dump va detrás de `IsAttachedToVisualTree()`, incluido
+  el loop por tab (las tabs ocultas — `classes`, `help` — tienen su ✕ fuera del
+  árbol y rompían el dump a mitad).
+
+### Nota de entorno para QA visual (Wayland/XWayland)
+
+- La sesión es **Wayland** con el shell bajo **XWayland**. En este entorno
+  `xtest.fake_input (d, X.MotionNotify, x, y)` **NO mueve el puntero real**
+  (queda donde estaba), lo que hace parecer que el click no llega.
+- **Solución que funciona**: `root.warp_pointer (x, y)` + `d.sync ()` +
+  `time.sleep (0.5)`, y recién entonces `xtest.fake_input (ButtonPress/ButtonRelease)`.
+  Confirmar con `root.query_pointer ()` (el `child` debe ser el window id del
+  shell) y con `w.query_pointer ()` (coordenadas window-relative).
+- **El foco importa**: `_NET_ACTIVE_WINDOW` puede cambiar a otra ventana entre
+  comandos y el click se pierde. Reactivar con `wmctrl -i -a 0x0260000f` y
+  confirmar con `get_input_focus ()` antes de cada click.
+- Los artefactos de QA de agentes viven en `~/opencode/` (no en `/tmp/`, que es
+  tmpfs y se borra al reiniciar).
+
+### Infra
+
+- Hooks QA nuevos en `QaDialogArg`: `--padclose`.
+- Scripts de QA (fuera del repo, en `~/opencode/`): `qa_searchpopup.sh`,
+  `qa_padclose.sh`.
+
+## M26 — Paridad de pads placeholder (documentoutline, classes, codeissues)
+
+El usuario aprobó la **Opción 1 acotada** (los tres primeros pads de la
+propuesta de abajo: `documentoutline`, `classes`, `codeissues`) y el trabajo se
+**implementó y verificó el 2026-10-02**. La propuesta original de alcance se
+conserva al final de la sección como contexto de decisión.
+
+### Implementación
+
+- **`SymbolIndexService`** (`MonoDevelop.Ide/Services/SymbolIndexService.cs`,
+  nuevo): escáner de una pasada sobre C# que recupera tipos y miembros (field,
+  event, property, method) con línea e INDENT, y de ahí el árbol por
+  indentación. Porta a la vez los tres consumidores que antes vivían dispersos:
+  `ScanSymbols` (breadcrumb, Go To Type, `:t`), `BuildOutline` (Document
+  Outline) y `BuildClassTree` (Classes: project ▸ namespace ▸ tipo ▸ miembro,
+  con el orden legacy `ClassNodeBuilder`: tipos → field → event → property →
+  method, alfabético por bucket). `ScanFile` cachea por fecha de modificación
+  (el Classes pad reescanea la solución entera). Los regex de declaración
+  excluyen comentarios, llaves de apertura Allman (no deben hacer pop del
+  scope), y solo admiten campos a nivel de tipo (un `const` dentro de un método
+  no es miembro).
+- **`CodeIssueService`** (`MonoDevelop.Ide/Services/CodeIssueService.cs`,
+  nuevo): porta el modelo de `CodeIssuePad` sobre los diagnósticos que el shell
+  ya produce (`ParseBuildMessage`/`SetErrors`): parsea la línea MSBuild
+  `file(line,col): severity CODE: message`, agrupa por severidad en el orden
+  legacy (error → warning → info → hidden) y formatea la fila y el resumen
+  (`1 error(s), 2 warning(s), 1 info(s)`).
+- **Pads** (`MainWindow.axaml.cs`): `documentoutline` (RightPads) y `classes`
+  (LeftPads) son árboles `TreeView` con doble clic que abre el archivo y salta a
+  la línea; `codeissues` (BottomPads) es la lista con encabezado de resumen. Los
+  tres nacen `Visible=false` (auto-ocultos como el `Pads.addin.xml` legacy) y se
+  encienden por View > Pads. El Document Outline sigue al documento activo
+  (el timer del breadcrumb lo refresca cuando cambia texto o pestaña).
+- **Hooks QA** (`QaDialogArg`): `--outline[=<path>]`, `--classes`,
+  `--codeissues` y `--dblclick[=<path>]` (este último ejercita la activación de
+  los tres pads sin XTEST: selecciona un nodo con destino conocido y llama el
+  mismo método del handler `DoubleTapped`, verificando el caret con
+  `VerifyCaret`). **Nota**: `--dblclick` se implementó pero no se había
+  registrado en `QaDialogArg` (el hook nunca disparaba); el registro se corrigió
+  en este cierre.
+
+### QA (fixture `~/opencode/m26fix`, clase `Widget` + interface `IThing`)
+
+Logs `~/opencode/m26_qa_{outline,classes,codeissues,dblclick}.log`, 0 FATAL /
+0 Unhandled en los cuatro:
+
+```
+[outline]  10 node(s) in Program.cs
+[outline]  class Widget @5 · field counter @7 · field Max @8 · event Changed @9
+           property Value @10 · property Name @11 · method Run @13 · method Double @19
+           interface IThing @22 · method Go @24
+[classes]  project m26fix ▸ namespace M26Fix ▸ interface IThing (Program.cs:22) [method Go]
+           class Widget (Program.cs:5) ▸ field counter/Max · event Changed
+           property Name/Value · method Double/Run
+[codeissues] 1 error(s), 2 warning(s), 1 info(s) — rows=4
+[codeissues] Program.cs (12,5): error CS0103 · (20,9): warning CS0219 · (24,1): warning CS0168 · (30,3): info CS8019
+[dblclick] classes activated interface IThing @Program.cs:22 → caret line 22 (expected 22)
+[dblclick] outline activated class Widget @5 → caret line 5 (expected 5)
+[dblclick] codeissues activated error CS0103 @Program.cs:12,5 → caret line 12 (expected 12)
+```
+
+El estado vacío también está cubierto (`No solution loaded` en Classes,
+`(empty state)` en Outline).
+
+### Hallazgos del Tester QA Senior (§18.5) corregidos antes del cierre
+
+El subagente Tester QA Senior (§18.5) reprodujo fallos reales del escáner que
+alimenta los tres pads; el ciclo recursivo se repitió **3 rondas** hasta aprobar
+limpio. Correcciones:
+
+1. **(bloqueante H1)** el regex de miembro incluía `\s` en la clase del tipo, así
+   que la **indentación** servía de "tipo": `        if (true)` se leía como
+   `method if`, y `while`/`foreach`/`get`/`set` igual. Fix: los regex corren sobre
+   la línea **sin indentación** + guard de palabras clave de sentencia.
+2. **(mayor H2)** propiedad estilo **Allman** (`public int Prop` con `{` en la
+   línea siguiente) se perdía → `allmanPropertyRegex`.
+3. **(menor H3)** campo **sin modificador** (`int Field;`) → el campo admite cero
+   modificadores.
+4. **(menor H4)** cuerpos de **comentarios de bloque** y **strings verbatim** →
+   `UpdateLexState` rastrea `/* */` y `@"..."` (con `""` escapado).
+5. **(mayor N1, regresión del rediseño)** `throw new X ();` y `yield return
+   X ();` caían como métodos porque el guard comparaba el tipo entero → guard
+   **token-aware** (cualquier token keyword rechaza la línea).
+6. **(mayor N2)** `record` / `record class` / `record struct` no se reconocían
+   (caían como método) → `typeDeclRegex` con `record`; kind `record` en el
+   Classes pad y en el orden legacy.
+7. **(menor N3)** **indexers** (`public int this [int i] => i;`) →
+   `indexerDeclRegex` → propiedad `this[]`.
+8. **(menor N4)** **raw strings** `"""..."""` (C# 11) → cuarto estado en
+   `UpdateLexState`. De paso, `void Go ();` de una interfaz ahora sí se detecta
+   (9 → 10 nodos en el fixture).
+
+Regresión permanente: 8 tests nuevos en `SymbolIndexTests` (control de flujo,
+Allman, campo sin modificador, comentarios/verbatim, throw/yield, record,
+indexer, raw string). Verificación adversarial por GUI
+(`~/opencode/m26_adv_outline2.log`, fixture `Adv.cs` con `record Point`,
+`throw new`, `yield return`, indexer) → exactamente 6 nodos (`record Point @6`,
+`class Adv @8`, `property Prop @10`, `method Run @16`, `method It @32`,
+`property this[] @37`); arnés `~/opencode/qa_m26_adv/` → `ALL CHECKS PASSED`.
+Build del shell **0 errores**; tests **53/53** (`AvaloniaShell.Editor.Tests`).
+Veredicto del Tester QA Senior: **M26 PASA**.
+
+### Propuesta original (contexto de decisión)
+
+Estado de partida: M25 cerró el pad de edición (tabs horizontales, editor
+SkiaSharp visible, breadcrumb, splitter, GoToType, `:t` con contenedor, checks
+de View > Pads y persistencia de layout) y M25b cerró los dos pendientes que
+quedaban abiertos (fix del hook `--searchpopup` y verificación visual del ✕ de
+Properties). El shell ya cubre: menú completo (11 menús, 176 comandos), toolbar
+con búsqueda en vivo, Solution pad sobre `Xwt.TreeView` real, Properties con
+descriptores reales, editor con intellisense/hover/folding/burbujas, debugger
+DAP completo (Locals/Watch/Call Stack/Threads/Immediate/Attach/breakpoints),
+build/run con configuración activa, diálogos (About/Preferences/Addins/Find/
+GoTo/New Project/Add Reference/Dirty Files) y persistencia de layout y sesión.
+
+### Inventario de trabajo abierto (evidencia, no opinión)
+
+| # | Frente | Evidencia | Impacto |
+|---|--------|-----------|---------|
+| A | Pads placeholder sin contenido real | Portados `documentoutline`, `classes` y `codeissues` (M26). Quedan cáscara `help` (`(documentation index)`), `toolbox` (`(toolbox items)`) y `unittests` (`(unit tests of loaded solutions)`) — `MainWindow.axaml.cs` | 3 de 6 portados; el legacy tiene implementación real para todos |
+| B | Bloqueo `Mono.Addins.Setup` net472/netstandard | CS1503 en `AddinPackage.cs:141`, CS0012 en `SetupService.cs:842`; `docs/migration-status-report.md` § 5 | impide el build completo de la solución maestra (gate de cierre) |
+| C | Comandos sin cablear | 2 de 176: `ProjectCommands.SelectActiveConfiguration:` (variante sin sufijo) y el literal `...`; el resto resuelve por prefijo (`pad:`, `pads:`, `recent:`, `tool:`) | bajo, pero rompe la promesa "ningún ítem se oculta" |
+| D | Xwt y módulos Gtk/Mac-only | `docs/interfaz-plan.md` fila 8 de la tabla de migración: **PENDIENTE** | decisión necesaria antes del cutover |
+| E | Rebranding (nombre/logo) | `docs/interfaz-plan.md` línea 86: "pendientes de decidir; se aplica al completar la migración de UI" | bloquea el cierre de la migración de UI |
+| F | Redibujo de iconos PNG estilo Fluent | fila 9 de la tabla: **EN CURSO** ("redibujo uno a uno continúa con QA visual") | cosmético, pero es criterio de paridad visual |
+| G | Runsheet In3 (smoke tests de GUI) | `docs/interfaz-plan.md` línea 74: "Pendiente (no se puede ejecutar hasta correr la GUI bajo runtime .NET 8)" | es el **gate de aceptación** de la fase de migración |
+| H | NRefactory/Cecil legacy | `docs/migration-status-report.md` § 3.4: implementación provisional, **debe reemplazarse** | deuda técnica marcada por el usuario |
+
+### Candidatos de alcance (elegir uno o combinar)
+
+**Opción 1 — Paridad de pads restantes (frente A).** Portar los 6 pads
+placeholder desde su equivalente Gtk, con la regla del bucle por módulos
+(inventario de funcionalidades → implementación → QA de paridad → 0
+diferencias). Orden sugerido por valor y por dependencia ya resuelta:
+1. `documentoutline` — el shell ya tiene `ScanSymbols` (usado por el breadcrumb
+   y por `:t`); el pad es un árbol de esos símbolos con navegación al hacer
+   doble clic. Legacy: `MonoDevelop.DesignerSupport/DocumentOutlinePad.cs`.
+2. `classes` — el shell ya tiene el índice de símbolos por archivo; el legacy
+   (`MonoDevelop.Ide.Gui.Pads.ClassPad/ClassBrowserPad.cs`) agrupa por
+   namespace → tipo → miembros. Reutiliza el mismo escaneo.
+3. `codeissues` — el shell ya parsea diagnósticos de build
+   (`ParseBuildMessage`/`SetErrors`); el legacy
+   (`MonoDevelop.Refactoring/.../CodeIssuePad.cs`) lista los diagnósticos de
+   Roslyn con severidad y navegación.
+4. `unittests` — requiere runner; el legacy usa `MonoDevelop.UnitTesting`.
+   Mayor esfuerzo (proceso de test + árbol de resultados).
+5. `toolbox` — el legacy depende de providers por addin (GtkCore, AspNet,
+   DesignerSupport); el valor en Linux-first es bajo.
+6. `help` — el legacy es un índice de documentación Mono; valor bajo en el
+   objetivo Linux-first.
+
+**Opción 2 — Desbloqueo del build completo (frente B).** Atacar la
+compatibilidad `net472`/`netstandard` de `Mono.Addins.Setup` (CS1503/CS0012) y
+seguir con la normalización del árbol de solución hasta que `Main.sln` compile
+con el SDK 10 real. Es el **gate de cierre** de la fase de migración
+(`docs/interfaz-plan.md` fila 14) y desbloquea todo lo demás.
+
+**Opción 3 — Cierre de paridad y cutover (frentes C, D, E, G).** Cerrar los 2
+comandos sin cablear, decidir el destino de Xwt y de los módulos Gtk/Mac-only,
+resolver el rebranding y ejecutar el runsheet In3 como gate de aceptación.
+
+**Opción 4 — Deuda técnica marcada (frente H).** Reemplazar NRefactory/Cecil
+legacy por el stack Roslyn moderno. Es la deuda que el usuario marcó
+explícitamente como "deberá reemplazarse"; conviene planificarla antes del
+cutover para no arrastrarla.
+
+### Recomendación
+
+**Opción 1 acotada a los tres primeros pads (`documentoutline`, `classes`,
+`codeissues`)**, porque:
+- los tres reutilizan infraestructura que el shell **ya tiene** (índice de
+  símbolos, parser de diagnósticos, navegación a línea), así que el costo es
+  bajo y el riesgo de regresión es mínimo;
+- elimina 3 de los 6 pads cáscara, que es la brecha de paridad más visible;
+- mantiene el ritmo del bucle por módulos sin abrir frentes de infraestructura
+  (B) ni decisiones de producto (D/E) que requieren al usuario.
+
+Los frentes B y G quedan como **siguiente paso natural** una vez cerrada la
+paridad de pads, porque B es el gate de cierre y G es su criterio de
+aceptación.
+
+### Criterio de aceptación (cumplido)
+
+- Cada pad portado tiene su inventario de funcionalidades legacy documentado y
+  su QA determinista (hook `--<pad>` en `QaDialogArg`) con evidencia en el log.
+- 0 diferencias funcionales contra el pad Gtk de referencia.
+- Build del shell en 0 errores y los 46 tests del editor en verde.
+- Documentación actualizada (`interfaz-plan.md`, `session_summary.md`,
+  `migration-status-report.md`) + commit + push.

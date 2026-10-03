@@ -38,6 +38,7 @@
     <Border x:Name="TitleBarRow" DockPanel.Dock="Top" Background="{DynamicResource IdeChromeBgBrush}"
             CornerRadius="8,8,0,0">
       <Grid ColumnDefinitions="*,Auto">
+        <Image x:Name="MonoDevelopIcon" Width="22" Height="22" />
         <!-- Full legacy main menu (structure/labels/icons of MainMenu.addin.xml + addins),
              built by MenuService/MenuBuilder. -->
         <Menu x:Name="MainMenu" FontSize="12" />

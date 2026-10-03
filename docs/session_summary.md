@@ -636,3 +636,145 @@ documento + keywords).
   process" (contienda entre TFMs del mismo build) se resuelven con
   `dotnet build-server shutdown` y `-m:1`.
 - Tests 16/16.
+
+## 2026-09-25 (c) — M25b: fix del hook `--searchpopup` y verificación visual del ✕ de Properties
+
+- **Fix `:t Program` stale en `--searchpopup`**: la causa NO era debounce ni
+  retrigger del handler (diagnóstico que M25 había dejado escrito). El commit
+  `8d3c607821` fusionó el comentario con la llamada, dejando
+  `OnToolbarSearchTextChanged (":t Program")` y su `Output` DENTRO del
+  comentario `// first hit opens its file and jumps to the declaration line.`
+  (verificado con `cat -A` y `git log -L`). Por eso el `Output` de `:t Program`
+  mostraba el estado de `:s TODO` y la activación usaba los resultados de
+  `:t Double` (0 hits). Fix: separar comentario y llamada + re-indentar el
+  bloque. QA `--searchpopup` verde: `:t Program` → `results=1 first=Program
+  (class) | Program.cs : 8`, `:t Main` → `Main (method) | Program.cs : 10 — in
+  Program`, `:t Double` → 0, `activated → tab selected: Program.cs`.
+- **Verificación visual del ✕ del pad Properties** (pendiente de M24):
+  `PadHost.PadTab` ganó `internal Button? CloseButton` y `LogCollapseChrome()`
+  emite `[padclose] '<host>' tab=<id> visible=... bounds=... screen=(x,y)`.
+  Hook nuevo `--padclose` (registrado en `QaDialogArg`). Rect medido:
+  `screen=(1420,242) size=16x16 content='✕' tip='Close pad'`. El glifo se
+  renderiza (crop del rect: dominante `(0,120,215)` del botón + 48 px de
+  `(15,75,122)` del glifo). Click XTEST real sobre el centro →
+  `properties tab visible=False selected=properties visibleTabs=[]` y
+  `View > Pads > Properties checked=False`; el pad desaparece del lado derecho.
+  **Re-validado desde un arranque limpio** (capturas `padclose_verified.png` y
+  `padclose_verified2.png`): el ✕ funciona, no hay bug de hit-test. El intento
+  intermedio que falló fue porque el pad derecho ya estaba **colapsado** por un
+  click de control sobre el chevron "Collapse pad": con el host colapsado el ✕
+  no está en el árbol visual y no es hittable. El QA del ✕ debe correr sobre un
+  arranque limpio.
+- **Listener de captura en `--padclose`**: se añadió un `PointerPressed` con
+  `handledEventsToo: true` que imprime la cadena de controles que recibe el
+  press (`[padclose] press at (x,y) → ...`), para distinguir "el click no llega
+  a la ventana" de "el click llega pero el handler no corre". **Hallazgo**: un
+  `PointerPressed +=` normal nunca ve el click sobre el ✕ porque `Button` marca
+  el evento como handled; hace falta `AddHandler (PointerPressedEvent, ...,
+  RoutingStrategies.Tunnel | Bubble, handledEventsToo: true)`. Con eso el press
+  se reporta como `AccessText < ContentPresenter < Button < StackPanel <
+  ContentPresenter < ToggleButton < ... < PadHost#RightPads`: el ✕ **sí** es el
+  target del hit-test en su centro (window-relative 1108,93) y el `ToggleButton`
+  padre no lo intercepta.
+- **Hallazgos de instrumentación** (para futuras QAs):
+  - `PointToScreen` lanza `ArgumentException: Visual does not belong to a
+    visual tree` si el visual no está attached → todo el dump va detrás de
+    `IsAttachedToVisualTree()`, incluido el loop por tab (las tabs ocultas
+    `classes`/`help` tienen su ✕ fuera del árbol y cortaban el dump).
+  - `InputHitTest` devuelve `null` para el ✕ aunque el click real funcione
+    (confirma la nota de `PadHost.cs:111`). Autoritativo: `new Rect
+    (control.Bounds.Size).Contains (local)` — `Visual.Bounds` está en
+    coordenadas del PADRE, no propias.
+- **Quirk de entorno (Wayland/XWayland)**: `xtest.fake_input (MotionNotify)`
+  NO mueve el puntero real; hay que usar `root.warp_pointer (x, y)` + `sync` +
+  espera, y recién entonces `ButtonPress/ButtonRelease`. Confirmar con
+  `root.query_pointer ()` (el `child` debe ser el window id del shell). El
+  **foco** también importa: `_NET_ACTIVE_WINDOW` puede cambiar a otra ventana
+  entre comandos; reactivar con `wmctrl -i -a 0x0260000f` antes de cada click.
+- **Artefactos de QA de agentes**: `~/opencode/` (no `/tmp/`, que es tmpfs).
+  Scripts nuevos: `qa_searchpopup.sh`, `qa_padclose.sh`.
+- **Restauración**: los PNG de `docs/img/` (attach-to-process-pad,
+  breakpoints-pad, locals-pad, watch-pad) estaban borrados en el working tree
+  por los QA de capturas; restaurados con `git checkout -- docs/img/`.
+- **M26 propuesto** (pendiente de aprobación): paridad de los 6 pads
+  placeholder, con recomendación de empezar por `documentoutline`, `classes` y
+  `codeissues` (reutilizan el índice de símbolos y el parser de diagnósticos ya
+  existentes). Detalle en `docs/interfaz-plan.md` § M26.
+- Build del shell: 0 errores. Tests del editor: 16/16.
+
+## 2026-10-02 — M26: paridad de pads `documentoutline`, `classes`, `codeissues`
+
+El usuario aprobó la **Opción 1 acotada** de la propuesta M26 (tres pads) y se
+cerró la implementación + QA que había quedado a medias en el working tree.
+
+**Implementación (código ya presente, cerrado y verificado):**
+- `MonoDevelop.Ide/Services/SymbolIndexService.cs` (nuevo): escáner de una pasada
+  sobre C# (tipos + miembros con línea/INDENT); alimenta `ScanSymbols`
+  (breadcrumb/GoToType/`:t`), `BuildOutline` (Document Outline) y
+  `BuildClassTree` (Classes: project ▸ namespace ▸ tipo ▸ miembro, orden legacy
+  `ClassNodeBuilder`). Cache por timestamp en `ScanFile`.
+- `MonoDevelop.Ide/Services/CodeIssueService.cs` (nuevo): parsea las líneas
+  MSBuild `file(line,col): severity CODE: message`, agrupa por severidad en el
+  orden legacy (error → warning → info → hidden) y forma fila/resumen.
+- `MainWindow.axaml.cs`: pads `documentoutline` (RightPads), `classes`
+  (LeftPads) y `codeissues` (BottomPads); árboles con doble clic que abre
+  archivo + salta a línea; auto-ocultos por defecto (paridad `Pads.addin.xml`).
+  El Document Outline sigue al documento activo vía el timer del breadcrumb.
+- Hooks QA: `--outline[=<path>]`, `--classes`, `--codeissues` y
+  `--dblclick[=<path>]`.
+
+**Hueco encontrado y corregido:** el hook `--dblclick` estaba implementado en
+`MainWindow` pero **no registrado en `Program.QaDialogArg`** → nunca disparaba
+(el log previo `m26_dblclick.log` en realidad venía de un arranque normal con
+`--sln`, no del hook). Registrado `--dblclick` y `--dblclick=` en
+`QaDialogArg`.
+
+**QA (fixture `~/opencode/m26fix`: `Widget` + `IThing`; logs
+`~/opencode/m26_qa_{outline,classes,codeissues,dblclick}.log`, 0 FATAL):**
+- `--outline` → 10 nodos: `class Widget @5`, fields `counter@7`/`Max@8`,
+  `event Changed@9`, `property Value@10`/`Name@11`, `method Run@13`/`Double@19`,
+  `interface IThing @22`, `method Go@24` (el escáner corregido ahora sí detecta
+  el método de interfaz `void Go ();`, que antes se perdía).
+- `--classes` → `project m26fix ▸ namespace M26Fix ▸ interface IThing
+  (Program.cs:22)` (con `method Go`) + `class Widget (Program.cs:5)` con miembros
+  en orden legacy.
+- `--codeissues` → `1 error(s), 2 warning(s), 1 info(s)` / `rows=4` (CS0103,
+  CS0219, CS0168, CS8019).
+- `--dblclick` → activa las tres rutas y verifica caret: `interface IThing @22`
+  → línea 22; `class Widget @5` → línea 5; `error CS0103 @12` → línea 12.
+- Estados vacíos cubiertos (`No solution loaded`, `(empty state)`).
+
+**Hallazgos del Tester QA Senior (§18.5) corregidos antes del cierre** (3 rondas
+hasta aprobar limpio):
+1. **(bloqueante H1)** el escáner leía `if (true)` / `while` / `foreach` / `get` /
+   `set` indentados como miembros: la clase de "tipo" del regex incluía `\s`, así
+   que la indentación hacía de tipo. Fix: los regex corren sobre la línea
+   **sin indentación** + guard de palabras clave de sentencia.
+2. **(mayor H2)** propiedad estilo Allman (`public int Prop`, `{` en la línea
+   siguiente) no se detectaba → `allmanPropertyRegex`.
+3. **(menor H3)** campo sin modificador (`int Field;`) → el campo admite cero
+   modificadores.
+4. **(menor H4)** cuerpos de comentarios de bloque y strings verbatim →
+   `UpdateLexState` rastrea `/* */` y `@"..."` (`""` escapado).
+5. **(mayor N1, regresión del rediseño)** `throw new X ();` / `yield return
+   X ();` caían como métodos porque el guard comparaba el tipo entero →
+   guard **token-aware** (cualquier token keyword rechaza).
+6. **(mayor N2)** `record` / `record class` / `record struct` no se reconocían
+   (caían como método) → `typeDeclRegex` con `record`, kind `record` en el
+   Classes pad y en el orden legacy.
+7. **(menor N3)** indexers (`public int this [int i] => i;`) → `indexerDeclRegex`
+   → `property this[]`.
+8. **(menor N4)** raw strings `"""..."""` (C# 11) no se rastreaban → cuarto
+   estado en `UpdateLexState`.
+   Regresión cubierta con 8 tests nuevos (`SymbolIndexTests`) y verificada por
+   GUI sobre el fixture adversarial ampliado (`~/opencode/m26_adv_fixture/Adv.cs`
+   con `record Point`, `throw new`, `yield return`, indexer): el outline da
+   exactamente `record Point @6`, `class Adv @8`, `property Prop @10`, `method
+   Run @16`, `method It @32`, `property this[] @37` — 0 falsos positivos.
+   Veredicto final del Tester QA Senior (ronda 3): **M26 PASA**; arnés
+   adversarial `~/opencode/qa_m26_adv/` → `ALL CHECKS PASSED`.
+   Build del shell **0 errores**; tests **53/53** (`AvaloniaShell.Editor.Tests`).
+
+**Cierre**: documentación M26 en `interfaz-plan.md` (+ README del shell) y
+commit+push del bloque.
+

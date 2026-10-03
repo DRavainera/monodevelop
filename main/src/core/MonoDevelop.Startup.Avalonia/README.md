@@ -68,10 +68,11 @@ MonoDevelop.Startup.Avalonia/
 El shell NO tiene módulos propios de lógica: todo vive integrado junto a los
 demás módulos del IDE (sin carpetas `Avalonia/` ni código duplicado):
 
-- `main/src/core/MonoDevelop.Ide/Services/` — los 10 servicios (ns
+- `main/src/core/MonoDevelop.Ide/Services/` — los 12 servicios (ns
   `MonoDevelop.Ide.Services`): IconService, SolutionLoader, UserPreferences,
   SettingsStore, KeyboardShortcutRegistry, NavigationHistoryService,
-  TaskScanner, ExternalToolRunner, GettextService, ConfigurationService.
+  TaskScanner, ExternalToolRunner, GettextService, ConfigurationService,
+  SymbolIndexService, CodeIssueService.
 - `main/src/core/MonoDevelop.Ide/Controls/` — los 4 controles (ns
   `MonoDevelop.Ide.Controls`): SkTextEditor, PadHost, CompletionPopup,
   EditorTooltipPopup.
@@ -231,6 +232,10 @@ documento sucio a propósito para poder probar el diálogo visualmente
 | `--watchedit` | Pad Watch: edición in-place (Esc rollback, Enter reemplaza en sitio) + reevaluación automática tras el step | `[watchedit]` |
 | `--pinwatch` | Pinned watches: burbujas por línea, serialización file/line legacy en .userprefs, valor vivo al pausar, unpin, burbujas CLICABLES (menú Remove / Go to line) | `[pinwatch]` |
 | `--legacyqa` | Pins escritos por el IDE GTK legacy (XML exacto de PinnedWatchStore): siembra, reabre y verifica restauración + round trip del formato | `[legacyqa]` |
+| `--outline[=<path>]` | Document Outline pad (M26): árbol de símbolos del documento activo | `[outline]` |
+| `--classes` | Classes pad (M26): project ▸ namespace ▸ tipo ▸ miembro de la solución | `[classes]` |
+| `--codeissues` | Code Issues pad (M26): diagnósticos MSBuild agrupados por severidad | `[codeissues]` |
+| `--dblclick[=<path>]` | Activación por doble clic de los tres pads M26 (abre archivo + salta a línea) | `[dblclick]` |
 
 QA visual: los hooks se complementan con capturas X11 (`magick x:<win>`) para
 comparar la UI contra la legacy GTK en vivo (ver bitácoras en
@@ -348,12 +353,11 @@ comparar la UI contra la legacy GTK en vivo (ver bitácoras en
 
 Cada módulo se porta desde el código GTK listando primero sus funcionalidades,
 se implementa en Avalonia y pasa QA de paridad antes de avanzar al siguiente.
-Completados recientes: Watch editable in-place + reevaluación por step,
-pinned watches como burbujas y gutter con hover (M16e), integración
-estructural Services/Controls → MonoDevelop.Ide y servicios de debug →
-addin MonoDevelop.Debugger. Siguientes candidatos:
-TipOfTheDay, SelectEncodingsDialog, NewConfigurationDialog/NewLayoutDialog,
-ProgressDialog, AttachToProcessDialog (Debugger) y semántica Roslyn real para
-completion/tooltip.
+Completado reciente (**M26**): los pads placeholder `documentoutline`, `classes`
+y `codeissues`, portados sobre `SymbolIndexService`/`CodeIssueService` con
+activación por doble clic (hooks `--outline`, `--classes`, `--codeissues`,
+`--dblclick`). Siguientes candidatos: los 3 pads cáscara restantes (`unittests`,
+`toolbox`, `help`), el desbloqueo del build completo de `Main.sln`
+(`Mono.Addins.Setup` net472/netstandard) y el runsheet In3 como gate.
 
-Detalle hito por hito: `docs/interfaz-plan.md` § M4–M16f.
+Detalle hito por hito: `docs/interfaz-plan.md` § M4–M26.
