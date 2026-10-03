@@ -73,6 +73,7 @@ public partial class PreferencesDialog : Window
 		"colortheme", "codesnippets", "languagebundles",
 		"naming", "standardheader",
 		"vcgeneral", "vccommit", "git", "changelog",
+		"nugetgeneral",
 	};
 
 	string? pendingLanguage;
@@ -112,6 +113,7 @@ public partial class PreferencesDialog : Window
 		LoadStandardHeaderPanel ();
 		LoadVcGeneralPanel ();
 		LoadGitPanel ();
+		LoadNugetGeneralPanel ();
 		SetupCmEditors ();
 		LoadCommitMessagePanel ();
 		LoadChangeLogPanel ();
@@ -1672,6 +1674,67 @@ public partial class PreferencesDialog : Window
 		SettingsStore.SetBool ("MonoDevelop.VersionControl.Git.StashUnstashWhenSwitchingBranches", GitStashBranch!.IsChecked == true);
 	}
 
+	// ---------- NuGet → General (nested properties) ----------
+	// PackageManagementOptions stores both flags as nested <Property> entries under
+	// "PackageManagementSettings" (PropertyService.Get("PackageManagementSettings",
+	// new Properties())). Defaults: both true.
+
+	static string PropertiesFile => Path.Combine (
+		Environment.GetFolderPath (Environment.SpecialFolder.UserProfile),
+		".config", "MonoDevelop", "9.0", "MonoDevelopProperties.xml");
+
+	static bool ReadNested (string parent, string key, bool def)
+	{
+		try {
+			if (!File.Exists (PropertiesFile))
+				return def;
+			var el = XDocument.Load (PropertiesFile, LoadOptions.PreserveWhitespace).Root?
+				.Elements ("Property").FirstOrDefault (e => (string?)e.Attribute ("key") == parent)?
+				.Elements ("Property").FirstOrDefault (e => (string?)e.Attribute ("key") == key);
+			return bool.TryParse ((string?)el?.Attribute ("value"), out var b) ? b : def;
+		} catch { return def; }
+	}
+
+	static void WriteNested (string parent, string key, bool value)
+	{
+		try {
+			Directory.CreateDirectory (Path.GetDirectoryName (PropertiesFile)!);
+			XDocument doc;
+			try {
+				doc = File.Exists (PropertiesFile) ? XDocument.Load (PropertiesFile, LoadOptions.PreserveWhitespace)
+					: new XDocument (new XElement ("MonoDevelopProperties", new XAttribute ("version", "2.0")));
+			} catch { doc = new XDocument (new XElement ("MonoDevelopProperties", new XAttribute ("version", "2.0"))); }
+			var root = doc.Root ?? new XElement ("MonoDevelopProperties");
+			if (root.Parent is null)
+				doc = new XDocument (root);
+			var p = root.Elements ("Property").FirstOrDefault (e => (string?)e.Attribute ("key") == parent);
+			if (p is null) {
+				p = new XElement ("Property", new XAttribute ("key", parent));
+				root.Add (p);
+			}
+			var v = value ? "True" : "False";
+			var k = p.Elements ("Property").FirstOrDefault (e => (string?)e.Attribute ("key") == key);
+			if (k is null)
+				p.Add (new XElement ("Property", new XAttribute ("key", key), new XAttribute ("value", v)));
+			else
+				k.SetAttributeValue ("value", v);
+			doc.Save (PropertiesFile);
+		} catch (Exception ex) { MainWindow.Instance?.Output ("[prefs] nuget save failed: " + ex.Message); }
+	}
+
+	void LoadNugetGeneralPanel ()
+	{
+		NugetRestore!.IsChecked = ReadNested ("PackageManagementSettings", "AutomaticPackageRestoreOnOpeningSolution", true);
+		NugetUpdates!.IsChecked = ReadNested ("PackageManagementSettings", "CheckUpdatedPackagesOnOpeningSolution", true);
+		MainWindow.Instance?.Output ($"[prefs-nuget] restore={NugetRestore.IsChecked} updates={NugetUpdates.IsChecked}");
+	}
+
+	void StoreNugetGeneralPanel ()
+	{
+		WriteNested ("PackageManagementSettings", "AutomaticPackageRestoreOnOpeningSolution", NugetRestore!.IsChecked == true);
+		WriteNested ("PackageManagementSettings", "CheckUpdatedPackagesOnOpeningSolution", NugetUpdates!.IsChecked == true);
+	}
+
 	// ---------- Panel switching (OptionsDialog.SelectPanel) ----------
 	void OnSectionSelected (object? sender, SelectionChangedEventArgs e)
 	{
@@ -1714,6 +1777,7 @@ public partial class PreferencesDialog : Window
 		PanelVcGeneral!.IsVisible = id == "vcgeneral";
 		PanelCommitMessage!.IsVisible = id == "vccommit";
 		PanelGit!.IsVisible = id == "git";
+		PanelNugetGeneral!.IsVisible = id == "nugetgeneral";
 		PanelChangeLog!.IsVisible = id == "changelog";
 		PanelPlaceholder!.IsVisible = !functionalPanels.Contains (id);
 
@@ -1777,6 +1841,7 @@ public partial class PreferencesDialog : Window
 		StoreCommitMessagePanel ();
 		StoreChangeLogPanel ();
 		StoreGitPanel ();
+		StoreNugetGeneralPanel ();
 		StoreThemePanel ();
 		Close ();
 	}

@@ -465,6 +465,15 @@
                          Text="Stored as the ChangeLogPolicy entry of the global policy set, same as the GTK UI." />
             </StackPanel>
 
+            <StackPanel x:Name="PanelNugetGeneral" Margin="16" Spacing="8" IsVisible="False">
+              <TextBlock Text="Package Restore" FontWeight="SemiBold" />
+              <CheckBox x:Name="NugetRestore" Content="Automatically restore packages when opening a solution." />
+              <TextBlock Text="Package Updates" FontWeight="SemiBold" Margin="0,6,0,0" />
+              <CheckBox x:Name="NugetUpdates" Content="Check for package updates when opening a solution." />
+              <TextBlock Margin="0,6,0,0" Opacity="0.7" FontSize="11" TextWrapping="Wrap"
+                         Text="Stored as nested properties under PackageManagementSettings in MonoDevelopProperties.xml, same as the GTK UI." />
+            </StackPanel>
+
             <StackPanel x:Name="PanelGit" Margin="16" Spacing="8" IsVisible="False">
               <CheckBox x:Name="GitRebase" Content="Use the Rebase option for merging" />
               <CheckBox x:Name="GitStashUpdate" Content="Automatically stash/unstash local changes" />
