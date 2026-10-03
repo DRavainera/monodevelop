@@ -1032,3 +1032,16 @@ VcsIntegration + editor CM incrustado; persiste `<ChangeLogPolicy>`.
 `<CommitMessageStyle>`); parametrizado `BuildElement(name)`. H2 sensibilidad
 (Integrate/Require según UpdateMode) y H3 telemetría corregidos. **PASA LIMPIO**.
 Build 0 errores, 53/53 tests.
+
+## 2026-10-03 (h) — NuGet Sources + Debugger
+
+- **NuGet → Sources** (vía A, backend real): referencia `NuGet.Configuration` 5.4.0
+  en el shell y uso de `PackageSourceProvider.LoadPackageSources/SavePackageSources`
+  (misma API que `RegisteredPackageSourcesViewModel`). Lista + Add/Remove/
+  Move Up/Down; persiste en `NuGet.Config`.
+- **Debugger**: portado `DebuggerOptionsPanel` (Scope/Evaluation/Advanced). Los
+  `DebuggerSessionOptions` de `DebuggingService` son claves planas de
+  `PropertyService` (`MonoDevelop.Debugger.DebuggingService.*`), así que se leen/
+  escriben directamente. Incluye el combo `AutomaticSourceDownload` (Ask/Always/
+  Never), el timeout de evaluación y la sensibilidad de "AllowToString".
+QA: build 0 errores, 53/53 tests, `placeholder=False`, 0 FATAL en ambos.

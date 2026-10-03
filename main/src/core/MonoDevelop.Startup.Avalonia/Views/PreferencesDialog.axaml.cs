@@ -75,7 +75,7 @@ public partial class PreferencesDialog : Window
 		"colortheme", "codesnippets", "languagebundles",
 		"naming", "standardheader",
 		"vcgeneral", "vccommit", "git", "changelog",
-		"nugetgeneral", "packagesources",
+		"nugetgeneral", "packagesources", "debugger",
 	};
 
 	string? pendingLanguage;
@@ -117,6 +117,7 @@ public partial class PreferencesDialog : Window
 		LoadGitPanel ();
 		LoadNugetGeneralPanel ();
 		LoadNugetSourcesPanel ();
+		LoadDebuggerPanel ();
 		SetupCmEditors ();
 		LoadCommitMessagePanel ();
 		LoadChangeLogPanel ();
@@ -1814,6 +1815,41 @@ public partial class PreferencesDialog : Window
 		} catch (Exception ex) { MainWindow.Instance?.Output ("[prefs] sources save failed: " + ex.Message); }
 	}
 
+	// ---------- Debugger (flat legacy keys via DebuggingService.GetUserOptions) ----------
+
+	void LoadDebuggerPanel ()
+	{
+		DbStepOverProps!.IsChecked = SettingsStore.GetBool ("MonoDevelop.Debugger.DebuggingService.StepOverPropertiesAndOperators", true);
+		DbStepIntoExternal!.IsChecked = !SettingsStore.GetBool ("MonoDevelop.Debugger.DebuggingService.ProjectAssembliesOnly", true);
+		DbAllowEval!.IsChecked = SettingsStore.GetBool ("MonoDevelop.Debugger.DebuggingService.AllowTargetInvoke", true);
+		DbAllowToString!.IsChecked = SettingsStore.GetBool ("MonoDevelop.Debugger.DebuggingService.AllowToStringCalls", true);
+		DbTimeout!.Text = SettingsStore.GetString ("MonoDevelop.Debugger.DebuggingService.EvaluationTimeout") ?? "2500";
+		DbShowBaseGroup!.IsChecked = !SettingsStore.GetBool ("MonoDevelop.Debugger.DebuggingService.FlattenHierarchy", false);
+		DbGroupPrivate!.IsChecked = SettingsStore.GetBool ("MonoDevelop.Debugger.DebuggingService.GroupPrivateMembers", true);
+		DbGroupStatic!.IsChecked = SettingsStore.GetBool ("MonoDevelop.Debugger.DebuggingService.GroupStaticMembers", true);
+		DbSourceDownload!.SelectedIndex = (SettingsStore.GetString ("MonoDevelop.Debugger.DebuggingService.AutomaticSourceDownload") ?? "Ask") switch { "Always" => 1, "Never" => 2, _ => 0 };
+		DbLogging!.IsChecked = SettingsStore.GetBool ("MonoDevelop.Debugger.DebuggingService.DebuggerLogging", false);
+		DbUseNewTreeView!.IsChecked = SettingsStore.GetBool ("MonoDevelop.Debugger.UseNewTreeView", true);
+		DbAllowToString.IsEnabled = DbAllowEval.IsChecked == true;
+		MainWindow.Instance?.Output ($"[prefs-debugger] stepIntoExternal={DbStepIntoExternal.IsChecked} eval={DbAllowEval.IsChecked} timeout={DbTimeout.Text} source={DbSourceDownload.SelectedIndex}");
+	}
+
+	void StoreDebuggerPanel ()
+	{
+		SettingsStore.SetBool ("MonoDevelop.Debugger.DebuggingService.StepOverPropertiesAndOperators", DbStepOverProps!.IsChecked == true);
+		SettingsStore.SetBool ("MonoDevelop.Debugger.DebuggingService.ProjectAssembliesOnly", DbStepIntoExternal!.IsChecked != true);
+		SettingsStore.SetBool ("MonoDevelop.Debugger.DebuggingService.AllowTargetInvoke", DbAllowEval!.IsChecked == true);
+		SettingsStore.SetBool ("MonoDevelop.Debugger.DebuggingService.AllowToStringCalls", DbAllowToString!.IsChecked == true);
+		SettingsStore.SetString ("MonoDevelop.Debugger.DebuggingService.EvaluationTimeout", DbTimeout!.Text.Trim ());
+		SettingsStore.SetBool ("MonoDevelop.Debugger.DebuggingService.FlattenHierarchy", DbShowBaseGroup!.IsChecked != true);
+		SettingsStore.SetBool ("MonoDevelop.Debugger.DebuggingService.GroupPrivateMembers", DbGroupPrivate!.IsChecked == true);
+		SettingsStore.SetBool ("MonoDevelop.Debugger.DebuggingService.GroupStaticMembers", DbGroupStatic!.IsChecked == true);
+		SettingsStore.SetString ("MonoDevelop.Debugger.DebuggingService.AutomaticSourceDownload",
+			DbSourceDownload!.SelectedIndex switch { 1 => "Always", 2 => "Never", _ => "Ask" });
+		SettingsStore.SetBool ("MonoDevelop.Debugger.DebuggingService.DebuggerLogging", DbLogging!.IsChecked == true);
+		SettingsStore.SetBool ("MonoDevelop.Debugger.UseNewTreeView", DbUseNewTreeView!.IsChecked == true);
+	}
+
 	// ---------- Panel switching (OptionsDialog.SelectPanel) ----------
 	void OnSectionSelected (object? sender, SelectionChangedEventArgs e)
 	{
@@ -1858,6 +1894,7 @@ public partial class PreferencesDialog : Window
 		PanelGit!.IsVisible = id == "git";
 		PanelNugetGeneral!.IsVisible = id == "nugetgeneral";
 		PanelNugetSources!.IsVisible = id == "packagesources";
+		PanelDebugger!.IsVisible = id == "debugger";
 		PanelChangeLog!.IsVisible = id == "changelog";
 		PanelPlaceholder!.IsVisible = !functionalPanels.Contains (id);
 
@@ -1923,6 +1960,7 @@ public partial class PreferencesDialog : Window
 		StoreGitPanel ();
 		StoreNugetGeneralPanel ();
 		StoreNugetSourcesPanel ();
+		StoreDebuggerPanel ();
 		StoreThemePanel ();
 		Close ();
 	}

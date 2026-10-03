@@ -487,6 +487,38 @@
               </StackPanel>
             </Grid>
 
+            <!-- ===== Debugger (legacy DebuggerOptionsPanel) ===== -->
+            <StackPanel x:Name="PanelDebugger" Margin="16" Spacing="6" IsVisible="False">
+              <TextBlock Text="Scope" FontWeight="SemiBold" />
+              <CheckBox x:Name="DbStepOverProps" Content="Step over properties and operators" />
+              <CheckBox x:Name="DbStepIntoExternal" Content="Step into external code" />
+              <TextBlock Margin="16,0,0,0" TextWrapping="Wrap" Opacity="0.7" FontSize="11"
+                         Text="The debugger will step into code and hit exceptions in dependencies that aren't considered part of your project, like packages and references." />
+              <TextBlock Text="Evaluation" FontWeight="SemiBold" Margin="0,8,0,0" />
+              <CheckBox x:Name="DbAllowEval" Content="Allow implicit property evaluation and method invocation" />
+              <CheckBox x:Name="DbAllowToString" Content="Call string-conversion function on objects in variables windows" Margin="16,0,0,0" />
+              <Grid ColumnDefinitions="220,*">
+                <TextBlock Text="Evaluation timeout (ms)" VerticalAlignment="Center" />
+                <TextBox x:Name="DbTimeout" Grid.Column="1" MaxWidth="120" HorizontalAlignment="Left" />
+              </Grid>
+              <CheckBox x:Name="DbShowBaseGroup" Content="Show inherited class members in a base class group" />
+              <CheckBox x:Name="DbGroupPrivate" Content="Group non-public members in the Variables windows" />
+              <CheckBox x:Name="DbGroupStatic" Content="Group static members in the Variables windows" />
+              <Grid ColumnDefinitions="220,*" Margin="0,6,0,0">
+                <TextBlock Text="Automatic source download" VerticalAlignment="Center" />
+                <ComboBox x:Name="DbSourceDownload" Grid.Column="1" MinWidth="180" HorizontalAlignment="Left">
+                  <ComboBoxItem Content="Ask" />
+                  <ComboBoxItem Content="Always" />
+                  <ComboBoxItem Content="Never" />
+                </ComboBox>
+              </Grid>
+              <TextBlock Text="Advanced options" FontWeight="SemiBold" Margin="0,8,0,0" />
+              <CheckBox x:Name="DbLogging" Content="Enable some diagnostic logging" />
+              <CheckBox x:Name="DbUseNewTreeView" Content="Use the new variables tree view" />
+              <TextBlock Margin="0,6,0,0" Opacity="0.7" FontSize="11" TextWrapping="Wrap"
+                         Text="Stored with the legacy MonoDevelop.Debugger.DebuggingService.* keys in MonoDevelopProperties.xml." />
+            </StackPanel>
+
             <StackPanel x:Name="PanelNugetGeneral" Margin="16" Spacing="8" IsVisible="False">
               <TextBlock Text="Package Restore" FontWeight="SemiBold" />
               <CheckBox x:Name="NugetRestore" Content="Automatically restore packages when opening a solution." />
