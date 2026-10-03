@@ -99,19 +99,32 @@
 
             <!-- ===== Key Bindings (legacy KeyBindingsPanel: scheme "current" editable in
                  Custom.kb.xml. Select command, capture accelerator, Update/Add.) ===== -->
-            <Grid x:Name="PanelKeyBindings" Margin="16" RowDefinitions="Auto,*,Auto,Auto"
-                  ColumnDefinitions="*,160" IsVisible="False">
-              <ListBox x:Name="KbCommandsList" Grid.Row="0" Grid.ColumnSpan="2" MinHeight="220"
-                       MaxHeight="300" />
-              <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="8" Margin="0,8,0,0">
-                <TextBlock Text="Accelerator:" VerticalAlignment="Center" />
-                <TextBox x:Name="KbAccelEntry" Width="180" KeyDown="OnKbAccelKeyDown"
-                         Watermark="Press keys…" />
-                <Button x:Name="KbUpdateBtn" Content="Update" Click="OnKbUpdate" />
-                <Button x:Name="KbRemoveBtn" Content="Remove" Click="OnKbRemove" />
+            <Grid x:Name="PanelKeyBindings" Margin="16"
+                  RowDefinitions="Auto,Auto,Auto,Auto,*,Auto,Auto" IsVisible="False">
+              <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="6">
+                <TextBlock Text="Scheme:" VerticalAlignment="Center" />
+                <ComboBox x:Name="KbSchemeCombo" MinWidth="220" SelectionChanged="OnKbSchemeChanged" />
               </StackPanel>
-              <TextBlock x:Name="KbHint" Grid.Row="2" Margin="0,6,0,0" Opacity="0.7" FontSize="11"
-                         Text="Overrides are stored in KeyBindings/Custom.kb.xml (legacy scheme 'current'). Press Enter in the box to capture a key combination." />
+              <Separator Grid.Row="1" Margin="0,6" />
+              <TextBox x:Name="KbSearch" Grid.Row="2" Width="260" HorizontalAlignment="Left"
+                       Watermark="Search" TextChanged="OnKbSearchChanged" />
+              <Border x:Name="KbWarningBox" Grid.Row="3" IsVisible="False" Margin="0,6"
+                      BorderBrush="{DynamicResource IdeBorderBrush}" BorderThickness="1"
+                      CornerRadius="3" Padding="4">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                  <Image x:Name="KbWarningIcon" Width="16" Height="16" VerticalAlignment="Center" />
+                  <TextBlock Text="The current scheme has conflicting key bindings" VerticalAlignment="Center" />
+                  <Button x:Name="KbConflictsButton" Content="View Conflicts" Click="OnKbViewConflicts" />
+                </StackPanel>
+              </Border>
+              <TreeView x:Name="KbTree" Grid.Row="4" SelectionChanged="OnKbTreeSelectionChanged" />
+              <TextBlock x:Name="KbMessage" Grid.Row="5" IsVisible="False" TextWrapping="Wrap" Margin="0,4,0,0" />
+              <StackPanel Grid.Row="6" Orientation="Horizontal" Spacing="6" Margin="0,6,0,0">
+                <TextBlock Text="Edit Binding" VerticalAlignment="Center" />
+                <TextBox x:Name="KbAccelEntry" Width="220" KeyDown="OnKbAccelKeyDown" />
+                <Button x:Name="KbApplyBtn" Content="Apply" Click="OnKbUpdate" />
+                <Button x:Name="KbAddBtn" Content="Add" Click="OnKbRemove" />
+              </StackPanel>
             </Grid>
 
             <!-- ===== Fonts (legacy FontsPanel: FontProperties nested property with

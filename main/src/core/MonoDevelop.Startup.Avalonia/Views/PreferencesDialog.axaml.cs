@@ -13,6 +13,7 @@ using Avalonia.Media.Imaging;
 using Avalonia.Platform.Storage;
 using Avalonia.Styling;
 using MonoDevelop.Ide.Services;
+using MonoDevelop.Components.Commands;
 
 namespace MonoDevelop.AvaloniaShell.Views;
 
@@ -77,7 +78,6 @@ public partial class PreferencesDialog : Window
 	bool updatingDetails;
 
 	// Editable models of the panels (re-stored on OK like OptionsPanel.ApplyChanges).
-	readonly Dictionary<string, string> keyBindings = new ();
 	List<SettingsStore.ExternalTool> tools = new ();
 
 	public PreferencesDialog ()
@@ -345,69 +345,315 @@ public partial class PreferencesDialog : Window
 	static string? NullIfEmpty (string? s) => string.IsNullOrWhiteSpace (s) ? null : s;
 
 	// ---------- Key Bindings ----------
+	// Reuses the MonoDevelop.Ide backend (Command/ActionCommand, KeyBindingSet for
+	// bindings + conflicts, KeyBindingManager for labels); schemes are parsed from
+	// the legacy options/*.xml with KeyBindingSet.LoadScheme (no addin engine needed).
 
-	// The commands the editor can bind: menu commands present in the running menu
-	// (KeyboardShortcutRegistry), like the legacy panel lists Commands.addin.xml ones.
+	public sealed record KbCommand (string Category, Command Command, string Label, string? Icon);
+
+	readonly List<KbCommand> kbCommands = new ();
+	KeyBindingSet kbSet = new ();
+	KeyBindingSet kbDefaults = new ();
+	readonly List<(string Name, KeyBindingSet Set)> kbSchemes = new ();
+	readonly HashSet<string> kbDuplicateKeys = new (StringComparer.OrdinalIgnoreCase);
+	string? kbCurrentKey;
+
 	void LoadKeyBindingsPanel ()
 	{
-		foreach (var kv in SettingsStore.LoadKeyBindings ())
-			keyBindings [kv.Key] = kv.Value;
-		KbCommandsList!.SelectionChanged += (_, _) => ShowBindingForSelection ();
-		RebuildKeyBindingList ();
+		kbDefaults = new KeyBindingSet ();
+		var catalog = MainWindow.Instance?.MenuCommandCatalog ()
+			?? Array.Empty<(string, string, string, string?, string?)> ();
+		foreach (var (cat, id, label, shortcut, icon) in catalog) {
+			var cmd = new ActionCommand (id, label);
+			kbCommands.Add (new KbCommand (cat, cmd, label, icon));
+			if (!string.IsNullOrEmpty (shortcut))
+				kbDefaults.SetBinding (cmd, NormalizeBinding (shortcut));
+		}
+		kbSet = new KeyBindingSet (kbDefaults);
+		foreach (var kv in SettingsStore.LoadKeyBindings ()) {
+			var c = kbCommands.FirstOrDefault (x => (string)x.Command.Id == kv.Key);
+			if (c is null)
+				continue;
+			kbSet.SetBinding (c.Command, (kv.Value ?? "").Split (' ', StringSplitOptions.RemoveEmptyEntries));
+		}
+		LoadKbSchemes ();
+		KbSchemeCombo!.Items.Clear ();
+		foreach (var (name, _) in kbSchemes)
+			KbSchemeCombo.Items.Add (name);
+		KbSchemeCombo.Items.Add ("Custom");
+		KbSchemeCombo.SelectedItem = "Custom";
+		RebuildKbTree ();
+		UpdateKbConflicts ();
+		MainWindow.Instance?.Output ($"[prefs-keybindings] commands={kbCommands.Count} schemes={kbSchemes.Count} conflicts={kbDuplicateKeys.Count}");
 	}
 
-	void RebuildKeyBindingList ()
+	static string NormalizeBinding (string s)
 	{
-		var bindings = MainWindow.Instance?.MenuCommandBindings ()
-			?? Array.Empty<(string, string)> ();
-		KbCommandsList!.Items.Clear ();
-		foreach (var (commandId, label) in bindings.OrderBy (b => b.Item2, StringComparer.OrdinalIgnoreCase)) {
-			keyBindings.TryGetValue (commandId, out var custom);
-			KbCommandsList.Items.Add (new ListBoxItem {
-				Tag = commandId,
-				Content = label + (string.IsNullOrEmpty (custom) ? "" : $"   —  {custom}"),
-			});
+		if (string.IsNullOrWhiteSpace (s))
+			return s;
+		var chords = new List<string> ();
+		foreach (var chord in s.Split ('|')) {
+			var toks = chord.Split (new [] { '+', ' ' }, StringSplitOptions.RemoveEmptyEntries)
+				.Select (t => t.ToLowerInvariant () switch {
+					"ctrl" or "control" => "Control",
+					"shift" => "Shift",
+					"alt" => "Alt",
+					"meta" or "cmd" or "super" or "win" => "Meta",
+					_ => t,
+				});
+			chords.Add (string.Join ("+", toks));
+		}
+		return string.Join ("|", chords);
+	}
+
+	void LoadKbSchemes ()
+	{
+		foreach (var (file, name) in new [] {
+			("KeyBindingSchemeMonoDevelop2.xml", "MonoDevelop 2"),
+			("KeyBindingSchemeMonoDevelop1.xml", "MonoDevelop 1"),
+			("KeyBindingSchemeVisualStudio.xml", "Visual Studio"),
+			("KeyBindingSchemeXcode.xml", "Xcode"),
+			("KeyBindingSchemeEmacs.xml", "Emacs"),
+		}) {
+			var path = FindOptionsFile (file);
+			if (path is null)
+				continue;
+			try {
+				var set = new KeyBindingSet (kbDefaults);
+				using var reader = new System.Xml.XmlTextReader (path);
+				set.LoadScheme (reader, "current");
+				kbSchemes.Add ((name, set));
+			} catch { /* skip malformed scheme */ }
 		}
 	}
 
-	void ShowBindingForSelection ()
+	static string? FindOptionsFile (string file)
 	{
-		if (KbCommandsList?.SelectedItem is ListBoxItem { Tag: string cmd })
-			KbAccelEntry!.Text = keyBindings.TryGetValue (cmd, out var g) ? g : "";
+		var dir = AppContext.BaseDirectory;
+		for (int i = 0; i < 8 && dir is not null; i++) {
+			var c = Path.Combine (dir, "src", "core", "MonoDevelop.Ide", "options", file);
+			if (File.Exists (c))
+				return c;
+			dir = Path.GetDirectoryName (dir);
+		}
+		return null;
 	}
+
+	void RebuildKbTree ()
+	{
+		var terms = (KbSearch?.Text ?? "").ToLowerInvariant ().Split (' ', StringSplitOptions.RemoveEmptyEntries);
+		bool Match (KbCommand c)
+		{
+			if (terms.Length == 0)
+				return true;
+			var binding = string.Join (" ", kbSet.GetBindings (c.Command));
+			var label = KeyBindingManager.BindingToDisplayLabel (binding, false) ?? binding;
+			var hay = (c.Category + " " + c.Label + " " + binding + " " + label).ToLowerInvariant ();
+			return terms.All (t => hay.Contains (t));
+		}
+		KbTree!.Items.Clear ();
+		foreach (var group in kbCommands.GroupBy (c => c.Category).OrderBy (g => g.Key, StringComparer.OrdinalIgnoreCase)) {
+			var visible = group.Where (Match).OrderBy (c => c.Label, StringComparer.OrdinalIgnoreCase).ToList ();
+			if (visible.Count == 0)
+				continue;
+			var cat = new TreeViewItem {
+				Header = new TextBlock { Text = group.Key, FontWeight = FontWeight.Bold },
+				IsExpanded = true,
+			};
+			foreach (var c in visible)
+				cat.Items.Add (MakeKbRow (c));
+			KbTree.Items.Add (cat);
+		}
+	}
+
+	TreeViewItem MakeKbRow (KbCommand c)
+	{
+		var binding = string.Join (" ", kbSet.GetBindings (c.Command));
+		var grid = new Grid { ColumnDefinitions = ColumnDefinitions.Parse ("340,240,*") };
+		var cmdPanel = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
+		if (!string.IsNullOrEmpty (c.Icon) && IconService.GetImage (c.Icon!) is Bitmap bmp)
+			cmdPanel.Children.Add (new Image { Source = bmp, Width = 16, Height = 16, VerticalAlignment = VerticalAlignment.Center });
+		cmdPanel.Children.Add (new TextBlock { Text = c.Label, VerticalAlignment = VerticalAlignment.Center });
+		grid.Children.Add (cmdPanel);
+		var chips = KbChips (binding);
+		Grid.SetColumn (chips, 1);
+		grid.Children.Add (chips);
+		var desc = new TextBlock { Opacity = 0.6, VerticalAlignment = VerticalAlignment.Center };
+		Grid.SetColumn (desc, 2);
+		grid.Children.Add (desc);
+		return new TreeViewItem { Header = grid, Tag = c, IsExpanded = true };
+	}
+
+	Control KbChips (string binding)
+	{
+		var panel = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4 };
+		foreach (var key in binding.Split (' ', StringSplitOptions.RemoveEmptyEntries)) {
+			var dup = kbDuplicateKeys.Contains (key);
+			var label = KeyBindingManager.BindingToDisplayLabel (key, false) ?? key;
+			panel.Children.Add (new Border {
+				Background = new SolidColorBrush (Color.Parse (dup ? "#66E5A50A" : "#33808080")),
+				CornerRadius = new CornerRadius (3),
+				Padding = new Thickness (6, 1),
+				Child = new TextBlock { Text = label, FontSize = 11, VerticalAlignment = VerticalAlignment.Center },
+			});
+		}
+		if (panel.Children.Count == 0)
+			panel.Children.Add (new TextBlock { Text = "—", Opacity = 0.3, FontSize = 11 });
+		return panel;
+	}
+
+	void OnKbTreeSelectionChanged (object? sender, SelectionChangedEventArgs e)
+	{
+		if (KbTree?.SelectedItem is TreeViewItem { Tag: KbCommand c }) {
+			kbCurrentKey = string.Join (" ", kbSet.GetBindings (c.Command));
+			KbAccelEntry!.Text = KeyBindingManager.BindingToDisplayLabel (kbCurrentKey, false) ?? "";
+			UpdateKbButtons (c);
+			UpdateKbMessage ();
+		} else {
+			kbCurrentKey = null;
+			KbAccelEntry!.Text = "";
+			KbApplyBtn!.IsEnabled = KbAddBtn!.IsEnabled = false;
+			KbMessage!.IsVisible = false;
+		}
+	}
+
+	void UpdateKbButtons (KbCommand c)
+	{
+		var bound = kbSet.GetBindings (c.Command);
+		KbApplyBtn!.IsEnabled = bound.Length > 0 || !string.IsNullOrEmpty (KbAccelEntry!.Text);
+		KbAddBtn!.IsEnabled = true;
+		var entered = NormalizeBinding (KbAccelEntry.Text ?? "");
+		KbAddBtn.Content = !string.IsNullOrEmpty (entered) && bound.Contains (entered) ? "Delete" : "Add";
+	}
+
+	void OnKbSearchChanged (object? sender, TextChangedEventArgs e) => RebuildKbTree ();
 
 	void OnKbAccelKeyDown (object? sender, KeyEventArgs e)
 	{
-		// Capture the pressed combination as an Avalonia gesture string (Control+S),
-		// the same format Custom.kb.xml stores.
 		if (e.Key is Key.LeftCtrl or Key.RightCtrl or Key.LeftShift or Key.RightShift
 			or Key.LeftAlt or Key.RightAlt or Key.LWin or Key.RWin or Key.System)
 			return;
-		var gesture = new KeyGesture (e.Key, e.KeyModifiers & ~KeyModifiers.Meta).ToString ();
-		KbAccelEntry!.Text = gesture;
+		var gesture = new KeyGesture (e.Key, e.KeyModifiers & ~KeyModifiers.Meta);
+		var norm = NormalizeBinding (gesture.ToString ());
+		KbAccelEntry!.Text = KeyBindingManager.BindingToDisplayLabel (norm, false) ?? norm;
+		if (KbTree?.SelectedItem is TreeViewItem { Tag: KbCommand c })
+			UpdateKbButtons (c);
+		UpdateKbMessage ();
 		e.Handled = true;
 	}
 
 	void OnKbUpdate (object? sender, RoutedEventArgs e)
 	{
-		if (KbCommandsList?.SelectedItem is not ListBoxItem { Tag: string cmd }
-			|| string.IsNullOrEmpty (KbAccelEntry!.Text))
+		if (KbTree?.SelectedItem is not TreeViewItem { Tag: KbCommand c })
 			return;
-		keyBindings [cmd] = KbAccelEntry.Text;
-		SettingsStore.SaveKeyBindings (keyBindings);
+		var text = NormalizeBinding (KbAccelEntry!.Text ?? "");
+		if (string.IsNullOrEmpty (text))
+			return;
+		kbSet.SetBinding (c.Command, text.Split (' ', StringSplitOptions.RemoveEmptyEntries));
+		PersistKeyBindings ();
+		RebuildKbTree ();
+		UpdateKbConflicts ();
 		MainWindow.Instance?.RebuildMenu ();
-		RebuildKeyBindingList ();
-		MainWindow.Instance?.Output ("[prefs] binding updated: " + cmd);
 	}
 
 	void OnKbRemove (object? sender, RoutedEventArgs e)
 	{
-		if (KbCommandsList?.SelectedItem is not ListBoxItem { Tag: string cmd })
+		if (KbTree?.SelectedItem is not TreeViewItem { Tag: KbCommand c })
 			return;
-		keyBindings [cmd] = "";
-		SettingsStore.SaveKeyBindings (keyBindings);
+		var text = NormalizeBinding (KbAccelEntry!.Text ?? "");
+		if (string.IsNullOrEmpty (text))
+			return;
+		var keys = kbSet.GetBindings (c.Command).ToList ();
+		if (keys.Contains (text))
+			keys.Remove (text);
+		else
+			keys.Add (text);
+		kbSet.SetBinding (c.Command, keys.ToArray ());
+		PersistKeyBindings ();
+		RebuildKbTree ();
+		UpdateKbConflicts ();
 		MainWindow.Instance?.RebuildMenu ();
-		RebuildKeyBindingList ();
+	}
+
+	void OnKbSchemeChanged (object? sender, SelectionChangedEventArgs e)
+	{
+		if (KbSchemeCombo?.SelectedItem is not string name)
+			return;
+		var scheme = kbSchemes.FirstOrDefault (s => s.Name == name);
+		if (scheme.Set is not null)
+			kbSet = scheme.Set.Clone ();
+		RebuildKbTree ();
+		UpdateKbConflicts ();
+	}
+
+	void UpdateKbConflicts ()
+	{
+		kbDuplicateKeys.Clear ();
+		foreach (var conf in kbSet.CheckKeyBindingConflicts (kbCommands.Select (c => c.Command)))
+			kbDuplicateKeys.Add (conf.Key);
+		KbWarningBox!.IsVisible = kbDuplicateKeys.Count > 0;
+	}
+
+	void UpdateKbMessage ()
+	{
+		if (string.IsNullOrEmpty (kbCurrentKey) || KbTree?.SelectedItem is not TreeViewItem { Tag: KbCommand c }) {
+			KbMessage!.IsVisible = false;
+			return;
+		}
+		var entered = NormalizeBinding (KbAccelEntry!.Text ?? "");
+		if (string.IsNullOrEmpty (entered)) {
+			KbMessage.IsVisible = false;
+			return;
+		}
+		var others = kbCommands.Where (x => x != c && kbSet.GetBindings (x.Command).Contains (entered)).Select (x => x.Label).ToList ();
+		if (others.Count > 0) {
+			KbMessage.Text = $"This key combination is already bound to command '{others [0]}'.";
+			KbMessage.IsVisible = true;
+		} else
+			KbMessage.IsVisible = false;
+	}
+
+	void OnKbViewConflicts (object? sender, RoutedEventArgs e)
+	{
+		var menu = new MenuFlyout ();
+		bool first = true;
+		foreach (var key in kbDuplicateKeys) {
+			var cmds = kbCommands.Where (x => kbSet.GetBindings (x.Command).Contains (key)).ToList ();
+			if (cmds.Count < 2)
+				continue;
+			if (!first)
+				menu.Items.Add (new Separator ());
+			foreach (var c in cmds) {
+				var item = new MenuItem { Header = $"{key} – {c.Label}" };
+				var cc = c;
+				item.Click += (_, _) => {
+					KbSearch!.Text = "";
+					foreach (var ci in KbTree!.Items.OfType<TreeViewItem> ()) {
+						var row = ci.Items.OfType<TreeViewItem> ().FirstOrDefault (r => ReferenceEquals (r.Tag, cc));
+						if (row is not null) {
+							ci.IsExpanded = true;
+							row.IsSelected = true;
+							break;
+						}
+					}
+				};
+				menu.Items.Add (item);
+				first = false;
+			}
+		}
+		KbConflictsButton!.Flyout = menu;
+		menu.ShowAt (KbConflictsButton!);
+	}
+
+	void PersistKeyBindings ()
+	{
+		var map = new Dictionary<string, string> (StringComparer.Ordinal);
+		foreach (var c in kbCommands) {
+			var b = string.Join (" ", kbSet.GetBindings (c.Command));
+			if (!string.IsNullOrEmpty (b))
+				map [(string)c.Command.Id] = b;
+		}
+		SettingsStore.SaveKeyBindings (map);
 	}
 
 	// ---------- Fonts ----------

@@ -6316,6 +6316,34 @@ public partial class MainWindow : Window
 		return list;
 	}
 
+	/// <summary>Editable key-binding catalog grouped by the top-level menu (the legacy
+	/// command Category): (Category, CommandId, Label, Shortcut, Icon). Reuses the menu
+	/// model (Commands.addin.xml structure) and the Custom.kb.xml overrides.</summary>
+	public System.Collections.Generic.IReadOnlyList<(string Category, string CommandId, string Label, string? Shortcut, string? Icon)> MenuCommandCatalog ()
+	{
+		var list = new List<(string, string, string, string?, string?)> ();
+		foreach (var top in MenuService.BuildMainMenu (RecentSolutions.GetAll ().Select (r => r.Path).ToList ())) {
+			if (top.IsSeparator || top.IsHeader)
+				continue;
+			var category = top.Label.Replace ("_", "");
+			void Walk (System.Collections.Generic.IReadOnlyList<MenuService.MenuEntry> entries)
+			{
+				foreach (var e in entries) {
+					if (e.Children.Count > 0) {
+						Walk (e.Children);
+						continue;
+					}
+					string? id = e.CommandId ?? MenuBuilder.GetCommandId (e.OnClick);
+					if (string.IsNullOrEmpty (id) || list.Exists (x => x.Item2 == id))
+						continue;
+					list.Add ((category, id!, e.Label.Replace ("_", ""), e.Shortcut, e.Icon));
+				}
+			}
+			Walk (top.Children);
+		}
+		return list;
+	}
+
 	/// <summary>
 	/// Applies FontProperties (Editor role) to the open editors, like the legacy
 	/// FontsPanel triggers a font-changed event consumed by Mono.TextEditor.
