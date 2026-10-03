@@ -926,3 +926,28 @@ build del shell, o (c) guardas `#if AVALONIA_SHELL` en `CommandManager`/
 **Cierre**: commit de la Fase 1a (referencia a Core). Fase 1b pendiente de la
 decisión (a/b/c).
 
+## 2026-10-03 (b) — Key Bindings (Fase 1b): plan por pasos (opción c, sin GTK)
+
+Decisión: opción (c) + **sin GTK en la shell**; donde haya GTK se añade un
+equivalente no-GTK **en el mismo `.cs`** de `MonoDevelop.Ide`. Símbolo
+`AVALONIA_SHELL` añadido al csproj del shell (guarda `#if !AVALONIA_SHELL`).
+
+**Hallazgo del Paso 1**: el modelo está acoplado a GTK en la raíz:
+- `KeyboardShortcut` se define en `MonoDevelop.Components/GtkWorkarounds.cs:1409`
+  y su ctor toma `Gdk.Key`/`Gdk.ModifierType`.
+- `Command` (Command.cs) usa `KeyBinding` (definido en `KeyBindingManager.cs:909`)
+  y `CommandManager.ToCommandId`; `KeyBinding` usa `KeyboardShortcut`.
+Por eso el orden de pasos es:
+
+1. `GtkWorkarounds.cs`: añadir equivalente no-GTK de `KeyboardShortcut` (guarda) —
+   es la raíz del modelo.
+2. `KeyBindingManager.cs`: guardar los métodos GTK (`AccelLabelFromKey(Gdk.EventKey)`,
+   `AccelToKey`, `BindingToKeys`, cctor con `Gdk.ModifierType`); dejar el modelo
+   portable (`KeyBinding`, `Binding`, `BindingToDisplayLabel`, `FixChordSeparators`).
+3. `CommandManager.cs`: guardar GTK/command-service; dejar `ToCommandId`.
+4. Compilar `Command`/`ActionCommand`/`KeyBindingSet`/`KeyBindingScheme`/
+   `KeyBindingService`/`SchemeExtensionNode`.
+5. Panel Avalonia fiel + cableado de HotKeys (`InputGesture` desde el binding).
+
+Estado: árbol **verde** (define añadido, sin archivos del backend aún).
+

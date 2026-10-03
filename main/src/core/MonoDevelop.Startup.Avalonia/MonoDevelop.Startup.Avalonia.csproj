@@ -18,6 +18,10 @@
          and remain fully debuggable in VS/VSCode. -->
     <DebugType>embedded</DebugType>
     <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <!-- Marks the Avalonia shell when compiling reused MonoDevelop.Ide backend
+         sources: GTK-only members of those files are wrapped in #if !AVALONIA_SHELL
+         and kept out; non-GTK equivalents live in the same .cs. -->
+    <DefineConstants>$(DefineConstants);AVALONIA_SHELL</DefineConstants>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Avalonia" Version="12.1.2" />
