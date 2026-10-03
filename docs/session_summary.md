@@ -1072,3 +1072,13 @@ QA: 0 errores, 53/53, `count=1 selected=__current`, 0 FATAL.
   (directorio de salida) con la clave legacy
   `PerformanceDiagnosticsAddIn.OutputPath` (default `~/Desktop`) + Browse.
 QA: 0 errores, 53/53, ambos paneles `placeholder=False`, 0 FATAL.
+
+## 2026-10-03 (l) — Text Editor: XML, IntelliSense Behavior/Appearance
+
+Sin saltar paneles: **Behavior → XML** (`XmlEditorOptions`, props anidadas bajo
+`XmlEditor.AddIn.Options`: AutoCompleteElements/AutoInsertFragment/
+ShowSchemaAnnotation), **IntelliSense → Behavior** (mismo contenido que el
+panel padre `intellisense` = `CompletionOptionsPanel`) e **IntelliSense →
+Appearance** (`CompletionOptionsHideAdvancedMembers`, checkbox "filter by
+browsable"). QA: 0 errores, 53/53, los tres `placeholder=False`, 0 FATAL
+(`[prefs-xml] complete=False fragments=True schema=False` = defaults legacy).

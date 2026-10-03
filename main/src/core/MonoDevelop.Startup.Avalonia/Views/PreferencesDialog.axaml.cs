@@ -75,7 +75,7 @@ public partial class PreferencesDialog : Window
 		"colortheme", "codesnippets", "languagebundles",
 		"naming", "standardheader",
 		"vcgeneral", "vccommit", "git", "changelog",
-		"nugetgeneral", "packagesources", "debugger", "netcore", "runtimes", "perfdiag",
+		"nugetgeneral", "packagesources", "debugger", "netcore", "runtimes", "perfdiag", "xml", "intellisense-appearance", "intellisense-behavior",
 	};
 
 	string? pendingLanguage;
@@ -121,6 +121,8 @@ public partial class PreferencesDialog : Window
 		LoadNetCorePanel ();
 		LoadRuntimesPanel ();
 		LoadPerfDiagPanel ();
+		LoadXmlEditorPanel ();
+		LoadCompletionAppearancePanel ();
 		SetupCmEditors ();
 		LoadCommitMessagePanel ();
 		LoadChangeLogPanel ();
@@ -1987,6 +1989,31 @@ public partial class PreferencesDialog : Window
 	void StorePerfDiagPanel ()
 		=> SettingsStore.SetString ("PerformanceDiagnosticsAddIn.OutputPath", NullIfEmpty (PerfDiagPath!.Text?.Trim ()));
 
+	// ---------- Text Editor → Behavior → XML (XmlEditorOptions nested properties) ----------
+
+	void LoadXmlEditorPanel ()
+	{
+		XmlAutoComplete!.IsChecked = ReadNested ("XmlEditor.AddIn.Options", "AutoCompleteElements", false);
+		XmlAutoInsertFragments!.IsChecked = ReadNested ("XmlEditor.AddIn.Options", "AutoInsertFragment", true);
+		XmlShowSchema!.IsChecked = ReadNested ("XmlEditor.AddIn.Options", "ShowSchemaAnnotation", false);
+		MainWindow.Instance?.Output ($"[prefs-xml] complete={XmlAutoComplete.IsChecked} fragments={XmlAutoInsertFragments.IsChecked} schema={XmlShowSchema.IsChecked}");
+	}
+
+	void StoreXmlEditorPanel ()
+	{
+		WriteNested ("XmlEditor.AddIn.Options", "AutoCompleteElements", XmlAutoComplete!.IsChecked == true);
+		WriteNested ("XmlEditor.AddIn.Options", "AutoInsertFragment", XmlAutoInsertFragments!.IsChecked == true);
+		WriteNested ("XmlEditor.AddIn.Options", "ShowSchemaAnnotation", XmlShowSchema!.IsChecked == true);
+	}
+
+	// ---------- IntelliSense → Appearance (CompletionOptionsHideAdvancedMembers) ----------
+
+	void LoadCompletionAppearancePanel ()
+		=> CompletionFilterBrowsable!.IsChecked = !SettingsStore.GetBool ("CompletionOptionsHideAdvancedMembers", true);
+
+	void StoreCompletionAppearancePanel ()
+		=> SettingsStore.SetBool ("CompletionOptionsHideAdvancedMembers", CompletionFilterBrowsable!.IsChecked != true);
+
 	// ---------- Panel switching (OptionsDialog.SelectPanel) ----------
 	void OnSectionSelected (object? sender, SelectionChangedEventArgs e)
 	{
@@ -2020,7 +2047,7 @@ public partial class PreferencesDialog : Window
 		PanelGeneral!.IsVisible = id == "general";
 		PanelMarkers!.IsVisible = id == "markers";
 		PanelBehavior!.IsVisible = id == "behavior";
-		PanelIntelliSense!.IsVisible = id == "intellisense";
+		PanelIntelliSense!.IsVisible = id is "intellisense" or "intellisense-behavior";
 		PanelColorTheme!.IsVisible = id == "colortheme";
 		PanelCodeSnippets!.IsVisible = id == "codesnippets";
 		PanelLanguageBundles!.IsVisible = id == "languagebundles";
@@ -2035,6 +2062,8 @@ public partial class PreferencesDialog : Window
 		PanelNetCore!.IsVisible = id == "netcore";
 		PanelRuntimes!.IsVisible = id == "runtimes";
 		PanelPerfDiag!.IsVisible = id == "perfdiag";
+		PanelXmlEditor!.IsVisible = id == "xml";
+		PanelCompletionAppearance!.IsVisible = id == "intellisense-appearance";
 		PanelChangeLog!.IsVisible = id == "changelog";
 		PanelPlaceholder!.IsVisible = !functionalPanels.Contains (id);
 
@@ -2104,6 +2133,8 @@ public partial class PreferencesDialog : Window
 		StoreNetCorePanel ();
 		StoreRuntimesPanel ();
 		StorePerfDiagPanel ();
+		StoreXmlEditorPanel ();
+		StoreCompletionAppearancePanel ();
 		StoreThemePanel ();
 		Close ();
 	}

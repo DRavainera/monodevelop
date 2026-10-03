@@ -487,9 +487,23 @@
               </StackPanel>
             </Grid>
 
-            <!-- ===== Performance Diagnostics → General (legacy GlobalOptionsPanel) ===== -->
+            <!-- ===== Text Editor → Behavior → XML (legacy XmlEditorOptionsPanel) ===== -->
+            <StackPanel x:Name="PanelXmlEditor" Margin="16" Spacing="8" IsVisible="False">
+              <CheckBox x:Name="XmlAutoComplete" Content="Automatically complete elements" />
+              <CheckBox x:Name="XmlAutoInsertFragments" Content="Automatically insert closing fragments" />
+              <CheckBox x:Name="XmlShowSchema" Content="Show schema annotations" />
+              <TextBlock Opacity="0.7" FontSize="11" TextWrapping="Wrap"
+                         Text="Stored as nested properties under XmlEditor.AddIn.Options, same as the GTK UI." />
+            </StackPanel>
+
+            <!-- ===== Text Editor → IntelliSense → Appearance (legacy CompletionAppearancePanel) ===== -->
+            <StackPanel x:Name="PanelCompletionAppearance" Margin="16" Spacing="8" IsVisible="False">
+              <CheckBox x:Name="CompletionFilterBrowsable" Content="Filter the completion list by browsable members" />
+              <TextBlock Opacity="0.7" FontSize="11" TextWrapping="Wrap"
+                         Text="Stored with the legacy CompletionOptionsHideAdvancedMembers key." />
+            </StackPanel>
+
             <StackPanel x:Name="PanelPerfDiag" Margin="16" Spacing="8" IsVisible="False">
-              <TextBlock Text="General" FontWeight="SemiBold" />
               <Grid ColumnDefinitions="140,*">
                 <TextBlock Text="Output directory:" VerticalAlignment="Center" />
                 <Grid Grid.Column="1" ColumnDefinitions="*,Auto">
