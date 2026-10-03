@@ -395,8 +395,35 @@
                          Text="User bundles live in the LanguageBundles folder; built-in bundles are provided by the IDE." />
             </Grid>
 
-            <!-- Generic placeholder for panels provided by add-ins that are not wired
-                 in this shell (their settings remain available through the legacy UI). -->
+            <!-- ===== Source Code → .NET Naming Policies (legacy NamespaceSynchronisationPanel) ===== -->
+            <StackPanel x:Name="PanelNaming" Margin="16" Spacing="8" IsVisible="False">
+              <CheckBox x:Name="NmAssociate" Content="Associate namespaces with directory names" />
+              <CheckBox x:Name="NmDefaultRoot" Content="Use the default namespace as the root of all namespaces" Margin="16,0,0,0" />
+              <StackPanel Orientation="Horizontal" Spacing="20" Margin="16,0,0,0">
+                <RadioButton x:Name="NmFlat" GroupName="nspolicy" Content="Flat folder structure" />
+                <RadioButton x:Name="NmHierarch" GroupName="nspolicy" Content="Hierarchical folder structure" />
+              </StackPanel>
+              <Grid ColumnDefinitions="200,*" Margin="0,6,0,0">
+                <TextBlock Text="Resource naming" VerticalAlignment="Center" />
+                <ComboBox x:Name="NmResourceCombo" Grid.Column="1" MinWidth="240" HorizontalAlignment="Left">
+                  <ComboBoxItem Content="File format default" />
+                  <ComboBoxItem Content="File name" />
+                  <ComboBoxItem Content="Visual Studio style (MSBuild)" />
+                </ComboBox>
+              </Grid>
+              <TextBlock Margin="0,6,0,0" Opacity="0.7" FontSize="11" TextWrapping="Wrap"
+                         Text="Stored as the DotNetNamingPolicy entry of the global policy set (Policies/UserDefault.mdpolicy.xml), same as the GTK UI." />
+            </StackPanel>
+
+            <!-- ===== Source Code → Standard Header (legacy StandardHeaderPolicyPanel) ===== -->
+            <StackPanel x:Name="PanelStandardHeader" Margin="16" Spacing="8" IsVisible="False">
+              <CheckBox x:Name="ShInclude" Content="Include the standard header in newly created files" />
+              <TextBlock Text="Header text" FontWeight="SemiBold" Margin="0,6,0,0" />
+              <TextBox x:Name="ShText" AcceptsReturn="True" Height="170" TextWrapping="NoWrap" />
+              <TextBlock Margin="0,6,0,0" Opacity="0.7" FontSize="11" TextWrapping="Wrap"
+                         Text="Stored as the StandardHeader entry of the global policy set (Policies/UserDefault.mdpolicy.xml), same as the GTK UI." />
+            </StackPanel>
+
             <StackPanel x:Name="PanelPlaceholder" Margin="16" IsVisible="False" Spacing="8">
               <TextBlock Text="This options panel is provided by an add-in and has not been wired to the new UI yet. Its settings remain available through the legacy interface until the cutover."
                          TextWrapping="Wrap" Opacity="0.7" />

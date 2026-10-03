@@ -351,7 +351,9 @@ comparar la UI contra la legacy GTK en vivo (ver bitácoras en
   SourceEditor2 (General, Markers and Rulers, Behavior, IntelliSense, Color
   Theme, Code Snippets, Language Bundles) con las mismas claves
   `DefaultSourceEditorOptions`/`EditorPreferences` y las mismas carpetas de
-  usuario (`ColorThemes`/`Snippets`/`LanguageBundles`). El resto
+  usuario (`ColorThemes`/`Snippets`/`LanguageBundles`) y el grupo **Source Code**
+  (.NET Naming Policies, Standard Header) escribiendo el policy set global
+  `Policies/UserDefault.mdpolicy.xml`. El resto
   (paneles de add-in) figura en el árbol con label/icono pero como placeholder
   hasta portar su stack.
 - **Persistencia de la sesión de debug**: breakpoints, watches (pad + pins

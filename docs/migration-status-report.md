@@ -286,6 +286,12 @@ El bucle de migración Gtk → Avalonia continúa por módulos (detalle por hito
   `Snippets`, `LanguageBundles`; `ColorScheme`/`ColorScheme-Dark`). QA §18.5 en
   2 rondas (H1 crash de Code Snippets corregido). Build 0 errores, 53/53 tests.
   Detalle en `docs/interfaz-plan.md` § M29.
+- **M30 completado (2026-10-02)**: portados **.NET Naming Policies** y
+  **Standard Header** (grupo Source Code) escribiendo/leyendo el policy set
+  global `Policies/UserDefault.mdpolicy.xml` con el formato de
+  `PolicyService`/`PolicySet` (elementos `DotNetNamingPolicy`/`StandardHeader`).
+  Code Formatting queda placeholder. QA §18.5 en 3 rondas. Build 0 errores,
+  53/53 tests. Detalle en `docs/interfaz-plan.md` § M30.
 
 Nota operativa: el binario de la UI Avalonia es
 `src/core/MonoDevelop.Startup.Avalonia/bin/Debug/net10.0/MonoDevelop.AvaloniaShell.dll`;

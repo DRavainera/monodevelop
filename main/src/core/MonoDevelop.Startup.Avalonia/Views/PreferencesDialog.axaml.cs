@@ -69,6 +69,7 @@ public partial class PreferencesDialog : Window
 		// Text editor group (ported from the SourceEditor2 add-in panels, same keys).
 		"general", "markers", "behavior", "intellisense",
 		"colortheme", "codesnippets", "languagebundles",
+		"naming", "standardheader",
 	};
 
 	string? pendingLanguage;
@@ -104,8 +105,11 @@ public partial class PreferencesDialog : Window
 		LoadColorThemePanel ();
 		LoadSnippetsPanel ();
 		LoadLanguageBundlesPanel ();
+		LoadNamingPanel ();
+		LoadStandardHeaderPanel ();
 		GenWordWrap!.IsCheckedChanged += (_, _) => GenWordWrapGlyphs!.IsEnabled = GenWordWrap.IsChecked == true;
 		BhAutoInsertBrace!.IsCheckedChanged += (_, _) => BhSmartSemicolon!.IsEnabled = BhAutoInsertBrace.IsChecked == true;
+		NmAssociate!.IsCheckedChanged += (_, _) => UpdateNamingEnable ();
 		BuildSectionTree ();
 		// Default selection: Visual Style (the first functional panel), like the GTK
 		// dialog opens on the first selectable section.
@@ -1037,6 +1041,148 @@ public partial class PreferencesDialog : Window
 		LoadLanguageBundlesPanel ();
 	}
 
+	// ---------- Source Code policies (global PolicySet) ----------
+	// The GTK panels are PolicyOptionsPanel<T>; the global policy set is serialized to
+	// Policies/UserDefault.mdpolicy.xml with one child element per policy, named by the
+	// policy's [DataItem] (StandardHeader / DotNetNamingPolicy) and its [ItemProperty]s.
+
+	static string GlobalPolicyFile => Path.Combine (UserDataRoot, "Policies", "UserDefault.mdpolicy.xml");
+
+	static XElement? LoadGlobalPolicy (string elementName)
+	{
+		try {
+			if (!File.Exists (GlobalPolicyFile))
+				return null;
+			var root = XDocument.Load (GlobalPolicyFile).Root;
+			// PolicyService.LoadPolicy accepts both <Policies><PolicySet> and a bare <PolicySet> root.
+			var ps = root?.Name == "PolicySet" ? root : root?.Element ("PolicySet");
+			return ps?.Element (elementName);
+		} catch { return null; }
+	}
+
+	// Writes all the given policies into the global PolicySet in ONE save (so .previous
+	// captures the whole previous file, like PolicyService.SavePolicies/ParanoidSave).
+	static void StoreGlobalPolicies (params (string Name, Action<XElement> Fill)[] policies)
+	{
+		try {
+			var dir = Path.Combine (UserDataRoot, "Policies");
+			Directory.CreateDirectory (dir);
+			XDocument doc;
+			try { doc = File.Exists (GlobalPolicyFile) ? XDocument.Load (GlobalPolicyFile) : new XDocument (); } catch { doc = new XDocument (); }
+			var root = doc.Root;
+			if (root is null) {
+				root = new XElement ("Policies");
+				doc = new XDocument (root);
+			} else if (root.Name == "PolicySet") {
+				// Normalize a bare <PolicySet> root into the wrapped form WITHOUT
+				// dropping its sibling policies/attributes (reparent, don't recreate).
+				var bare = root;
+				root = new XElement ("Policies");
+				root.Add (bare);
+				doc = new XDocument (root);
+			} else if (root.Name != "Policies") {
+				root = new XElement ("Policies");
+				doc = new XDocument (root);
+			}
+			var ps = root.Element ("PolicySet");
+			if (ps is null) {
+				ps = new XElement ("PolicySet", new XAttribute ("name", "User Default"), new XAttribute ("id", "UserDefault"));
+				root.Add (ps);
+			}
+			foreach (var (name, fill) in policies) {
+				ps.Elements (name).Remove ();
+				var el = new XElement (name);
+				fill (el);
+				ps.Add (el);
+			}
+			// Keep a .previous copy like PolicyService.ParanoidSave (recoverable writes).
+			if (File.Exists (GlobalPolicyFile))
+				File.Copy (GlobalPolicyFile, GlobalPolicyFile + ".previous", overwrite: true);
+			doc.Save (GlobalPolicyFile);
+		} catch (Exception ex) { MainWindow.Instance?.Output ("[prefs] policy save failed: " + ex.Message); }
+	}
+
+	static void StoreGlobalPolicy (string elementName, Action<XElement> fill)
+		=> StoreGlobalPolicies ((elementName, fill));
+
+	XElement BuildNamingPolicy ()
+	{
+		string assoc = NmAssociate!.IsChecked != true ? "None"
+			: NmHierarch!.IsChecked == true ? (NmDefaultRoot!.IsChecked == true ? "PrefixedHierarchical" : "Hierarchical")
+			: (NmDefaultRoot!.IsChecked == true ? "PrefixedFlat" : "Flat");
+		string res = NmResourceCombo!.SelectedIndex switch { 1 => "FileName", 2 => "MSBuild", _ => "FileFormatDefault" };
+		return new XElement ("DotNetNamingPolicy", new XElement ("DirectoryNamespaceAssociation", assoc), new XElement ("ResourceNamePolicy", res));
+	}
+
+	XElement BuildStandardHeaderPolicy ()
+		=> new XElement ("StandardHeader",
+			new XElement ("Text", ShText!.Text ?? ""),
+			new XElement ("IncludeInNewFiles", ShInclude!.IsChecked == true ? "True" : "False"));
+
+	void StoreSourceCodePolicies ()
+	{
+		StoreGlobalPolicies (("DotNetNamingPolicy", el => el.Add (BuildNamingPolicy ().Elements ())),
+			("StandardHeader", el => el.Add (BuildStandardHeaderPolicy ().Elements ())));
+	}
+
+	void LoadNamingPanel ()
+	{
+		var el = LoadGlobalPolicy ("DotNetNamingPolicy");
+		// Effective system default is PrefixedHierarchical/FileFormatDefault (the
+		// DefaultDotNetNamingPolicy.xml policy set), not the enum's zero value.
+		var assoc = (string?)el?.Element ("DirectoryNamespaceAssociation") ?? "PrefixedHierarchical";
+		var res = (string?)el?.Element ("ResourceNamePolicy") ?? "FileFormatDefault";
+		NmAssociate!.IsChecked = assoc != "None";
+		NmDefaultRoot!.IsChecked = assoc is "PrefixedFlat" or "PrefixedHierarchical";
+		NmHierarch!.IsChecked = assoc is "Hierarchical" or "PrefixedHierarchical";
+		NmFlat!.IsChecked = !(NmHierarch.IsChecked == true);
+		NmResourceCombo!.SelectedIndex = res switch { "FileName" => 1, "MSBuild" => 2, _ => 0 };
+		UpdateNamingEnable ();
+		MainWindow.Instance?.Output ($"[prefs-naming] assoc={assoc} resource={res}");
+	}
+
+	void UpdateNamingEnable ()
+	{
+		var on = NmAssociate!.IsChecked == true;
+		NmDefaultRoot!.IsEnabled = on;
+		NmFlat!.IsEnabled = on;
+		NmHierarch!.IsEnabled = on;
+	}
+
+	void LoadStandardHeaderPanel ()
+	{
+		var el = LoadGlobalPolicy ("StandardHeader");
+		ShInclude!.IsChecked = el is null || !bool.TryParse ((string?)el.Element ("IncludeInNewFiles"), out var inc) || inc;
+		ShText!.Text = (string?)el?.Element ("Text") ?? "";
+		MainWindow.Instance?.Output ($"[prefs-header] include={ShInclude.IsChecked} textLen={(ShText.Text ?? "").Length}");
+	}
+
+	/// <summary>QA: exercises the global-policy write (naming + header), dumps the
+	/// resulting file and restores the previous one.</summary>
+	public void QaWriteSourceCodePolicies ()
+	{
+		string? backup = File.Exists (GlobalPolicyFile) ? Convert.ToBase64String (File.ReadAllBytes (GlobalPolicyFile)) : null;
+		string? backupPrev = File.Exists (GlobalPolicyFile + ".previous") ? Convert.ToBase64String (File.ReadAllBytes (GlobalPolicyFile + ".previous")) : null;
+		try {
+			NmAssociate!.IsChecked = true;
+			NmHierarch!.IsChecked = false;
+			NmDefaultRoot!.IsChecked = true;
+			NmResourceCombo!.SelectedIndex = 1;
+			ShInclude!.IsChecked = false;
+			ShText!.Text = "// QA header";
+			StoreSourceCodePolicies ();
+			var content = File.Exists (GlobalPolicyFile) ? File.ReadAllText (GlobalPolicyFile).Replace ("\r", "").Replace ("\n", " ") : "(none)";
+			MainWindow.Instance?.Output ($"[prefs-sourcewrite] {content}");
+		} finally {
+			try {
+				if (backup is null) File.Delete (GlobalPolicyFile);
+				else File.WriteAllBytes (GlobalPolicyFile, Convert.FromBase64String (backup));
+				if (backupPrev is null) File.Delete (GlobalPolicyFile + ".previous");
+				else File.WriteAllBytes (GlobalPolicyFile + ".previous", Convert.FromBase64String (backupPrev));
+			} catch { }
+		}
+	}
+
 	// ---------- Panel switching (OptionsDialog.SelectPanel) ----------
 	void OnSectionSelected (object? sender, SelectionChangedEventArgs e)
 	{
@@ -1074,6 +1220,8 @@ public partial class PreferencesDialog : Window
 		PanelColorTheme!.IsVisible = id == "colortheme";
 		PanelCodeSnippets!.IsVisible = id == "codesnippets";
 		PanelLanguageBundles!.IsVisible = id == "languagebundles";
+		PanelNaming!.IsVisible = id == "naming";
+		PanelStandardHeader!.IsVisible = id == "standardheader";
 		PanelPlaceholder!.IsVisible = !functionalPanels.Contains (id);
 
 		HeaderTitle!.Text = node.Label;
@@ -1119,6 +1267,7 @@ public partial class PreferencesDialog : Window
 		StoreBehaviorPanel ();
 		StoreIntelliSensePanel ();
 		StoreColorThemePanel ();
+		StoreSourceCodePolicies ();
 		Close ();
 	}
 

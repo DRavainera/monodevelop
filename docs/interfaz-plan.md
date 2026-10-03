@@ -2269,3 +2269,36 @@ defecto del diálogo, script QA case-insensitive/sin truncar) y ronda 2 → **AP
 (6/6 escenarios adversariales de Code Snippets sin crash). Build 0 errores;
 53/53 tests; 3 paneles `placeholder=False`, fixtures listadas
 (`themes=5`, `count=1`, `count=1`).
+
+## M30 — Source Code: .NET Naming Policies + Standard Header (global policy set)
+
+Continuación del grupo Source Code (2026-10-02). Los paneles GTK son
+`PolicyOptionsPanel<T>` (policy framework); en el shell se escribe/lee el **policy
+set global** directamente en `Policies/UserDefault.mdpolicy.xml`, con un elemento
+por política nombrado por su `[DataItem]` y sus `[ItemProperty]` como hijos —
+exactamente lo que `PolicySet.LoadFromXml`/`PolicyService.DiffDeserializeXml`
+consumen (verificado por el Tester leyendo el serializador).
+
+- **.NET Naming Policies** (`naming`, legacy `NamespaceSynchronisationPanel`):
+  asociar namespaces↔carpetas, namespace raíz, flat/hierárquico, y naming de
+  recursos de 3 estados (File format default / File name / MSBuild).
+  Escribe el elemento `<DotNetNamingPolicy>` (`DirectoryNamespaceAssociation`,
+  `ResourceNamePolicy`). Default efectivo del sistema **`PrefixedHierarchical`**
+  (el de `DefaultDotNetNamingPolicy.xml`), no el cero del enum.
+- **Standard Header** (`standardheader`, legacy `StandardHeaderPolicyPanel`):
+  texto del header + "incluir en archivos nuevos"; escribe `<StandardHeader>`
+  (`Text`, `IncludeInNewFiles`).
+- **Code Formatting** (`codeformatting`) queda **placeholder** (es el panel más
+  grande, 466 líneas, con preview y edición de políticas de formato).
+- Escritura: `StoreGlobalPolicies` guarda el set en **una pasada**, conserva las
+  demás políticas y normaliza una raíz `<PolicySet>` directa a `<Policies>` sin
+  perder hermanos; copia `.previous` (como `PolicyService.ParanoidSave`).
+
+### QA (§18.5, 3 rondas)
+
+Tester QA Senior: ronda 1 → formato **APTO** + 2 hallazgos medios (default de
+naming = `PrefixedHierarchical`; pérdida de `ResourceNamePolicy.FileName`) y 2
+bajos; ronda 2 → medios y `.previous` corregidos; ronda 3 → raíz directa
+preservando hermanos y restore byte-exacto del hook. Build 0 errores; 53/53
+tests; `naming`/`standardheader` `placeholder=False`, política escrita y
+restaurada. Hook QA `--prefs-sourcewrite` (dry-run con backup/restore).

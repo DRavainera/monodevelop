@@ -877,3 +877,25 @@ Los tres paneles GTK dependen de `SyntaxHighlightingService`/`CodeTemplateServic
 **Cierre**: documentación M29 en `interfaz-plan.md`/`migration-status-report.md`
 (+ README) y commit+push.
 
+## 2026-10-02 (e) — M30: Source Code — .NET Naming Policies + Standard Header
+
+Los paneles GTK son `PolicyOptionsPanel<T>`; el shell escribe/lee el policy set
+global en `Policies/UserDefault.mdpolicy.xml` con los elementos/nombres de
+`[DataItem]`/`[ItemProperty]` (`DotNetNamingPolicy`, `StandardHeader`),
+compatible con `PolicySet.LoadFromXml`/`PolicyService.DiffDeserializeXml`:
+- `naming`: asociación namespaces↔carpetas, raíz, flat/hierárquico, y
+  `ResourceNamePolicy` de 3 estados (FileFormatDefault/FileName/MSBuild);
+  default efectivo `PrefixedHierarchical`.
+- `standardheader`: texto + incluir en archivos nuevos.
+- Escritura en una pasada (conserva otras políticas, normaliza raíz `<PolicySet>`
+  directa sin perder hermanos, copia `.previous`).
+- `codeformatting` queda placeholder (panel grande).
+Hook QA `--prefs-sourcewrite` (dry-run con backup/restore).
+
+**QA (§18.5, 3 rondas)**: formato APTO; corregidos default de naming, pérdida de
+`FileName`, `.previous` intermedio y raíz directa. Build 0 errores; tests
+**53/53**; `naming`/`standardheader` `placeholder=False`.
+
+**Cierre**: documentación M30 en `interfaz-plan.md`/`migration-status-report.md`
+(+ README) y commit+push.
+

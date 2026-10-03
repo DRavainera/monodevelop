@@ -291,6 +291,11 @@ public partial class MainWindow : Window
 				var dlg = new PreferencesDialog { WindowStartupLocation = WindowStartupLocation.CenterOwner };
 				dlg.DumpTreeForQa ();
 				dlg.ShowDialog (this);
+			} else if (qa == "--prefs-sourcewrite") {
+				// QA: exercise the global-policy write for naming/header, dump and restore.
+				var dlg = new PreferencesDialog { WindowStartupLocation = WindowStartupLocation.CenterOwner };
+				dlg.QaWriteSourceCodePolicies ();
+				dlg.Close ();
 			} else if (qa.StartsWith ("--prefs=", StringComparison.Ordinal)) {
 				var arg = qa.Substring ("--prefs=".Length);
 				var dlg = new PreferencesDialog { WindowStartupLocation = WindowStartupLocation.CenterOwner };
