@@ -1053,3 +1053,13 @@ listado de runtimes instalados. Persiste en la clave legacy
 `DotNetCoreRuntimeFileName`; `.NET Core` queda anidada bajo `SDK Locations`
 como en el addin.xml. QA: 0 errores, 53/53, `path=/home/daniel/.dotnet/dotnet`,
 placeholder=False, 0 FATAL.
+
+## 2026-10-03 (j) — Projects → .NET Runtimes
+
+Portado `MonoRuntimePanel`: lista los runtimes registrados por el servicio de
+runtimes de Core (`Runtime.SystemAssemblyService.GetTargetRuntimes`), marca
+(Default)/(running) y persiste el default en la clave legacy
+`MonoDevelop.Ide.DefaultTargetRuntime`. Como la shell no arranca el motor de
+add-ins que registra las fábricas de runtime, la consulta va en try/catch y cae al
+.NET detectado en disco (`~/.dotnet/dotnet`), que es el único runtime del host.
+QA: 0 errores, 53/53, `count=1 selected=__current`, 0 FATAL.

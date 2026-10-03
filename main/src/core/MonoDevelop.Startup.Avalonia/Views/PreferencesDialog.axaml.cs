@@ -75,7 +75,7 @@ public partial class PreferencesDialog : Window
 		"colortheme", "codesnippets", "languagebundles",
 		"naming", "standardheader",
 		"vcgeneral", "vccommit", "git", "changelog",
-		"nugetgeneral", "packagesources", "debugger", "netcore",
+		"nugetgeneral", "packagesources", "debugger", "netcore", "runtimes",
 	};
 
 	string? pendingLanguage;
@@ -119,6 +119,7 @@ public partial class PreferencesDialog : Window
 		LoadNugetSourcesPanel ();
 		LoadDebuggerPanel ();
 		LoadNetCorePanel ();
+		LoadRuntimesPanel ();
 		SetupCmEditors ();
 		LoadCommitMessagePanel ();
 		LoadChangeLogPanel ();
@@ -1914,6 +1915,56 @@ public partial class PreferencesDialog : Window
 			SettingsStore.SetString (DotNetCoreRuntimeKey, p);
 	}
 
+	// ---------- Projects → .NET Runtimes (MonoRuntimePanel) ----------
+
+	// Local view of a runtime: the Core TargetRuntime is abstract and the shell does
+	// not run the add-in engine that registers its factories, so a detected .NET
+	// runtime is represented with this record.
+	sealed record TargetRuntimeLike (string Id, string DisplayName, bool IsRunning);
+	// Runtimes come from the Core runtime registry; the default uses the legacy
+	// MonoDevelop.Ide.DefaultTargetRuntime key ("__current" = the running one).
+
+	void LoadRuntimesPanel ()
+	{
+		if (RuntimesList is null || RuntimeRunning is null)
+			return;
+		RuntimesList.Items.Clear ();
+		var defId = SettingsStore.GetString ("MonoDevelop.Ide.DefaultTargetRuntime") ?? "__current";
+		ListBoxItem? selected = null;
+		var runtimes = new List<TargetRuntimeLike> ();
+		try {
+			runtimes = MonoDevelop.Core.Runtime.SystemAssemblyService.GetTargetRuntimes ()
+				.Select (tr => new TargetRuntimeLike (tr.Id, tr.DisplayName, tr.IsRunning)).ToList ();
+		} catch { /* registry not initialized in the shell */ }
+		if (runtimes.Count == 0) {
+			var dotnet = DetectDotNet ();
+			if (dotnet.Length > 0)
+				runtimes.Add (new TargetRuntimeLike (".NET", ".NET (" + dotnet + ")", true));
+		}
+		foreach (var tr in runtimes) {
+			var isDef = defId == "__current" ? true : defId == tr.Id;
+			var label = tr.DisplayName + (isDef ? "  (Default)" : "") + (tr.IsRunning ? "  (running)" : "");
+			var item = new ListBoxItem { Tag = tr, Content = label };
+			RuntimesList.Items.Add (item);
+			if (isDef) selected = item;
+		}
+		if (selected is not null)
+			RuntimesList.SelectedItem = selected;
+		RuntimeRunning!.Text = "MonoDevelop is currently running on "
+			+ (runtimes.FirstOrDefault ()?.DisplayName ?? "an unknown runtime") + ".";
+		MainWindow.Instance?.Output ($"[prefs-runtimes] count={RuntimesList.Items.Count} selected={defId}");
+	}
+
+	void StoreRuntimesPanel ()
+	{
+		if (RuntimesList is null)
+			return;
+	{
+		if (RuntimesList?.SelectedItem is ListBoxItem { Tag: TargetRuntimeLike tr })
+			SettingsStore.SetString ("MonoDevelop.Ide.DefaultTargetRuntime", tr.Id);
+		}
+	}
+
 	// ---------- Panel switching (OptionsDialog.SelectPanel) ----------
 	void OnSectionSelected (object? sender, SelectionChangedEventArgs e)
 	{
@@ -1960,6 +2011,7 @@ public partial class PreferencesDialog : Window
 		PanelNugetSources!.IsVisible = id == "packagesources";
 		PanelDebugger!.IsVisible = id == "debugger";
 		PanelNetCore!.IsVisible = id == "netcore";
+		PanelRuntimes!.IsVisible = id == "runtimes";
 		PanelChangeLog!.IsVisible = id == "changelog";
 		PanelPlaceholder!.IsVisible = !functionalPanels.Contains (id);
 
@@ -2027,6 +2079,7 @@ public partial class PreferencesDialog : Window
 		StoreNugetSourcesPanel ();
 		StoreDebuggerPanel ();
 		StoreNetCorePanel ();
+		StoreRuntimesPanel ();
 		StoreThemePanel ();
 		Close ();
 	}

@@ -487,7 +487,14 @@
               </StackPanel>
             </Grid>
 
-            <!-- ===== Debugger (legacy DebuggerOptionsPanel) ===== -->
+            <!-- ===== Projects → .NET Runtimes (legacy MonoRuntimePanel) ===== -->
+            <StackPanel x:Name="PanelRuntimes" Margin="16" Spacing="8" IsVisible="False">
+              <TextBlock x:Name="RuntimeRunning" FontWeight="SemiBold" TextWrapping="Wrap" />
+              <ListBox x:Name="RuntimesList" MinHeight="160" MaxHeight="260" />
+              <TextBlock Margin="0,6,0,0" Opacity="0.7" FontSize="11" TextWrapping="Wrap"
+                         Text="Lists the runtimes registered by the runtime service; the default is stored with the legacy MonoDevelop.Ide.DefaultTargetRuntime key." />
+            </StackPanel>
+
             <!-- ===== Projects → SDK Locations → .NET Core (legacy DotNetCoreSdkLocationPanel) ===== -->
             <StackPanel x:Name="PanelNetCore" Margin="16" Spacing="8" IsVisible="False">
               <TextBlock Text="Microsoft .NET Core SDK location" FontWeight="SemiBold" />
