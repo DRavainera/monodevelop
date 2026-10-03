@@ -899,3 +899,30 @@ Hook QA `--prefs-sourcewrite` (dry-run con backup/restore).
 **Cierre**: documentación M30 en `interfaz-plan.md`/`migration-status-report.md`
 (+ README) y commit+push.
 
+## 2026-10-03 — Key Bindings (Fase 1a): integración de MonoDevelop.Core
+
+Directiva del usuario: reutilizar el backend existente de la UI GTK (no crear
+uno nuevo); `MonoDevelop.Core` y `MonoDevelop.Ide` son parte de la shell.
+
+**Análisis del backend de comandos/atajos** (mapa de acoplamiento GTK):
+- **GTK-free (reutilizables tal cual):** `KeyBindingSet.cs`, `KeyBindingScheme.cs`,
+  `Command.cs`, `ActionCommand.cs`, `KeyBindingService.cs`, `SchemeExtensionNode.cs`.
+- **Acoplados a GTK:** `CommandManager.cs` (13 Gdk/54 Gtk) y `KeyBindingManager.cs`
+  (152 Gdk); el panel GTK `KeyBindingsPanel.cs` es el widget a reemplazar.
+
+**Fase 1a (hecha):** el shell referencia `MonoDevelop.Core` (ProjectReference);
+compila a **0 errores**, tests 53/53, QA 0 FATAL. `MonoDevelop.Core.dll` net10 se
+copia a `main/build/` (misma carpeta unificada).
+
+**Bloqueo detectado (Fase 1b):** integrar `MonoDevelop.Ide` no es directo:
+- Compilar las fuentes del backend → 378 errores (Gdk/Gtk/CommandInfo/handlers).
+- ProjectReference a `MonoDevelop.Ide.csproj` → arrastra `Mono.Addins.Gui` (GTK) y
+  da 272 errores (sin refs GTK en este contexto).
+Opciones a decidir: (a) referenciar el `MonoDevelop.Ide.dll` **ya compilado** en
+`main/build/` (evita reconstruir y sus deps GTK), (b) añadir las refs GTK al
+build del shell, o (c) guardas `#if AVALONIA_SHELL` en `CommandManager`/
+`KeyBindingManager` (invasivo, 378 errores de superficie).
+
+**Cierre**: commit de la Fase 1a (referencia a Core). Fase 1b pendiente de la
+decisión (a/b/c).
+
