@@ -97,5 +97,9 @@
 		<Compile Include="..\MonoDevelop.Ide\MonoDevelop.Components.Commands\CommandInfo.cs" />
 		<Compile Include="..\MonoDevelop.Ide\MonoDevelop.Components.Commands\CommandArrayInfo.cs" />
 		<Compile Include="..\MonoDevelop.Ide\MonoDevelop.Components.Commands\CommandInfoSet.cs" />
+		<Compile Include="..\MonoDevelop.Ide\MonoDevelop.Components.Commands\KeyBindingSet.cs" />
+		<Compile Include="..\MonoDevelop.Ide\MonoDevelop.Components.Commands\KeyBindingScheme.cs" />
+		<Compile Include="..\MonoDevelop.Ide\MonoDevelop.Components.Commands\KeyBindingService.cs" />
+		<Compile Include="..\MonoDevelop.Ide\MonoDevelop.Components.Commands.ExtensionNodes\SchemeExtensionNode.cs" />
 	</ItemGroup>
 </Project>
