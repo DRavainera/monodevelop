@@ -37,15 +37,20 @@ using System.Reflection;
 using System.Text;
 using System.Xml;
 
+#if !AVALONIA_SHELL
 using MonoDevelop.Components.Commands.ExtensionNodes;
+#endif
 using Mono.Addins;
 using MonoDevelop.Core;
+#if !AVALONIA_SHELL
 using MonoDevelop.Ide;
+#endif
 using System.Threading.Tasks;
 using System.Threading;
 
 namespace MonoDevelop.Components.Commands
 {
+#if !AVALONIA_SHELL
 	[DefaultServiceImplementation (typeof (IdeCommandManager))]
 	public class CommandManager: Service, IDisposable
 	{
@@ -3263,5 +3268,24 @@ Gtk.Widget GetFocusedChild (Control widget)
 			Message = message;
 		}
 	}
+#endif
+
+#if AVALONIA_SHELL
+	/// <summary>Non-GTK equivalent (AVALONIA_SHELL): only the command-id helper the shell
+	/// needs from the GTK CommandManager (the rest — menus/toolbars/GTK dispatch — is GTK-only).</summary>
+	public static class CommandManager
+	{
+		public static object ToCommandId (object ob)
+		{
+			// Include the type name when converting enum members to ids.
+			if (ob == null)
+				return null;
+			else if (ob.GetType ().IsEnum)
+				return ob.GetType ().FullName + "." + ob;
+			else
+				return ob;
+		}
+	}
+#endif
 }
 

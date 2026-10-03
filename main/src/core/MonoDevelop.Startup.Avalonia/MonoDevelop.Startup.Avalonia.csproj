@@ -89,5 +89,13 @@
 	<ItemGroup>
 		<Compile Include="..\MonoDevelop.Ide\MonoDevelop.Components\GtkWorkarounds.cs" />
 		<Compile Include="..\MonoDevelop.Ide\MonoDevelop.Components.Commands\KeyBindingManager.cs" />
+		<Compile Include="..\MonoDevelop.Ide\MonoDevelop.Components.Commands\CommandManager.cs" />
+		<Compile Include="..\MonoDevelop.Ide\MonoDevelop.Components.Commands\Command.cs" />
+		<Compile Include="..\MonoDevelop.Ide\MonoDevelop.Components.Commands\ActionCommand.cs" />
+		<Compile Include="..\MonoDevelop.Ide\MonoDevelop.Components.Commands\ActionType.cs" />
+		<Compile Include="..\MonoDevelop.Ide\MonoDevelop.Components.Commands\CommandHandler.cs" />
+		<Compile Include="..\MonoDevelop.Ide\MonoDevelop.Components.Commands\CommandInfo.cs" />
+		<Compile Include="..\MonoDevelop.Ide\MonoDevelop.Components.Commands\CommandArrayInfo.cs" />
+		<Compile Include="..\MonoDevelop.Ide\MonoDevelop.Components.Commands\CommandInfoSet.cs" />
 	</ItemGroup>
 </Project>
