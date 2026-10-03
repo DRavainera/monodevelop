@@ -68,9 +68,10 @@
                  restart in one panel) ===== -->
             <StackPanel x:Name="PanelStyle" Margin="16" Spacing="10" IsVisible="False">
               <TextBlock Text="User Interface Theme" FontWeight="SemiBold" />
+              <RadioButton x:Name="ThemeSystemRadio" GroupName="uitheme" Content="System" />
               <RadioButton x:Name="ThemeDarkRadio" GroupName="uitheme" Content="Dark" />
               <RadioButton x:Name="ThemeLightRadio" GroupName="uitheme" Content="Light" />
-              <TextBlock Text="The legacy GTK dialog listed the installed GTK themes; the new UI maps them to the Fluent dark/light variants."
+              <TextBlock Text="System follows the operating system light/dark setting. The legacy GTK dialog listed the installed GTK themes; the new UI maps them to the Fluent variants."
                          TextWrapping="Wrap" Opacity="0.7" FontSize="11" />
               <TextBlock Text="User Interface Language" FontWeight="SemiBold" Margin="0,8,0,0" />
               <ComboBox x:Name="LanguageCombo" MinWidth="260" HorizontalAlignment="Left" />

@@ -86,6 +86,7 @@ public partial class PreferencesDialog : Window
 		MonoDevelop.AvaloniaShell.Controls.DialogWindow.Apply (this);
 		ThemeDarkRadio!.IsCheckedChanged += OnThemeRadioChecked;
 		ThemeLightRadio!.IsCheckedChanged += OnThemeRadioChecked;
+		ThemeSystemRadio!.IsCheckedChanged += OnThemeRadioChecked;
 		LoadLanguagePanel ();
 		LoadAuthorPanel ();
 		LoadKeyBindingsPanel ();
@@ -1475,21 +1476,33 @@ public partial class PreferencesDialog : Window
 		MainWindow.Instance?.Output ($"[prefs-panel] {id} | {node.Label} | icon={node.Icon} | placeholder={!functionalPanels.Contains (id)}");
 
 		if (id == "style") {
-			var dark = Application.Current?.ActualThemeVariant != ThemeVariant.Light;
-			ThemeDarkRadio!.IsChecked = dark;
-			ThemeLightRadio!.IsChecked = !dark;
+			// Legacy key MonoDevelop.Ide.UserInterfaceTheme: "" (Default/system, the Linux
+			// default) | "Dark" | "Light". System maps to ThemeVariant.Default (follows OS).
+			var stored = SettingsStore.GetString (ThemeKey);
+			ThemeSystemRadio!.IsChecked = stored != "Dark" && stored != "Light";
+			ThemeDarkRadio!.IsChecked = stored == "Dark";
+			ThemeLightRadio!.IsChecked = stored == "Light";
+			MainWindow.Instance?.Output ($"[prefs-theme] stored={(stored ?? "(null)")} system={ThemeSystemRadio.IsChecked} dark={ThemeDarkRadio.IsChecked} light={ThemeLightRadio.IsChecked} variant={Application.Current?.RequestedThemeVariant}");
 		}
 
 		updatingDetails = false;
 	}
 
+	const string ThemeKey = "MonoDevelop.Ide.UserInterfaceTheme";
+
+	/// <summary>Maps the stored legacy theme name to an Avalonia variant ("" = System/Default).</summary>
+	public static ThemeVariant ThemeVariantFor (string? stored)
+		=> stored == "Dark" ? ThemeVariant.Dark : stored == "Light" ? ThemeVariant.Light : ThemeVariant.Default;
+
 	void OnThemeRadioChecked (object? sender, RoutedEventArgs e)
 	{
 		if (updatingDetails || sender is not RadioButton rb || rb.IsChecked != true)
 			return;
-		var light = ReferenceEquals (sender, ThemeLightRadio);
+		var v = ReferenceEquals (sender, ThemeDarkRadio) ? ThemeVariant.Dark
+			: ReferenceEquals (sender, ThemeLightRadio) ? ThemeVariant.Light
+			: ThemeVariant.Default;
 		if (Application.Current is not null)
-			Application.Current.RequestedThemeVariant = light ? ThemeVariant.Light : ThemeVariant.Dark;
+			Application.Current.RequestedThemeVariant = v;
 	}
 
 	// ---------- Apply / OK ----------
@@ -1514,8 +1527,15 @@ public partial class PreferencesDialog : Window
 		StoreIntelliSensePanel ();
 		StoreColorThemePanel ();
 		StoreSourceCodePolicies ();
+		StoreThemePanel ();
 		Close ();
 	}
+
+	// Legacy key: "" = System/Default (follows the OS), "Dark", "Light".
+	void StoreThemePanel ()
+		=> SettingsStore.SetString (ThemeKey,
+			ThemeDarkRadio!.IsChecked == true ? "Dark" :
+			ThemeLightRadio!.IsChecked == true ? "Light" : "");
 
 	void OnCancel (object? sender, RoutedEventArgs e) => Close ();
 }
