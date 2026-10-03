@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text;
 using System.Xml.Linq;
 using Avalonia;
 using Avalonia.Layout;
@@ -71,7 +72,7 @@ public partial class PreferencesDialog : Window
 		"general", "markers", "behavior", "intellisense",
 		"colortheme", "codesnippets", "languagebundles",
 		"naming", "standardheader",
-		"vcgeneral",
+		"vcgeneral", "vccommit",
 	};
 
 	string? pendingLanguage;
@@ -110,6 +111,12 @@ public partial class PreferencesDialog : Window
 		LoadNamingPanel ();
 		LoadStandardHeaderPanel ();
 		LoadVcGeneralPanel ();
+		LoadCommitMessagePanel ();
+		foreach (var cb in new[] { CmUseBullets, CmIndentEntries, CmIndent, CmLineSep, CmOneLine, CmMsgNewLine, CmIncludeDirs, CmWrap })
+			if (cb is not null)
+				cb.IsCheckedChanged += (_, _) => UpdateCmPreview ();
+		if (CmHeader is not null)
+			CmHeader.TextChanged += (_, _) => UpdateCmPreview ();
 		GenWordWrap!.IsCheckedChanged += (_, _) => GenWordWrapGlyphs!.IsEnabled = GenWordWrap.IsChecked == true;
 		BhAutoInsertBrace!.IsCheckedChanged += (_, _) => BhSmartSemicolon!.IsEnabled = BhAutoInsertBrace.IsChecked == true;
 		NmAssociate!.IsCheckedChanged += (_, _) => UpdateNamingEnable ();
@@ -1477,6 +1484,91 @@ public partial class PreferencesDialog : Window
 		} catch (Exception ex) { MainWindow.Instance?.Output ("[prefs] vc save failed: " + ex.Message); }
 	}
 
+	// ---------- Version Control → Commit Message Style (global policy) ----------
+	// VersionControlPolicy ([DataItem("VersionControlPolicy")]) wraps a CommitMessageStyle
+	// whose [ItemProperty] fields the GTK widget derives from 8 toggles (see
+	// CommitMessageStylePanelWidget). Stored in the global policy set.
+
+	static string FromCString (string t) => (t ?? "").Replace ("\\t", "\t").Replace ("\\n", "\n");
+	static string ToCString (string t) => (t ?? "").Replace ("\t", "\\t").Replace ("\n", "\\n");
+
+	string cmHeader = "", cmIndent = "", cmFirstFilePrefix = "* ", cmFileSeparator = ":\n* ", cmLastFilePostfix = ": ";
+	int cmLineAlign = 2, cmInterMessageLines = 1;
+	bool cmIncludeDirs, cmWrap = true;
+
+	void LoadCommitMessagePanel ()
+	{
+		var cs = LoadGlobalPolicy ("VersionControlPolicy")?.Element ("CommitMessageStyle");
+		if (cs is not null) {
+			cmHeader = (string?)cs.Element ("Header") ?? cmHeader;
+			cmIndent = (string?)cs.Element ("Indent") ?? cmIndent;
+			cmFirstFilePrefix = (string?)cs.Element ("FirstFilePrefix") ?? cmFirstFilePrefix;
+			cmFileSeparator = (string?)cs.Element ("FileSeparator") ?? cmFileSeparator;
+			cmLastFilePostfix = (string?)cs.Element ("LastFilePostfix") ?? cmLastFilePostfix;
+			if (int.TryParse ((string?)cs.Element ("LineAlign"), out var la)) cmLineAlign = la;
+			if (int.TryParse ((string?)cs.Element ("InterMessageLines"), out var im)) cmInterMessageLines = im;
+			if (bool.TryParse ((string?)cs.Element ("IncludeDirectoryPaths"), out var id)) cmIncludeDirs = id;
+			if (bool.TryParse ((string?)cs.Element ("Wrap"), out var w)) cmWrap = w;
+		}
+		CmHeader!.Text = ToCString (cmHeader.TrimEnd ('\n'));
+		CmUseBullets!.IsChecked = cmFirstFilePrefix.Trim ().Length > 0;
+		CmIndentEntries!.IsChecked = cmIndent.Length > 0;
+		CmIndent!.IsChecked = cmLineAlign != 0;
+		CmLineSep!.IsChecked = cmInterMessageLines != 0;
+		CmMsgNewLine!.IsChecked = cmLastFilePostfix == ":\n";
+		CmOneLine!.IsChecked = cmFileSeparator == ":\n* ";
+		CmIncludeDirs!.IsChecked = cmIncludeDirs;
+		CmWrap!.IsChecked = cmWrap;
+		UpdateCmPreview ();
+		MainWindow.Instance?.Output ($"[prefs-cm] header={cmHeader.Trim().Length} bullet={cmFirstFilePrefix.Trim().Length > 0} lineAlign={cmLineAlign} interLines={cmInterMessageLines} dirs={cmIncludeDirs} wrap={cmWrap}");
+	}
+
+ void StoreCommitMessagePanel ()
+	{
+		// Mirror the widget handlers + UpdateBullets (order matters: prefix before align).
+		cmFirstFilePrefix = CmUseBullets!.IsChecked == true ? "* " : "";
+		cmIndent = CmIndentEntries!.IsChecked == true ? "\t" : "";
+		cmLineAlign = CmIndent!.IsChecked == true ? cmFirstFilePrefix.Length : 0;
+		cmFileSeparator = CmOneLine!.IsChecked == true ? ":\n" + cmFirstFilePrefix : ", ";
+		cmLastFilePostfix = CmMsgNewLine!.IsChecked == true ? ":\n" + new string (' ', cmLineAlign) : ": ";
+		cmInterMessageLines = CmLineSep!.IsChecked == true ? 1 : 0;
+		cmIncludeDirs = CmIncludeDirs!.IsChecked == true;
+		cmWrap = CmWrap!.IsChecked == true;
+		cmHeader = !string.IsNullOrEmpty (CmHeader!.Text) ? FromCString (CmHeader.Text) + "\n\n" : "";
+		StoreGlobalPolicies (("VersionControlPolicy", el => el.Add (
+			new XElement ("CommitMessageStyle",
+				new XElement ("Header", cmHeader),
+				new XElement ("Indent", cmIndent),
+				new XElement ("FirstFilePrefix", cmFirstFilePrefix),
+				new XElement ("FileSeparator", cmFileSeparator),
+				new XElement ("LastFilePostfix", cmLastFilePostfix),
+				new XElement ("LineAlign", cmLineAlign.ToString ()),
+				new XElement ("InterMessageLines", cmInterMessageLines.ToString ()),
+				new XElement ("IncludeDirectoryPaths", cmIncludeDirs ? "True" : "False"),
+				new XElement ("Wrap", cmWrap ? "True" : "False")))));
+	}
+
+	// Approximate preview of the formatted commit message (the GTK uses ChangeLogWriter).
+	void UpdateCmPreview ()
+	{
+		if (CmPreview is null)
+			return;
+		var sb = new StringBuilder ();
+		if (!string.IsNullOrWhiteSpace (CmHeader!.Text))
+			sb.Append (CmHeader.Text).Append ('\n').Append ('\n');
+		var prefix = CmUseBullets!.IsChecked == true ? "* " : "";
+		var ind = CmIndentEntries!.IsChecked == true ? "\t" : "";
+		var sep = CmOneLine!.IsChecked == true ? ":\n" + prefix : ", ";
+		var post = CmMsgNewLine!.IsChecked == true ? ":\n" + new string (' ', CmIndent!.IsChecked == true ? prefix.Length : 0) : ": ";
+		sb.Append ("My changes made additional changes. This is sample documentation.").Append (post)
+			.Append (CmIncludeDirs!.IsChecked == true ? "./somedir/myfile.ext" : "myfile.ext").Append (sep);
+		sb.Append ("My changes made additional changes. This is sample documentation.").Append (post)
+			.Append (CmIncludeDirs.IsChecked == true ? "./yourfile.ext" : "yourfile.ext").Append (sep);
+		sb.Append ("Some additional changes on another file of the project.").Append (post)
+			.Append (CmIncludeDirs.IsChecked == true ? "./otherfile.ext" : "otherfile.ext");
+		CmPreview.Text = sb.ToString ();
+	}
+
 	// ---------- Panel switching (OptionsDialog.SelectPanel) ----------
 	void OnSectionSelected (object? sender, SelectionChangedEventArgs e)
 	{
@@ -1517,6 +1609,7 @@ public partial class PreferencesDialog : Window
 		PanelNaming!.IsVisible = id == "naming";
 		PanelStandardHeader!.IsVisible = id == "standardheader";
 		PanelVcGeneral!.IsVisible = id == "vcgeneral";
+		PanelCommitMessage!.IsVisible = id == "vccommit";
 		PanelPlaceholder!.IsVisible = !functionalPanels.Contains (id);
 
 		HeaderTitle!.Text = node.Label;
@@ -1576,6 +1669,7 @@ public partial class PreferencesDialog : Window
 		StoreColorThemePanel ();
 		StoreSourceCodePolicies ();
 		StoreVcGeneralPanel ();
+		StoreCommitMessagePanel ();
 		StoreThemePanel ();
 		Close ();
 	}

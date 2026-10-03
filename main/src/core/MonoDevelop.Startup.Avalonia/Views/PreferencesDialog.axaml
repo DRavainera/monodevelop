@@ -438,7 +438,26 @@
                          Text="Stored as the StandardHeader entry of the global policy set (Policies/UserDefault.mdpolicy.xml), same as the GTK UI." />
             </StackPanel>
 
-            <!-- ===== Version Control → General (legacy VersionControlGeneralOptionsPanel) ===== -->
+            <!-- ===== Version Control → Commit Message Style (legacy VersionControlPolicyPanel) ===== -->
+            <StackPanel x:Name="PanelCommitMessage" Margin="16" Spacing="6" IsVisible="False">
+              <TextBlock Text="Message header" FontWeight="SemiBold" />
+              <TextBox x:Name="CmHeader" Watermark="(none)" />
+              <CheckBox x:Name="CmUseBullets" Content="Use bullets for each entry" />
+              <CheckBox x:Name="CmIndentEntries" Content="Indent each entry" />
+              <CheckBox x:Name="CmIndent" Content="Align the message text" />
+              <CheckBox x:Name="CmLineSep" Content="Add a blank line between messages" />
+              <CheckBox x:Name="CmOneLine" Content="Add one line per file changed" />
+              <CheckBox x:Name="CmMsgNewLine" Content="Keep the file name and messages on separate lines" />
+              <CheckBox x:Name="CmIncludeDirs" Content="Include file directories" />
+              <CheckBox x:Name="CmWrap" Content="Wrap the lines at 60 characters" />
+              <TextBlock Text="Preview" FontWeight="SemiBold" Margin="0,6,0,0" />
+              <Border BorderBrush="{DynamicResource IdeBorderBrush}" BorderThickness="1" CornerRadius="3" Padding="6">
+                <TextBlock x:Name="CmPreview" TextWrapping="Wrap" FontSize="11" />
+              </Border>
+              <TextBlock Margin="0,6,0,0" Opacity="0.7" FontSize="11" TextWrapping="Wrap"
+                         Text="Stored as the VersionControlPolicy entry of the global policy set, same as the GTK UI." />
+            </StackPanel>
+
             <StackPanel x:Name="PanelVcGeneral" Margin="16" Spacing="8" IsVisible="False">
               <CheckBox x:Name="VcDisableCheck" Content="Disable Version Control globally" />
               <TextBlock Margin="0,6,0,0" Opacity="0.7" FontSize="11" TextWrapping="Wrap"
