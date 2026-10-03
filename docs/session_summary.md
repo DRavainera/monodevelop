@@ -998,3 +998,15 @@ arrancaba clara en SO oscuro); corregido (no pin; refresco vía
 oscuro y `variant=Default`; Dark/Light OK; round-trip con click real OK; H2
 (System persiste como clave ausente) aceptado como equivalente al default legacy.
 Build 0 errores, 53/53 tests, 0 FATAL. **PASA LIMPIO.**
+
+## 2026-10-03 (e) — Preferences: Version Control → General
+
+Panel portado del add-in (`VersionControlGeneralOptionsPanel`): checkbox
+"Disable Version Control globally" que persiste en
+`~/.config/MonoDevelop/9.0/VersionControl.config` (`VersionControlConfiguration`
+vía `XmlDataSerializer`). **QA (§18.5, 2 rondas)**: H1 (ALTO) — el formato
+canónico de la GTK es el **atributo** raíz `<VersionControlConfiguration
+Disabled="True">`, no un elemento; la shell solo leía el elemento (interop
+GTK→shell rota). Corregido: lee atributo primero (fallback elemento) y escribe el
+atributo canónico eliminando el hijo; repositorios preservados. **PASA LIMPIO**.
+Build 0 errores, 53/53 tests.

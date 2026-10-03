@@ -1434,9 +1434,11 @@ public partial class PreferencesDialog : Window
 
 	// ---------- Version Control → General (global config) ----------
 	// VersionControlService persists VersionControlConfiguration with XmlDataSerializer
-	// into ~/.config/MonoDevelop/9.0/VersionControl.config; the Disabled flag is a
-	// [ItemProperty] rendered as a <Disabled> element (StoreAllInElements=false). We edit
-	// only that element, preserving repositories and any other content byte-for-byte.
+	// into ~/.config/MonoDevelop/9.0/VersionControl.config. The Disabled [ItemProperty] is
+	// rendered by the canonical serializer as a ROOT ATTRIBUTE (<VersionControlConfiguration
+	// Disabled="True">); older/hand-written files may use a <Disabled> child element. We
+	// read both (attribute first, matching the GTK reader) and write the canonical attribute,
+	// preserving repositories and any other content.
 
 	static string VcConfigFile => Path.Combine (
 		Environment.GetFolderPath (Environment.SpecialFolder.UserProfile),
@@ -1446,9 +1448,11 @@ public partial class PreferencesDialog : Window
 	{
 		var disabled = false;
 		try {
-			if (File.Exists (VcConfigFile))
-				disabled = XDocument.Load (VcConfigFile).Root?.Element ("Disabled") is { } el
-					&& bool.TryParse (el.Value, out var b) && b;
+			if (File.Exists (VcConfigFile)) {
+				var root = XDocument.Load (VcConfigFile).Root;
+				var raw = (string?)root?.Attribute ("Disabled") ?? (string?)root?.Element ("Disabled");
+				disabled = bool.TryParse (raw, out var b) && b;
+			}
 		} catch { /* unreadable */ }
 		VcDisableCheck!.IsChecked = disabled;
 		MainWindow.Instance?.Output ($"[prefs-vc] disabled={disabled}");
@@ -1465,12 +1469,10 @@ public partial class PreferencesDialog : Window
 				root = new XElement ("VersionControlConfiguration");
 				doc = new XDocument (root);
 			}
-			var value = VcDisableCheck!.IsChecked == true ? "True" : "False";
-			var el = root.Element ("Disabled");
-			if (el is null)
-				root.Add (new XElement ("Disabled", value));
-			else
-				el.Value = value;
+			// Canonical form: root attribute. Drop any legacy child element to avoid a
+			// duplicate that the GTK reader would resolve last.
+			root.SetAttributeValue ("Disabled", VcDisableCheck!.IsChecked == true ? "True" : "False");
+			root.Element ("Disabled")?.Remove ();
 			doc.Save (VcConfigFile);
 		} catch (Exception ex) { MainWindow.Instance?.Output ("[prefs] vc save failed: " + ex.Message); }
 	}
