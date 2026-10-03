@@ -465,6 +465,28 @@
                          Text="Stored as the ChangeLogPolicy entry of the global policy set, same as the GTK UI." />
             </StackPanel>
 
+            <!-- ===== NuGet → Sources (legacy PackageSourcesOptionsPanel) ===== -->
+            <Grid x:Name="PanelNugetSources" Margin="16" RowDefinitions="Auto,*,Auto" IsVisible="False">
+              <TextBlock Grid.Row="0" Text="Package sources" FontWeight="SemiBold" Margin="0,0,0,6" />
+              <ListBox x:Name="NugetSourceList" Grid.Row="1" MinHeight="220" MaxHeight="300"
+                       SelectionChanged="OnNugetSourceSelected" />
+              <StackPanel Grid.Row="2" Spacing="6" Margin="0,8,0,0">
+                <Grid ColumnDefinitions="120,*,Auto">
+                  <TextBox x:Name="NugetSourceName" Watermark="Name" />
+                  <TextBox x:Name="NugetSourceUrl" Grid.Column="1" Margin="6,0,0,0" Watermark="Source URL" />
+                  <Button Grid.Column="2" Content="Add" Margin="6,0,0,0" Click="OnNugetSourceAdd" />
+                </Grid>
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                  <Button Content="Remove" Click="OnNugetSourceRemove" />
+                  <Button Content="Move Up" Click="OnNugetSourceUp" />
+                  <Button Content="Move Down" Click="OnNugetSourceDown" />
+                  <TextBlock Margin="8,0,0,0" VerticalAlignment="Center" Opacity="0.8" x:Name="NugetSourceInfo" />
+                </StackPanel>
+                <TextBlock Opacity="0.7" FontSize="11" TextWrapping="Wrap"
+                           Text="Reads/writes NuGet.Config through NuGet.Configuration Settings (same backend as the GTK UI)." />
+              </StackPanel>
+            </Grid>
+
             <StackPanel x:Name="PanelNugetGeneral" Margin="16" Spacing="8" IsVisible="False">
               <TextBlock Text="Package Restore" FontWeight="SemiBold" />
               <CheckBox x:Name="NugetRestore" Content="Automatically restore packages when opening a solution." />

@@ -15,6 +15,8 @@ using Avalonia.Platform.Storage;
 using Avalonia.Styling;
 using MonoDevelop.Ide.Services;
 using MonoDevelop.Components.Commands;
+using NuGet.Configuration;
+using NuGet.Common;
 
 namespace MonoDevelop.AvaloniaShell.Views;
 
@@ -73,7 +75,7 @@ public partial class PreferencesDialog : Window
 		"colortheme", "codesnippets", "languagebundles",
 		"naming", "standardheader",
 		"vcgeneral", "vccommit", "git", "changelog",
-		"nugetgeneral",
+		"nugetgeneral", "packagesources",
 	};
 
 	string? pendingLanguage;
@@ -114,6 +116,7 @@ public partial class PreferencesDialog : Window
 		LoadVcGeneralPanel ();
 		LoadGitPanel ();
 		LoadNugetGeneralPanel ();
+		LoadNugetSourcesPanel ();
 		SetupCmEditors ();
 		LoadCommitMessagePanel ();
 		LoadChangeLogPanel ();
@@ -1735,6 +1738,82 @@ public partial class PreferencesDialog : Window
 		WriteNested ("PackageManagementSettings", "CheckUpdatedPackagesOnOpeningSolution", NugetUpdates!.IsChecked == true);
 	}
 
+	// ---------- NuGet → Sources (NuGet.Configuration backend) ----------
+	// Reuses Settings/PackageSource like the add-in's RegisteredPackageSourcesViewModel.
+	sealed record NugetSource (string Name, string Url, bool Enabled);
+
+	readonly List<NugetSource> nugetSources = new ();
+
+	void LoadNugetSourcesPanel ()
+	{
+		nugetSources.Clear ();
+		try {
+			var provider = new PackageSourceProvider (Settings.LoadDefaultSettings (root: null));
+			foreach (var ps in provider.LoadPackageSources ())
+				nugetSources.Add (new NugetSource (ps.Name, ps.Source, ps.IsEnabled));
+		} catch (Exception ex) { MainWindow.Instance?.Output ("[prefs] sources load failed: " + ex.Message); }
+		RebuildNugetSourceList ();
+		MainWindow.Instance?.Output ($"[prefs-sources] count={nugetSources.Count}");
+	}
+
+	void RebuildNugetSourceList ()
+	{
+		NugetSourceList!.Items.Clear ();
+		foreach (var s in nugetSources)
+			NugetSourceList.Items.Add (new ListBoxItem { Tag = s, Content = (s.Enabled ? "" : "(disabled) ") + s.Name + "  —  " + s.Url });
+	}
+
+	void OnNugetSourceSelected (object? sender, SelectionChangedEventArgs e)
+	{
+		if (NugetSourceInfo is not null)
+			NugetSourceInfo.Text = (NugetSourceList?.SelectedItem as ListBoxItem)?.Tag is NugetSource s
+				? (s.Enabled ? "Enabled" : "Disabled") : "";
+	}
+
+	void OnNugetSourceAdd (object? sender, RoutedEventArgs e)
+	{
+		var name = NugetSourceName?.Text?.Trim ();
+		var url = NugetSourceUrl?.Text?.Trim ();
+		if (string.IsNullOrEmpty (name) || string.IsNullOrEmpty (url))
+			return;
+		nugetSources.Add (new NugetSource (name!, url!, true));
+		NugetSourceName!.Text = "";
+		NugetSourceUrl!.Text = "";
+		RebuildNugetSourceList ();
+	}
+
+	void OnNugetSourceRemove (object? sender, RoutedEventArgs e)
+	{
+		if (NugetSourceList?.SelectedItem is ListBoxItem { Tag: NugetSource s }) {
+			nugetSources.Remove (s);
+			RebuildNugetSourceList ();
+		}
+	}
+
+	void MoveNugetSource (int delta)
+	{
+		if (NugetSourceList?.SelectedItem is not ListBoxItem { Tag: NugetSource s })
+			return;
+		int i = nugetSources.IndexOf (s), j = i + delta;
+		if (i < 0 || j < 0 || j >= nugetSources.Count)
+			return;
+		nugetSources.RemoveAt (i);
+		nugetSources.Insert (j, s);
+		RebuildNugetSourceList ();
+	}
+
+	void OnNugetSourceUp (object? sender, RoutedEventArgs e) => MoveNugetSource (-1);
+	void OnNugetSourceDown (object? sender, RoutedEventArgs e) => MoveNugetSource (1);
+
+	void StoreNugetSourcesPanel ()
+	{
+		try {
+			var provider = new PackageSourceProvider (Settings.LoadDefaultSettings (root: null));
+			provider.SavePackageSources (nugetSources
+				.Select (s => new PackageSource (s.Name, s.Url) { IsEnabled = s.Enabled }).ToList ());
+		} catch (Exception ex) { MainWindow.Instance?.Output ("[prefs] sources save failed: " + ex.Message); }
+	}
+
 	// ---------- Panel switching (OptionsDialog.SelectPanel) ----------
 	void OnSectionSelected (object? sender, SelectionChangedEventArgs e)
 	{
@@ -1778,6 +1857,7 @@ public partial class PreferencesDialog : Window
 		PanelCommitMessage!.IsVisible = id == "vccommit";
 		PanelGit!.IsVisible = id == "git";
 		PanelNugetGeneral!.IsVisible = id == "nugetgeneral";
+		PanelNugetSources!.IsVisible = id == "packagesources";
 		PanelChangeLog!.IsVisible = id == "changelog";
 		PanelPlaceholder!.IsVisible = !functionalPanels.Contains (id);
 
@@ -1842,6 +1922,7 @@ public partial class PreferencesDialog : Window
 		StoreChangeLogPanel ();
 		StoreGitPanel ();
 		StoreNugetGeneralPanel ();
+		StoreNugetSourcesPanel ();
 		StoreThemePanel ();
 		Close ();
 	}
