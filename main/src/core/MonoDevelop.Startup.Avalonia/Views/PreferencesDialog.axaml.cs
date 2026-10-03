@@ -75,7 +75,7 @@ public partial class PreferencesDialog : Window
 		"colortheme", "codesnippets", "languagebundles",
 		"naming", "standardheader",
 		"vcgeneral", "vccommit", "git", "changelog",
-		"nugetgeneral", "packagesources", "debugger", "netcore", "runtimes",
+		"nugetgeneral", "packagesources", "debugger", "netcore", "runtimes", "perfdiag",
 	};
 
 	string? pendingLanguage;
@@ -120,6 +120,7 @@ public partial class PreferencesDialog : Window
 		LoadDebuggerPanel ();
 		LoadNetCorePanel ();
 		LoadRuntimesPanel ();
+		LoadPerfDiagPanel ();
 		SetupCmEditors ();
 		LoadCommitMessagePanel ();
 		LoadChangeLogPanel ();
@@ -158,7 +159,7 @@ public partial class PreferencesDialog : Window
 				Leaf ("netcore", ".NET Core", "md-platform-netcore"),
 			}),
 			Leaf ("debugger", "Debugger", "md-prefs-generic"),
-			Leaf ("gtkdesigner", "GTK# Designer", "md-prefs-generic")),
+			Leaf ("uidesigner", "UI Designer", "md-prefs-generic")),
 		Cat ("Text Editor",
 			Leaf ("general", "General", "md-prefs-generic"),
 			Leaf ("markers", "Markers and Rulers", "md-prefs-generic"),
@@ -1965,6 +1966,27 @@ public partial class PreferencesDialog : Window
 		}
 	}
 
+	// ---------- Performance Diagnostics → General (OutputPath key) ----------
+
+	void LoadPerfDiagPanel ()
+	{
+		PerfDiagPath!.Text = SettingsStore.GetString ("PerformanceDiagnosticsAddIn.OutputPath")
+			?? Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile), "Desktop");
+		MainWindow.Instance?.Output ($"[prefs-perfdiag] path={PerfDiagPath.Text}");
+	}
+
+	async void OnPerfDiagBrowse (object? sender, RoutedEventArgs e)
+	{
+		if (TopLevel.GetTopLevel (this)?.StorageProvider is not { } sp)
+			return;
+		var dirs = await sp.OpenFolderPickerAsync (new Avalonia.Platform.Storage.FolderPickerOpenOptions { AllowMultiple = false, Title = "Select the output directory" });
+		if (dirs.Count > 0 && dirs [0].TryGetLocalPath () is { } p)
+			PerfDiagPath!.Text = p;
+	}
+
+	void StorePerfDiagPanel ()
+		=> SettingsStore.SetString ("PerformanceDiagnosticsAddIn.OutputPath", NullIfEmpty (PerfDiagPath!.Text?.Trim ()));
+
 	// ---------- Panel switching (OptionsDialog.SelectPanel) ----------
 	void OnSectionSelected (object? sender, SelectionChangedEventArgs e)
 	{
@@ -2012,6 +2034,7 @@ public partial class PreferencesDialog : Window
 		PanelDebugger!.IsVisible = id == "debugger";
 		PanelNetCore!.IsVisible = id == "netcore";
 		PanelRuntimes!.IsVisible = id == "runtimes";
+		PanelPerfDiag!.IsVisible = id == "perfdiag";
 		PanelChangeLog!.IsVisible = id == "changelog";
 		PanelPlaceholder!.IsVisible = !functionalPanels.Contains (id);
 
@@ -2080,6 +2103,7 @@ public partial class PreferencesDialog : Window
 		StoreDebuggerPanel ();
 		StoreNetCorePanel ();
 		StoreRuntimesPanel ();
+		StorePerfDiagPanel ();
 		StoreThemePanel ();
 		Close ();
 	}

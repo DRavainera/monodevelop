@@ -487,7 +487,20 @@
               </StackPanel>
             </Grid>
 
-            <!-- ===== Projects → .NET Runtimes (legacy MonoRuntimePanel) ===== -->
+            <!-- ===== Performance Diagnostics → General (legacy GlobalOptionsPanel) ===== -->
+            <StackPanel x:Name="PanelPerfDiag" Margin="16" Spacing="8" IsVisible="False">
+              <TextBlock Text="General" FontWeight="SemiBold" />
+              <Grid ColumnDefinitions="140,*">
+                <TextBlock Text="Output directory:" VerticalAlignment="Center" />
+                <Grid Grid.Column="1" ColumnDefinitions="*,Auto">
+                  <TextBox x:Name="PerfDiagPath" Watermark="~/Desktop" />
+                  <Button Grid.Column="1" Content="Browse…" Margin="6,0,0,0" Click="OnPerfDiagBrowse" />
+                </Grid>
+              </Grid>
+              <TextBlock Opacity="0.7" FontSize="11" TextWrapping="Wrap"
+                         Text="Stored with the legacy PerformanceDiagnosticsAddIn.OutputPath key." />
+            </StackPanel>
+
             <StackPanel x:Name="PanelRuntimes" Margin="16" Spacing="8" IsVisible="False">
               <TextBlock x:Name="RuntimeRunning" FontWeight="SemiBold" TextWrapping="Wrap" />
               <ListBox x:Name="RuntimesList" MinHeight="160" MaxHeight="260" />

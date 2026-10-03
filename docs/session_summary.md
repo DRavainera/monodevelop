@@ -1063,3 +1063,12 @@ runtimes de Core (`Runtime.SystemAssemblyService.GetTargetRuntimes`), marca
 add-ins que registra las fábricas de runtime, la consulta va en try/catch y cae al
 .NET detectado en disco (`~/.dotnet/dotnet`), que es el único runtime del host.
 QA: 0 errores, 53/53, `count=1 selected=__current`, 0 FATAL.
+
+## 2026-10-03 (k) — UI Designer (renombrado) + Performance Diagnostics
+
+- El nodo **"GTK# Designer"** pasa a **"UI Designer"** (id `uidesigner`), ya que
+  la sección no depende de GTK en la shell.
+- **Performance Diagnostics → General**: portado `GlobalOptionsPanel`
+  (directorio de salida) con la clave legacy
+  `PerformanceDiagnosticsAddIn.OutputPath` (default `~/Desktop`) + Browse.
+QA: 0 errores, 53/53, ambos paneles `placeholder=False`, 0 FATAL.
