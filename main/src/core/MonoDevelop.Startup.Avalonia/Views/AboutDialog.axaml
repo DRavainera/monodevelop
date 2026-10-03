@@ -14,9 +14,9 @@
     <Border x:Name="ChromeRow" Grid.Row="0" Classes="dialogchrome" Background="{DynamicResource IdeChromeBgBrush}"
             BorderBrush="{DynamicResource IdeBorderBrush}" BorderThickness="0,0,0,1">
       <Grid ColumnDefinitions="*,Auto">
-        <!-- <TextBlock Text="About MonoDevelop" Margin="12,6" FontWeight="SemiBold"
+        <TextBlock Text="About MonoDevelop" Margin="12,6" FontWeight="SemiBold"
                    Foreground="{DynamicResource IdeFgBrush}" />
-        <Button Grid.Column="1" Classes="caption captionclose" Content="&#x2715;" Click="OnClose" /> -->
+        <Button Grid.Column="1" Classes="caption captionclose" Content="&#x2715;" Click="OnClose" />
       </Grid>
     </Border>
 
@@ -55,7 +55,7 @@
                      Foreground="{DynamicResource IdeFgBrush}" />
           <Separator Margin="0,8" />
           <TextBlock Text="Loaded Assemblies" FontWeight="Bold" Foreground="{DynamicResource IdeFgBrush}" />
-          <TextBlock x:Name="AssembliesText" FontFamily="Consolas,DejaVu Sans Mono,monospace" FontSize="11"
+          <TextBlock x:Name="AssembliesText" FontSize="11"
                      TextWrapping="Wrap" Margin="0,4,0,0" Foreground="{DynamicResource IdeFgBrush}" />
         </StackPanel>
       </ScrollViewer>
