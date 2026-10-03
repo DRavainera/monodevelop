@@ -274,6 +274,12 @@ El bucle de migración Gtk → Avalonia continúa por módulos (detalle por hito
   nuevo **Build → "Errors and Warnings"** (`BuildMessagePanel`). QA §18.5 en 2
   rondas hasta aprobar limpio. Build 0 errores, 53/53 tests. Detalle en
   `docs/interfaz-plan.md` § M27.
+- **M28 completado (2026-10-02)**: fix de la **doble barra de título** de los
+  diálogos (`DialogWindow.Apply` buscaba el `dialogchrome` en el contenido ya
+  desprendido) y **portados los paneles del Text Editor** del add-in
+  SourceEditor2 a Avalonia (`general`, `markers`, `behavior`, `intellisense`)
+  con las mismas claves legacy. QA §18.5 en 3 rondas hasta limpio. Build 0
+  errores, 53/53 tests. Detalle en `docs/interfaz-plan.md` § M28.
 
 Nota operativa: el binario de la UI Avalonia es
 `src/core/MonoDevelop.Startup.Avalonia/bin/Debug/net10.0/MonoDevelop.AvaloniaShell.dll`;

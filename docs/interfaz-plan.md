@@ -2174,3 +2174,66 @@ Tester QA Senior: ronda 1 → 4 hallazgos menores (idioma como sección propia,
 subpaneles omitidos, F# ausente, dead code) corregidos; ronda 2 → **PASA
 limpio** (0 bloqueantes/mayores/menores). Build 0 errores; 53/53 tests. Logs
 `~/opencode/prefs_qa_{tree,buildmessages}.log`, captura `prefs_tree.png`.
+
+## M28 — Fix de la doble barra de título + paneles del Text Editor (add-in SourceEditor2)
+
+Continuación de M27 (2026-10-02).
+
+### Fix: doble barra de título en los diálogos
+
+`Controls/DialogWindow.cs` (`Apply`) buscaba la fila XAML `Classes="dialogchrome"`
+en `LogicalExtensions.GetLogicalDescendants(window)` **después** de
+`window.Content = null`; al estar el contenido ya desprendido, no la encontraba y
+añadía una **segunda** barra de título (uno de los síntomas que veía el usuario:
+dos bandas de chrome con texto en el top del diálogo). Fix: recorrer el árbol
+lógico del contenido desprendido (`oldContent`). Afecta a todos los diálogos que
+usan `DialogWindow.Apply` (About/NewSolution/DirtyFiles/FindInFiles/AddinManager/
+Preferences). Verificado por píxeles (una sola banda de título) y
+`_NET_FRAME_EXTENTS` ausente (el WM no dibuja marco).
+
+### Integración de add-in: paneles del Text Editor
+
+Los paneles de Preferences provistos por el add-in `MonoDevelop.SourceEditor2`
+son widgets GTK (`Gtk.Bin`), por lo que no se pueden hostear en Avalonia; se
+**portan** a Avalonia leyendo/escribiendo las **mismas claves** de
+`MonoDevelopProperties.xml` que usa el add-in vía `DefaultSourceEditorOptions`/
+`EditorPreferences` (así ambas UIs comparten los settings). Portados:
+
+- **General** (`general`, legacy `GeneralOptionsPanel`): `LineEndingConversion`,
+  `ShowFoldMargin`, `DefaultRegionsFolding`, `DefaultCommentFolding`,
+  `WordWrapStyle` (flags `WordWrap`/`VisibleGlyphs`).
+- **Markers and Rulers** (`markers`, legacy `MarkerPanel`):
+  `ShowLineNumberMargin`, `ShowRuler`, `HighlightCaretLine`,
+  `HighlightMatchingBracket`, `EnableHighlightUsages`, `ShowBlockStructure`,
+  `EnableQuickDiff`, `ShowProcedureLineSeparators`, `EnableAnimations`,
+  `ShowWhitespaces`, `IncludeWhitespaces`.
+- **Behavior** (`behavior`, legacy `BehaviorPanel`): `IndentStyle`,
+  `WordNavigationStyle`, `AutoInsertMatchingBracket`, `SmartSemicolonPlacement`,
+  `TabIsReindent`, `SmartBackspace`, `AutoFormatDocumentOnSave`,
+  `AutoSetPatternCasing`, `EnableSelectionWrappingKeys`,
+  `GenerateFormattingUndoStep`.
+- **IntelliSense** (`intellisense`, legacy `CompletionOptionsPanel`):
+  `EnableAutoCodeCompletion`, `AddImportedItemsToCompletionList`,
+  `IncludeKeywordsInCompletionList`, `IncludeCodeSnippetsInCompletionList`,
+  `ForceCompletionSuggestionMode`.
+
+Los `[Flags]` enums se serializan como el `EnumConverter` legacy: el compuesto
+`IncludeWhitespaces.All` se escribe/lee como `"All"`, `"None"` si vacío, y se
+preservan miembros válidos fuera del conjunto gestionado (p.ej.
+`WordWrapStyles.AutoIndent`).
+
+### QA (§18.5, 3 rondas)
+
+Tester QA Senior: barra de título **aprobada**; paneles aprobados con hallazgos
+H1/H2 (`IncludeWhitespaces`: no reconocía `"All"` ni el default `All`) y H3
+(`SetFlag` descartaba `AutoIndent`), **todos corregidos** y re-verificados con
+probe real de `EnumConverter`. Build 0 errores; 53/53 tests; 4 paneles
+`placeholder=False`, 0 FATAL. Logs `~/opencode/prefs_qa_{general,markers,behavior,intellisense}.log`.
+
+### Pendiente
+
+Resto de paneles de add-in (Source Code naming/formatting/header, Version
+Control, NuGet, .NET Runtimes, SDK Locations/.NET Core, Debugger, GTK# Designer,
+Performance, F#, Color Theme, Code Snippets, Language Bundles, Source Analysis,
+XML Schemas) siguen como placeholder con label/icono correctos; se portarán por
+módulos igual que el Text Editor.

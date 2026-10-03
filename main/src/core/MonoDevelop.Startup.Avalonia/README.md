@@ -347,8 +347,11 @@ comparar la UI contra la legacy GTK en vivo (ver bitácoras en
   (`MonoDevelopProperties.xml`, `Custom.kb.xml`, `MonoDevelop-tools.xml`):
   Visual Style (tema + idioma), Author, Key Bindings, Fonts, Updates, Tasks,
   External Tools, Load/Save, Build, **Errors and Warnings** (`BuildMessagePanel`),
-  Feedback y Maintenance. El resto (paneles de add-in) figura en el árbol con
-  label/icono pero como placeholder hasta portar su stack.
+  Feedback, Maintenance y el grupo **Text Editor** portado del add-in
+  SourceEditor2 (General, Markers and Rulers, Behavior, IntelliSense) con las
+  mismas claves `DefaultSourceEditorOptions`/`EditorPreferences`. El resto
+  (paneles de add-in) figura en el árbol con label/icono pero como placeholder
+  hasta portar su stack.
 - **Persistencia de la sesión de debug**: breakpoints, watches (pad + pins
   del editor) y config activa viven en `<sln>.userprefs` — los breakpoints
   con el formato Mono.Debugging (`MonoDevelop.Debugger/WatchService.cs`

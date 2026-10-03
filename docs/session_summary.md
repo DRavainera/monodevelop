@@ -818,3 +818,41 @@ documentada.
 **Cierre**: documentación M27 en `interfaz-plan.md`/`migration-status-report.md`
 (+ README del shell) y commit+push.
 
+## 2026-10-02 (c) — M28: fix doble barra de título + paneles Text Editor (add-in SourceEditor2)
+
+**Fix de la doble barra de título**: `DialogWindow.Apply` buscaba la fila XAML
+`dialogchrome` en `window` **después** de `window.Content = null`, no la
+encontraba y añadía una barra propia → dos barras. Fix: recorrer
+`LogicalExtensions.GetLogicalDescendants(oldContent)`. Afecta a todos los
+diálogos con `DialogWindow.Apply`. Verificado por píxeles (una sola banda) y
+`_NET_FRAME_EXTENTS` ausente.
+
+**Integración del add-in SourceEditor2**: sus paneles son widgets GTK, no
+hosteables en Avalonia → se **portan** leyendo/escribiendo las mismas claves de
+`MonoDevelopProperties.xml` que `DefaultSourceEditorOptions`/`EditorPreferences`:
+- `general` (GeneralOptionsPanel): LineEndingConversion/ShowFoldMargin/
+  DefaultRegionsFolding/DefaultCommentFolding/WordWrapStyle.
+- `markers` (MarkerPanel): ShowLineNumberMargin/ShowRuler/HighlightCaretLine/
+  HighlightMatchingBracket/EnableHighlightUsages/ShowBlockStructure/
+  EnableQuickDiff/ShowProcedureLineSeparators/EnableAnimations/ShowWhitespaces/
+  IncludeWhitespaces.
+- `behavior` (BehaviorPanel): IndentStyle/WordNavigationStyle/
+  AutoInsertMatchingBracket/SmartSemicolonPlacement/TabIsReindent/SmartBackspace/
+  AutoFormatDocumentOnSave/AutoSetPatternCasing/EnableSelectionWrappingKeys/
+  GenerateFormattingUndoStep.
+- `intellisense` (CompletionOptionsPanel): EnableAutoCodeCompletion/
+  AddImportedItemsToCompletionList/IncludeKeywordsInCompletionList/
+  IncludeCodeSnippetsInCompletionList/ForceCompletionSuggestionMode.
+`[Flags]` se serializa como el `EnumConverter` legacy (`All`/`None`/lista) y se
+preservan miembros válidos fuera del conjunto gestionado (p.ej.
+`WordWrapStyles.AutoIndent`).
+
+**QA (§18.5, 3 rondas)**: barra de título aprobada; paneles aprobados con H1/H2
+(`IncludeWhitespaces` no reconocía `"All"`/default) y H3 (se descartaba
+`AutoIndent`), corregidos y re-verificados con probe real de `EnumConverter`.
+Build 0 errores; tests **53/53**; 4 paneles `placeholder=False`, 0 FATAL.
+
+**Cierre**: documentación M28 en `interfaz-plan.md`/`migration-status-report.md`
+(+ README) y commit+push. Deuda: el resto de paneles de add-in siguen como
+placeholder con label/icono, a portar por módulos.
+

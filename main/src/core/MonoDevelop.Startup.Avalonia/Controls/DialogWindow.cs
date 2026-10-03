@@ -215,10 +215,12 @@ public class DialogWindow : Window
 		var frameDock = new DockPanel { LastChildFill = true };
 		frameDock.Children.Add (frameContentHost);
 
-		// Reuse the dialog's own title row as the drag handle when tagged. At Apply
-		// time the window is not attached yet, so walk the LOGICAL tree manually.
+		// Reuse the dialog's own title row as the drag handle when tagged. The
+		// content was just detached from the window, so walk the LOGICAL tree of
+		// the detached content (walking the window would find nothing and add a
+		// SECOND title row on top of the XAML one).
 		Border? ownTitle = null;
-		foreach (var d in LogicalExtensions.GetLogicalDescendants (window)) {
+		foreach (var d in LogicalExtensions.GetLogicalDescendants (oldContent)) {
 			if (d is Border b && b.Classes.Contains ("dialogchrome")) {
 				ownTitle = b;
 				break;

@@ -65,6 +65,8 @@ public partial class PreferencesDialog : Window
 	static readonly HashSet<string> functionalPanels = new () {
 		"style", "author", "keybindings", "fonts", "updates", "tasks",
 		"externaltools", "loadsave", "build", "buildmessages", "feedback", "maintenance",
+		// Text editor group (ported from the SourceEditor2 add-in panels, same keys).
+		"general", "markers", "behavior", "intellisense",
 	};
 
 	string? pendingLanguage;
@@ -93,6 +95,12 @@ public partial class PreferencesDialog : Window
 		LoadBuildPanel ();
 		LoadBuildMessagesPanel ();
 		LoadMaintenancePanel ();
+		LoadGeneralPanel ();
+		LoadMarkersPanel ();
+		LoadBehaviorPanel ();
+		LoadIntelliSensePanel ();
+		GenWordWrap!.IsCheckedChanged += (_, _) => GenWordWrapGlyphs!.IsEnabled = GenWordWrap.IsChecked == true;
+		BhAutoInsertBrace!.IsCheckedChanged += (_, _) => BhSmartSemicolon!.IsEnabled = BhAutoInsertBrace.IsChecked == true;
 		BuildSectionTree ();
 		// Default selection: Visual Style (the first functional panel), like the GTK
 		// dialog opens on the first selectable section.
@@ -660,8 +668,187 @@ public partial class PreferencesDialog : Window
 		SettingsStore.SetBool ("MonoDevelop.EnableAutomatedTesting", MtAutomatedTesting!.IsChecked == true);
 	}
 
-	// ---------- Panel switching (OptionsDialog.SelectPanel) ----------
+	// ---------- Text editor panels (ported from the SourceEditor2 add-in) ----------
+	// The GTK option panels store through DefaultSourceEditorOptions / EditorPreferences,
+	// which are ConfigurationProperty backed and end up in MonoDevelopProperties.xml under
+	// these keys. Reading/writing the raw keys keeps both UIs sharing the settings.
 
+	// The legacy EnumConverter writes the composite name when all members of a [Flags]
+	// enum are set: IncludeWhitespaces.All == Space|Tab|LineEndings serializes as
+	// "All" (verified with .NET 10 EnumConverter). Handle it on read and write.
+	static readonly string[] IncludeWhitespaceMembers = { "Space", "Tab", "LineEndings" };
+	static readonly string[] WordWrapMembers = { "WordWrap", "VisibleGlyphs" };
+
+	static bool Flag (string key, string flag)
+	{
+		foreach (var f in (SettingsStore.GetString (key) ?? "").Split (',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)) {
+			if (f.Equals (flag, StringComparison.OrdinalIgnoreCase))
+				return true;
+			// "All" implies every member of the flags enum.
+			if (f.Equals ("All", StringComparison.OrdinalIgnoreCase))
+				return true;
+		}
+		return false;
+	}
+
+	// Reads/writes a [Flags] enum the way the legacy EnumConverter does: expand a
+	// composite "All" into its members so a single flag can be toggled, preserve any
+	// valid member that is not in `order` (e.g. WordWrapStyles.AutoIndent), and
+	// re-emit the composite name when every known member is back on.
+	static void SetFlag (string key, string flag, bool on, string[] order, bool hasAll)
+	{
+		var members = new HashSet<string> (StringComparer.OrdinalIgnoreCase);
+		var extras = new List<string> ();
+		foreach (var f in (SettingsStore.GetString (key) ?? "").Split (',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)) {
+			if (hasAll && f.Equals ("All", StringComparison.OrdinalIgnoreCase)) {
+				foreach (var m in order)
+					members.Add (m);
+			} else if (!f.Equals ("None", StringComparison.OrdinalIgnoreCase)) {
+				members.Add (f);
+				if (!order.Any (o => o.Equals (f, StringComparison.OrdinalIgnoreCase)))
+					extras.Add (f);
+			}
+		}
+		if (on) members.Add (flag); else members.Remove (flag);
+
+		var parts = order.Where (members.Contains).ToList ();
+		foreach (var e in extras)
+			if (!e.Equals (flag, StringComparison.OrdinalIgnoreCase) && !parts.Any (p => p.Equals (e, StringComparison.OrdinalIgnoreCase)))
+				parts.Add (e);
+
+		if (parts.Count == 0)
+			SettingsStore.SetString (key, "None");
+		else if (hasAll && extras.Count == 0 && order.All (members.Contains))
+			SettingsStore.SetString (key, "All");
+		else
+			SettingsStore.SetString (key, string.Join (", ", parts));
+	}
+
+	// General: legacy GeneralOptionsPanel.
+	void LoadGeneralPanel ()
+	{
+		var conv = SettingsStore.GetString ("LineEndingConversion") ?? "LeaveAsIs";
+		GenLineEndingsCombo!.SelectedIndex = conv switch { "Ask" => 0, "ConvertAlways" => 2, _ => 1 };
+		GenShowFoldMargin!.IsChecked = SettingsStore.GetBool ("ShowFoldMargin", true);
+		GenDefaultRegionsFolding!.IsChecked = SettingsStore.GetBool ("DefaultRegionsFolding", false);
+		GenDefaultCommentFolding!.IsChecked = SettingsStore.GetBool ("DefaultCommentFolding", true);
+		GenWordWrap!.IsChecked = Flag ("WordWrapStyle", "WordWrap");
+		GenWordWrapGlyphs!.IsChecked = Flag ("WordWrapStyle", "VisibleGlyphs");
+		GenWordWrapGlyphs.IsEnabled = GenWordWrap.IsChecked == true;
+	}
+
+	void StoreGeneralPanel ()
+	{
+		SettingsStore.SetString ("LineEndingConversion", GenLineEndingsCombo!.SelectedIndex switch {
+			0 => "Ask",
+			2 => "ConvertAlways",
+			_ => "LeaveAsIs",
+		});
+		SettingsStore.SetBool ("ShowFoldMargin", GenShowFoldMargin!.IsChecked == true);
+		SettingsStore.SetBool ("DefaultRegionsFolding", GenDefaultRegionsFolding!.IsChecked == true);
+		SettingsStore.SetBool ("DefaultCommentFolding", GenDefaultCommentFolding!.IsChecked == true);
+		SetFlag ("WordWrapStyle", "WordWrap", GenWordWrap!.IsChecked == true, WordWrapMembers, false);
+		SetFlag ("WordWrapStyle", "VisibleGlyphs", GenWordWrapGlyphs!.IsChecked == true, WordWrapMembers, false);
+	}
+
+	// Markers and rulers: legacy MarkerPanel.
+	void LoadMarkersPanel ()
+	{
+		MkShowLineNumbers!.IsChecked = SettingsStore.GetBool ("ShowLineNumberMargin", true);
+		MkShowRuler!.IsChecked = SettingsStore.GetBool ("ShowRuler", true);
+		MkHighlightCurrentLine!.IsChecked = SettingsStore.GetBool ("HighlightCaretLine", false);
+		MkHighlightMatchingBracket!.IsChecked = SettingsStore.GetBool ("HighlightMatchingBracket", true);
+		MkHighlightUsages!.IsChecked = SettingsStore.GetBool ("EnableHighlightUsages", true);
+		MkDrawIndentMarkers!.IsChecked = SettingsStore.GetBool ("ShowBlockStructure", true);
+		MkEnableQuickDiff!.IsChecked = SettingsStore.GetBool ("EnableQuickDiff", false);
+		MkProcedureSeparators!.IsChecked = SettingsStore.GetBool ("ShowProcedureLineSeparators", false);
+		MkEnableAnimations!.IsChecked = SettingsStore.GetBool ("EnableAnimations", true);
+		var ws = SettingsStore.GetString ("ShowWhitespaces") ?? "Never";
+		MkShowWhitespacesCombo!.SelectedIndex = ws switch { "Selection" => 1, "Always" => 2, _ => 0 };
+		// Legacy default is IncludeWhitespaces.All (every member on).
+		var includeRaw = SettingsStore.GetString ("IncludeWhitespaces");
+		MkIncludeSpaces!.IsChecked = includeRaw is null || Flag ("IncludeWhitespaces", "Space");
+		MkIncludeTabs!.IsChecked = includeRaw is null || Flag ("IncludeWhitespaces", "Tab");
+		MkIncludeLineEndings!.IsChecked = includeRaw is null || Flag ("IncludeWhitespaces", "LineEndings");
+	}
+
+	void StoreMarkersPanel ()
+	{
+		SettingsStore.SetBool ("ShowLineNumberMargin", MkShowLineNumbers!.IsChecked == true);
+		SettingsStore.SetBool ("ShowRuler", MkShowRuler!.IsChecked == true);
+		SettingsStore.SetBool ("HighlightCaretLine", MkHighlightCurrentLine!.IsChecked == true);
+		SettingsStore.SetBool ("HighlightMatchingBracket", MkHighlightMatchingBracket!.IsChecked == true);
+		SettingsStore.SetBool ("EnableHighlightUsages", MkHighlightUsages!.IsChecked == true);
+		SettingsStore.SetBool ("ShowBlockStructure", MkDrawIndentMarkers!.IsChecked == true);
+		SettingsStore.SetBool ("EnableQuickDiff", MkEnableQuickDiff!.IsChecked == true);
+		SettingsStore.SetBool ("ShowProcedureLineSeparators", MkProcedureSeparators!.IsChecked == true);
+		SettingsStore.SetBool ("EnableAnimations", MkEnableAnimations!.IsChecked == true);
+		SettingsStore.SetString ("ShowWhitespaces", MkShowWhitespacesCombo!.SelectedIndex switch {
+			1 => "Selection",
+			2 => "Always",
+			_ => "Never",
+		});
+		SetFlag ("IncludeWhitespaces", "Space", MkIncludeSpaces!.IsChecked == true, IncludeWhitespaceMembers, true);
+		SetFlag ("IncludeWhitespaces", "Tab", MkIncludeTabs!.IsChecked == true, IncludeWhitespaceMembers, true);
+		SetFlag ("IncludeWhitespaces", "LineEndings", MkIncludeLineEndings!.IsChecked == true, IncludeWhitespaceMembers, true);
+	}
+
+	// Behavior: legacy BehaviorPanel.
+	void LoadBehaviorPanel ()
+	{
+		var indent = SettingsStore.GetString ("IndentStyle") ?? "Smart";
+		BhIndentCombo!.SelectedIndex = indent switch { "None" => 0, "Auto" => 1, _ => 2 };
+		var wordNav = SettingsStore.GetString ("WordNavigationStyle") ?? "Windows";
+		BhWordNavigationCombo!.SelectedIndex = wordNav == "Unix" ? 0 : 1;
+		BhAutoInsertBrace!.IsChecked = SettingsStore.GetBool ("AutoInsertMatchingBracket", true);
+		BhSmartSemicolon!.IsChecked = SettingsStore.GetBool ("SmartSemicolonPlacement", false);
+		BhSmartSemicolon.IsEnabled = BhAutoInsertBrace.IsChecked == true;
+		BhTabAsReindent!.IsChecked = SettingsStore.GetBool ("TabIsReindent", false);
+		BhSmartBackspace!.IsChecked = SettingsStore.GetBool ("SmartBackspace", true);
+		BhFormatOnSave!.IsChecked = SettingsStore.GetBool ("AutoFormatDocumentOnSave", false);
+		BhAutoPatternCasing!.IsChecked = SettingsStore.GetBool ("AutoSetPatternCasing", false);
+		BhSelectionSurrounding!.IsChecked = SettingsStore.GetBool ("EnableSelectionWrappingKeys", false);
+		BhFormattingUndo!.IsChecked = SettingsStore.GetBool ("GenerateFormattingUndoStep", true);
+	}
+
+	void StoreBehaviorPanel ()
+	{
+		SettingsStore.SetString ("IndentStyle", BhIndentCombo!.SelectedIndex switch {
+			0 => "None",
+			1 => "Auto",
+			_ => "Smart",
+		});
+		SettingsStore.SetString ("WordNavigationStyle", BhWordNavigationCombo!.SelectedIndex == 0 ? "Unix" : "Windows");
+		SettingsStore.SetBool ("AutoInsertMatchingBracket", BhAutoInsertBrace!.IsChecked == true);
+		SettingsStore.SetBool ("SmartSemicolonPlacement", BhSmartSemicolon!.IsChecked == true);
+		SettingsStore.SetBool ("TabIsReindent", BhTabAsReindent!.IsChecked == true);
+		SettingsStore.SetBool ("SmartBackspace", BhSmartBackspace!.IsChecked == true);
+		SettingsStore.SetBool ("AutoFormatDocumentOnSave", BhFormatOnSave!.IsChecked == true);
+		SettingsStore.SetBool ("AutoSetPatternCasing", BhAutoPatternCasing!.IsChecked == true);
+		SettingsStore.SetBool ("EnableSelectionWrappingKeys", BhSelectionSurrounding!.IsChecked == true);
+		SettingsStore.SetBool ("GenerateFormattingUndoStep", BhFormattingUndo!.IsChecked == true);
+	}
+
+	// IntelliSense: legacy CompletionOptionsPanel.
+	void LoadIntelliSensePanel ()
+	{
+		IsAutoCodeCompletion!.IsChecked = SettingsStore.GetBool ("EnableAutoCodeCompletion", true);
+		IsShowImports!.IsChecked = SettingsStore.GetBool ("AddImportedItemsToCompletionList", false);
+		IsIncludeKeywords!.IsChecked = SettingsStore.GetBool ("IncludeKeywordsInCompletionList", true);
+		IsIncludeSnippets!.IsChecked = SettingsStore.GetBool ("IncludeCodeSnippetsInCompletionList", true);
+		IsSuggestionMode!.IsChecked = SettingsStore.GetBool ("ForceCompletionSuggestionMode", false);
+	}
+
+	void StoreIntelliSensePanel ()
+	{
+		SettingsStore.SetBool ("EnableAutoCodeCompletion", IsAutoCodeCompletion!.IsChecked == true);
+		SettingsStore.SetBool ("AddImportedItemsToCompletionList", IsShowImports!.IsChecked == true);
+		SettingsStore.SetBool ("IncludeKeywordsInCompletionList", IsIncludeKeywords!.IsChecked == true);
+		SettingsStore.SetBool ("IncludeCodeSnippetsInCompletionList", IsIncludeSnippets!.IsChecked == true);
+		SettingsStore.SetBool ("ForceCompletionSuggestionMode", IsSuggestionMode!.IsChecked == true);
+	}
+
+	// ---------- Panel switching (OptionsDialog.SelectPanel) ----------
 	void OnSectionSelected (object? sender, SelectionChangedEventArgs e)
 	{
 		var node = SectionTree?.SelectedItem switch {
@@ -691,6 +878,10 @@ public partial class PreferencesDialog : Window
 		PanelBuild!.IsVisible = id == "build";
 		PanelBuildMessages!.IsVisible = id == "buildmessages";
 		PanelMaintenance!.IsVisible = id == "maintenance";
+		PanelGeneral!.IsVisible = id == "general";
+		PanelMarkers!.IsVisible = id == "markers";
+		PanelBehavior!.IsVisible = id == "behavior";
+		PanelIntelliSense!.IsVisible = id == "intellisense";
 		PanelPlaceholder!.IsVisible = !functionalPanels.Contains (id);
 
 		HeaderTitle!.Text = node.Label;
@@ -731,6 +922,10 @@ public partial class PreferencesDialog : Window
 		StoreBuildPanel ();
 		StoreBuildMessagesPanel ();
 		StoreMaintenancePanel ();
+		StoreGeneralPanel ();
+		StoreMarkersPanel ();
+		StoreBehaviorPanel ();
+		StoreIntelliSensePanel ();
 		Close ();
 	}
 
