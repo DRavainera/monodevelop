@@ -1045,3 +1045,11 @@ Build 0 errores, 53/53 tests.
   escriben directamente. Incluye el combo `AutomaticSourceDownload` (Ask/Always/
   Never), el timeout de evaluación y la sensibilidad de "AllowToString".
 QA: build 0 errores, 53/53 tests, `placeholder=False`, 0 FATAL en ambos.
+
+## 2026-10-03 (i) — Projects → SDK Locations → .NET Core
+
+Portado `DotNetCoreSdkLocationPanel`: ruta del runtime (.NET Core) con Browse y
+listado de runtimes instalados. Persiste en la clave legacy
+`DotNetCoreRuntimeFileName`; `.NET Core` queda anidada bajo `SDK Locations`
+como en el addin.xml. QA: 0 errores, 53/53, `path=/home/daniel/.dotnet/dotnet`,
+placeholder=False, 0 FATAL.

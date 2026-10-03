@@ -75,7 +75,7 @@ public partial class PreferencesDialog : Window
 		"colortheme", "codesnippets", "languagebundles",
 		"naming", "standardheader",
 		"vcgeneral", "vccommit", "git", "changelog",
-		"nugetgeneral", "packagesources", "debugger",
+		"nugetgeneral", "packagesources", "debugger", "netcore",
 	};
 
 	string? pendingLanguage;
@@ -118,6 +118,7 @@ public partial class PreferencesDialog : Window
 		LoadNugetGeneralPanel ();
 		LoadNugetSourcesPanel ();
 		LoadDebuggerPanel ();
+		LoadNetCorePanel ();
 		SetupCmEditors ();
 		LoadCommitMessagePanel ();
 		LoadChangeLogPanel ();
@@ -152,7 +153,9 @@ public partial class PreferencesDialog : Window
 			// Shown by the legacy only under the RUNTIME_SELECTOR feature switch; the
 			// shell lists it always (net10-only) as an informative placeholder.
 			Leaf ("runtimes", ".NET Runtimes", "md-prefs-generic"),
-			Leaf ("sdklocations", "SDK Locations", "md-prefs-sdk-locations"),
+			new PrefsNode ("sdklocations", "SDK Locations", "md-prefs-sdk-locations", new () {
+				Leaf ("netcore", ".NET Core", "md-platform-netcore"),
+			}),
 			Leaf ("debugger", "Debugger", "md-prefs-generic"),
 			Leaf ("gtkdesigner", "GTK# Designer", "md-prefs-generic")),
 		Cat ("Text Editor",
@@ -1850,6 +1853,67 @@ public partial class PreferencesDialog : Window
 		SettingsStore.SetBool ("MonoDevelop.Debugger.UseNewTreeView", DbUseNewTreeView!.IsChecked == true);
 	}
 
+	// ---------- Projects → SDK Locations → .NET Core (DotNetCoreRuntime.FileName key) ----------
+
+	const string DotNetCoreRuntimeKey = "DotNetCoreRuntimeFileName";
+
+	void LoadNetCorePanel ()
+	{
+		NetCorePath!.Text = SettingsStore.GetString (DotNetCoreRuntimeKey) ?? DetectDotNet ();
+		NetCoreRuntimes!.Text = ListDotNetRuntimes ();
+		MainWindow.Instance?.Output ($"[prefs-netcore] path={NetCorePath.Text}");
+	}
+
+	static string DetectDotNet ()
+	{
+		foreach (var c in new [] {
+			Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile), ".dotnet", "dotnet"),
+			"/usr/bin/dotnet", "/usr/local/bin/dotnet", "/usr/share/dotnet/dotnet",
+		})
+			if (File.Exists (c))
+				return c;
+		return "";
+	}
+
+	static string ListDotNetRuntimes ()
+	{
+		var versions = new List<string> ();
+		foreach (var root in new [] {
+			Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile), ".dotnet"),
+			"/usr/share/dotnet", "/usr/lib/dotnet",
+		}) {
+			var shared = Path.Combine (root, "shared", "Microsoft.NETCore.App");
+			if (!Directory.Exists (shared))
+				continue;
+			foreach (var v in Directory.EnumerateDirectories (shared).Select (Path.GetFileName).OrderBy (v => v))
+				if (!versions.Contains (v))
+					versions.Add (v);
+		}
+		return versions.Count == 0 ? "(none found)" : string.Join ("  ", versions);
+	}
+
+	async void OnNetCoreBrowse (object? sender, RoutedEventArgs e)
+	{
+		if (TopLevel.GetTopLevel (this)?.StorageProvider is not { } sp)
+			return;
+		var files = await sp.OpenFilePickerAsync (new Avalonia.Platform.Storage.FilePickerOpenOptions {
+			AllowMultiple = false,
+			Title = "Select the dotnet executable",
+			FileTypeFilter = new [] { new Avalonia.Platform.Storage.FilePickerFileType ("dotnet") { Patterns = new [] { "dotnet" } } },
+		});
+		if (files.Count > 0 && files [0].TryGetLocalPath () is { } p)
+			NetCorePath!.Text = p;
+	}
+
+	void StoreNetCorePanel ()
+	{
+		var p = NetCorePath!.Text?.Trim ();
+		if (string.IsNullOrEmpty (p))
+			SettingsStore.SetString (DotNetCoreRuntimeKey, null);
+		else
+			SettingsStore.SetString (DotNetCoreRuntimeKey, p);
+	}
+
 	// ---------- Panel switching (OptionsDialog.SelectPanel) ----------
 	void OnSectionSelected (object? sender, SelectionChangedEventArgs e)
 	{
@@ -1895,6 +1959,7 @@ public partial class PreferencesDialog : Window
 		PanelNugetGeneral!.IsVisible = id == "nugetgeneral";
 		PanelNugetSources!.IsVisible = id == "packagesources";
 		PanelDebugger!.IsVisible = id == "debugger";
+		PanelNetCore!.IsVisible = id == "netcore";
 		PanelChangeLog!.IsVisible = id == "changelog";
 		PanelPlaceholder!.IsVisible = !functionalPanels.Contains (id);
 
@@ -1961,6 +2026,7 @@ public partial class PreferencesDialog : Window
 		StoreNugetGeneralPanel ();
 		StoreNugetSourcesPanel ();
 		StoreDebuggerPanel ();
+		StoreNetCorePanel ();
 		StoreThemePanel ();
 		Close ();
 	}
