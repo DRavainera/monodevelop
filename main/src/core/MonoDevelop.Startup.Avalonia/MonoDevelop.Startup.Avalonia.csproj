@@ -88,5 +88,6 @@
 	     same .cs (step 1: KeyboardShortcut). -->
 	<ItemGroup>
 		<Compile Include="..\MonoDevelop.Ide\MonoDevelop.Components\GtkWorkarounds.cs" />
+		<Compile Include="..\MonoDevelop.Ide\MonoDevelop.Components.Commands\KeyBindingManager.cs" />
 	</ItemGroup>
 </Project>

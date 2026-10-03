@@ -27,6 +27,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Text;
 
 
 // Terminology:
@@ -46,6 +47,7 @@ using System.Collections.Generic;
 
 namespace MonoDevelop.Components.Commands
 {
+#if !AVALONIA_SHELL
 	public class KeyBindingManager : IDisposable
 	{
 		Dictionary<KeyBinding, List<Command>> bindings = new Dictionary<KeyBinding, List<Command>> ();
@@ -977,6 +979,140 @@ namespace MonoDevelop.Components.Commands
 			return chord + KeyBindingManager.AccelLabelFromKey (Accel.Key, Accel.Modifier);
 		}
 	}
+#endif
+
+#if AVALONIA_SHELL
+	// Non-GTK equivalent for the Avalonia shell (AVALONIA_SHELL). The GTK machinery above
+	// (Gdk key events, chords, selection modifiers) is not needed here; the shell keeps the
+	// same surface it consumes: the portable binding/label helpers and the KeyBinding model,
+	// working on the string binding format used by KeyBindingSet and the schemes.
+	public static class KeyBindingManager
+	{
+		static bool isMac => MonoDevelop.Core.Platform.IsMac;
+
+		public static string Binding (string chord, string accel)
+		{
+			if (string.IsNullOrEmpty (chord)) {
+				if (string.IsNullOrEmpty (accel))
+					return null;
+				return accel;
+			}
+			if (string.IsNullOrEmpty (accel))
+				return chord;
+			return chord + "|" + accel;
+		}
+
+		internal static string FixChordSeparators (string binding)
+		{
+			// Converts old style '|' separators to the '+' chord style (ported as-is).
+			if (string.IsNullOrEmpty (binding))
+				return binding;
+			var chars = binding.ToCharArray ();
+			bool foundChordSep = false;
+			for (int i = 1; i < binding.Length - 1; i++) {
+				if (chars [i] == '+' && !foundChordSep)
+					return binding;
+				if (chars [i] == '|' && chars [i - 1] != '|') {
+					foundChordSep = true;
+					chars [i] = '+';
+				}
+			}
+			return new string (chars);
+		}
+
+		public static string BindingToDisplayLabel (string binding, bool concise)
+			=> BindingToDisplayLabel (binding, concise, false);
+
+		public static string BindingToDisplayLabel (string binding, bool concise, bool includeIncomplete)
+		{
+			if (string.IsNullOrEmpty (binding))
+				return null;
+			var sb = new StringBuilder ();
+			var parts = binding.Split ('|');
+			for (int i = 0; i < parts.Length; i++) {
+				if (i > 0)
+					sb.Append (isMac ? " " : "|");
+				sb.Append (FormatChord (parts [i], concise));
+			}
+			return sb.ToString ();
+		}
+
+		public static string BindingToDisplayLabel (KeyBinding binding, bool concise)
+			=> binding?.ToString () ?? string.Empty;
+
+		static string FormatChord (string chord, bool concise)
+		{
+			if (string.IsNullOrEmpty (chord))
+				return chord;
+			var sb = new StringBuilder ();
+			foreach (var tok in chord.Split (new [] { '+' }, StringSplitOptions.RemoveEmptyEntries)) {
+				if (sb.Length > 0)
+					sb.Append ('+');
+				sb.Append (ModifierOrKeyToLabel (tok, concise));
+			}
+			return sb.ToString ();
+		}
+
+		static string ModifierOrKeyToLabel (string token, bool concise)
+		{
+			switch (token) {
+			case "Control":
+			case "Primary": return "Ctrl";
+			case "Shift": return "Shift";
+			case "Alt": return "Alt";
+			case "Mod1": return "Alt";
+			case "Meta": return isMac ? "Cmd" : "Meta";
+			case "Super":
+			case "Mod4": return "Super";
+			case "Return": return "Enter";
+			case "Escape": return "Esc";
+			case "Page_Up": return "PgUp";
+			case "Page_Down": return "PgDown";
+			default: return token;
+			}
+		}
+	}
+
+	public sealed class KeyBinding : IEquatable<KeyBinding>
+	{
+		public KeyBinding (string chord, string accel)
+		{
+			Chord = chord;
+			Accel = accel;
+		}
+
+		public KeyBinding (string accel)
+		{
+			Accel = accel;
+		}
+
+		public static bool TryParse (string str, out KeyBinding binding)
+		{
+			if (string.IsNullOrEmpty (str)) {
+				binding = null;
+				return false;
+			}
+			var i = str.IndexOf ('|');
+			binding = i < 0 ? new KeyBinding (str) : new KeyBinding (str.Substring (0, i), str.Substring (i + 1));
+			return true;
+		}
+
+		public string Chord { get; }
+		public string Accel { get; }
+
+		public bool Equals (KeyBinding other)
+			=> other is not null && Chord == other.Chord && Accel == other.Accel;
+
+		public override bool Equals (object obj)
+			=> obj is KeyBinding other && Equals (other);
+
+		public override int GetHashCode ()
+			=> (Chord?.GetHashCode () ?? 0) ^ (Accel?.GetHashCode () ?? 0);
+
+		public override string ToString ()
+			=> string.IsNullOrEmpty (Chord) ? Accel : Chord + "|" + Accel;
+	}
+#endif
 	
 //#region KeyBindingException
 //	public class KeyBindingConflictException : Exception {
