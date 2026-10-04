@@ -75,7 +75,7 @@ public partial class PreferencesDialog : Window
 		"colortheme", "codesnippets", "languagebundles",
 		"naming", "standardheader",
 		"vcgeneral", "vccommit", "git", "changelog",
-		"nugetgeneral", "packagesources", "debugger", "netcore", "runtimes", "perfdiag", "xml", "intellisense-appearance", "intellisense-behavior", "analysis",
+		"nugetgeneral", "packagesources", "debugger", "netcore", "runtimes", "perfdiag", "xml", "intellisense-appearance", "intellisense-behavior", "analysis", "csharpformat",
 	};
 
 	string? pendingLanguage;
@@ -123,6 +123,7 @@ public partial class PreferencesDialog : Window
 		LoadPerfDiagPanel ();
 		LoadXmlEditorPanel ();
 		LoadAnalysisPanel ();
+		LoadCSharpFormatPanel ();
 		LoadCompletionAppearancePanel ();
 		SetupCmEditors ();
 		LoadCommitMessagePanel ();
@@ -2030,6 +2031,93 @@ public partial class PreferencesDialog : Window
 		SettingsStore.SetBool ("Testing.EnableUnitTestEditorIntegration", AnUnitTest!.IsChecked == true);
 	}
 
+	// ---------- Behavior → C# (Roslyn per-language keys, same as the add-in's RoslynPreferences) ----------
+	// The add-in persists via RoslynPreferences.Wrap(RoslynKey(option, "C#")); the stored name is
+	// OptionKey.GetPropertyName(). The shell recomputes the SAME name from the same Roslyn options.
+
+	// OptionKey.GetPropertyName() is internal Roslyn API (visible to MonoDevelop.Ide only), so
+	// the shell invokes it by reflection to guarantee the SAME persisted key as the GTK UI.
+	static System.Reflection.MethodInfo? getPropNameMethod;
+
+	static System.Reflection.MethodInfo GetPropNameMethod ()
+	{
+		if (getPropNameMethod is not null)
+			return getPropNameMethod;
+		var t = typeof (Microsoft.CodeAnalysis.Options.OptionKey);
+		Type?[] types;
+		try {
+			types = t.Assembly.GetTypes ();
+		} catch (System.Reflection.ReflectionTypeLoadException ex) {
+			// Some Roslyn dependencies may be absent at runtime; use what loaded.
+			types = ex.Types ?? Array.Empty<Type?> ();
+		}
+		getPropNameMethod = types.Where (x => x is not null)!.Select (x => x!)
+			.SelectMany (x => x.GetMethods (System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static))
+			.FirstOrDefault (m => m.Name == "GetPropertyName" && m.GetParameters ().Length == 1 && m.GetParameters () [0].ParameterType == t);
+		return getPropNameMethod!;
+	}
+
+	static string RoslynPropName (Microsoft.CodeAnalysis.Options.IOption option)
+	{
+		// Preferred: the exact key the GTK UI persists (Roslyn's internal
+		// OptionKey.GetPropertyName). If the internal extension is not loadable in this
+		// host, fall back to the legacy MonoDevelop property name the add-in migrates
+		// from ("C#.<OptionId suffix>") so the panel still round-trips its own values.
+		try {
+			object key;
+			try {
+				key = Activator.CreateInstance (typeof (Microsoft.CodeAnalysis.Options.OptionKey), option, "C#")!;
+			} catch (ArgumentException) {
+				key = Activator.CreateInstance (typeof (Microsoft.CodeAnalysis.Options.OptionKey), option)!;
+			}
+			var m = GetPropNameMethod ();
+			if (m is not null)
+				return (string) m.Invoke (null, new [] { key })!;
+		} catch (Exception ex) {
+			MainWindow.Instance?.Output ("[prefs-csharp] Roslyn key unavailable (" + ex.GetType ().Name + "), using legacy name");
+		}
+		var id = option.GetType ().GetProperty ("Id")?.GetValue (option) as string ?? "";
+		var suffix = id.Contains ('#') ? id [(id.IndexOf ('#') + 1)..] : id;
+		return "C#." + suffix;
+	}
+
+	static bool CsOpt (Microsoft.CodeAnalysis.Options.IOption o, bool def)
+		=> SettingsStore.GetBool (RoslynPropName (o), def);
+
+	static void CsSet (Microsoft.CodeAnalysis.Options.IOption o, bool v)
+		=> SettingsStore.SetBool (RoslynPropName (o), v);
+
+	void LoadCSharpFormatPanel ()
+	{
+		CsFormatOnType!.IsChecked = CsOpt (Microsoft.CodeAnalysis.Options.FeatureOnOffOptions.AutoFormattingOnTyping, false);
+		CsFormatOnSemicolon!.IsChecked = CsOpt (Microsoft.CodeAnalysis.Options.FeatureOnOffOptions.AutoFormattingOnSemicolon, false);
+		CsFormatOnCloseBrace!.IsChecked = CsOpt (Microsoft.CodeAnalysis.Options.FeatureOnOffOptions.AutoFormattingOnCloseBrace, false);
+		CsFormatOnReturn!.IsChecked = CsOpt (new Microsoft.CodeAnalysis.Options.Option<bool> ("FormattingOptions", "AutoFormattingOnReturn", false), false);
+		CsFormatOnPaste!.IsChecked = CsOpt (Microsoft.CodeAnalysis.Options.FeatureOnOffOptions.FormatOnPaste, false);
+		CsShowFilterButtons!.IsChecked = CsOpt (Microsoft.CodeAnalysis.Options.CompletionOptions.ShowCompletionItemFilters, false);
+		CsTriggerOnDeletion!.IsChecked = CsOpt (Microsoft.CodeAnalysis.Options.CompletionOptions.TriggerOnDeletion, false);
+		UpdateCSharpFormatEnable ();
+		MainWindow.Instance?.Output ($"[prefs-csharp] onType={CsFormatOnType.IsChecked} key={RoslynPropName (Microsoft.CodeAnalysis.Options.FeatureOnOffOptions.AutoFormattingOnTyping)}");
+	}
+
+	void UpdateCSharpFormatEnable ()
+	{
+		var on = CsFormatOnType!.IsChecked == true;
+		CsFormatOnSemicolon!.IsEnabled = on;
+		CsFormatOnCloseBrace!.IsEnabled = on;
+	}
+
+	void StoreCSharpFormatPanel ()
+	{
+		CsSet (Microsoft.CodeAnalysis.Options.FeatureOnOffOptions.AutoFormattingOnTyping, CsFormatOnType!.IsChecked == true);
+		CsSet (Microsoft.CodeAnalysis.Options.FeatureOnOffOptions.AutoFormattingOnSemicolon, CsFormatOnSemicolon!.IsChecked == true);
+		CsSet (Microsoft.CodeAnalysis.Options.FeatureOnOffOptions.AutoFormattingOnCloseBrace, CsFormatOnCloseBrace!.IsChecked == true);
+		CsSet (new Microsoft.CodeAnalysis.Options.Option<bool> ("FormattingOptions", "AutoFormattingOnReturn", false), CsFormatOnReturn!.IsChecked == true);
+		CsSet (Microsoft.CodeAnalysis.Options.FeatureOnOffOptions.FormatOnPaste, CsFormatOnPaste!.IsChecked == true);
+		CsSet (Microsoft.CodeAnalysis.Options.CompletionOptions.ShowCompletionItemFilters, CsShowFilterButtons!.IsChecked == true);
+		CsSet (Microsoft.CodeAnalysis.Options.CompletionOptions.TriggerOnDeletion, CsTriggerOnDeletion!.IsChecked == true);
+	}
+
 	// ---------- Panel switching (OptionsDialog.SelectPanel) ----------
 	void OnSectionSelected (object? sender, SelectionChangedEventArgs e)
 	{
@@ -2080,6 +2168,7 @@ public partial class PreferencesDialog : Window
 		PanelPerfDiag!.IsVisible = id == "perfdiag";
 		PanelXmlEditor!.IsVisible = id == "xml";
 		PanelAnalysis!.IsVisible = id == "analysis";
+		PanelCSharpFormat!.IsVisible = id == "csharpformat";
 		PanelCompletionAppearance!.IsVisible = id == "intellisense-appearance";
 		PanelChangeLog!.IsVisible = id == "changelog";
 		PanelPlaceholder!.IsVisible = !functionalPanels.Contains (id);
@@ -2152,6 +2241,7 @@ public partial class PreferencesDialog : Window
 		StorePerfDiagPanel ();
 		StoreXmlEditorPanel ();
 		StoreAnalysisPanel ();
+		StoreCSharpFormatPanel ();
 		StoreCompletionAppearancePanel ();
 		StoreThemePanel ();
 		Close ();

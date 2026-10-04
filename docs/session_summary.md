@@ -1099,3 +1099,21 @@ en el cierre de compilación de la shell; `MonoRoslynCompat` solo aporta
 `FeatureOnOffOptions`/`ServiceFeatureOnOffOptions`. Afecta a **Behavior → C#**
 (`OnTheFlyFormattingPanel`, 7 opciones Roslyn) y al checkbox "whole solution".
 QA: 0 errores, 53/53, `placeholder=False`, `openFiles=True unitTest=False`, 0 FATAL.
+
+## 2026-10-03 (n) — Text Editor → Behavior → C# (on-the-fly formatting)
+
+Portado `OnTheFlyFormattingPanel` (7 checkboxes) con las opciones Roslyn reales
+(`FeatureOnOffOptions.AutoFormattingOnTyping/Semicolon/CloseBrace/FormatOnPaste`,
+`FormattingOptions.AutoFormattingOnReturn`, `CompletionOptions.
+ShowCompletionItemFilters/TriggerOnDeletion`). Para que las claves coincidan con
+la GTK se calculan vía `OptionKey.GetPropertyName()` (API **interna** de Roslyn,
+solo visible para `MonoDevelop.Ide`), invocada por reflexión: se añadieron las
+referencias `MonoRoslynCompat` (FeatureOnOffOptions/CompletionOptions) y
+`Microsoft.CodeAnalysis.Workspaces.dll` (Option<T>/OptionKey) al shell.
+
+**Caveat de fidelidad**: en este host la extensión interna no es invocable
+(`TargetInvocationException`: depende de `Microsoft.Bcl.AsyncInterfaces`, ausente),
+así que la clave cae al nombre legacy `"C#.<OptionId>"`. El panel es funcional y
+persiste round-trip, pero **las claves no coinciden** con las Roslyn de la GTK
+mientras no se resuelva esa dependencia. QA: 0 errores, 53/53,
+`placeholder=False`, 0 FATAL.

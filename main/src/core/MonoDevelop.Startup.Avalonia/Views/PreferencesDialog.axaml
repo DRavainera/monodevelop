@@ -496,6 +496,19 @@
                          Text="Stored with the legacy keys MonoDevelop.AnalysisCore.AnalysisEnabled_V2 and Testing.EnableUnitTestEditorIntegration. 'Whole solution' depends on a Roslyn per-language option key and stays disabled until the Roslyn reference is wired." />
             </StackPanel>
 
+            <!-- ===== Text Editor → Behavior → C# (legacy OnTheFlyFormattingPanel) ===== -->
+            <StackPanel x:Name="PanelCSharpFormat" Margin="16" Spacing="6" IsVisible="False">
+              <CheckBox x:Name="CsFormatOnType" Content="Automatically format when typing" />
+              <CheckBox x:Name="CsFormatOnSemicolon" Content="Automatically format statement on ;" Margin="16,0,0,0" />
+              <CheckBox x:Name="CsFormatOnCloseBrace" Content="Automatically format block on }" Margin="16,0,0,0" />
+              <CheckBox x:Name="CsFormatOnReturn" Content="Automatically format on return" />
+              <CheckBox x:Name="CsFormatOnPaste" Content="Automatically format on paste" />
+              <CheckBox x:Name="CsShowFilterButtons" Content="Show completion item filters" />
+              <CheckBox x:Name="CsTriggerOnDeletion" Content="Show completion list after a character is deleted" />
+              <TextBlock Opacity="0.7" FontSize="11" TextWrapping="Wrap"
+                         Text="Stored with the same Roslyn per-language keys the GTK UI computes via OptionKey.GetPropertyName()." />
+            </StackPanel>
+
             <!-- ===== Text Editor → Behavior → XML (legacy XmlEditorOptionsPanel) ===== -->
             <StackPanel x:Name="PanelXmlEditor" Margin="16" Spacing="8" IsVisible="False">
               <CheckBox x:Name="XmlAutoComplete" Content="Automatically complete elements" />

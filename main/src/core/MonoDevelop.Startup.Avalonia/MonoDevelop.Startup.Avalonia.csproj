@@ -65,6 +65,13 @@
     <!-- MonoDevelop.Core is part of the shell (same unified build tree): the non-GTK
          backend (commands, key bindings, options) lives there. -->
     <ProjectReference Include="..\MonoDevelop.Core\MonoDevelop.Core.csproj" />
+    <!-- Roslyn option model: the Text Editor C# formatting panel recomputes the same
+         per-language option keys (OptionKey.GetPropertyName) the GTK UI persists. -->
+    <ProjectReference Include="..\..\compat\MonoRoslynCompat\MonoRoslynCompat.csproj" />
+    <Reference Include="Microsoft.CodeAnalysis.Workspaces">
+      <HintPath>..\..\..\build\Microsoft.CodeAnalysis.Workspaces.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
     <!-- The Xwt Avalonia backend: dialogs/pads built on the Xwt frontend
          render through the same Avalonia/Skia stack as this shell. -->
     <ProjectReference Include="..\..\..\external\xwt\Xwt.Avalonia\Xwt.Avalonia.csproj" />
