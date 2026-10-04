@@ -5429,6 +5429,11 @@ public partial class MainWindow : Window
 	public void OnPreferencesMenu ()
 		=> new PreferencesDialog { WindowStartupLocation = WindowStartupLocation.CenterOwner }.ShowDialog (this);
 
+	/// <summary>Tools > Add-ins (Avalonia)...: the new add-in host catalog (the
+	/// "Extensions…" item above keeps the legacy Mono.Addins dialog).</summary>
+	public void OnAvaloniaAddonManagerMenu ()
+		=> new AddonManagerDialog { WindowStartupLocation = WindowStartupLocation.CenterOwner }.ShowDialog (this);
+
 	public void OnAddinManagerMenu ()
 		=> new AddinManagerDialog { WindowStartupLocation = WindowStartupLocation.CenterOwner }.ShowDialog (this);
 

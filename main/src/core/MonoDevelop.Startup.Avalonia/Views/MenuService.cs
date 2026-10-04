@@ -436,6 +436,7 @@ public static class MenuService
 		Label = "_Tools",
 		Children = {
 			Item ("_Extensions...", icon: "gtk-plugin", click: OpenAddins ()),
+			Item ("Add-ins (Avalonia)...", icon: "gtk-plugin", click: OpenAvaloniaAddins ()),
 			Sep (),
 			Sub ("Session Recorder", new List<MenuEntry> {
 				Item ("Start Session Recorder", click: Command ("MonoDevelop.Ide.Commands.ToolCommands.ToggleSessionRecorder")),
@@ -530,6 +531,7 @@ public static class MenuService
 	static Action OpenAbout () => () => MainWindow.Instance?.OnAboutMenu ();
 	static Action OpenPrefs () => () => MainWindow.Instance?.OnPreferencesMenu ();
 	static Action OpenAddins () => () => MainWindow.Instance?.OnAddinManagerMenu ();
+	static Action OpenAvaloniaAddins () => () => MainWindow.Instance?.OnAvaloniaAddonManagerMenu ();
 	static Action ToggleFull () => () => MainWindow.Instance?.ToggleFullScreen ();
 	static void OpenLink (string url)
 	{

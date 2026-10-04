@@ -1,0 +1,23 @@
+{
+  "identity": {
+    "id": "MonoDevelop.VersionControl",
+    "name": "Version Control",
+    "publisher": "MonoDevelop",
+    "version": "9.0.0",
+    "description": "Version control options: commit message style, per-VCS settings (Avalonia add-in)."
+  },
+  "assetType": "Microsoft.VisualStudio.MefComponent",
+  "installationTarget": { "id": "MonoDevelop.Avalonia", "version": "9.0" },
+  "tags": [ "version control", "git", "commit message" ],
+  "categories": [ "Version Control" ],
+  "dependencies": [ { "id": "MonoDevelop.Ide", "version": "9.0" } ],
+  "autoLoad": true,
+  "extensions": {
+    "/MonoDevelop/Ide/GlobalOptionsDialog/VersionControl": [
+      { "id": "General", "label": "General", "icon": "md-prefs-version-control" },
+      { "id": "Commit Message Style", "label": "Commit Message Style", "icon": "md-prefs-solution" },
+      { "id": "Git", "label": "Git", "icon": "md-prefs-solution" },
+      { "id": "ChangeLog Integration", "label": "ChangeLog Integration", "icon": "md-prefs-generic" }
+    ]
+  }
+}

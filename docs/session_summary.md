@@ -1254,3 +1254,18 @@ Verificado: `loaded 2/2` (Refactoring + XmlEditor), `schemas=1`,
 `addon sections merged=4`, `placeholder=False`, 0 FATAL; regresión de `analysis`/
 `keybindings`/`xml`/`intellisense` OK. QA §18.5 **APTO**. Build 0 errores, 53/53.
 UI GTK intacta.
+
+## 2026-10-03 (w) — Add-in VersionControl + menú Tools del Add-in Manager
+
+Nuevo add-in `main/src/addins/MonoDevelop.Avalonia.VersionControl/` (manifiesto
+JSON) que contribuye 4 secciones a `/MonoDevelop/Ide/GlobalOptionsDialog/
+VersionControl` (General, Commit Message Style, Git, ChangeLog Integration). Se
+conectó el **Add-in Manager (Avalonia)** al menú **Tools > "Add-ins (Avalonia)..."**
+(`MenuService.OpenAvaloniaAddins` → `MainWindow.OnAvaloniaAddonManagerMenu`);
+"Extensions…" sigue siendo el diálogo legacy de Mono.Addins (GTK).
+
+Verificado: `loaded 3/3` add-ins (Refactoring, XmlEditor, VersionControl),
+`ep …/VersionControl nodes=4`, `addon sections merged=4` (sin duplicar paneles VC),
+`git`/`keybindings` `placeholder=False` 0 FATAL, diálogo "Add-ins" abre 0 FATAL.
+QA §18.5 **APTO** (el primer intento del subagente falló por servicio → reintento).
+Build 0 errores, 53/53. UI GTK intacta.
