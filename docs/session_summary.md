@@ -1142,3 +1142,20 @@ panel legacy requiere `AddinManager.GetExtensionNodes("/MonoDevelop/ProjectModel
 Gui/MimeTypePolicyPanels")` (motor de add-ins) → queda fuera y documentado.
 QA: 0 errores, 53/53, `placeholder=False`, `tabsToSpaces=False indent=4 tab=4
 file=120` (defaults), 0 FATAL.
+
+## 2026-10-03 (q) — Alojar Mono.Addins en la shell
+
+Nuevo `MonoDevelop.Ide/Services/AddinEngineHost.cs`: engine **único y perezoso**
+(`AddinEngine.Initialize` con las rutas del IDE + `Registry.Update`), fachada
+`AddinManager.Initialize(configDir, addinsDir)` y sonda de extension nodes.
+Se invoca en `App.OnFrameworkInitializationCompleted` y el `AddinManagerDialog`
+deja de crear su propia engine (reutiliza el host compartido).
+
+**Estado**: el motor arranca y el registro se actualiza (avisos/errors de add-ins
+GTK incompletos, preexistentes: `MonoDevelop.GtkCore` sin `libstetic*.dll`), pero
+la sonda devuelve `MimeTypePolicyPanels=0` y `GlobalOptionsDialog=0`: el catálogo
+no registra los extension models de los add-ins (ensamblados GTK que no cargan +
+manifiestos no escaneados). Por tanto **Code Formatting** (árbol de policy-set
+por MimeType) y **XML Schemas** siguen pendientes: requieren que el registro
+resuelva extension nodes, no solo claves.
+QA: 0 errores, 53/53, keybindings/style siguen placeholder=False y 0 FATAL.

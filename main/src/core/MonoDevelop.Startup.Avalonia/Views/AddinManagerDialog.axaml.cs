@@ -101,36 +101,11 @@ public partial class AddinManagerDialog : Window
 	// which is pinned to a different SDK than this Avalonia 12 project).
 	static SetupService? CreateSetupService ()
 	{
-		try {
-			string home = Environment.GetFolderPath (Environment.SpecialFolder.UserProfile);
-			if (string.IsNullOrEmpty (home))
-				home = Environment.GetEnvironmentVariable ("HOME") ?? "";
-
-			var devConfig = Environment.GetEnvironmentVariable ("MONODEVELOP_DEV_CONFIG");
-			var devAddins = Environment.GetEnvironmentVariable ("MONODEVELOP_DEV_ADDINS");
-
-			string appId = Path.Combine ("MonoDevelop", "9.0");
-			string configDir = devConfig?.Length > 0 ? devConfig : Path.Combine (home, ".config", appId);
-			string addinsDir = devAddins?.Length > 0 ? devAddins : Path.Combine (home, ".local", "share", appId, "LocalInstall", "Addins");
-			string databaseDir = devAddins?.Length > 0 ? devAddins : Path.Combine (home, ".cache", appId);
-
-			// Use an AddinEngine with an explicit startup directory: the IDE registers
-			// its addins via .addins files placed next to the host binaries (build),
-			// so the scan must start there to share the IDE's add-in catalog.
-			var shellDir = Path.GetDirectoryName (typeof (Program).Assembly.Location);
-			var hostDir = Path.GetFullPath (Path.Combine (shellDir ?? ".", "..", "..", "..", "..", "..", "..", "build"));
-			if (!Directory.Exists (hostDir))
-				hostDir = shellDir ?? Directory.GetCurrentDirectory ();
-			Console.WriteLine ($"[addins] startupDirectory={hostDir}");
-			var engine = new AddinEngine ();
-			engine.Initialize (configDir, addinsDir, databaseDir, hostDir);
-			var registry = engine.Registry;
-			registry.Update (new ConsoleProgressStatus ());
-			return new SetupService (registry);
-		} catch (Exception ex) {
-			Console.WriteLine ("[addins] registry init failed: " + ex.Message);
+		// Shared engine (also initialised at startup) so the registry is loaded once.
+		if (!MonoDevelop.Ide.Services.AddinEngineHost.EnsureInitialized ())
 			return null;
-		}
+		var registry = MonoDevelop.Ide.Services.AddinEngineHost.Engine?.Registry;
+		return registry is null ? null : new SetupService (registry);
 	}
 
 	void ReloadCurrentTab () => LoadAddins ();
