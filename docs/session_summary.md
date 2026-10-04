@@ -1208,3 +1208,20 @@ loaded=True`, `ep /MonoDevelop/Ide/GlobalOptionsDialog/TextEditor nodes=1`.
 corregir ambos (guarda de ALC + `MarkLoaded()` + registro de nodos solo para
 add-ins cargados). **UI GTK intacta**: `git diff` confirma que ni
 `MonoDevelop.Ide` ni los add-ins legacy cambian. Build 0 errores, 53/53 tests.
+
+## 2026-10-03 (t) — Preferences data-driven desde el registro de add-ins
+
+`BuildModelCore()` = esqueleto de secciones core; `BuildModel()` =
+`MergeAddonSections(BuildModelCore())`. `MergeAddonSections` consulta
+`App.Addins?.Extensions.GetExtensionNodes(path)` para 6 extension points
+(`GlobalOptionsDialog`, `…/TextEditor`, `…/Projects/SdkLocations`,
+`…/VersionControl`, `…/Other`, `…/TextEditor/Analysis/C#`), mapea el id **legacy**
+del add-in al id de panel Avalonia (`LegacySectionMap`) y añade las secciones que
+aún no existen (sin duplicar las ya implementadas). El add-in de Refactoring
+contribuye `Analysis` + `Code Actions`/`Code Generation`/`Code Rules`.
+
+Verificado: `merged=3`, `ep …/TextEditor/Analysis/C# nodes=3`; la sección fusionada
+`codeactions` se renderiza con su icono (`md-prefs-code-actions`) y cae en
+placeholder (panel aún no implementado). Regresión: `analysis`/`intellisense`/
+`keybindings` siguen `placeholder=False`, 0 FATAL. QA §18.5 **APTO** (sin
+hallazgos). Build 0 errores, 53/53. UI GTK intacta.

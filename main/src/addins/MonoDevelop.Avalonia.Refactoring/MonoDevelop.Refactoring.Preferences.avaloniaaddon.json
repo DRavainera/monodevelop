@@ -7,10 +7,24 @@
     "description": "Source analysis and refactoring options (Avalonia add-in)."
   },
   "assetType": "Microsoft.VisualStudio.MefComponent",
-  "installationTarget": { "id": "MonoDevelop.Avalonia", "version": "9.0" },
-  "tags": [ "refactoring", "code analysis", "source analysis" ],
-  "categories": [ "Text Editor" ],
-  "dependencies": [ { "id": "MonoDevelop.Ide", "version": "9.0" } ],
+  "installationTarget": {
+    "id": "MonoDevelop.Avalonia",
+    "version": "9.0"
+  },
+  "tags": [
+    "refactoring",
+    "code analysis",
+    "source analysis"
+  ],
+  "categories": [
+    "Text Editor"
+  ],
+  "dependencies": [
+    {
+      "id": "MonoDevelop.Ide",
+      "version": "9.0"
+    }
+  ],
   "autoLoad": true,
   "extensions": {
     "/MonoDevelop/Ide/GlobalOptionsDialog/TextEditor": [
@@ -19,6 +33,23 @@
         "label": "Source Analysis",
         "icon": "md-prefs-code-analysis",
         "class": "MonoDevelop.AvaloniaAddons.Demo.AnalysisPlaceholder"
+      }
+    ],
+    "/MonoDevelop/Ide/GlobalOptionsDialog/TextEditor/Analysis/C#": [
+      {
+        "id": "Code Actions",
+        "label": "Code Actions",
+        "icon": "md-prefs-code-actions"
+      },
+      {
+        "id": "Code Generation",
+        "label": "Code Generation",
+        "icon": "md-prefs-generic"
+      },
+      {
+        "id": "Code Rules",
+        "label": "Code Rules",
+        "icon": "md-prefs-code-rules"
       }
     ]
   }

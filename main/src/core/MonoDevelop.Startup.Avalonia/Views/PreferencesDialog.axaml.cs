@@ -143,7 +143,56 @@ public partial class PreferencesDialog : Window
 	static PrefsNode Cat (string label, params PrefsNode[] children) => new ("", label, "", children.ToList ());
 	static PrefsNode Leaf (string id, string label, string icon) => new (id, label, icon, new List<PrefsNode> ());
 
-	static List<PrefsNode> BuildModel () => new () {
+	// Legacy section id (as declared by the add-ins) → Avalonia panel id.
+	static readonly Dictionary<string, string> LegacySectionMap = new (StringComparer.Ordinal) {
+		["Analysis"] = "analysis", ["C#"] = "analysis-csharp",
+		["General"] = "vcgeneral", ["Commit Message Style"] = "vccommit",
+		["Git"] = "git", ["ChangeLog Integration"] = "changelog",
+		["NuGet"] = "nugetgeneral", ["Sources"] = "packagesources",
+		["Debug Source Files"] = "debugsourcefiles",
+	};
+
+	// Extension points whose contributed sections are merged into the tree.
+	static readonly (string Point, string Category)[] MergePoints = {
+		("/MonoDevelop/Ide/GlobalOptionsDialog", "Projects"),
+		("/MonoDevelop/Ide/GlobalOptionsDialog/TextEditor", "Text Editor"),
+		("/MonoDevelop/Ide/GlobalOptionsDialog/Projects/SdkLocations", "Projects"),
+		("/MonoDevelop/Ide/GlobalOptionsDialog/VersionControl", "Version Control"),
+		("/MonoDevelop/Ide/GlobalOptionsDialog/Other", "Other"),
+		("/MonoDevelop/Ide/GlobalOptionsDialog/TextEditor/Analysis/C#", "Text Editor"),
+	};
+
+	/// <summary>Merges add-in extension nodes into the Preferences tree. Add-ins
+	/// contribute sections/panels; the skeleton keeps the core panels that no add-in
+	/// declares yet. Legacy ids are mapped to the Avalonia panel that implements them.</summary>
+	static List<PrefsNode> MergeAddonSections (List<PrefsNode> tree)
+	{
+		var reg = App.Addins?.Extensions;
+		if (reg is null)
+			return tree;
+		int merged = 0;
+		foreach (var (point, category) in MergePoints) {
+			foreach (var node in reg.GetExtensionNodes (point)) {
+				var label = string.IsNullOrEmpty (node.Label) ? node.Id : node.Label;
+				var id = LegacySectionMap.TryGetValue (node.Id, out var mapped) ? mapped
+					: node.Id.ToLowerInvariant ().Replace (" ", "").Replace (".", "").Replace ("#", "");
+				var cat = tree.FirstOrDefault (c => c.Label == category);
+				if (cat is null)
+					continue;
+				if (cat.Children.Any (ch => ch.Id == id || ch.Label == label))
+					continue;
+				var leaf = new PrefsNode (id, label, node.Icon ?? "md-prefs-generic", new List<PrefsNode> ());
+				if (!string.IsNullOrEmpty (node.ChildId))
+					leaf.Children.Add (new PrefsNode (node.ChildId.ToLowerInvariant (), node.ChildId, "md-prefs-generic", new ()));
+				cat.Children.Add (leaf);
+				merged++;
+			}
+		}
+		MainWindow.Instance?.Output ($"[prefs] addon sections merged={merged} (registry points={reg.ExtensionPoints.Count})");
+		return tree;
+	}
+
+	static List<PrefsNode> BuildModelCore () => new () {
 		Cat ("Environment",
 			Leaf ("style", "Visual Style", "md-prefs-visual-style"),
 			Leaf ("author", "Author Information", "md-prefs-author-information"),
@@ -203,6 +252,9 @@ public partial class PreferencesDialog : Window
 		Cat ("Performance Diagnostics",
 			Leaf ("perfgeneral", "General", "md-prefs-performance")),
 	};
+
+	/// <summary>Preferences tree: core skeleton + add-in contributions.</summary>
+	static List<PrefsNode> BuildModel () => MergeAddonSections (BuildModelCore ());
 
 	void BuildSectionTree ()
 	{
