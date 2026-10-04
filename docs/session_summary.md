@@ -1177,3 +1177,34 @@ Consecuencia: **Code Formatting** (árbol de policy-set por MimeType) y
 requieren que el ensamblado del add-in cargue sin GTK (o desacoplar esos paneles
 de la carga del ensamblado). Sin regresión: 53/53 tests, keybindings
 placeholder=False, 0 FATAL.
+
+## 2026-10-03 (s) — Nuevo sistema de add-ins para la shell Avalonia (sustituye a Mono.Addins)
+
+Nuevo módulo `main/src/core/MonoDevelop.Avalonia.Addons/` (net10.0, sin GTK),
+**independiente de Mono.Addins** (que queda para la UI GTK). Modelado sobre las
+extensiones de **Visual Studio** (no VSCode):
+- **Manifiesto JSON en disco** con forma `extension.vsixmanifest`
+  (`identity`, `assetType`, `installationTarget`, `tags`, `categories`,
+  `dependencies`, `entryPoint`, `autoLoad`, `extensions`).
+- **Contenedor MEF-like**: `[Export]`, `[Import]`, `[ImportMany]` + `CompositionHost`.
+- **Ciclo de vida VS**: `IAvaloniaAddon`/`AvaloniaAddon`, `IPackage`/`Package`,
+  `ProvideAutoLoad`, `ProvideOptionPage`.
+- **Aislamiento**: `AssemblyLoadContext` por add-in (`AddonLoadContext`).
+- **Registro de extension points**: `IAddonExtensionRegistry.GetExtensionNodes(path)`
+  + `ExtensionPoints` (GlobalOptionsDialog, MimeTypePolicyPanels, StartupHandlers,
+  Pads, Docking) — la misma forma que usaba el código legacy.
+- **Host** (`AddonHost`): descubre `*.avaloniaaddon.json` (`MONODEVELOP_AVALONIA_ADDINS`,
+  `Addins.Avalonia` junto al binario, o `main/src/addins` en el repo), compone y activa.
+
+**Primer add-in**: `main/src/addins/MonoDevelop.Avalonia.Refactoring/`
+(manifiesto JSON)Sized para contribuir al árbol de Preferences
+(`/MonoDevelop/Ide/GlobalOptionsDialog/TextEditor → Analysis/Source Analysis`).
+
+Verificado en runtime: `loaded 1/1 add-in(s)`, `MonoDevelop.Refactoring v9.0.0
+loaded=True`, `ep /MonoDevelop/Ide/GlobalOptionsDialog/TextEditor nodes=1`.
+
+**QA (§18.5, 3 rondas)**: ronda 1 (sin informe) → no pasó; ronda 2 **NO APTO**
+(NRE con `entryPoint` inexistente + semántica `Loaded`); ronda 3 **APTO** tras
+corregir ambos (guarda de ALC + `MarkLoaded()` + registro de nodos solo para
+add-ins cargados). **UI GTK intacta**: `git diff` confirma que ni
+`MonoDevelop.Ide` ni los add-ins legacy cambian. Build 0 errores, 53/53 tests.

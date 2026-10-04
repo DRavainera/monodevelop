@@ -108,6 +108,32 @@ internal static class Program
 		return proc.ExitCode;
 	}
 
+	/// <summary>Folder scanned for Avalonia add-in manifests (*.avaloniaaddon.json).</summary>
+	public static string AddonsDirectory {
+		get {
+			var env = Environment.GetEnvironmentVariable ("MONODEVELOP_AVALONIA_ADDINS");
+			if (!string.IsNullOrEmpty (env))
+				return env;
+			// Add-ins shipped in this repo: first next to the binaries, then the
+			// main/src/addins tree when running from the repo (avoids a copy step).
+			var inRepo = Path.Combine (AppContext.BaseDirectory, "Addins.Avalonia");
+			if (Directory.Exists (inRepo))
+				return inRepo;
+			var dir = AppContext.BaseDirectory;
+			for (int i = 0; i < 8 && dir is not null; i++) {
+				var candidate = Path.Combine (dir, "src", "addins");
+				if (Directory.Exists (candidate))
+					return candidate;
+				var parent = Path.GetDirectoryName (dir);
+				if (parent is null || parent == dir)
+					break;
+				dir = parent;
+			}
+			var home = Environment.GetFolderPath (Environment.SpecialFolder.UserProfile);
+			return Path.Combine (home, ".local", "share", "MonoDevelop-Avalonia", "Addins");
+		}
+	}
+
 	// QA hooks: --about | --prefs | --addins open the corresponding dialog at startup
 	// so automated runs can validate each migrated dialog without UI navigation.
 	// --prefs also accepts a value (--prefs=light|dark|<panelId>) to drive the dialog

@@ -65,6 +65,9 @@
     <!-- MonoDevelop.Core is part of the shell (same unified build tree): the non-GTK
          backend (commands, key bindings, options) lives there. -->
     <ProjectReference Include="..\MonoDevelop.Core\MonoDevelop.Core.csproj" />
+    <!-- New Avalonia add-in system (replaces Mono.Addins for this shell; the GTK IDE
+         keeps using Mono.Addins). Independent module, no GTK. -->
+    <ProjectReference Include="..\MonoDevelop.Avalonia.Addons\MonoDevelop.Avalonia.Addons.csproj" />
     <!-- Roslyn option model: the Text Editor C# formatting panel recomputes the same
          per-language option keys (OptionKey.GetPropertyName) the GTK UI persists. -->
     <ProjectReference Include="..\..\compat\MonoRoslynCompat\MonoRoslynCompat.csproj" />
