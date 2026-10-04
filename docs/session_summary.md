@@ -1159,3 +1159,21 @@ manifiestos no escaneados). Por tanto **Code Formatting** (árbol de policy-set
 por MimeType) y **XML Schemas** siguen pendientes: requieren que el registro
 resuelva extension nodes, no solo claves.
 QA: 0 errores, 53/53, keybindings/style siguen placeholder=False y 0 FATAL.
+
+## 2026-10-03 (r) — Manifiesto de add-ins propio (extension nodes siguen a 0)
+
+El `.addins` del stock (`MonoDevelop.exe.addins`) solo declara
+`<Directory include-subdirs="true">./AddIns</Directory>`, por lo que los
+**ensamblados raíz** (`MonoDevelop.Ide.dll`, que define
+`/MonoDevelop/Ide/GlobalOptionsDialog`) nunca se escanean. `AddinEngineHost`
+genera ahora un manifiesto propio en `<configDir>/shelladdins/shell.addins` que
+declara esos ensamblados + el árbol `AddIns/**` y lo pasa como `startupDir`.
+
+**Resultado medido**: la sonda sigue en `MimeTypePolicyPanels=0
+GlobalOptionsDialog=0`: `MonoDevelop.Ide.dll` **no carga** en el proceso Avalonia
+(dependencias GTK), por lo que sus extension models nunca se registran.
+Consecuencia: **Code Formatting** (árbol de policy-set por MimeType) y
+**XML Schemas** siguen bloqueados; no son resolubles con solo hosting del motor,
+requieren que el ensamblado del add-in cargue sin GTK (o desacoplar esos paneles
+de la carga del ensamblado). Sin regresión: 53/53 tests, keybindings
+placeholder=False, 0 FATAL.

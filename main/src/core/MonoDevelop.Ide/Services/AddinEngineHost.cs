@@ -50,8 +50,25 @@ public static class AddinEngineHost
 			Console.WriteLine ($"[addins] startupDirectory={hostDir}");
 			// Initialise the static AddinManager facade so AddinManager.GetExtensionNodes works.
 			try { AddinManager.Initialize (configDir, addinsDir); } catch (Exception ex) { Console.WriteLine ("[addins] AddinManager.Initialize: " + ex.Message); }
+			// The stock MonoDevelop.exe.addins only declares ./AddIns (include-subdirs), so the
+			// root assemblies (MonoDevelop.Ide.dll, which defines
+			// /MonoDevelop/Ide/GlobalOptionsDialog) would never be scanned. Generate a manifest
+			// that declares them plus the AddIns tree, and scan that directory.
+			var scanDir = Path.Combine (configDir, "shelladdins");
+			Directory.CreateDirectory (scanDir);
+			var manifest = Path.Combine (scanDir, "shell.addins");
+			var sb = new System.Text.StringBuilder ();
+			sb.AppendLine ("<Addins>");
+			foreach (var rootAsm in new [] { "MonoDevelop.Ide.dll", "MonoDevelop.Core.dll" }) {
+				var f = Path.Combine (hostDir, rootAsm);
+				if (File.Exists (f))
+					sb.AppendLine ($"\t<Assembly file=\"{f}\" />");
+			}
+			sb.AppendLine ($"\t<Directory include-subdirs=\"true\">{Path.Combine (hostDir, "AddIns")}</Directory>");
+			sb.AppendLine ("</Addins>");
+			File.WriteAllText (manifest, sb.ToString ());
 			engine = new AddinEngine ();
-			engine.Initialize (configDir, addinsDir, databaseDir, hostDir);
+			engine.Initialize (configDir, addinsDir, databaseDir, scanDir);
 			engine.Registry.Update (new HostProgressStatus ());
 			try {
 				int polPanels = 0;
