@@ -144,24 +144,62 @@ public partial class PreferencesDialog : Window
 	static PrefsNode Cat (string label, params PrefsNode[] children) => new ("", label, "", children.ToList ());
 	static PrefsNode Leaf (string id, string label, string icon) => new (id, label, icon, new List<PrefsNode> ());
 
-	// Legacy section id (as declared by the add-ins) → Avalonia panel id.
-	static readonly Dictionary<string, string> LegacySectionMap = new (StringComparer.Ordinal) {
-		["Analysis"] = "analysis", ["C#"] = "analysis-csharp",
-		["General"] = "vcgeneral", ["Commit Message Style"] = "vccommit",
-		["Git"] = "git", ["ChangeLog Integration"] = "changelog",
-		["NuGet"] = "nugetgeneral", ["Sources"] = "packagesources",
-		["Debug Source Files"] = "debugsourcefiles",
+	// Legacy section id → Avalonia panel id, per extension point. Keyed by point because
+	// the legacy ids are only unique inside their parent: "General" under
+	// /VersionControl is the VC panel (vcgeneral) while the same id under /TextEditor is
+	// the source-editor General panel (general).
+	static readonly Dictionary<string, Dictionary<string, string>> LegacySectionMap = new (StringComparer.Ordinal) {
+		["/MonoDevelop/Ide/GlobalOptionsDialog/TextEditor"] = new (StringComparer.Ordinal) {
+			["Analysis"] = "analysis",
+			["General"] = "general",
+			["Markers"] = "markers",
+			["Behavior"] = "behavior",
+			["CodeCompletion"] = "intellisense",
+			["SyntaxHighlighting"] = "colortheme",
+		},
+		["/MonoDevelop/Ide/GlobalOptionsDialog/TextEditor/Behavior"] = new (StringComparer.Ordinal) {
+			["XmlFormattingOptions"] = "xml",
+			["CSharpOnTheFlyFormattingPanel"] = "csharpformat",
+		},
+		["/MonoDevelop/Ide/GlobalOptionsDialog/TextEditor/Analysis/C#"] = new (StringComparer.Ordinal) {
+			["CodeActions"] = "codeactions",
+			["CodeGeneration"] = "codegeneration",
+			["CodeRules"] = "coderules",
+			["C#"] = "analysis-csharp",
+		},
+		["/MonoDevelop/Ide/GlobalOptionsDialog/Projects/SdkLocations"] = new (StringComparer.Ordinal) {
+			["DotNetCore"] = "netcore",
+		},
+		["/MonoDevelop/Ide/GlobalOptionsDialog/VersionControl"] = new (StringComparer.Ordinal) {
+			["General"] = "vcgeneral",
+			["Commit Message Style"] = "vccommit",
+			["Git"] = "git",
+			["ChangeLog Integration"] = "changelog",
+			["Subversion"] = "subversion",
+			["Mercurial"] = "mercurial",
+		},
+		["/MonoDevelop/Ide/GlobalOptionsDialog"] = new (StringComparer.Ordinal) {
+			["NuGet"] = "nugetgeneral",
+			["Debug Source Files"] = "debugsourcefiles",
+			["Debugging"] = "debugger",
+		},
+		["/MonoDevelop/Ide/GlobalOptionsDialog/Other"] = new (StringComparer.Ordinal) {
+			["FSharp"] = "fsharp",
+			["Performance Diagnostics"] = "perfgeneral",
+		},
 	};
 
-	// Extension points whose contributed sections are merged into the tree.
-	static readonly (string Point, string Category)[] MergePoints = {
-		("/MonoDevelop/Ide/GlobalOptionsDialog", "Projects"),
-		("/MonoDevelop/Ide/GlobalOptionsDialog/TextEditor", "Text Editor"),
-		("/MonoDevelop/Ide/GlobalOptionsDialog/Projects/SdkLocations", "Projects"),
-		("/MonoDevelop/Ide/GlobalOptionsDialog/VersionControl", "Version Control"),
-		("/MonoDevelop/Ide/GlobalOptionsDialog/Other", "Other"),
-		("/MonoDevelop/Ide/GlobalOptionsDialog/TextEditor/Analysis/C#", "Text Editor"),
-		("/MonoDevelop/Ide/GlobalOptionsDialog/TextEditor/Behavior", "Text Editor"),
+	// Extension points whose contributed sections are merged into the tree, with the
+	// category they belong to and the id of the parent node inside that category
+	// (empty = the category itself).
+	static readonly (string Point, string Category, string Parent)[] MergePoints = {
+		("/MonoDevelop/Ide/GlobalOptionsDialog", "Projects", ""),
+		("/MonoDevelop/Ide/GlobalOptionsDialog/TextEditor", "Text Editor", ""),
+		("/MonoDevelop/Ide/GlobalOptionsDialog/Projects/SdkLocations", "Projects", "sdklocations"),
+		("/MonoDevelop/Ide/GlobalOptionsDialog/VersionControl", "Version Control", ""),
+		("/MonoDevelop/Ide/GlobalOptionsDialog/Other", "Other", ""),
+		("/MonoDevelop/Ide/GlobalOptionsDialog/TextEditor/Analysis/C#", "Text Editor", "analysis-csharp"),
+		("/MonoDevelop/Ide/GlobalOptionsDialog/TextEditor/Behavior", "Text Editor", "behavior"),
 	};
 
 	/// <summary>Merges add-in extension nodes into the Preferences tree. Add-ins
@@ -173,20 +211,29 @@ public partial class PreferencesDialog : Window
 		if (reg is null)
 			return tree;
 		int merged = 0;
-		foreach (var (point, category) in MergePoints) {
+		foreach (var (point, category, parentId) in MergePoints) {
 			foreach (var node in reg.GetExtensionNodes (point)) {
 				var label = string.IsNullOrEmpty (node.Label) ? node.Id : node.Label;
-				var id = LegacySectionMap.TryGetValue (node.Id, out var mapped) ? mapped
+				
+				// Look up in the point-specific map, or fallback to normalized id.
+				var id = (LegacySectionMap.TryGetValue (point, out var pointMap) && pointMap.TryGetValue (node.Id, out var mapped)) ? mapped
 					: node.Id.ToLowerInvariant ().Replace (" ", "").Replace (".", "").Replace ("#", "");
+				
 				var cat = tree.FirstOrDefault (c => c.Label == category);
 				if (cat is null)
 					continue;
-				if (cat.Children.Any (ch => ch.Id == id || ch.Label == label))
+
+				// Find the parent node (either the category or a specific child within it).
+				var target = string.IsNullOrEmpty (parentId) ? cat : cat.Children.FirstOrDefault (ch => ch.Id == parentId);
+				if (target is null)
+					continue;
+
+				if (target.Children.Any (ch => ch.Id == id || ch.Label == label))
 					continue;
 				var leaf = new PrefsNode (id, label, node.Icon ?? "md-prefs-generic", new List<PrefsNode> ());
 				if (!string.IsNullOrEmpty (node.ChildId))
 					leaf.Children.Add (new PrefsNode (node.ChildId.ToLowerInvariant (), node.ChildId, "md-prefs-generic", new ()));
-				cat.Children.Add (leaf);
+				target.Children.Add (leaf);
 				merged++;
 			}
 		}

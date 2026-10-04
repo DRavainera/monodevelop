@@ -1269,3 +1269,24 @@ Verificado: `loaded 3/3` add-ins (Refactoring, XmlEditor, VersionControl),
 `git`/`keybindings` `placeholder=False` 0 FATAL, diálogo "Add-ins" abre 0 FATAL.
 QA §18.5 **APTO** (el primer intento del subagente falló por servicio → reintento).
 Build 0 errores, 53/53. UI GTK intacta.
+
+## 2026-10-04 (Th) — Add-ins DotNetCore + SourceEditor2 + Fix LegacySectionMap Bug
+
+Migración de los add-ins **DotNetCore** y **SourceEditor2** al nuevo sistema de manifiestos Avalonia.
+Se implementó una corrección crítica en `PreferencesDialog.axaml.cs` para evitar colisiones de IDs
+globales (ej: "General") entre diferentes extension points.
+
+**Cambios realizados:**
+- **Nuevo add-in** `main/src/addins/MonoDevelop.Avalonia.DotNetCore/` (contribuye `.NET Core` en `/Projects/SdkLocations`).
+- **Nuevo add-in** `main/src/addins/MonoDevelop.Avalonia.SourceEditor2/` (contribuye `General`, `Markers`, `Behavior`,
+  `IntelliSense` y `Color Theme` en `/TextEditor`).
+- **Refactor de `LegacySectionMap`**: Ahora es `Dictionary<point, Dictionary<id, mappedId>>`. Esto evita que el
+  "General" de Text Editor mapee erróneamente a `vcgeneral`.
+- **Refactor de `MergePoints`**: Ahora soporta un `ParentId`. Permite que las secciones se fusionen en un
+  nodo descendiente (ej: `netcore` dentro de `sdklocations`) en lugar de siempre en la categoría raíz.
+
+**Verificación:**
+- Build Avalonia Shell (net10.0): **0 errores**.
+- Carga de add-ins: **5/5** (Refactoring, XmlEditor, VersionControl, DotNetCore, SourceEditor2).
+- Árbol de Preferences: `addon sections merged=0` (sin duplicados; IDs correctos por contexto).
+- QA §18.5: **APTO**.

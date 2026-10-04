@@ -1,0 +1,20 @@
+{
+  "identity": {
+    "id": "MonoDevelop.DotNetCore",
+    "name": ".NET Core",
+    "publisher": "MonoDevelop",
+    "version": "9.0.0",
+    "description": ".NET Core SDK location options (Avalonia add-in)."
+  },
+  "assetType": "Microsoft.VisualStudio.MefComponent",
+  "installationTarget": { "id": "MonoDevelop.Avalonia", "version": "9.0" },
+  "tags": [ "dotnet", "netcore", "sdk", "runtimes" ],
+  "categories": [ "Projects" ],
+  "dependencies": [ { "id": "MonoDevelop.Ide", "version": "9.0" } ],
+  "autoLoad": true,
+  "extensions": {
+    "/MonoDevelop/Ide/GlobalOptionsDialog/Projects/SdkLocations": [
+      { "id": "DotNetCore", "label": ".NET Core", "icon": "md-platform-netcore" }
+    ]
+  }
+}

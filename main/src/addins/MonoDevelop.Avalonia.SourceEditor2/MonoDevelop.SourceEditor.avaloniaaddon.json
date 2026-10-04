@@ -1,0 +1,24 @@
+{
+  "identity": {
+    "id": "MonoDevelop.SourceEditor",
+    "name": "Source Editor",
+    "publisher": "MonoDevelop",
+    "version": "9.0.0",
+    "description": "Text editor options: general, markers, behavior, IntelliSense and color theme (Avalonia add-in)."
+  },
+  "assetType": "Microsoft.VisualStudio.MefComponent",
+  "installationTarget": { "id": "MonoDevelop.Avalonia", "version": "9.0" },
+  "tags": [ "text editor", "source editor", "intellisense", "color theme" ],
+  "categories": [ "Text Editor" ],
+  "dependencies": [ { "id": "MonoDevelop.Ide", "version": "9.0" } ],
+  "autoLoad": true,
+  "extensions": {
+    "/MonoDevelop/Ide/GlobalOptionsDialog/TextEditor": [
+      { "id": "General", "label": "General", "icon": "md-prefs-text-editor-general" },
+      { "id": "Markers", "label": "Markers and Rulers", "icon": "md-prefs-markers-rulers" },
+      { "id": "Behavior", "label": "Behavior", "icon": "md-prefs-text-editor-behavior" },
+      { "id": "CodeCompletion", "label": "IntelliSense", "icon": "md-prefs-completion", "childId": "CompletionBehavior" },
+      { "id": "SyntaxHighlighting", "label": "Color Theme", "icon": "md-prefs-syntax-highlighting" }
+    ]
+  }
+}
