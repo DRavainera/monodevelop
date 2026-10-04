@@ -73,7 +73,7 @@ public partial class PreferencesDialog : Window
 		// Text editor group (ported from the SourceEditor2 add-in panels, same keys).
 		"general", "markers", "behavior", "intellisense",
 		"colortheme", "codesnippets", "languagebundles",
-		"naming", "standardheader",
+		"naming", "standardheader", "codeformatting",
 		"vcgeneral", "vccommit", "git", "changelog",
 		"nugetgeneral", "packagesources", "debugger", "netcore", "runtimes", "perfdiag", "xml", "intellisense-appearance", "intellisense-behavior", "analysis", "csharpformat",
 	};
@@ -113,6 +113,7 @@ public partial class PreferencesDialog : Window
 		LoadLanguageBundlesPanel ();
 		LoadNamingPanel ();
 		LoadStandardHeaderPanel ();
+		LoadCodeFormattingPanel ();
 		LoadVcGeneralPanel ();
 		LoadGitPanel ();
 		LoadNugetGeneralPanel ();
@@ -2142,6 +2143,45 @@ public partial class PreferencesDialog : Window
 		CsSet (Microsoft.CodeAnalysis.Options.CompletionOptions.TriggerOnDeletion, CsTriggerOnDeletion!.IsChecked == true);
 	}
 
+	// ---------- Source Code → Code Formatting (TextStylePolicy in the global policy set) ----------
+	// TextStylePolicy has no [DataItem], so the policy element name is the type name.
+
+	static bool CfBool (XElement? pol, string name, bool def)
+		=> bool.TryParse ((string?)pol?.Element (name), out var b) ? b : def;
+
+	static int CfInt (XElement? pol, string name, int def)
+		=> int.TryParse ((string?)pol?.Element (name), out var i) ? i : def;
+
+	void LoadCodeFormattingPanel ()
+	{
+		var pol = LoadGlobalPolicy ("TextStylePolicy");
+		var tabsToSpaces = CfBool (pol, "TabsToSpaces", false);
+		CfIndentSpaces!.IsChecked = tabsToSpaces;
+		CfIndentTabs!.IsChecked = !tabsToSpaces;
+		CfIndentWidth!.Text = CfInt (pol, "IndentWidth", 4).ToString ();
+		CfTabWidth!.Text = CfInt (pol, "TabWidth", 4).ToString ();
+		CfFileWidth!.Text = CfInt (pol, "FileWidth", 120).ToString ();
+		CfRemoveTrailing!.IsChecked = CfBool (pol, "RemoveTrailingWhitespace", false);
+		CfNoTabsAfterNonTabs!.IsChecked = CfBool (pol, "NoTabsAfterNonTabs", false);
+		MainWindow.Instance?.Output ($"[prefs-cfmt] tabsToSpaces={tabsToSpaces} indent={CfIndentWidth.Text} tab={CfTabWidth.Text} file={CfFileWidth.Text}");
+	}
+
+	void StoreCodeFormattingPanel ()
+	{
+		var tabsToSpaces = CfIndentSpaces!.IsChecked == true;
+		int.TryParse (CfIndentWidth!.Text.Trim (), out var indent);
+		int.TryParse (CfTabWidth!.Text.Trim (), out var tab);
+		int.TryParse (CfFileWidth!.Text.Trim (), out var file);
+		StoreGlobalPolicies (("TextStylePolicy", el => {
+			el.Add (new XElement ("FileWidth", file.ToString ()));
+			el.Add (new XElement ("TabWidth", tab.ToString ()));
+			el.Add (new XElement ("TabsToSpaces", tabsToSpaces ? "True" : "False"));
+			el.Add (new XElement ("IndentWidth", indent.ToString ()));
+			el.Add (new XElement ("RemoveTrailingWhitespace", CfRemoveTrailing!.IsChecked == true ? "True" : "False"));
+			el.Add (new XElement ("NoTabsAfterNonTabs", CfNoTabsAfterNonTabs!.IsChecked == true ? "True" : "False"));
+		}));
+	}
+
 	// ---------- Panel switching (OptionsDialog.SelectPanel) ----------
 	void OnSectionSelected (object? sender, SelectionChangedEventArgs e)
 	{
@@ -2181,6 +2221,7 @@ public partial class PreferencesDialog : Window
 		PanelLanguageBundles!.IsVisible = id == "languagebundles";
 		PanelNaming!.IsVisible = id == "naming";
 		PanelStandardHeader!.IsVisible = id == "standardheader";
+		PanelCodeFormatting!.IsVisible = id == "codeformatting";
 		PanelVcGeneral!.IsVisible = id == "vcgeneral";
 		PanelCommitMessage!.IsVisible = id == "vccommit";
 		PanelGit!.IsVisible = id == "git";

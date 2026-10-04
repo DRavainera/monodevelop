@@ -624,6 +624,28 @@
                          Text="Stored as the VersionControlPolicy entry of the global policy set, same as the GTK UI." />
             </StackPanel>
 
+            <StackPanel x:Name="PanelCodeFormatting" Margin="16" Spacing="8" IsVisible="False">
+              <TextBlock Text="Text file formatting" FontWeight="SemiBold" />
+              <RadioButton x:Name="CfIndentSpaces" GroupName="cfindent" Content="Indent with spaces" />
+              <RadioButton x:Name="CfIndentTabs" GroupName="cfindent" Content="Indent with tabs" />
+              <Grid ColumnDefinitions="200,*">
+                <TextBlock Text="Indent width" VerticalAlignment="Center" />
+                <TextBox x:Name="CfIndentWidth" Grid.Column="1" MaxWidth="100" HorizontalAlignment="Left" />
+              </Grid>
+              <Grid ColumnDefinitions="200,*">
+                <TextBlock Text="Tab width" VerticalAlignment="Center" />
+                <TextBox x:Name="CfTabWidth" Grid.Column="1" MaxWidth="100" HorizontalAlignment="Left" />
+              </Grid>
+              <Grid ColumnDefinitions="200,*">
+                <TextBlock Text="File width (ruler column)" VerticalAlignment="Center" />
+                <TextBox x:Name="CfFileWidth" Grid.Column="1" MaxWidth="100" HorizontalAlignment="Left" />
+              </Grid>
+              <CheckBox x:Name="CfRemoveTrailing" Content="Remove trailing whitespace" />
+              <CheckBox x:Name="CfNoTabsAfterNonTabs" Content="No tabs after non-tab characters" />
+              <TextBlock Opacity="0.7" FontSize="11" TextWrapping="Wrap"
+                         Text="Stored as the TextStylePolicy entry of the global policy set (same keys as the GTK UI). The per-MimeType policy-set selection tree needs the add-in engine." />
+            </StackPanel>
+
             <StackPanel x:Name="PanelVcGeneral" Margin="16" Spacing="8" IsVisible="False">
               <CheckBox x:Name="VcDisableCheck" Content="Disable Version Control globally" />
               <TextBlock Margin="0,6,0,0" Opacity="0.7" FontSize="11" TextWrapping="Wrap"

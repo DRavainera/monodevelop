@@ -1131,3 +1131,14 @@ correcta es la **agnóstica de lenguaje** (la que produce el fallback de
 por reflexión no fue concluyente en este host, por lo que el panel **mantiene el
 fallback legacy** (`"C#.<OptionId>"`), funcional y round-trip, con la divergencia
 de claves documentada.
+
+## 2026-10-03 (p) — Source Code → Code Formatting
+
+Portado `CodeFormattingPanel` sobre las propiedades de `TextStylePolicy`
+(sin `[DataItem]` → elemento `TextStylePolicy`) del set global: TabsToSpaces
+(radios Espacios/Tabs), IndentWidth, TabWidth, FileWidth, RemoveTrailingWhitespace
+y NoTabsAfterNonTabs. El árbol de selección de policy-set **por MimeType** del
+panel legacy requiere `AddinManager.GetExtensionNodes("/MonoDevelop/ProjectModel/
+Gui/MimeTypePolicyPanels")` (motor de add-ins) → queda fuera y documentado.
+QA: 0 errores, 53/53, `placeholder=False`, `tabsToSpaces=False indent=4 tab=4
+file=120` (defaults), 0 FATAL.
