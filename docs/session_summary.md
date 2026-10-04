@@ -1082,3 +1082,20 @@ panel padre `intellisense` = `CompletionOptionsPanel`) e **IntelliSense →
 Appearance** (`CompletionOptionsHideAdvancedMembers`, checkbox "filter by
 browsable"). QA: 0 errores, 53/53, los tres `placeholder=False`, 0 FATAL
 (`[prefs-xml] complete=False fragments=True schema=False` = defaults legacy).
+
+## 2026-10-03 (m) — Text Editor → Source Analysis
+
+Portado `AnalysisOptionsPanel`: "Enable source analysis of open files"
+(`MonoDevelop.AnalysisCore.AnalysisEnabled_V2`, default true) y "Enable text editor
+unit test integration" (`Testing.EnableUnitTestEditorIntegration`, default false).
+El checkbox "whole solution" depende de una clave Roslyn por lenguaje
+(`SolutionCrawlerClosedFileDiagnostic`) y queda visible pero deshabilitado
+documentado, a la espera de referenciar `Microsoft.CodeAnalysis.Workspaces`
+(ver M-n).
+
+**Bloqueo confirmado de las claves Roslyn por lenguaje**: `Option<T>`/`OptionKey`/
+`GetPropertyName()` viven en `Microsoft.CodeAnalysis.Workspaces.dll`, que no está
+en el cierre de compilación de la shell; `MonoRoslynCompat` solo aporta
+`FeatureOnOffOptions`/`ServiceFeatureOnOffOptions`. Afecta a **Behavior → C#**
+(`OnTheFlyFormattingPanel`, 7 opciones Roslyn) y al checkbox "whole solution".
+QA: 0 errores, 53/53, `placeholder=False`, `openFiles=True unitTest=False`, 0 FATAL.

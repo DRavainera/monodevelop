@@ -75,7 +75,7 @@ public partial class PreferencesDialog : Window
 		"colortheme", "codesnippets", "languagebundles",
 		"naming", "standardheader",
 		"vcgeneral", "vccommit", "git", "changelog",
-		"nugetgeneral", "packagesources", "debugger", "netcore", "runtimes", "perfdiag", "xml", "intellisense-appearance", "intellisense-behavior",
+		"nugetgeneral", "packagesources", "debugger", "netcore", "runtimes", "perfdiag", "xml", "intellisense-appearance", "intellisense-behavior", "analysis",
 	};
 
 	string? pendingLanguage;
@@ -122,6 +122,7 @@ public partial class PreferencesDialog : Window
 		LoadRuntimesPanel ();
 		LoadPerfDiagPanel ();
 		LoadXmlEditorPanel ();
+		LoadAnalysisPanel ();
 		LoadCompletionAppearancePanel ();
 		SetupCmEditors ();
 		LoadCommitMessagePanel ();
@@ -2014,6 +2015,21 @@ public partial class PreferencesDialog : Window
 	void StoreCompletionAppearancePanel ()
 		=> SettingsStore.SetBool ("CompletionOptionsHideAdvancedMembers", CompletionFilterBrowsable!.IsChecked != true);
 
+	// ---------- Source Analysis (AnalysisOptions keys) ----------
+
+	void LoadAnalysisPanel ()
+	{
+		AnOpenFiles!.IsChecked = SettingsStore.GetBool ("MonoDevelop.AnalysisCore.AnalysisEnabled_V2", true);
+		AnUnitTest!.IsChecked = SettingsStore.GetBool ("Testing.EnableUnitTestEditorIntegration", false);
+		MainWindow.Instance?.Output ($"[prefs-analysis] openFiles={AnOpenFiles.IsChecked} unitTest={AnUnitTest.IsChecked}");
+	}
+
+	void StoreAnalysisPanel ()
+	{
+		SettingsStore.SetBool ("MonoDevelop.AnalysisCore.AnalysisEnabled_V2", AnOpenFiles!.IsChecked == true);
+		SettingsStore.SetBool ("Testing.EnableUnitTestEditorIntegration", AnUnitTest!.IsChecked == true);
+	}
+
 	// ---------- Panel switching (OptionsDialog.SelectPanel) ----------
 	void OnSectionSelected (object? sender, SelectionChangedEventArgs e)
 	{
@@ -2063,6 +2079,7 @@ public partial class PreferencesDialog : Window
 		PanelRuntimes!.IsVisible = id == "runtimes";
 		PanelPerfDiag!.IsVisible = id == "perfdiag";
 		PanelXmlEditor!.IsVisible = id == "xml";
+		PanelAnalysis!.IsVisible = id == "analysis";
 		PanelCompletionAppearance!.IsVisible = id == "intellisense-appearance";
 		PanelChangeLog!.IsVisible = id == "changelog";
 		PanelPlaceholder!.IsVisible = !functionalPanels.Contains (id);
@@ -2134,6 +2151,7 @@ public partial class PreferencesDialog : Window
 		StoreRuntimesPanel ();
 		StorePerfDiagPanel ();
 		StoreXmlEditorPanel ();
+		StoreAnalysisPanel ();
 		StoreCompletionAppearancePanel ();
 		StoreThemePanel ();
 		Close ();
