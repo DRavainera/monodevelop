@@ -1117,3 +1117,17 @@ así que la clave cae al nombre legacy `"C#.<OptionId>"`. El panel es funcional 
 persiste round-trip, pero **las claves no coinciden** con las Roslyn de la GTK
 mientras no se resuelva esa dependencia. QA: 0 errores, 53/53,
 `placeholder=False`, 0 FATAL.
+
+## 2026-10-03 (o) — Diagnóstico de la clave Roslyn (csharpformat)
+
+QA integral del día: **APTO** (0 errores, 53/53 tests, 17 paneles con
+`placeholder=False` y 0 FATAL, About y tema System verificados, sin regresión GTK).
+
+Diagnóstico del fallback de clave Roslyn: el error real es
+`ArgumentException: A language name cannot be specified for this option` — en este
+Roslyn 4.8 **todas** estas opciones rechazan el nombre de idioma, así que la clave
+correcta es la **agnóstica de lenguaje** (la que produce el fallback de
+`RoslynKey` del add-in). `OptionKey` no expone constructores públicos, y localizarlos
+por reflexión no fue concluyente en este host, por lo que el panel **mantiene el
+fallback legacy** (`"C#.<OptionId>"`), funcional y round-trip, con la divergencia
+de claves documentada.

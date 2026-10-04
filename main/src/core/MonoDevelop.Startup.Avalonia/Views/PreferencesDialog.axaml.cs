@@ -2057,6 +2057,32 @@ public partial class PreferencesDialog : Window
 		return getPropNameMethod!;
 	}
 
+	// OptionKey's constructors are not public; pick the best match by reflection.
+	static object NewOptionKey (Microsoft.CodeAnalysis.Options.IOption option, bool withLanguage)
+	{
+		var t = typeof (Microsoft.CodeAnalysis.Options.OptionKey);
+		var flags = System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance;
+		var ctors = t.GetConstructors (flags)
+			.Where (c => c.GetParameters ().Length == (withLanguage ? 2 : 1)
+				&& c.GetParameters () [0].ParameterType.IsInstanceOfType (option))
+			.OrderByDescending (c => c.GetParameters ().Length)
+			.ToList ();
+		if (ctors.Count == 0)
+			throw new InvalidOperationException ("OptionKey ctor not found");
+		try {
+			return ctors [0].Invoke (withLanguage ? new object? [] { option, "C#" } : new object? [] { option });
+		} catch (System.Reflection.TargetInvocationException ex) when (ex.InnerException is ArgumentException) {
+			// Same fallback as the add-in's RoslynKey: Roslyn rejects the language name for
+			// options that are no longer per-language.
+			var c1 = t.GetConstructors (flags)
+				.Where (c => c.GetParameters ().Length == 1 && c.GetParameters () [0].ParameterType.IsInstanceOfType (option))
+				.FirstOrDefault ();
+			if (c1 is null)
+				throw;
+			return c1.Invoke (new object? [] { option });
+		}
+	}
+
 	static string RoslynPropName (Microsoft.CodeAnalysis.Options.IOption option)
 	{
 		// Preferred: the exact key the GTK UI persists (Roslyn's internal
@@ -2064,17 +2090,15 @@ public partial class PreferencesDialog : Window
 		// host, fall back to the legacy MonoDevelop property name the add-in migrates
 		// from ("C#.<OptionId suffix>") so the panel still round-trips its own values.
 		try {
-			object key;
-			try {
-				key = Activator.CreateInstance (typeof (Microsoft.CodeAnalysis.Options.OptionKey), option, "C#")!;
-			} catch (ArgumentException) {
-				key = Activator.CreateInstance (typeof (Microsoft.CodeAnalysis.Options.OptionKey), option)!;
-			}
+			// In this Roslyn (4.8) every option here REJECTS the language name, so the add-in's
+			// RoslynKey fallback (language-agnostic OptionKey) is what the GTK UI ends up using.
+			object key = NewOptionKey (option, withLanguage: false);
 			var m = GetPropNameMethod ();
 			if (m is not null)
 				return (string) m.Invoke (null, new [] { key })!;
 		} catch (Exception ex) {
-			MainWindow.Instance?.Output ("[prefs-csharp] Roslyn key unavailable (" + ex.GetType ().Name + "), using legacy name");
+			var inner = ex is System.Reflection.TargetInvocationException tie ? tie.InnerException : ex;
+			MainWindow.Instance?.Output ("[prefs-csharp] Roslyn key unavailable (" + inner?.GetType ().Name + ": " + inner?.Message + "), using legacy name");
 		}
 		var id = option.GetType ().GetProperty ("Id")?.GetValue (option) as string ?? "";
 		var suffix = id.Contains ('#') ? id [(id.IndexOf ('#') + 1)..] : id;
