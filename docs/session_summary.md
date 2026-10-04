@@ -1225,3 +1225,16 @@ Verificado: `merged=3`, `ep …/TextEditor/Analysis/C# nodes=3`; la sección fus
 placeholder (panel aún no implementado). Regresión: `analysis`/`intellisense`/
 `keybindings` siguen `placeholder=False`, 0 FATAL. QA §18.5 **APTO** (sin
 hallazgos). Build 0 errores, 53/53. UI GTK intacta.
+
+## 2026-10-03 (u) — Add-in Manager de la shell Avalonia
+
+Nuevo `Views/AddonManagerDialog.axaml(.cs)`: lista los add-ins del host nuevo
+(`App.Addins`) con **estado** (loaded / not loaded / error), id+versión+publisher,
+descripción, tags y los **extension nodes** que aportan. Chrome propio de Avalonia
+(sin decoraciones del OS), como el resto de diálogos. El diálogo legacy de
+Mono.Addins sigue siendo el de la GTK. Hook QA: `--addonmanager`.
+
+Verificado: `MonoDevelop.Refactoring v9.0.0 loaded=True`,
+`[avalonia-addons-mgr] … state=loaded nodes=4`, ventana "Add-ins" presente, 0 FATAL.
+Regresión: `keybindings`/`analysis` siguen `placeholder=False`. QA §18.5 **APTO**
+(solo INFO). Build 0 errores, 53/53. UI GTK intacta.

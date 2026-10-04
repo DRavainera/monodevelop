@@ -313,6 +313,8 @@ public partial class MainWindow : Window
 					dlg.SelectPanel (arg);
 			} else if (qa == "--about") {
 				new AboutDialog { WindowStartupLocation = WindowStartupLocation.CenterOwner }.ShowDialog (this);
+			} else if (qa == "--addonmanager") {
+				new AddonManagerDialog { WindowStartupLocation = WindowStartupLocation.CenterOwner }.ShowDialog (this);
 			} else if (qa == "--addins") {
 				new AddinManagerDialog { WindowStartupLocation = WindowStartupLocation.CenterOwner }.ShowDialog (this);
 			} else if (qa == "--encodings") {

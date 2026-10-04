@@ -1,0 +1,57 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="MonoDevelop.AvaloniaShell.Views.AddonManagerDialog"
+        Title="Add-ins"
+        Width="780" Height="520"
+        WindowStartupLocation="CenterOwner"
+        SystemDecorations="None"
+        ExtendClientAreaToDecorationsHint="True"
+        Background="{DynamicResource IdeWindowBgBrush}">
+
+  <Window.Styles>
+    <Style Selector="TextBlock">
+      <Setter Property="Foreground" Value="{DynamicResource IdeFgBrush}" />
+    </Style>
+    <Style Selector="TextBox">
+      <Setter Property="Foreground" Value="{DynamicResource IdeFgBrush}" />
+      <Setter Property="Background" Value="{DynamicResource IdeChromeBgBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource IdeBorderBrush}" />
+    </Style>
+    <Style Selector="ListBoxItem">
+      <Setter Property="Foreground" Value="{DynamicResource IdeFgBrush}" />
+    </Style>
+  </Window.Styles>
+
+  <Grid RowDefinitions="Auto,*">
+    <!-- Custom chrome (Avalonia, never OS decorations) -->
+    <Border Grid.Row="0" Classes="dialogchrome" Background="{DynamicResource IdeChromeBgBrush}"
+            BorderBrush="{DynamicResource IdeBorderBrush}" BorderThickness="0,0,0,1">
+      <Grid ColumnDefinitions="*,Auto">
+        <TextBlock Text="Add-ins" Margin="12,6" FontWeight="SemiBold" />
+        <Button Grid.Column="1" Classes="caption captionclose" Content="&#x2715;" Click="OnClose" />
+      </Grid>
+    </Border>
+
+    <Grid Grid.Row="1" ColumnDefinitions="300,*">
+      <StackPanel Margin="8">
+        <TextBlock x:Name="AddonsRoot" Opacity="0.7" FontSize="11" TextWrapping="Wrap" Margin="4,0,4,6" />
+        <ListBox x:Name="AddonsList" SelectionChanged="OnAddonSelected" MinHeight="380" />
+      </StackPanel>
+
+      <ScrollViewer Grid.Column="1" Margin="8">
+        <StackPanel Spacing="8" Margin="8">
+          <TextBlock x:Name="DetailTitle" FontWeight="SemiBold" FontSize="15" />
+          <TextBlock x:Name="DetailId" Opacity="0.8" FontSize="11" />
+          <TextBlock x:Name="DetailState" />
+          <Separator />
+          <TextBlock x:Name="DetailDescription" TextWrapping="Wrap" />
+          <TextBlock Text="Tags" FontWeight="SemiBold" Margin="0,8,0,0" />
+          <TextBlock x:Name="DetailTags" Opacity="0.8" TextWrapping="Wrap" />
+          <TextBlock Text="Extension nodes" FontWeight="SemiBold" Margin="0,8,0,0" />
+          <TextBox x:Name="DetailNodes" IsReadOnly="True" AcceptsReturn="True" MinHeight="180"
+                   TextWrapping="NoWrap" FontSize="11" />
+        </StackPanel>
+      </ScrollViewer>
+    </Grid>
+  </Grid>
+</Window>
