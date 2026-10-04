@@ -1,0 +1,23 @@
+{
+  "identity": {
+    "id": "MonoDevelop.XmlEditor",
+    "name": "XML Editor",
+    "publisher": "MonoDevelop",
+    "version": "9.0.0",
+    "description": "XML editing options: schemas and file associations (Avalonia add-in)."
+  },
+  "assetType": "Microsoft.VisualStudio.MefComponent",
+  "installationTarget": { "id": "MonoDevelop.Avalonia", "version": "9.0" },
+  "tags": [ "xml", "schemas" ],
+  "categories": [ "Text Editor" ],
+  "dependencies": [ { "id": "MonoDevelop.Ide", "version": "9.0" } ],
+  "autoLoad": true,
+  "extensions": {
+    "/MonoDevelop/Ide/GlobalOptionsDialog/TextEditor": [
+      { "id": "XmlSchemas", "label": "XML Schemas", "icon": "md-prefs-xml" }
+    ],
+    "/MonoDevelop/Ide/GlobalOptionsDialog/TextEditor/Behavior": [
+      { "id": "XmlFormattingOptions", "label": "XML", "icon": "md-prefs-xml" }
+    ]
+  }
+}

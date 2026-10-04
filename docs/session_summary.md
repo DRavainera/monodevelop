@@ -1238,3 +1238,19 @@ Verificado: `MonoDevelop.Refactoring v9.0.0 loaded=True`,
 `[avalonia-addons-mgr] … state=loaded nodes=4`, ventana "Add-ins" presente, 0 FATAL.
 Regresión: `keybindings`/`analysis` siguen `placeholder=False`. QA §18.5 **APTO**
 (solo INFO). Build 0 errores, 53/53. UI GTK intacta.
+
+## 2026-10-03 (v) — Add-in Xml + panel XML Schemas
+
+Nuevo add-in `main/src/addins/MonoDevelop.Avalonia.XmlEditor/` (manifiesto JSON)
+que contribuye `XmlSchemas` y `XmlFormattingOptions` a `…/GlobalOptionsDialog/
+TextEditor` y `…/TextEditor/Behavior`. `MergeAddonSections` incorpora ese punto.
+
+Panel **XML Schemas** (`XmlSchemasPanel` legacy): lista los esquemas de usuario
+de `~/.local/share/MonoDevelop/9.0/XmlSchemas/*.xsd` con Add/Remove, y muestra
+las asociaciones `Association*` de `XmlEditor.AddIn.Options` — mismas rutas y
+claves que la GTK.
+
+Verificado: `loaded 2/2` (Refactoring + XmlEditor), `schemas=1`,
+`addon sections merged=4`, `placeholder=False`, 0 FATAL; regresión de `analysis`/
+`keybindings`/`xml`/`intellisense` OK. QA §18.5 **APTO**. Build 0 errores, 53/53.
+UI GTK intacta.

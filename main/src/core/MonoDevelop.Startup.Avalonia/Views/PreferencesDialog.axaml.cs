@@ -75,7 +75,7 @@ public partial class PreferencesDialog : Window
 		"colortheme", "codesnippets", "languagebundles",
 		"naming", "standardheader", "codeformatting",
 		"vcgeneral", "vccommit", "git", "changelog",
-		"nugetgeneral", "packagesources", "debugger", "netcore", "runtimes", "perfdiag", "xml", "intellisense-appearance", "intellisense-behavior", "analysis", "csharpformat",
+		"nugetgeneral", "packagesources", "debugger", "netcore", "runtimes", "perfdiag", "xml", "intellisense-appearance", "intellisense-behavior", "analysis", "csharpformat", "xmlschemas",
 	};
 
 	string? pendingLanguage;
@@ -125,6 +125,7 @@ public partial class PreferencesDialog : Window
 		LoadXmlEditorPanel ();
 		LoadAnalysisPanel ();
 		LoadCSharpFormatPanel ();
+		LoadXmlSchemasPanel ();
 		LoadCompletionAppearancePanel ();
 		SetupCmEditors ();
 		LoadCommitMessagePanel ();
@@ -160,6 +161,7 @@ public partial class PreferencesDialog : Window
 		("/MonoDevelop/Ide/GlobalOptionsDialog/VersionControl", "Version Control"),
 		("/MonoDevelop/Ide/GlobalOptionsDialog/Other", "Other"),
 		("/MonoDevelop/Ide/GlobalOptionsDialog/TextEditor/Analysis/C#", "Text Editor"),
+		("/MonoDevelop/Ide/GlobalOptionsDialog/TextEditor/Behavior", "Text Editor"),
 	};
 
 	/// <summary>Merges add-in extension nodes into the Preferences tree. Add-ins
@@ -2234,6 +2236,65 @@ public partial class PreferencesDialog : Window
 		}));
 	}
 
+	// ---------- XML Schemas (XmlSchemaManager: schemas in the data folder, associations in
+	// XmlEditor.AddIn.Options as Association<ext> properties) ----------
+
+	static string XmlSchemasDir => Path.Combine (UserDataRoot, "XmlSchemas");
+
+	void LoadXmlSchemasPanel ()
+	{
+		XmlSchemasList!.Items.Clear ();
+		if (Directory.Exists (XmlSchemasDir))
+			foreach (var f in Directory.EnumerateFiles (XmlSchemasDir, "*.xsd").OrderBy (f => f, StringComparer.OrdinalIgnoreCase))
+				XmlSchemasList.Items.Add (new ListBoxItem { Tag = f, Content = Path.GetFileName (f) });
+		// Associations: keys starting with "Association" inside XmlEditor.AddIn.Options.
+		var assoc = new List<string> ();
+		try {
+			var props = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile), ".config", "MonoDevelop", "9.0", "MonoDevelopProperties.xml");
+			if (File.Exists (props)) {
+				var root = System.Xml.Linq.XDocument.Load (props, LoadOptions.PreserveWhitespace).Root?
+					.Elements ("Property").FirstOrDefault (e => (string?)e.Attribute ("key") == "XmlEditor.AddIn.Options");
+				if (root is not null)
+					foreach (var p in root.Elements ("Property")) {
+						var k = (string?)p.Attribute ("key") ?? "";
+						if (k.StartsWith ("Association", StringComparison.OrdinalIgnoreCase))
+							assoc.Add (k ["Association".Length..] + " = " + ((string?)p.Attribute ("value") ?? "(inline)"));
+					}
+			}
+		} catch { }
+		XmlSchemaAssociations!.Text = assoc.Count == 0 ? "(none configured)" : string.Join (Environment.NewLine, assoc);
+		MainWindow.Instance?.Output ($"[prefs-xmlschemas] schemas={XmlSchemasList.Items.Count} associations={assoc.Count}");
+	}
+
+	void StoreXmlSchemasPanel () { }
+
+	async void OnXmlSchemaAdd (object? sender, RoutedEventArgs e)
+	{
+		if (TopLevel.GetTopLevel (this)?.StorageProvider is not { } sp)
+			return;
+		var files = await sp.OpenFilePickerAsync (new Avalonia.Platform.Storage.FilePickerOpenOptions {
+			AllowMultiple = true,
+			Title = "Select XML schemas",
+			FileTypeFilter = new [] { new Avalonia.Platform.Storage.FilePickerFileType ("XML Schema") { Patterns = new [] { "*.xsd" } } },
+		});
+		if (files.Count == 0)
+			return;
+		Directory.CreateDirectory (XmlSchemasDir);
+		foreach (var f in files) {
+			if (f.TryGetLocalPath () is { } src)
+				File.Copy (src, Path.Combine (XmlSchemasDir, Path.GetFileName (src)), overwrite: true);
+		}
+		LoadXmlSchemasPanel ();
+	}
+
+	void OnXmlSchemaRemove (object? sender, RoutedEventArgs e)
+	{
+		if (XmlSchemasList?.SelectedItem is ListBoxItem { Tag: string file }) {
+			try { File.Delete (file); } catch { }
+			LoadXmlSchemasPanel ();
+		}
+	}
+
 	// ---------- Panel switching (OptionsDialog.SelectPanel) ----------
 	void OnSectionSelected (object? sender, SelectionChangedEventArgs e)
 	{
@@ -2286,6 +2347,7 @@ public partial class PreferencesDialog : Window
 		PanelXmlEditor!.IsVisible = id == "xml";
 		PanelAnalysis!.IsVisible = id == "analysis";
 		PanelCSharpFormat!.IsVisible = id == "csharpformat";
+		PanelXmlSchemas!.IsVisible = id == "xmlschemas";
 		PanelCompletionAppearance!.IsVisible = id == "intellisense-appearance";
 		PanelChangeLog!.IsVisible = id == "changelog";
 		PanelPlaceholder!.IsVisible = !functionalPanels.Contains (id);
@@ -2359,6 +2421,7 @@ public partial class PreferencesDialog : Window
 		StoreXmlEditorPanel ();
 		StoreAnalysisPanel ();
 		StoreCSharpFormatPanel ();
+		StoreXmlSchemasPanel ();
 		StoreCompletionAppearancePanel ();
 		StoreThemePanel ();
 		Close ();

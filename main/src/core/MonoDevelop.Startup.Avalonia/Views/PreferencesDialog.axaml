@@ -646,6 +646,22 @@
                          Text="Stored as the TextStylePolicy entry of the global policy set (same keys as the GTK UI). The per-MimeType policy-set selection tree needs the add-in engine." />
             </StackPanel>
 
+            <Grid x:Name="PanelXmlSchemas" Margin="16" RowDefinitions="Auto,*,Auto" IsVisible="False">
+              <TextBlock Grid.Row="0" Text="User XML schemas" FontWeight="SemiBold" Margin="0,0,0,6" />
+              <ListBox x:Name="XmlSchemasList" Grid.Row="1" MinHeight="140" MaxHeight="220" />
+              <StackPanel Grid.Row="2" Spacing="6" Margin="0,8,0,0">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                  <Button Content="Add…" Click="OnXmlSchemaAdd" />
+                  <Button Content="Remove" Click="OnXmlSchemaRemove" />
+                </StackPanel>
+                <TextBlock Text="File extensions bound to XML schemas" FontWeight="SemiBold" Margin="0,6,0,0" />
+                <TextBox x:Name="XmlSchemaAssociations" IsReadOnly="True" AcceptsReturn="True" MinHeight="110"
+                         TextWrapping="NoWrap" FontSize="11" />
+                <TextBlock Opacity="0.7" FontSize="11" TextWrapping="Wrap"
+                           Text="Schemas live in XmlSchemas under the MonoDevelop data folder; extensions are stored as Association* properties under XmlEditor.AddIn.Options (same as the GTK UI)." />
+              </StackPanel>
+            </Grid>
+
             <StackPanel x:Name="PanelVcGeneral" Margin="16" Spacing="8" IsVisible="False">
               <CheckBox x:Name="VcDisableCheck" Content="Disable Version Control globally" />
               <TextBlock Margin="0,6,0,0" Opacity="0.7" FontSize="11" TextWrapping="Wrap"
