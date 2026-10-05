@@ -1,0 +1,36 @@
+{
+	"identity": {
+		"id": "MonoDevelop.Avalonia.WindowsPlatform",
+		"displayName": "Windows Platform (Avalonia)",
+		"name": "WindowsPlatform",
+		"publisher": "MonoDevelop",
+		"version": "1.0.0",
+		"description": "Windows desktop platform support for Avalonia shell."
+	},
+	"assetType": "Microsoft.VisualStudio.MefComponent",
+	"installationTarget": {
+		"id": "MonoDevelop.Avalonia",
+		"version": ""
+	},
+	"tags": ["windows", "platform", "desktop", "avalonia"],
+	"categories": ["Platform"],
+	"dependencies": [],
+	"autoLoad": true,
+	"assets": [
+		{
+			"type": "Microsoft.VisualStudio.MefComponent",
+			"src": "MonoDevelop.Avalonia.WindowsPlatform.dll",
+			"assembly": "MonoDevelop.Avalonia.WindowsPlatform.dll",
+			"className": "MonoDevelop.Platform.WindowsPlatform"
+		}
+	],
+	"extensions": {
+		"/MonoDevelop/Core/PlatformService": [
+			{
+				"id": "WindowsPlatform",
+				"label": "Windows Platform",
+				"className": "MonoDevelop.Platform.WindowsPlatform"
+			}
+		]
+	}
+}

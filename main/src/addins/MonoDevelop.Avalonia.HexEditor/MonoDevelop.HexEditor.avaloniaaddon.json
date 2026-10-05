@@ -1,0 +1,21 @@
+{
+  "identity": {
+    "id": "MonoDevelop.HexEditor",
+    "displayName": "Hex Editor",
+    "name": "HexEditor",
+    "publisher": "MonoDevelop",
+    "version": "9.0.0",
+    "description": "Binary file hex editor (Avalonia add-in)."
+  },
+  "assetType": "Microsoft.VisualStudio.MefComponent",
+  "installationTarget": { "id": "MonoDevelop.Avalonia", "version": "9.0" },
+  "tags": [ "binary", "hex", "editor" ],
+  "categories": [ "Tools" ],
+  "dependencies": [ { "id": "MonoDevelop.Ide", "versionRange": "[9.0,*)" } ],
+  "autoLoad": true,
+  "extensions": {
+    "/MonoDevelop/Ide/ContextMenu/File": [
+      { "id": "MonoDevelop.HexEditor.Open", "label": "Open Hex Editor", "icon": "md-prefs-generic" }
+    ]
+  }
+}

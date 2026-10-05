@@ -1,0 +1,21 @@
+{
+  "identity": {
+    "id": "MonoDevelop.WebReferences",
+    "displayName": "Web References",
+    "name": "WebReferences",
+    "publisher": "MonoDevelop",
+    "version": "9.0.0",
+    "description": "Web reference management and tools (Avalonia add-in)."
+  },
+  "assetType": "Microsoft.VisualStudio.MefComponent",
+  "installationTarget": { "id": "MonoDevelop.Avalonia", "version": "9.0" },
+  "tags": [ "web", "references", "webservices" ],
+  "categories": [ "Tools" ],
+  "dependencies": [ { "id": "MonoDevelop.Ide", "versionRange": "[9.0,*)" } ],
+  "autoLoad": true,
+  "extensions": {
+    "/MonoDevelop/Ide/ContextMenu/ProjectPad": [
+      { "id": "MonoDevelop.WebReferences.AddWebReference", "label": "Add Web Reference", "icon": "md-prefs-generic" }
+    ]
+  }
+}

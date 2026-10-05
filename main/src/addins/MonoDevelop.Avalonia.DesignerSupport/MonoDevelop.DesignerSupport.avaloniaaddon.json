@@ -1,0 +1,21 @@
+{
+  "identity": {
+    "id": "MonoDevelop.DesignerSupport",
+    "displayName": "Designer Support",
+    "name": "DesignerSupport",
+    "publisher": "MonoDevelop",
+    "version": "9.0.0",
+    "description": "Toolbox and designer support for Avalonia projects (Avalonia add-in)."
+  },
+  "assetType": "Microsoft.VisualStudio.MefComponent",
+  "installationTarget": { "id": "MonoDevelop.Avalonia", "version": "9.0" },
+  "tags": [ "designer", "toolbox", "ui" ],
+  "categories": [ "Tools" ],
+  "dependencies": [ { "id": "MonoDevelop.Ide", "versionRange": "[9.0,*)" } ],
+  "autoLoad": true,
+  "extensions": {
+    "/MonoDevelop/Ide/CommandBars/DesignerTools": [
+      { "id": "MonoDevelop.DesignerSupport.Toolbox", "label": "Designer Toolbox", "icon": "md-prefs-generic" }
+    ]
+  }
+}

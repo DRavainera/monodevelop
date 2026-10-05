@@ -1,0 +1,21 @@
+{
+  "identity": {
+    "id": "MonoDevelop.Gettext",
+    "displayName": "Gettext",
+    "name": "Gettext",
+    "publisher": "MonoDevelop",
+    "version": "9.0.0",
+    "description": "Gettext translation and localization tools (Avalonia add-in)."
+  },
+  "assetType": "Microsoft.VisualStudio.MefComponent",
+  "installationTarget": { "id": "MonoDevelop.Avalonia", "version": "9.0" },
+  "tags": [ "gettext", "translation", "localization" ],
+  "categories": [ "Tools" ],
+  "dependencies": [ { "id": "MonoDevelop.Ide", "versionRange": "[9.0,*)" } ],
+  "autoLoad": true,
+  "extensions": {
+    "/MonoDevelop/Ide/ContextMenu/ProjectPad": [
+      { "id": "MonoDevelop.Gettext.TranslateProject", "label": "Translate Project", "icon": "md-prefs-generic" }
+    ]
+  }
+}

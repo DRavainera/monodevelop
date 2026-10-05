@@ -1,0 +1,21 @@
+{
+  "identity": {
+    "id": "MonoDevelop.DocFood",
+    "displayName": "DocFood",
+    "name": "DocFood",
+    "publisher": "MonoDevelop",
+    "version": "9.0.0",
+    "description": "Documentation assistant options (Avalonia add-in)."
+  },
+  "assetType": "Microsoft.VisualStudio.MefComponent",
+  "installationTarget": { "id": "MonoDevelop.Avalonia", "version": "9.0" },
+  "tags": [ "docs", "docfood" ],
+  "categories": [ "Other" ],
+  "dependencies": [ { "id": "MonoDevelop.Ide", "versionRange": "[9.0,*)" } ],
+  "autoLoad": true,
+  "extensions": {
+    "/MonoDevelop/Ide/GlobalOptionsDialog/Other": [
+      { "id": "DocFood", "label": "DocFood", "icon": "md-prefs-generic" }
+    ]
+  }
+}

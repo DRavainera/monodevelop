@@ -1,0 +1,19 @@
+{
+	"identity": {
+		"id": "MonoDevelop.LinuxPlatform",
+		"displayName": "Linux Platform",
+		"name": "LinuxPlatform",
+		"publisher": "MonoDevelop",
+		"version": "1.0.0",
+		"description": "Linux desktop platform support for Avalonia shell."
+	},
+	"assetType": "Microsoft.VisualStudio.MefComponent",
+	"autoLoad": true,
+	"assets": [
+		{
+			"type": "Microsoft.VisualStudio.MefComponent",
+			"assembly": "MonoDevelop.LinuxPlatform.dll",
+			"className": "MonoDevelop.Platform.LinuxPlatform"
+		}
+	]
+}

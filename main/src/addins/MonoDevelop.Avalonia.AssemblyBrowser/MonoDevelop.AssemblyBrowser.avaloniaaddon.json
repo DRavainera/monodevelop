@@ -1,0 +1,21 @@
+{
+  "identity": {
+    "id": "MonoDevelop.AssemblyBrowser",
+    "displayName": "Assembly Browser",
+    "name": "AssemblyBrowser",
+    "publisher": "MonoDevelop",
+    "version": "9.0.0",
+    "description": "Assembly browser and dependency inspector (Avalonia add-in)."
+  },
+  "assetType": "Microsoft.VisualStudio.MefComponent",
+  "installationTarget": { "id": "MonoDevelop.Avalonia", "version": "9.0" },
+  "tags": [ "assembly", "browser", "dependencies" ],
+  "categories": [ "Tools" ],
+  "dependencies": [ { "id": "MonoDevelop.Ide", "versionRange": "[9.0,*)" } ],
+  "autoLoad": true,
+  "extensions": {
+    "/MonoDevelop/Ide/ContextMenu/ProjectPad": [
+      { "id": "MonoDevelop.AssemblyBrowser.ContextMenu", "label": "Open Assembly Browser", "icon": "md-prefs-generic" }
+    ]
+  }
+}

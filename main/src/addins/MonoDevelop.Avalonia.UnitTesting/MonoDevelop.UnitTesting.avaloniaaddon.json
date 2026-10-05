@@ -1,0 +1,24 @@
+{
+  "identity": {
+    "id": "MonoDevelop.UnitTesting",
+    "displayName": "Unit Testing",
+    "name": "UnitTesting",
+    "publisher": "MonoDevelop",
+    "version": "9.0.0",
+    "description": "Unit testing tools and runner for Avalonia (Avalonia add-in)."
+  },
+  "assetType": "Microsoft.VisualStudio.MefComponent",
+  "installationTarget": { "id": "MonoDevelop.Avalonia", "version": "9.0" },
+  "tags": [ "testing", "unit testing", "nunit", "xunit" ],
+  "categories": [ "Testing" ],
+  "dependencies": [ { "id": "MonoDevelop.Ide", "versionRange": "[9.0,*)" } ],
+  "autoLoad": true,
+  "extensions": {
+    "/MonoDevelop/Ide/Commands": [
+      { "id": "MonoDevelop.UnitTesting.RunTests", "label": "Run All Tests", "icon": "md-prefs-run" }
+    ],
+    "/MonoDevelop/Ide/Pads": [
+      { "id": "MonoDevelop.UnitTesting.TestPad", "label": "Tests", "icon": "md-prefs-test" }
+    ]
+  }
+}

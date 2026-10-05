@@ -1,0 +1,22 @@
+{
+  "identity": {
+    "id": "MonoDevelop.NuGet",
+    "displayName": "NuGet",
+    "name": "NuGet",
+    "publisher": "MonoDevelop",
+    "version": "9.0.0",
+    "description": "NuGet package management options (Avalonia add-in)."
+  },
+  "assetType": "Microsoft.VisualStudio.MefComponent",
+  "installationTarget": { "id": "MonoDevelop.Avalonia", "version": "9.0" },
+  "tags": [ "nuget", "packages", "dependencies" ],
+  "categories": [ "NuGet" ],
+  "dependencies": [ { "id": "MonoDevelop.Ide", "versionRange": "[9.0,*)" } ],
+  "autoLoad": true,
+  "extensions": {
+    "/MonoDevelop/Ide/GlobalOptionsDialog/NuGet": [
+      { "id": "NuGetGeneral", "label": "General", "icon": "md-prefs-package" },
+      { "id": "PackageSources", "label": "Sources", "icon": "md-prefs-package-source" }
+    ]
+  }
+}

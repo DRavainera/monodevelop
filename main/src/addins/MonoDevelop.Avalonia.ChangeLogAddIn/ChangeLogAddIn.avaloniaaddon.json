@@ -1,0 +1,21 @@
+{
+  "identity": {
+    "id": "MonoDevelop.ChangeLogAddIn",
+    "displayName": "ChangeLog Add-in",
+    "name": "ChangeLogAddIn",
+    "publisher": "MonoDevelop",
+    "version": "9.0.0",
+    "description": "ChangeLog integration options (Avalonia add-in)."
+  },
+  "assetType": "Microsoft.VisualStudio.MefComponent",
+  "installationTarget": { "id": "MonoDevelop.Avalonia", "version": "9.0" },
+  "tags": [ "changelog", "versioning" ],
+  "categories": [ "Version Control" ],
+  "dependencies": [ { "id": "MonoDevelop.Ide", "versionRange": "[9.0,*)" } ],
+  "autoLoad": true,
+  "extensions": {
+    "/MonoDevelop/Ide/GlobalOptionsDialog/VersionControl": [
+      { "id": "DefaultChangeLogIntegration", "label": "ChangeLog Integration", "icon": "md-prefs-generic" }
+    ]
+  }
+}

@@ -1,0 +1,38 @@
+{
+	"identity": {
+		"id": "MonoDevelop.Avalonia.LinuxPlatform",
+		"displayName": "Linux Platform (Avalonia)",
+		"name": "LinuxPlatform",
+		"publisher": "MonoDevelop",
+		"version": "1.0.0",
+		"description": "Linux desktop platform support for Avalonia shell.",
+		"preview": false,
+		"language": "en-US"
+	},
+	"assetType": "Microsoft.VisualStudio.MefComponent",
+	"installationTarget": {
+		"id": "MonoDevelop.Avalonia",
+		"version": ""
+	},
+	"tags": ["linux", "platform", "desktop", "avalonia"],
+	"categories": ["Platform"],
+	"dependencies": [],
+	"autoLoad": true,
+	"assets": [
+		{
+			"type": "Microsoft.VisualStudio.MefComponent",
+			"src": "MonoDevelop.Avalonia.LinuxPlatform.dll",
+			"assembly": "MonoDevelop.Avalonia.LinuxPlatform.dll",
+			"className": "MonoDevelop.Platform.LinuxPlatform"
+		}
+	],
+	"extensions": {
+		"/MonoDevelop/Core/PlatformService": [
+			{
+				"id": "LinuxPlatform",
+				"label": "Linux Platform",
+				"className": "MonoDevelop.Platform.LinuxPlatform"
+			}
+		]
+	}
+}

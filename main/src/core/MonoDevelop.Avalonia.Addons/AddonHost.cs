@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.Loader;
+using System.Text.RegularExpressions;
 using System.Text.Json;
 using MonoDevelop.AvaloniaAddons.Extensions;
 using MonoDevelop.AvaloniaAddons.Manifests;
@@ -10,17 +12,6 @@ using MonoDevelop.AvaloniaAddons.Packages;
 
 namespace MonoDevelop.AvaloniaAddons
 {
-	public sealed class AddonLoadState
-	{
-		public AddonManifest Manifest { get; init; }
-		public IAvaloniaAddon Addon { get; set; }
-		public AddonLoadContext Context { get; set; }
-		public string Error { get; set; }
-		public bool Loaded { get; private set; }
-		/// <summary>Marked when the add-in activated, or when it contributed nodes
-		/// (manifest-only add-ins have no assembly).</summary>
-		public void MarkLoaded () => Loaded = Error is null;
-	}
 
 	/// <summary>
 	/// Hosts the shell add-ins: discovers manifests under a root folder, loads each in its
@@ -45,7 +36,6 @@ namespace MonoDevelop.AvaloniaAddons
 		}
 
 		public IReadOnlyList<AddonLoadState> Addons => addons;
-		/// <summary>Extension-point registry populated by the discovered add-ins.</summary>
 		public IAddonExtensionRegistry Extensions => extensions;
 		public IReadOnlyList<string> Log => log;
 		public string RootDirectory => root;
@@ -64,104 +54,240 @@ namespace MonoDevelop.AvaloniaAddons
 				try {
 					var m = JsonSerializer.Deserialize<AddonManifest> (File.ReadAllText (file));
 					if (m?.Identity is null || string.IsNullOrEmpty (m.Identity.Id)) { Note ("invalid manifest: " + file); continue; }
-					var asm = ResolveAssembly (m, file);
+					
+					// Dependency Check
+					if (!ValidateDependencies (m)) { Note ($"dependency error in {file}"); continue; }
+
 					var state = new AddonLoadState { Manifest = m };
-					if (asm is not null)
-						state.Context = new AddonLoadContext (asm);
-					else if (!string.IsNullOrEmpty (m.EntryPoint))
-						state.Error = $"entry point not found: {m.EntryPoint}";
-					addons.Add (state);
+						if (m.EntryPoint is not { Length: > 0 } && (m.Assets == null || m.Assets.Count == 0)) {
+							state.Error = "no entrypoint or assets found";
+					}
+					
+					if (state.Error is null) {
+							var asm = ResolveAssembly (m, file);
+							var manifestDir = Path.GetDirectoryName (file) ?? root;
+							if (asm is not null) {
+								state.Context = new AddonLoadContext (asm, manifestDir);
+							} else {
+								state.Error = "assembly not found for entry point";
+							}
+					}
+					
+					if (state.Error is null) state.MarkLoaded ();
 				} catch (Exception ex) { Note ($"manifest error {file}: {ex.Message}"); }
 			}
 		}
 
 		string ResolveAssembly (AddonManifest m, string manifestFile)
 		{
-			if (string.IsNullOrEmpty (m.EntryPoint))
-				return null;
-			var dir = Path.GetDirectoryName (manifestFile);
-			var guess = Path.Combine (dir ?? root, m.EntryPoint);
-			return File.Exists (guess) ? guess : null;
+			if (m.EntryPoint is not { Length: > 0 } && (m.Assets == null || m.Assets.Count == 0)) return null;
+			var dir = Path.GetDirectoryName (manifestFile) ?? root;
+			
+			// Prioritize Assets configuration
+			if (m.Assets != null) {
+				foreach (var asset in m.Assets) {
+					if (asset.Assembly is { Length: > 0 }) {
+						// Try as assembly name first, then as file path
+						var assemblyName = asset.Assembly;
+						if (assemblyName.EndsWith (".dll", StringComparison.OrdinalIgnoreCase))
+							assemblyName = Path.GetFileNameWithoutExtension (assemblyName);
+						
+						return assemblyName; // Return assembly name for AddonLoadContext
+					}
+				}
+			}
+			
+			// Legacy support for EntryPoint as file path
+			if (m.EntryPoint is { Length: > 0 }) {
+				var guess = Path.Combine (dir, m.EntryPoint);
+				if (File.Exists (guess)) {
+					// Convert file path to assembly name
+					return Path.GetFileNameWithoutExtension (guess);
+				}
+				// Try as assembly name
+				return m.EntryPoint;
+			}
+			
+			return null;
+		}
+
+		bool ValidateDependencies (AddonManifest m)
+		{
+			if (m.Dependencies == null || m.Dependencies.Count == 0) return true;
+			
+			foreach (var dep in m.Dependencies) {
+				if (dep.Id is null || string.IsNullOrEmpty (dep.Id)) continue;
+				
+				// Find dependency addon
+				var depAddon = addons.FirstOrDefault (a => a.Manifest.Identity.Id == dep.Id);
+				if (depAddon == null) {
+					Note ($"Dependency '{dep.Id}' not found for '{m.Identity.Id}'");
+					return false;
+				}
+				
+				// Check if dependency is loaded and doesn't have errors
+				if (!depAddon.Loaded || depAddon.Error != null) {
+					Note ($"Dependency '{dep.Id}' for '{m.Identity.Id}' is not ready (Loaded: {depAddon.Loaded}, Error: {depAddon.Error})");
+					return false;
+				}
+				
+				// Validate version range
+				if (dep.VersionRange is { Length: > 0 } && !IsVersionSatisfied (depAddon.Manifest.Identity.Version, dep.VersionRange)) {
+					Note ($"Version constraint failed: '{m.Identity.Id}' requires '{dep.Id}' {dep.VersionRange}, but found {depAddon.Manifest.Identity.Version}");
+					return false;
+				}
+			}
+			
+			return true;
+		}
+
+		bool IsVersionSatisfied (string version, string range)
+		{
+			if (range == "[*]" || string.IsNullOrEmpty (range)) return true;
+			
+			try {
+				// Parse range format like [9.0, 10.0)
+				if (range.StartsWith ("[") && (range.EndsWith (")") || range.EndsWith ("]"))) {
+					var inner = range.Substring (1, range.Length - 2); // Remove brackets
+					var parts = inner.Split (',');
+					if (parts.Length != 2) return version == range; // Fallback
+					
+					var minVersionStr = parts[0].Trim ();
+					var maxVersionStr = parts[1].Trim ();
+					
+					// Parse versions
+					if (!Version.TryParse (version, out var actualVersion)) return false;
+					
+					bool minInclusive = range[0] == '[';
+					bool maxInclusive = range[^1] == ']';
+					
+					// Check minimum bound
+					if (!string.IsNullOrEmpty (minVersionStr) && minVersionStr != "*") {
+						if (!Version.TryParse (minVersionStr, out var minVersion)) return false;
+						
+						if (minInclusive) {
+							if (actualVersion < minVersion) return false;
+						} else {
+							if (actualVersion <= minVersion) return false;
+						}
+					}
+					
+					// Check maximum bound
+					if (!string.IsNullOrEmpty (maxVersionStr) && maxVersionStr != "*") {
+						if (!Version.TryParse (maxVersionStr, out var maxVersion)) return false;
+						
+						if (maxInclusive) {
+							if (actualVersion > maxVersion) return false;
+						} else {
+							if (actualVersion >= maxVersion) return false;
+						}
+					}
+					
+					return true;
+				}
+				
+				// Simple equality check
+				return version == range;
+			} catch {
+				// Fallback to simple comparison
+				return version == range;
+			}
 		}
 
 		/// <summary>Loads add-in assemblies, composes and activates packages.</summary>
 		public void LoadAll ()
 		{
+			// Phase 1: Pre-load dependency validation
 			foreach (var state in addons) {
-				try {
-					if (state.Manifest.EntryPoint is { Length: > 0 } && state.Context is { } alc) {
-						var asmPath = ResolveAssembly (state.Manifest, FindManifestPath (state.Manifest));
-						if (asmPath is not null) {
-							var asm = alc.LoadFromAssemblyPath (asmPath);
-							foreach (var t in SafeGetTypes (asm)) {
-								if (t is null || t.IsAbstract || t.IsInterface)
-									continue;
-								if (!typeof(IPackage).IsAssignableFrom (t) && !typeof(IAvaloniaAddon).IsAssignableFrom (t))
-									continue;
-								object inst = null;
-								try { inst = Activator.CreateInstance (t); }
-								catch (Exception ex) { Note ($"{state.Manifest.Identity.Id}: ctor {t.Name}: {ex.Message}"); continue; }
-								composition.Add (inst);
-								if (inst is IPackage pkg)
-									pkg.Initialize (new Context (root, extensions, composition, state.Manifest.Identity.Id, Note));
-							}
-						}
-					}
-					state.MarkLoaded ();
-				} catch (Exception ex) { state.Error = ex.Message; Note ($"{state.Manifest.Identity.Id}: {ex.Message}"); }
-			}
-			// register extension nodes from the manifests (only for add-ins that loaded,
-			// so the UI never renders nodes whose classes are unavailable)
-			foreach (var state in addons) {
-				if (!state.Loaded)
+				if (!ValidateDependencies (state.Manifest)) {
+					state.Error = "dependencies not satisfied";
+					Note ($"{state.Manifest.Identity.Id}: dependencies not satisfied");
 					continue;
-				foreach (var (path, nodes) in state.Manifest.Extensions) {
-					if (!extensions.HasExtensionPoint (path))
-						extensions.DeclareExtensionPoint (path);
-					foreach (var node in nodes ?? new List<AddonExtensionNode> ())
-						extensions.AddNode (path, node);
 				}
 			}
-			// activate autoloaded packages
-			foreach (var p in composition.GetExports (typeof (IPackage)).OfType<IPackage> ())
-				_ = p;
-			foreach (var inst in composition.Parts) {
-				if (inst is IPackage pkg && inst.GetType ().GetCustomAttribute<ProvideAutoLoadAttribute> () is not null)
-					pkg.Load ();
+			
+			// Phase 2: Load assemblies
+			foreach (var state in addons) {
+				if (state.Loaded || state.Error != null) continue;
+				try {
+					var manifestPath = FindManifestPath (state.Manifest);
+					var assemblyName = ResolveAssembly (state.Manifest, manifestPath);
+					var manifestDir = Path.GetDirectoryName (manifestPath) ?? root;
+					
+					if (assemblyName != null) {
+						var alc = new AddonLoadContext (assemblyName, manifestDir);
+						state.Context = alc;
+						
+						foreach (var t in SafeGetTypes (alc.Assembly)) {
+							if (t is null || t.IsAbstract || t.IsInterface) continue;
+							if (!typeof(IPackage).IsAssignableFrom (t) && !typeof(IAvaloniaAddon).IsAssignableFrom (t)) continue;
+							
+							object inst = null;
+							try { inst = Activator.CreateInstance (t); } 
+							catch (Exception ex) { Note ($"{state.Manifest.Identity.Id}: ctor {t.Name}: {ex.Message}"); continue; }
+							
+							if (inst is IAvaloniaAddon addon) {
+								addon.Initialize (new Context (root, extensions, composition, state.Manifest.Identity.Id, Note));
+								if (addon.GetType ().GetCustomAttribute<ProvideAutoLoadAttribute> () is not null) addon.Load ();
+							}
+							
+							if (inst is IPackage pkg) {
+								pkg.Initialize (new Context (root, extensions, composition, state.Manifest.Identity.Id, Note));
+								if (pkg.GetType ().GetCustomAttribute<ProvideAutoLoadAttribute> () is not null) pkg.Load ();
+							}
+						}
+						
+						state.MarkLoaded ();
+					} else {
+						state.Error = "assembly not found";
+					}
+				} catch (Exception ex) { 
+					state.Error = ex.Message; 
+					Note ($"{state.Manifest.Identity.Id}: {ex.Message}"); 
+				}
 			}
-			foreach (var st in addons)
-				st.MarkLoaded ();
-			Note ($"loaded {addons.Count (a => a.Loaded)}/{addons.Count} add-in(s)");
+			
+			// register extension nodes from the manifests
+		foreach (var state in addons) {
+			if (!state.Loaded) continue;
+			foreach (var (path, nodes) in state.Manifest.Extensions) {
+				if (!extensions.HasExtensionPoint (path)) extensions.DeclareExtensionPoint (path);
+				foreach (var node in nodes ?? new List<AddonExtensionNode> ()) extensions.AddNode (path, node);
+			}
+		}
+		// activate autoloaded packages
+		foreach (var p in composition.GetExports (typeof (IPackage)).OfType<IPackage> ()) _ = p;
+		foreach (var inst in composition.Parts) {
+			if (inst is IPackage pkg && inst.GetType ().GetCustomAttribute<ProvideAutoLoadAttribute> () is not null) pkg.Load ();
+		}
+		foreach (var st in addons) st.MarkLoaded ();
+		Note ($"loaded {addons.Count (a => a.Loaded)}/{addons.Count} add-in(s)");
+	}
+
+		string FindManifestPath (AddonManifest m) => Directory.EnumerateFiles (root, "*" + ManifestSuffix, SearchOption.AllDirectories).FirstOrDefault (f => File.ReadAllText (f).Contains (m.Identity.Id)) ?? Path.Combine (root, m.Identity.Id + ManifestSuffix);
+
+		static IEnumerable<Type> SafeGetTypes (Assembly asm) {
+			try { return asm.GetTypes (); } catch (ReflectionTypeLoadException ex) { return (ex.Types ?? Array.Empty<Type> ()).Where (t => t is not null); }
 		}
 
-		string FindManifestPath (AddonManifest m)
-			=> Directory.EnumerateFiles (root, "*" + ManifestSuffix, SearchOption.AllDirectories)
-				.FirstOrDefault (f => File.ReadAllText (f).Contains (m.Identity.Id)) ?? Path.Combine (root, m.Identity.Id + ManifestSuffix);
+		public void Dispose () => UnloadAll ();
 
-		static IEnumerable<Type> SafeGetTypes (Assembly asm)
-		{
-			try { return asm.GetTypes (); }
-			catch (ReflectionTypeLoadException ex) { return (ex.Types ?? Array.Empty<Type> ()).Where (t => t is not null); }
+		void UnloadAll () {
+			foreach (var inst in composition.Parts.OfType<IPackage> ()) inst.Unload ();
 		}
 
-		sealed class Context : IAddonContext
-		{
+		sealed class Context : IAddonContext {
 			readonly Action<string> note;
-			public Context (string root, IAddonExtensionRegistry ext, ICompositionHost comp, string addonId, Action<string> note)
-			{ RootDirectory = root; Extensions = ext; Composition = comp; AddonId = addonId; this.note = note; }
+			public Context (string root, IAddonExtensionRegistry ext, ICompositionHost comp, string addonId, Action<string> note) {
+				this.RootDirectory = root; this.Extensions = ext; this.Composition = comp; this.AddonId = addonId; this.note = note;
+			}
 			public string AddonId { get; }
 			public string RootDirectory { get; }
 			public IAddonExtensionRegistry Extensions { get; }
 			public ICompositionHost Composition { get; }
+			public ICommandService CommandService { get; }
+			public IPadRegistry PadRegistry { get; }
 			public void Log (string message) => note ($"{AddonId}: {message}");
 		}
-
-		public void UnloadAll ()
-		{
-			foreach (var inst in composition.Parts.OfType<IPackage> ())
-				inst.Unload ();
-		}
-
-		public void Dispose () => UnloadAll ();
-	}
+ 	}
 }

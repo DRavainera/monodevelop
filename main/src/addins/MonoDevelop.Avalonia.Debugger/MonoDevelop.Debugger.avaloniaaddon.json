@@ -1,0 +1,21 @@
+{
+  "identity": {
+    "id": "MonoDevelop.Debugger",
+    "displayName": "Debugger",
+    "name": "Debugger",
+    "publisher": "MonoDevelop",
+    "version": "9.0.0",
+    "description": "Debugging options (Avalonia add-in)."
+  },
+  "assetType": "Microsoft.VisualStudio.MefComponent",
+  "installationTarget": { "id": "MonoDevelop.Avalonia", "version": "9.0" },
+  "tags": [ "debug", "debugger" ],
+  "categories": [ "Projects" ],
+  "dependencies": [ { "id": "MonoDevelop.Ide", "versionRange": "[9.0,*)" } ],
+  "autoLoad": true,
+  "extensions": {
+    "/MonoDevelop/Ide/GlobalOptionsDialog/Projects": [
+      { "id": "Debugger", "label": "Debugger", "icon": "md-prefs-debugger" }
+    ]
+  }
+}

@@ -4,11 +4,9 @@ using System.Text.Json.Serialization;
 
 namespace MonoDevelop.AvaloniaAddons.Manifests
 {
-	/// <summary>
-	/// Add-in manifest, shaped after the Visual Studio <c>extension.vsixmanifest</c>
-	/// (identity / assetType / installationTarget / tags / categories / dependencies)
+	/// <summary>Add-in manifest, shaped after the Visual Studio <c>extension.vsixmanifest</c>
+	/// (identity / assetType / installationTarget / tags / categories / dependencies) 
 	/// so the model is familiar, plus the shell-specific pieces (autoLoad, extensions).
-	/// Serialized as JSON on disk (<c>&lt;id&gt;.avaloniaaddon.json</c>).
 	/// </summary>
 	public sealed class AddonManifest
 	{
@@ -30,14 +28,15 @@ namespace MonoDevelop.AvaloniaAddons.Manifests
 		[JsonPropertyName ("dependencies")]
 		public List<AddonDependency> Dependencies { get; set; } = new ();
 
-		/// <summary>Type implementing <see cref="IAvaloniaAddon"/> loaded from the add-in assembly.</summary>
 		[JsonPropertyName ("entryPoint")]
 		public string EntryPoint { get; set; }
 
 		[JsonPropertyName ("autoLoad")]
 		public bool AutoLoad { get; set; } = true;
 
-		/// <summary>Extension nodes per extension point path (e.g. /MonoDevelop/Ide/GlobalOptionsDialog).</summary>
+		[JsonPropertyName ("assets")]
+		public List<AddonAsset> Assets { get; set; } = new ();
+
 		[JsonPropertyName ("extensions")]
 		public Dictionary<string, List<AddonExtensionNode>> Extensions { get; set; } = new ();
 	}
@@ -45,10 +44,13 @@ namespace MonoDevelop.AvaloniaAddons.Manifests
 	public sealed class AddonIdentity
 	{
 		[JsonPropertyName ("id")] public string Id { get; set; } = "";
+		[JsonPropertyName ("displayName")] public string DisplayName { get; set; } = "";
 		[JsonPropertyName ("name")] public string Name { get; set; } = "";
 		[JsonPropertyName ("publisher")] public string Publisher { get; set; } = "";
 		[JsonPropertyName ("version")] public string Version { get; set; } = "1.0.0";
 		[JsonPropertyName ("description")] public string Description { get; set; } = "";
+		[JsonPropertyName ("preview")] public bool Preview { get; set; } = false;
+		[JsonPropertyName ("language")] public string Language { get; set; } = "en-US";
 	}
 
 	public sealed class AddonInstallationTarget
@@ -60,16 +62,23 @@ namespace MonoDevelop.AvaloniaAddons.Manifests
 	public sealed class AddonDependency
 	{
 		[JsonPropertyName ("id")] public string Id { get; set; } = "";
-		[JsonPropertyName ("version")] public string Version { get; set; } = "";
+		[JsonPropertyName ("versionRange")] public string VersionRange { get; set; } = "[*]";
 	}
 
-	/// <summary>One contributed node (section/panel) for an extension point.</summary>
-	public sealed class AddonExtensionNode
+	public sealed class AddonAsset
 	{
+		[JsonPropertyName ("type")] public string Type { get; set; } = "Microsoft.VisualStudio.MefComponent";
+		[JsonPropertyName ("src")] public string Src { get; set; }
+		[JsonPropertyName ("assembly")] public string Assembly { get; set; }
+		[JsonPropertyName ("className")] public string ClassName { get; set; }
+	}
+
+	public sealed class AddonExtensionNode
+	{ 
 		[JsonPropertyName ("id")] public string Id { get; set; } = "";
 		[JsonPropertyName ("label")] public string Label { get; set; } = "";
-		[JsonPropertyName ("icon")] public string Icon { get; set; }
-		[JsonPropertyName ("class")] public string Class { get; set; }
+		[JsonPropertyName ("icon")] public string Icon { get; set; } = "";
+		[JsonPropertyName ("className")] public string ClassName { get; set; }
 		[JsonPropertyName ("childId")] public string ChildId { get; set; }
 	}
 }

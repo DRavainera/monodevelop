@@ -1,42 +1,84 @@
 using System;
+using System.IO;
 using System.Reflection;
 using System.Runtime.Loader;
 
 namespace MonoDevelop.AvaloniaAddons
 {
-	/// <summary>
-	/// Per-add-in <see cref="AssemblyLoadContext"/> so an add-in's dependencies never
-	/// leak into the shell (Visual Studio runs extensions out-of-proc; we isolate in-proc).
-	/// </summary>
-	public sealed class AddonLoadContext : AssemblyLoadContext
-	{
-		readonly AssemblyDependencyResolver resolver;
+    /// <summary>
+    /// Load context for an add-in, using AssemblyDependencyResolver for proper dependency resolution.
+    /// </summary>
+    public sealed class AddonLoadContext : AssemblyLoadContext
+    {
+        private readonly AssemblyDependencyResolver resolver;
+        private readonly string assemblyPath;
 
-		public AddonLoadContext (string assemblyPath)
-			: base (isCollectible: true)
-		{
-			if (!string.IsNullOrEmpty (assemblyPath))
-				resolver = new AssemblyDependencyResolver (assemblyPath);
-		}
+        public Assembly Assembly { get; private set; }
+        public string AssemblyName { get; }
 
-		protected override Assembly Load (AssemblyName assemblyName)
-		{
-			if (resolver is not null) {
-				var path = resolver.ResolveAssemblyToPath (assemblyName);
-				if (path is not null)
-					return LoadFromAssemblyPath (path);
-			}
-			return null; // fall back to the default context (shell/shared)
-		}
+        public AddonLoadContext(string assemblyPathOrName, string manifestDirectory)
+        {
+            if (File.Exists(assemblyPathOrName))
+            {
+                // It's a file path
+                this.assemblyPath = assemblyPathOrName;
+                this.AssemblyName = Path.GetFileNameWithoutExtension(assemblyPathOrName);
+                this.resolver = new AssemblyDependencyResolver(assemblyPathOrName);
+            }
+            else
+            {
+                // It's an assembly name - try to find it
+                var guess = Path.Combine(manifestDirectory, assemblyPathOrName + ".dll");
+                if (File.Exists(guess))
+                {
+                    this.assemblyPath = guess;
+                    this.AssemblyName = assemblyPathOrName;
+                    this.resolver = new AssemblyDependencyResolver(guess);
+                }
+                else
+                {
+                    throw new FileNotFoundException($"Assembly '{assemblyPathOrName}' not found in directory '{manifestDirectory}'");
+                }
+            }
 
-		protected override IntPtr LoadUnmanagedDll (string unmanagedDllName)
-		{
-			if (resolver is not null) {
-				var path = resolver.ResolveUnmanagedDllToPath (unmanagedDllName);
-				if (path is not null)
-					return LoadUnmanagedDllFromPath (path);
-			}
-			return IntPtr.Zero;
-		}
-	}
+            LoadAssembly();
+        }
+
+        private void LoadAssembly()
+        {
+            try
+            {
+                Assembly = LoadFromAssemblyPath(assemblyPath);
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException($"Failed to load assembly '{assemblyPath}': {ex.Message}", ex);
+            }
+        }
+
+        protected override Assembly Load(AssemblyName assemblyName)
+        {
+            // Try to resolve using AssemblyDependencyResolver first
+            var assemblyPath = resolver.ResolveAssemblyToPath(assemblyName);
+            if (assemblyPath != null)
+            {
+                return LoadFromAssemblyPath(assemblyPath);
+            }
+
+            // Fall back to default resolution
+            return null;
+        }
+
+        protected override IntPtr LoadUnmanagedDll(string unmanagedDllName)
+        {
+            // Try to resolve unmanaged DLLs
+            var libraryPath = resolver.ResolveUnmanagedDllToPath(unmanagedDllName);
+            if (libraryPath != null)
+            {
+                return LoadUnmanagedDllFromPath(libraryPath);
+            }
+
+            return IntPtr.Zero;
+        }
+    }
 }

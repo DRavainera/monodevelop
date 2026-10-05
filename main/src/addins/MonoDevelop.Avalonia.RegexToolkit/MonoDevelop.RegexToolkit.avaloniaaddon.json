@@ -1,0 +1,24 @@
+{
+  "identity": {
+    "id": "MonoDevelop.RegexToolkit",
+    "displayName": "Regex Toolkit",
+    "name": "RegexToolkit",
+    "publisher": "MonoDevelop",
+    "version": "9.0.0",
+    "description": "Regular expression testing and manipulation toolkit (Avalonia add-in)."
+  },
+  "assetType": "Microsoft.VisualStudio.MefComponent",
+  "installationTarget": { "id": "MonoDevelop.Avalonia", "version": "9.0" },
+  "tags": [ "regex", "search", "tools" ],
+  "categories": [ "Tools" ],
+  "dependencies": [ { "id": "MonoDevelop.Ide", "versionRange": "[9.0,*)" } ],
+  "autoLoad": true,
+  "extensions": {
+    "/MonoDevelop/Ide/Commands": [
+      { "id": "MonoDevelop.RegexToolkit.Open", "label": "Regex Toolkit", "icon": "md-prefs-generic" }
+    ],
+    "/MonoDevelop/Ide/Pads": [
+      { "id": "MonoDevelop.RegexToolkit.RegexPad", "label": "Regex Tester", "icon": "md-prefs-generic" }
+    ]
+  }
+}
