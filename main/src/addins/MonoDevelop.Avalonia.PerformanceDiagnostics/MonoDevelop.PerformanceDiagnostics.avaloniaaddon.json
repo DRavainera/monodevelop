@@ -1,0 +1,43 @@
+{
+  "identity": {
+    "id": "MonoDevelop.PerformanceDiagnostics",
+    "displayName": "Performance Diagnostics",
+    "name": "PerformanceDiagnostics",
+    "publisher": "MonoDevelop",
+    "version": "9.0.0",
+    "description": "UI thread hang monitoring, profiling, leak tracker and reliability diagnostics (Avalonia add-in)."
+  },
+  "assetType": "Microsoft.VisualStudio.MefComponent",
+  "installationTarget": { "id": "MonoDevelop.Avalonia", "version": "9.0" },
+  "tags": [ "performance", "diagnostics", "profiling", "leak tracker" ],
+  "categories": [ "Diagnostics" ],
+  "dependencies": [ { "id": "MonoDevelop.Ide", "versionRange": "[9.0,*)" } ],
+  "autoLoad": true,
+  "extensions": {
+    "/MonoDevelop/Ide/Commands": [
+      { "id": "PerformanceDiagnosticsAddIn.StartStopListeningUIThreadMonitorHandler", "label": "Start monitoring UIThread hangs" },
+      { "id": "PerformanceDiagnosticsAddIn.ProfileFor5SecondsHandler", "label": "Profile for 5 seconds" },
+      { "id": "PerformanceDiagnosticsAddIn.SpinDumpFor5SecondsHandler", "label": "SpinDump for 5 seconds" },
+      { "id": "PerformanceDiagnosticsAddIn.DumpLiveWidgetsHandler", "label": "Dump live widgets" },
+      { "id": "PerformanceDiagnosticsAddIn.ToggleProfileHandler", "label": "Toggle profiling" },
+      { "id": "PerformanceDiagnosticsAddIn.EnhanceSampleFile", "label": "Enhance Sample output file" },
+      { "id": "PerformanceDiagnosticsAddIn.InduceUIThreadCrash", "label": "Induce UI Thread Crash" },
+      { "id": "PerformanceDiagnosticsAddIn.InduceManagedCrash", "label": "Induce Managed Crash" },
+      { "id": "PerformanceDiagnosticsAddIn.InduceNativeCrash", "label": "Induce Native Crash" },
+      { "id": "PerformanceDiagnosticsAddIn.InduceHang", "label": "Induce Hang" },
+      { "id": "PerformanceDiagnosticsAddIn.InduceNativePInvokeCrash", "label": "Induce PInvoke Crash" }
+    ],
+    "/MonoDevelop/Ide/MainMenu/Help": [
+      { "id": "Diagnostics", "label": "Diagnostics" }
+    ],
+    "/MonoDevelop/Ide/GlobalOptionsDialog/PerformanceDiagnostics": [
+      { "id": "PerformanceDiagnosticsGeneral", "label": "General", "icon": "md-prefs-performance", "className": "PerformanceDiagnosticsAddIn.GlobalOptionsPanel" }
+    ],
+    "/MonoDevelop/Ide/Pads": [
+      { "id": "PerformanceDiagnosticsAddIn.LeakTrackerPad", "label": "Leak Tracker", "icon": "md-errors-list", "className": "PerformanceDiagnosticsAddIn.LeakTrackerPad" }
+    ],
+    "/MonoDevelop/Ide/WorkbenchLayouts/Solution": [
+      { "id": "PerformanceDiagnosticsAddIn.LeakTrackerPad", "label": "Leak Tracker", "icon": "md-errors-list" }
+    ]
+  }
+}

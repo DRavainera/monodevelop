@@ -1,0 +1,19 @@
+{
+	"identity": {
+		"id": "MonoDevelop.MacPlatform",
+		"displayName": "Mac Platform",
+		"name": "MacPlatform",
+		"publisher": "MonoDevelop",
+		"version": "1.0.0",
+		"description": "Mac desktop platform support for Avalonia shell."
+	},
+	"assetType": "Microsoft.VisualStudio.MefComponent",
+	"autoLoad": true,
+	"assets": [
+		{
+			"type": "Microsoft.VisualStudio.MefComponent",
+			"assembly": "MonoDevelop.MacPlatform.dll",
+			"className": "MonoDevelop.Platform.MacPlatform"
+		}
+	]
+}

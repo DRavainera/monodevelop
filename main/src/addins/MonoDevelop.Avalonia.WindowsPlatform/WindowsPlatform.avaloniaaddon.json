@@ -1,0 +1,19 @@
+{
+	"identity": {
+		"id": "MonoDevelop.WindowsPlatform",
+		"displayName": "Windows Platform",
+		"name": "WindowsPlatform",
+		"publisher": "MonoDevelop",
+		"version": "1.0.0",
+		"description": "Windows desktop platform support for Avalonia shell."
+	},
+	"assetType": "Microsoft.VisualStudio.MefComponent",
+	"autoLoad": true,
+	"assets": [
+		{
+			"type": "Microsoft.VisualStudio.MefComponent",
+			"assembly": "MonoDevelop.WindowsPlatform.dll",
+			"className": "MonoDevelop.Platform.WindowsPlatform"
+		}
+	]
+}

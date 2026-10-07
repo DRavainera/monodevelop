@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 using System.Runtime.Loader;
 
@@ -27,18 +28,20 @@ namespace MonoDevelop.AvaloniaAddons
             }
             else
             {
-                // It's an assembly name - try to find it
-                var guess = Path.Combine(manifestDirectory, assemblyPathOrName + ".dll");
-                if (File.Exists(guess))
+                // It's an assembly name: next to the manifest, then the unified
+                // build tree (main/build; the single build output directory, same
+                // ../../../build convention as the add-in csproj references).
+                var name = assemblyPathOrName + ".dll";
+                var candidates = new[]
                 {
-                    this.assemblyPath = guess;
-                    this.AssemblyName = assemblyPathOrName;
-                    this.resolver = new AssemblyDependencyResolver(guess);
-                }
-                else
-                {
+                    Path.Combine(manifestDirectory, name),
+                    Path.GetFullPath(Path.Combine(manifestDirectory, "..", "..", "..", "build", name)),
+                };
+                this.assemblyPath = candidates.FirstOrDefault(File.Exists);
+                if (this.assemblyPath is null)
                     throw new FileNotFoundException($"Assembly '{assemblyPathOrName}' not found in directory '{manifestDirectory}'");
-                }
+                this.AssemblyName = Path.GetFileNameWithoutExtension(this.assemblyPath);
+                this.resolver = new AssemblyDependencyResolver(this.assemblyPath);
             }
 
             LoadAssembly();

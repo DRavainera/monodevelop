@@ -1,0 +1,60 @@
+{
+  "identity": {
+    "id": "MonoDevelop.VBNetBinding",
+    "displayName": "VB.NET Binding",
+    "name": "VBNetBinding",
+    "publisher": "MonoDevelop",
+    "version": "9.0.0",
+    "description": "VB.NET language binding: project type, language binding, templates, option panels, MIME and text editor extension (Avalonia add-in)."
+  },
+  "assetType": "Microsoft.VisualStudio.MefComponent",
+  "installationTarget": { "id": "MonoDevelop.Avalonia", "version": "9.0" },
+  "tags": [ "vbnet", "language binding" ],
+  "categories": [ "Language Binding" ],
+  "dependencies": [
+    { "id": "MonoDevelop.Ide", "versionRange": "[9.0,*)" }
+  ],
+  "autoLoad": true,
+  "extensions": {
+    "/MonoDevelop/ProjectModel/MSBuildItemTypes": [
+      { "id": "VBNet", "language": "VBNet", "extension": "vbproj", "guid": "{F184B08F-C81C-45F6-A57F-5ABD9991F28F}", "import": "$(MSBuildBinPath)\\Microsoft.VisualBasic.targets", "className": "MonoDevelop.VBNetBinding.VBProject", "resourceHandler": "MonoDevelop.VBNetBinding.VBNetResourceIdBuilder" }
+    ],
+    "/MonoDevelop/Ide/FileFilters": [
+      { "id": "VBNet", "label": "VB.NET Files", "extensions": "*.vb" }
+    ],
+    "/MonoDevelop/Ide/FileTemplates": [
+      { "id": "EmptyVBFile", "resource": "EmptyVBFile.xft.xml" },
+      { "id": "VBAssemblyInfo", "resource": "AssemblyInfo.xft.xml" }
+    ],
+    "/MonoDevelop/Ide/ProjectTemplates": [
+      { "id": "MonoDevelop.VBNet.EmptyProject", "resource": "EmptyVBProject.xpt.xml" },
+      { "id": "MonoDevelop.VBNet.ConsoleProject", "resource": "VBConsoleApplicationProject.xpt.xml" }
+    ],
+    "/MonoDevelop/ProjectModel/Gui/ItemOptionPanels/Build/General": [
+      { "id": "VBNetProjectOptionsPanel", "label": "General Options", "className": "MonoDevelop.VBNetBinding.ProjectOptionsPanel", "condition": "ProjectTypeId=VBNet" },
+      { "id": "VBNetOutputOptionsPanel", "label": "Imports", "className": "MonoDevelop.VBNetBinding.ImportOptionsPanel", "condition": "ProjectTypeId=VBNet" }
+    ],
+    "/MonoDevelop/ProjectModel/Gui/ItemOptionPanels/Build/Compiler": [
+      { "id": "VBNetConfigurationOptionsPanel", "label": "Compiler Options", "className": "MonoDevelop.VBNetBinding.ConfigurationOptionsPanel", "condition": "ProjectTypeId=VBNet" }
+    ],
+    "/MonoDevelop/Core/StockIcons": [
+      { "id": "md-vb-file", "resource": "md-file-source" }
+    ],
+    "/MonoDevelop/Core/MimeTypes": [
+      { "id": "text/x-basic", "label": "Visual Basic source code", "icon": "md-vb-file", "isText": true, "roslynName": "Visual Basic", "contentType": "Basic", "pattern": "*.vb" }
+    ],
+    "/MonoDevelop/ProjectModel/LanguageBindings": [
+      { "id": "VBNet", "extensions": ".vb", "singleLineCommentTag": "'", "codeDomType": "MonoDevelop.VBNetBinding.ImprovedCodeDomProvider" }
+    ],
+    "/MonoDevelop/ProjectModel/SerializableClasses": [
+      { "id": "VBCompilerParameters", "className": "MonoDevelop.VBNetBinding.VBCompilerParameters" },
+      { "id": "Import", "className": "MonoDevelop.VBNetBinding.Import" }
+    ],
+    "/MonoDevelop/Ide/TextEditorExtensions": [
+      { "id": "VBNetTextEditorExtension", "className": "MonoDevelop.VBNet.VBNetTextEditorExtension", "fileExtensions": ".vb" }
+    ],
+    "/MonoDevelop/TypeSystem/Parser": [
+      { "id": "VBNetTypeSystemParser", "className": "MonoDevelop.VBNetBinding.TypeSystemParser", "mimeType": "text/x-basic" }
+    ]
+  }
+}

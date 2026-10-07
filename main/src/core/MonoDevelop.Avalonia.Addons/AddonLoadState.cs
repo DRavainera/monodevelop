@@ -16,8 +16,11 @@ namespace MonoDevelop.AvaloniaAddons
 
         public void MarkLoaded()
         {
-            Loaded = true;
-            LoadTime = DateTime.Now;
+            // Loaded mirrors the error state: a failed add-in stays unloaded
+            // (its extension nodes must not reach the UI).
+            Loaded = Error is null;
+            if (Loaded)
+                LoadTime = DateTime.Now;
         }
 
         public void MarkFailed(string error)

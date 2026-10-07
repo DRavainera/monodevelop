@@ -1,0 +1,70 @@
+{
+  "identity": {
+    "id": "MonoDevelop.Packaging",
+    "displayName": "NuGet Packaging",
+    "name": "Packaging",
+    "publisher": "MonoDevelop",
+    "version": "9.0.0",
+    "description": "NuGet packaging: .nuproj project type, packaging project flavor, templates, wizards, option panels and Create NuGet Package command (Avalonia add-in)."
+  },
+  "assetType": "Microsoft.VisualStudio.MefComponent",
+  "installationTarget": { "id": "MonoDevelop.Avalonia", "version": "9.0" },
+  "tags": [ "nuget", "packaging" ],
+  "categories": [ "Project System" ],
+  "dependencies": [
+    { "id": "MonoDevelop.Ide", "versionRange": "[9.0,*)" }
+  ],
+  "autoLoad": true,
+  "extensions": {
+    "/MonoDevelop/ProjectModel/ConditionTypes": [
+      { "id": "ProjectHasNuGetMetadata", "className": "MonoDevelop.Packaging.ProjectHasNuGetMetadataCondition" }
+    ],
+    "/MonoDevelop/ProjectModel/MSBuildItemTypes": [
+      { "id": "NuGet.Packaging", "language": "NuGet.Packaging", "extension": "nuproj", "guid": "{5DD5E4FA-CB73-4610-85AB-557B54E96AA9}", "className": "MonoDevelop.Packaging.PackagingProject", "alias": "NuGetPackaging", "msbuildSupport": "Required" }
+    ],
+    "/MonoDevelop/ProjectModel/ProjectModelExtensions": [
+      { "id": "MonoDevelop.Packaging.PackagingProjectFlavor", "className": "MonoDevelop.Packaging.PackagingProjectFlavor", "guid": "{5DD5E4FA-CB73-4610-85AB-557B54E96AA9}", "alias": "NuGetPackaging" },
+      { "id": "DotNetProjectPackagingExtension", "className": "MonoDevelop.Packaging.DotNetProjectPackagingExtension" }
+    ],
+    "/MonoDevelop/ProjectModel/LanguageBindings": [
+      { "id": "NuGet.Packaging", "extensions": ".nuproj" }
+    ],
+    "/MonoDevelop/ProjectModel/MSBuildGlobalPropertyProviders": [
+      { "id": "NuGetPackagingMSBuildPropertyProvider", "className": "MonoDevelop.Packaging.MSBuildGlobalPropertyProvider" }
+    ],
+    "/MonoDevelop/Ide/ProjectTemplates": [
+      { "id": "MonoDevelop.Packaging.Project", "resource": "Templates/PackagingProject.xpt.xml" },
+      { "id": "MonoDevelop.Packaging.CrossPlatformLibrary", "resource": "Templates/CrossPlatformLibrary.xpt.xml" }
+    ],
+    "/MonoDevelop/Ide/ProjectTemplateWizards": [
+      { "id": "MonoDevelop.Packaging.ProjectTemplateWizard", "className": "MonoDevelop.Packaging.Templating.PackagingProjectTemplateWizard" },
+      { "id": "MonoDevelop.Packaging.CrossPlatformLibraryTemplateWizard", "className": "MonoDevelop.Packaging.Templating.CrossPlatformLibraryTemplateWizard" }
+    ],
+    "/MonoDevelop/ProjectModel/Gui/ItemOptionPanels": [
+      { "id": "NuGetPackage", "label": "NuGet Package" },
+      { "id": "Build", "label": "Build", "className": "MonoDevelop.Packaging.OptionPanels.ProjectNuGetBuildOptionsPanel", "childId": "NuGetPackage", "condition": "ItemType=DotNetProject AND NOT ItemType=MonoDevelop.Packaging.PackagingProject" },
+      { "id": "Metadata", "label": "Metadata", "icon": "md-prefs-metadata", "className": "MonoDevelop.Packaging.OptionPanels.NuGetPackageMetadataOptionsPanel", "childId": "NuGetPackage", "condition": "ItemType=MonoDevelop.Packaging.PackagingProject|DotNetProject" },
+      { "id": "ReferenceAssemblies", "label": "Reference Assemblies", "icon": "md-prefs-package", "className": "MonoDevelop.Packaging.OptionPanels.ReferenceAssembliesOptionsPanel", "childId": "NuGetPackage", "condition": "ItemType=MonoDevelop.Packaging.PackagingProject" }
+    ],
+    "/MonoDevelop/Ide/Commands": [
+      { "id": "NuGet", "label": "NuGet" },
+      { "id": "MonoDevelop.Packaging.Commands.CreateNuGetPackage", "label": "Create NuGet _Package", "className": "MonoDevelop.Packaging.CreateNuGetPackageHandler" },
+      { "id": "MonoDevelop.Packaging.Commands.AddPlatformImplementation", "label": "Add _Platform Implementation...", "className": "MonoDevelop.Packaging.AddPlatformImplementationHandler" }
+    ],
+    "/MonoDevelop/Ide/MainMenu/Build": [
+      { "id": "CreateNuGetPackageSeparator", "type": "separator", "condition": "ProjectHasNuGetMetadata" },
+      { "id": "MonoDevelop.Packaging.Commands.CreateNuGetPackage", "condition": "ProjectHasNuGetMetadata" }
+    ],
+    "/MonoDevelop/Ide/ContextMenu/ProjectPad": [
+      { "id": "CreateNuGetPackageSeparator", "type": "separator", "condition": "(ItemType=DotNetProject|MonoDevelop.Packaging.PackagingProject) AND ProjectHasNuGetMetadata" },
+      { "id": "MonoDevelop.Packaging.Commands.CreateNuGetPackage", "condition": "(ItemType=DotNetProject|MonoDevelop.Packaging.PackagingProject) AND ProjectHasNuGetMetadata" }
+    ],
+    "/MonoDevelop/Ide/ContextMenu/ProjectPad/Add": [
+      { "id": "MonoDevelop.Packaging.Commands.AddPlatformImplementation", "condition": "ItemType=DotNetProject AND ProjectHasNuGetMetadata" }
+    ],
+    "/MonoDevelop/DesignerSupport/PropertyProviders": [
+      { "id": "NuGetFilePropertyProvider", "className": "MonoDevelop.Packaging.NuGetFilePropertyProvider" },
+      { "id": "NuGetProjectReferencePropertyProvider", "className": "MonoDevelop.Packaging.NuGetProjectReferencePropertyProvider" }
+    ]
+  }
+}

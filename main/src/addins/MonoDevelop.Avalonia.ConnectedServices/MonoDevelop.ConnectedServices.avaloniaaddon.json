@@ -1,0 +1,39 @@
+{
+  "identity": {
+    "id": "MonoDevelop.ConnectedServices",
+    "displayName": "Connected Services",
+    "name": "ConnectedServices",
+    "publisher": "MonoDevelop",
+    "version": "9.0.0",
+    "description": "Connected services: service providers, project model extension, solution pad nodes and service gallery (Avalonia add-in)."
+  },
+  "assetType": "Microsoft.VisualStudio.MefComponent",
+  "installationTarget": { "id": "MonoDevelop.Avalonia", "version": "9.0" },
+  "tags": [ "connected services", "service providers", "project model" ],
+  "categories": [ "Project Model" ],
+  "dependencies": [ { "id": "MonoDevelop.Ide", "versionRange": "[9.0,*)" } ],
+  "autoLoad": true,
+  "extensions": {
+    "/MonoDevelop/ProjectModel/ProjectModelExtensions": [
+      { "id": "ConnectedServiceProjectExtension", "label": "Connected Services Project Extension", "className": "MonoDevelop.ConnectedServices.ConnectedServiceProjectExtension" }
+    ],
+    "/MonoDevelop/Ide/Commands/Project": [
+      { "id": "MonoDevelop.ConnectedServices.Commands.OpenServicesGallery", "label": "Service Capabilities" }
+    ],
+    "/MonoDevelop/Ide/MainMenu/Project": [
+      { "id": "MonoDevelop.ConnectedServices.Commands.OpenServicesGallery", "label": "Service Capabilities" }
+    ],
+    "/MonoDevelop/Ide/Pads/ProjectPad": [
+      { "id": "ConnectedServicesFolderNodeBuilderExtension", "label": "Connected Services Folder", "className": "MonoDevelop.ConnectedServices.Gui.SolutionPad.ConnectedServicesFolderNodeBuilderExtension" },
+      { "id": "ConnectedServicesFolderNodeBuilder", "label": "Connected Services Folder Node", "className": "MonoDevelop.ConnectedServices.Gui.SolutionPad.ConnectedServicesFolderNodeBuilder" },
+      { "id": "ConnectedServicesFolderNodeHiderExtension", "label": "Connected Services Folder Hider", "className": "MonoDevelop.ConnectedServices.Gui.SolutionPad.ConnectedServicesFolderNodeHiderExtension" },
+      { "id": "ConnectedServiceNodeBuilder", "label": "Connected Service Node", "className": "MonoDevelop.ConnectedServices.Gui.SolutionPad.ConnectedServiceNodeBuilder" }
+    ],
+    "/MonoDevelop/Ide/Commands/Hidden": [
+      { "id": "MonoDevelop.ConnectedServices.Commands.OpenServicesGalleryFromServicesNode", "label": "Open Service Gallery" },
+      { "id": "MonoDevelop.ConnectedServices.Commands.OpenServiceDetails", "label": "Open Service Details" },
+      { "id": "MonoDevelop.ConnectedServices.Commands.RemoveService", "label": "Remove Service…" },
+      { "id": "MonoDevelop.ConnectedServices.Commands.AddServiceTelemetry", "label": "Add Service" }
+    ]
+  }
+}

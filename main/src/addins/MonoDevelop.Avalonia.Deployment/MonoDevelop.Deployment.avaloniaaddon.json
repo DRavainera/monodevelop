@@ -1,0 +1,97 @@
+{
+  "identity": {
+    "id": "MonoDevelop.Deployment",
+    "displayName": "Deployment (Packaging)",
+    "name": "Deployment",
+    "publisher": "MonoDevelop",
+    "version": "9.0.0",
+    "description": "Deployment and packaging: package builders, deploy handlers, deploy directories/platforms and packaging project support (Avalonia add-in)."
+  },
+  "assetType": "Microsoft.VisualStudio.MefComponent",
+  "installationTarget": { "id": "MonoDevelop.Avalonia", "version": "9.0" },
+  "tags": [ "deployment", "packaging", "install" ],
+  "categories": [ "Project Model" ],
+  "dependencies": [ { "id": "MonoDevelop.Ide", "versionRange": "[9.0,*)" } ],
+  "autoLoad": true,
+  "extensions": {
+    "/MonoDevelop/Ide/Commands": [
+      { "id": "Deployment", "label": "Deployment" },
+      { "id": "MonoDevelop.Deployment.Commands.CreatePackage", "label": "Create Package..." },
+      { "id": "MonoDevelop.Deployment.Commands.AddPackage", "label": "Add Package..." },
+      { "id": "MonoDevelop.Deployment.Commands.Install", "label": "Install..." }
+    ],
+    "/MonoDevelop/Ide/MainMenu/Project": [
+      { "id": "MonoDevelop.Deployment.Commands.CreatePackage", "label": "Create Package..." }
+    ],
+    "/MonoDevelop/Ide/ContextMenu/ProjectPad/Tools": [
+      { "id": "MonoDevelop.Deployment.Commands.CreatePackage", "label": "Create Package...", "condition": "ItemType=Solution|Project" },
+      { "id": "MonoDevelop.Deployment.Commands.Install", "label": "Install...", "condition": "ItemType=Solution|Project" }
+    ],
+    "/MonoDevelop/Ide/ProjectTemplates": [
+      { "id": "MonoDevelop.PackagingProject", "label": "Packaging Project", "resource": "PackagingProject.xpt.xml" }
+    ],
+    "/MonoDevelop/Ide/Pads/ProjectPad": [
+      { "id": "PackagingProjectNodeBuilder", "label": "Packaging Project Node", "className": "MonoDevelop.Deployment.NodeBuilders.PackagingProjectNodeBuilder" },
+      { "id": "PackageNodeBuilder", "label": "Package Node", "className": "MonoDevelop.Deployment.NodeBuilders.PackageNodeBuilder" }
+    ],
+    "/MonoDevelop/Ide/TemplateImages": [
+      { "id": "md-package-project", "label": "Package Project Image", "resource": "package-sidebar.png" }
+    ],
+    "/MonoDevelop/ProjectModel/SerializableClasses": [
+      { "id": "LocalFileCopyConfiguration", "className": "MonoDevelop.Deployment.Targets.LocalFileCopyConfiguration" },
+      { "id": "SshFuseFileCopyConfiguration", "className": "MonoDevelop.Deployment.Targets.SshFuseFileCopyConfiguration" },
+      { "id": "PackagingProject", "className": "MonoDevelop.Deployment.PackagingProject" },
+      { "id": "PackagingProjectConfiguration", "className": "MonoDevelop.Deployment.PackagingProjectConfiguration" },
+      { "id": "BinariesZipPackageBuilder", "className": "MonoDevelop.Deployment.Targets.BinariesZipPackageBuilder" },
+      { "id": "SourcesZipPackageBuilder", "className": "MonoDevelop.Deployment.Targets.SourcesZipPackageBuilder" }
+    ],
+    "/MonoDevelop/ProjectModel/Gui/ItemOptionPanels": [
+      { "id": "Deployment", "label": "Deployment" }
+    ],
+    "/MonoDevelop/Core/StockIcons": [
+      { "id": "md-package-project", "label": "Package Project Icon", "resource": "package-project.png" }
+    ],
+    "/MonoDevelop/DeployService/PackageBuilders": [
+      { "id": "SourcesZipPackageBuilder", "className": "MonoDevelop.Deployment.Targets.SourcesZipPackageBuilder" },
+      { "id": "BinariesZipPackageBuilder", "className": "MonoDevelop.Deployment.Targets.BinariesZipPackageBuilder" }
+    ],
+    "/MonoDevelop/Deployment/DeployFileCopiers": [
+      { "id": "LocalFileCopyHandler", "className": "MonoDevelop.Deployment.Targets.LocalFileCopyHandler" },
+      { "id": "SshFuseFileCopyHandler", "className": "MonoDevelop.Deployment.Targets.SshFuseFileCopyHandler", "condition": "Platform=!windows" }
+    ],
+    "/MonoDevelop/Deployment/DeployServiceExtensions": [
+      { "id": "PrepareDeploy", "className": "MonoDevelop.Deployment.DeployServiceExtension" },
+      { "id": "DefaultDeploy", "className": "MonoDevelop.Deployment.DefaultDeployServiceExtension" }
+    ],
+    "/MonoDevelop/Deployment/PackageBuilderEditors": [
+      { "id": "SourcesZipDeployEditor", "className": "MonoDevelop.Deployment.Gui.SourcesZipDeployEditor" },
+      { "id": "BinariesZipDeployEditor", "className": "MonoDevelop.Deployment.Gui.BinariesZipDeployEditor" }
+    ],
+    "/MonoDevelop/Deployment/FileCopyConfigurationEditors": [
+      { "id": "LocalFileCopyConfigurationEditor", "className": "MonoDevelop.Deployment.Gui.LocalFileCopyConfigurationEditor" },
+      { "id": "SshFuseFileCopyConfigurationEditor", "className": "MonoDevelop.Deployment.Gui.SshFuseFileCopyConfigurationEditor", "condition": "Platform=!windows" }
+    ],
+    "/MonoDevelop/Deployment/ContextMenu/ProjectPad/Package": [
+      { "id": "MonoDevelop.Ide.Commands.ProjectCommands.Build", "label": "Build" },
+      { "id": "MonoDevelop.Ide.Commands.EditCommands.Delete", "label": "Delete" },
+      { "id": "MonoDevelop.Ide.Commands.ProjectCommands.Options", "label": "Options" }
+    ],
+    "/MonoDevelop/Deployment/ContextMenu/ProjectPad/PackagingProject": [
+      { "id": "MonoDevelop.Ide.Commands.ProjectCommands.Build", "label": "Build" },
+      { "id": "MonoDevelop.Deployment.Commands.AddPackage", "label": "Add Package..." },
+      { "id": "MonoDevelop.Ide.Commands.EditCommands.Delete", "label": "Delete" }
+    ],
+    "/MonoDevelop/Deployment/DeployDirectories": [
+      { "id": "ProgramFiles", "label": "Program files" },
+      { "id": "ProgramFilesRoot", "label": "Program files root folder" },
+      { "id": "Binaries", "label": "Binaries" },
+      { "id": "Gac", "label": "Global Assembly Cache" },
+      { "id": "CommonApplicationData", "label": "Shared application data" },
+      { "id": "CommonApplicationDataRoot", "label": "Shared application data root folder" }
+    ],
+    "/MonoDevelop/Deployment/DeployPlatforms": [
+      { "id": "Linux", "label": "Linux" },
+      { "id": "Windows", "label": "Microsoft Windows" }
+    ]
+  }
+}

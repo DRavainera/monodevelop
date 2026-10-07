@@ -1,0 +1,9 @@
+<Project>
+  <!-- Compilación restringida a macOS: fuera de macOS el proyecto es no-op
+       (no produce DLL ni deps.json en main/build/). -->
+  <Target Name="CoreCompile" Condition=" $([MSBuild]::IsOSPlatform('OSX')) != 'true' " />
+  <Target Name="CopyFilesToOutputDirectory" Condition=" $([MSBuild]::IsOSPlatform('OSX')) != 'true' " />
+  <Target Name="SkipPlatformBuildCleanup" AfterTargets="Build" Condition=" $([MSBuild]::IsOSPlatform('OSX')) != 'true' ">
+    <Delete Files="$(OutDir)$(AssemblyName).deps.json" />
+  </Target>
+</Project>

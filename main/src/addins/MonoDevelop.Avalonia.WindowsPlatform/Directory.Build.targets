@@ -1,0 +1,9 @@
+<Project>
+  <!-- Compilación restringida a Windows: fuera de Windows el proyecto es no-op
+       (no produce DLL ni deps.json en main/build/). -->
+  <Target Name="CoreCompile" Condition=" $([MSBuild]::IsOSPlatform('Windows')) != 'true' " />
+  <Target Name="CopyFilesToOutputDirectory" Condition=" $([MSBuild]::IsOSPlatform('Windows')) != 'true' " />
+  <Target Name="SkipPlatformBuildCleanup" AfterTargets="Build" Condition=" $([MSBuild]::IsOSPlatform('Windows')) != 'true' ">
+    <Delete Files="$(OutDir)$(AssemblyName).deps.json" />
+  </Target>
+</Project>

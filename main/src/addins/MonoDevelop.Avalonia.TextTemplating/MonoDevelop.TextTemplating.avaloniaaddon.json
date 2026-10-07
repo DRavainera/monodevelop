@@ -1,0 +1,47 @@
+{
+  "identity": {
+    "id": "MonoDevelop.TextTemplating",
+    "displayName": "Text Templating",
+    "name": "TextTemplating",
+    "publisher": "MonoDevelop",
+    "version": "9.0.0",
+    "description": "T4 text template processing: mime types, parser, editor extension, file templates and generation tools (Avalonia add-in)."
+  },
+  "assetType": "Microsoft.VisualStudio.MefComponent",
+  "installationTarget": { "id": "MonoDevelop.Avalonia", "version": "9.0" },
+  "tags": [ "t4", "templates", "text templating" ],
+  "categories": [ "Tools" ],
+  "dependencies": [ { "id": "MonoDevelop.Ide", "versionRange": "[9.0,*)" } ],
+  "autoLoad": true,
+  "extensions": {
+    "/MonoDevelop/Core/MimeTypes": [
+      { "id": "application/t4-template", "label": "Text template", "icon": "md-template" }
+    ],
+    "/MonoDevelop/Ide/FileFilters": [
+      { "id": "T4Templates", "label": "T4 Templates" }
+    ],
+    "/MonoDevelop/TypeSystem/Parser": [
+      { "id": "T4Parser", "label": "T4 Parser", "className": "MonoDevelop.TextTemplating.Parser.T4Parser" }
+    ],
+    "/MonoDevelop/Ide/TextEditorExtensions": [
+      { "id": "T4EditorExtension", "label": "T4 Editor Extension", "className": "MonoDevelop.TextTemplating.Gui.T4EditorExtension" }
+    ],
+    "/MonoDevelop/Ide/FileTemplates": [
+      { "id": "T4TemplateCSharp", "label": "C# T4 Template" },
+      { "id": "T4PreprocessedTemplateCSharp", "label": "C# T4 Preprocessed Template" }
+    ],
+    "/MonoDevelop/Ide/CustomTools": [
+      { "id": "TextTemplatingFileGenerator", "label": "TextTemplatingFileGenerator", "className": "MonoDevelop.TextTemplating.TextTemplatingFileGenerator" },
+      { "id": "TextTemplatingFilePreprocessor", "label": "TextTemplatingFilePreprocessor", "className": "MonoDevelop.TextTemplating.TextTemplatingFilePreprocessor" }
+    ],
+    "/MonoDevelop/Ide/Commands": [
+      { "id": "MonoDevelop.TextTemplating.Commands.Generate", "label": "Process T4 Templates..." }
+    ],
+    "/MonoDevelop/Ide/ContextMenu/ProjectPad/Tools": [
+      { "id": "MonoDevelop.TextTemplating.Commands.Generate", "label": "Process T4 Templates..." }
+    ],
+    "/MonoDevelop/Ide/FileTemplateTypes": [
+      { "id": "T4File", "label": "T4 File", "className": "MonoDevelop.TextTemplating.T4FileTemplate" }
+    ]
+  }
+}

@@ -1,0 +1,47 @@
+{
+  "identity": {
+    "id": "MonoDevelop.UnitTesting.NUnit",
+    "displayName": "NUnit",
+    "name": "UnitTesting.NUnit",
+    "publisher": "MonoDevelop",
+    "version": "9.0.0",
+    "description": "NUnit test provider: system test provider, NUnit project/file templates and test method/class markers (Avalonia add-in)."
+  },
+  "assetType": "Microsoft.VisualStudio.MefComponent",
+  "installationTarget": { "id": "MonoDevelop.Avalonia", "version": "9.0" },
+  "tags": [ "nunit", "unit testing" ],
+  "categories": [ "Testing" ],
+  "dependencies": [
+    { "id": "MonoDevelop.Ide", "versionRange": "[9.0,*)" },
+    { "id": "MonoDevelop.UnitTesting", "versionRange": "[9.0,*)" }
+  ],
+  "autoLoad": true,
+  "extensions": {
+    "/MonoDevelop/UnitTesting/TestProviders": [
+      { "id": "SystemTestProvider", "className": "MonoDevelop.UnitTesting.NUnit.SystemTestProvider" }
+    ],
+    "/MonoDevelop/Ide/ProjectTemplates": [
+      { "id": "MonoDevelop.CSharp.NUnitLibraryProject", "label": "C# NUnit Test Library", "resource": "NUnitProject.xpt.xml" },
+      { "id": "MonoDevelop.VBNet.NUnitLibraryProject", "label": "VB.NET NUnit Test Library", "resource": "NUnitProjectVBNet.xpt.xml" }
+    ],
+    "/MonoDevelop/Ide/FileTemplates": [
+      { "id": "NUnitTestClass", "label": "NUnit Test Class", "resource": "NUnitTestClass.xft.xml" }
+    ],
+    "/MonoDevelop/Ide/TemplateImages": [
+      { "id": "md-test-project", "resource": "test-sidebar.png" }
+    ],
+    "/MonoDevelop/Core/StockIcons": [
+      { "id": "md-test-project", "resource": "test-project.png" }
+    ],
+    "/MonoDevelop/UnitTesting/UnitTestMarkers": [
+      {
+        "id": "NUnit",
+        "testMethodAttributeMarker": "NUnit.Framework.TestAttribute",
+        "testCaseMethodAttributeMarker": "NUnit.Framework.TestCaseAttribute",
+        "testCaseSourceMethodAttributeMarker": "NUnit.Framework.TestCaseSourceAttribute",
+        "ignoreTestMethodAttributeMarker": "NUnit.Framework.IgnoreAttribute",
+        "ignoreTestClassAttributeMarker": "NUnit.Framework.IgnoreAttribute"
+      }
+    ]
+  }
+}

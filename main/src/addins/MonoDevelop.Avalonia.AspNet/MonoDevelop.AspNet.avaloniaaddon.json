@@ -1,0 +1,172 @@
+{
+  "identity": {
+    "id": "MonoDevelop.AspNet",
+    "displayName": "ASP.NET",
+    "name": "AspNet",
+    "publisher": "MonoDevelop",
+    "version": "9.0.0",
+    "description": "ASP.NET (WebForms/MVC) binding: project templates, file templates, file filters, parsers, project flavors, XSP execution and MVC navigation commands (Avalonia add-in)."
+  },
+  "assetType": "Microsoft.VisualStudio.MefComponent",
+  "installationTarget": { "id": "MonoDevelop.Avalonia", "version": "9.0" },
+  "tags": [ "asp.net", "webforms", "mvc", "xsp" ],
+  "categories": [ "Language Bindings" ],
+  "dependencies": [ { "id": "MonoDevelop.Ide", "versionRange": "[9.0,*)" } ],
+  "autoLoad": true,
+  "extensions": {
+    "/MonoDevelop/Ide/ProjectTemplates": [
+      { "id": "MonoDevelop.AspNet.EmptyProject", "label": "ASP.NET Empty Project", "file": "Templates/Projects/EmptyProject.xpt.xml" },
+      { "id": "MonoDevelop.AspNet.MvcProject", "label": "ASP.NET MVC Project", "file": "Templates/Projects/MvcProject.xpt.xml" },
+      { "id": "MonoDevelop.AspNet.WebApplication", "label": "ASP.NET Web Application", "file": "Templates/Projects/WebFormsProject.xpt.xml" }
+    ],
+    "/MonoDevelop/Ide/FileTemplates": [
+      { "id": "WebForm-Empty", "file": "Templates/WebForms/WebForm-Empty.xft.xml" },
+      { "id": "WebForm-CodeBehind", "file": "Templates/WebForms/WebForm-CodeBehind.xft.xml" },
+      { "id": "WebHandler-Empty", "file": "Templates/WebForms/WebHandler-Empty.xft.xml" },
+      { "id": "WebHandler-CodeBehind", "file": "Templates/WebForms/WebHandler-CodeBehind.xft.xml" },
+      { "id": "WebControl-Empty", "file": "Templates/WebForms/WebControl-Empty.xft.xml" },
+      { "id": "WebControl-CodeBehind", "file": "Templates/WebForms/WebControl-CodeBehind.xft.xml" },
+      { "id": "WebService-Empty", "file": "Templates/WebForms/WebService-Empty.xft.xml" },
+      { "id": "WebService-CodeBehind", "file": "Templates/WebForms/WebService-CodeBehind.xft.xml" },
+      { "id": "MasterPage-Empty", "file": "Templates/WebForms/MasterPage-Empty.xft.xml" },
+      { "id": "MasterPage-CodeBehind", "file": "Templates/WebForms/MasterPage-CodeBehind.xft.xml" },
+      { "id": "NestedMasterPage", "file": "Templates/WebForms/NestedMasterPage.xft.xml" },
+      { "id": "NestedMasterPage-CodeBehind", "file": "Templates/WebForms/NestedMasterPage-CodeBehind.xft.xml" },
+      { "id": "GlobalAsax", "file": "Templates/GlobalAsax.xft.xml" },
+      { "id": "WebConfig-Application", "file": "Templates/WebConfig-Application.xft.xml" },
+      { "id": "WebConfig-SubDir", "file": "Templates/WebConfig-SubDir.xft.xml" },
+      { "id": "WebContentForm-CodeBehind", "file": "Templates/WebForms/WebContentForm-CodeBehind.xft.xml" },
+      { "id": "WebContentForm", "file": "Templates/WebForms/WebContentForm.xft.xml" },
+      { "id": "AspMvcController", "file": "Templates/Mvc/Controller.xft.xml" },
+      { "id": "AspMvcViewPage", "file": "Templates/Mvc/ViewPage.xft.xml" },
+      { "id": "AspMvcViewContentPage", "file": "Templates/Mvc/ViewContentPage.xft.xml" },
+      { "id": "AspMvcUserControl", "file": "Templates/Mvc/UserControl.xft.xml" },
+      { "id": "AspMvcViewMasterPage", "file": "Templates/Mvc/ViewMasterPage.xft.xml" },
+      { "id": "AspMvcWebConfigViews", "file": "Templates/Mvc/WebConfigViews.xft.xml" },
+      { "id": "AspMvcViewPageRazor", "file": "Templates/Mvc/ViewPageRazor.xft.xml" },
+      { "id": "AspMvcLayoutPage", "file": "Templates/Mvc/LayoutPage.xft.xml" },
+      { "id": "AspMvcPartialViewPageRazor", "file": "Templates/Mvc/PartialViewPageRazor.xft.xml" },
+      { "id": "PreprocessedRazorTemplate", "file": "Templates/PreprocessedRazorTemplate.xft.xml" },
+      { "id": "EmptyCSSFile", "file": "Templates/EmptyCssFile.xft.xml" },
+      { "id": "EmptyLESSFile", "file": "Templates/EmptyLessFile.xft.xml" },
+      { "id": "EmptySCSSFile", "file": "Templates/EmptyScssFile.xft.xml" },
+      { "id": "EmptyJSONFile", "file": "Templates/EmptyJsonFile.xft.xml" },
+      { "id": "EmptyJavaScriptFile", "file": "Templates/EmptyJavaScriptFile.xft.xml" },
+      { "id": "EmptyTypeScriptFile", "file": "Templates/EmptyTypeScriptFile.xft.xml" },
+      { "id": "npmConfigurationFile", "file": "Templates/npmConfigurationFile.xft.xml" }
+    ],
+    "/MonoDevelop/Ide/FileTemplateTypes": [
+      { "id": "AspNetMasterContentFile", "className": "MonoDevelop.AspNet.WebForms.MasterContentFileDescriptionTemplate" }
+    ],
+    "/MonoDevelop/Ide/FileFilters": [
+      { "id": "AspNetWebFiles", "label": "ASP.NET Files", "extensions": "*.aspx,*.ashx,*.asmx,*.ascx,*.master,*.asax,*.cshtml" },
+      { "id": "Html", "label": "HTML Files", "extensions": "*.htm,*.html" }
+    ],
+    "/MonoDevelop/TextEditor/LegacyEditorSupport": [
+      { "id": "aspx", "extensions": ".aspx,.ashx,.asmx,.ascx,.master,.asax" }
+    ],
+    "/MonoDevelop/ProjectModel/ProjectModelExtensions": [
+      { "id": "AspNetMvc1", "guid": "{603C0E0B-DB56-11DC-BE95-000D561079B0}", "className": "MonoDevelop.AspNet.Projects.AspMvc1ProjectFlavor" },
+      { "id": "AspNetMvc2", "guid": "{F85E285D-A4E0-4152-9332-AB1D724D3325}", "className": "MonoDevelop.AspNet.Projects.AspMvc2ProjectFlavor" },
+      { "id": "AspNetMvc3", "guid": "{E53F8FEA-EAE0-44A6-8774-FFD645390401}", "className": "MonoDevelop.AspNet.Projects.AspMvc3ProjectFlavor" },
+      { "id": "AspNetMvc4", "guid": "{E3E379DF-F4C6-4180-9B81-6769533ABE47}", "className": "MonoDevelop.AspNet.Projects.AspMvc4ProjectFlavor" },
+      { "id": "AspNetApp", "guid": "{349C5851-65DF-11DA-9384-00065B846F21}", "className": "MonoDevelop.AspNet.Projects.AspNetAppProjectFlavor" }
+    ],
+    "/MonoDevelop/TypeSystem/Parser": [
+      { "id": "WebFormsParser", "className": "MonoDevelop.AspNet.WebForms.WebFormsParser", "mimeType": "application/x-aspx, application/x-ascx, application/x-master-page" },
+      { "id": "HtmlParser", "className": "MonoDevelop.AspNet.Html.HtmlParser", "mimeType": "text/html, application/x-spark" },
+      { "id": "RazorCSharpParser", "className": "MonoDevelop.AspNet.Razor.RazorCSharpParser", "mimeType": "text/x-cshtml" }
+    ],
+    "/MonoDevelop/ProjectModel/SerializableClasses": [
+      { "id": "WebFormsToolboxNode", "className": "MonoDevelop.AspNet.WebForms.WebFormsToolboxNode" }
+    ],
+    "/MonoDevelop/ProjectModel/Gui/ItemOptionPanels/Run": [
+      { "id": "XspOptions", "label": "XSP Web Server", "className": "MonoDevelop.AspNet.Execution.XspOptionsPanel", "condition": "FlavorType=MonoDevelop.AspNet.Projects.AspNetAppProjectFlavor" }
+    ],
+    "/MonoDevelop/DesignerSupport/ToolboxLoaders": [
+      { "id": "AspNetWebFormsToolboxLoader", "className": "MonoDevelop.AspNet.WebForms.WebFormsToolboxLoader" }
+    ],
+    "/MonoDevelop/DesignerSupport/ToolboxProviders": [
+      { "id": "AspNetWebFormsToolboxProvider", "className": "MonoDevelop.AspNet.WebForms.WebFormsToolboxProvider" }
+    ],
+    "/MonoDevelop/Ide/Commands": [
+      { "id": "AspNet", "label": "ASP.NET" },
+      { "id": "MonoDevelop.AspNet.Commands.AspNetCommands.AddAspNetDirectory", "label": "ASP.NET Directory" },
+      { "id": "MonoDevelop.AspNet.Commands.AspNetCommands.AddController", "label": "Add Controller..." },
+      { "id": "MonoDevelop.AspNet.Commands.AspNetCommands.AddView", "label": "Add View..." },
+      { "id": "MonoDevelop.AspNet.Commands.AspNetCommands.GoToView", "label": "Go to View" },
+      { "id": "MonoDevelop.AspNet.Commands.AspNetCommands.AddViewFromController", "label": "Add View from Controller..." },
+      { "id": "MonoDevelop.AspNet.Commands.AspNetCommands.GoToController", "label": "Go to Controller" }
+    ],
+    "/MonoDevelop/Ide/ContextMenu/ProjectPad/Add": [
+      { "id": "AspNetDirectories", "label": "ASP.NET Directory", "commandId": "MonoDevelop.AspNet.Commands.AspNetCommands.AddAspNetDirectory", "autohide": true },
+      { "id": "MonoDevelop.AspNet.Commands.AspNetCommands.AddController", "label": "Add Controller..." },
+      { "id": "MonoDevelop.AspNet.Commands.AspNetCommands.AddView", "label": "Add View..." }
+    ],
+    "/MonoDevelop/Ide/Pads/ProjectPad": [
+      { "id": "AspNetProjectNodeBuilderExtension", "className": "MonoDevelop.AspNet.ProjectPad.AspNetProjectNodeBuilderExtension" },
+      { "id": "AspNetFolderNodeBuilderExtension", "className": "MonoDevelop.AspNet.ProjectPad.AspNetFolderNodeBuilderExtension" }
+    ],
+    "/MonoDevelop/Core/MimeTypes": [
+      { "id": "application/x-aspx", "label": "ASP.NET page", "icon": "md-html-file-icon", "pattern": "*.aspx" },
+      { "id": "application/x-ascx", "label": "ASP.NET user control", "icon": "md-html-file-icon", "pattern": "*.ascx" },
+      { "id": "application/x-asax", "label": "ASP.NET global application class", "icon": "md-html-file-icon", "pattern": "*.asax" },
+      { "id": "application/x-ashx", "label": "ASP.NET handler", "icon": "md-html-file-icon", "pattern": "*.ashx" },
+      { "id": "application/x-asmx", "label": "ASP.NET web service", "icon": "md-html-file-icon", "pattern": "*.asmx" },
+      { "id": "application/x-asix", "label": "ASP.NET image generator", "icon": "md-html-file-icon", "pattern": "*.asix" },
+      { "id": "application/x-master-page", "label": "ASP.NET master page", "icon": "md-html-file-icon", "pattern": "*.master" },
+      { "id": "application/javascript", "label": "Javascript source code", "icon": "md-file-js", "pattern": "*.js" },
+      { "id": "text/css", "label": "CSS document", "icon": "md-file-css", "pattern": "*.css" },
+      { "id": "text/x-less", "label": "LESS, CSS document", "icon": "md-file-less", "pattern": "*.less" },
+      { "id": "text/x-sass", "label": "SASS, CSS document", "icon": "md-file-scss", "pattern": "*.sass" },
+      { "id": "text/x-scss", "label": "SCSS, CSS document", "icon": "md-file-scss", "pattern": "*.scss" },
+      { "id": "text/html", "label": "HTML document", "icon": "md-html-file-icon", "pattern": "*.html|*.htm" },
+      { "id": "application/x-spark", "label": "Spark View template", "icon": "md-html-file-icon", "pattern": "*.spark" },
+      { "id": "application/typescript", "label": "Typescript source code", "icon": "md-file-ts", "pattern": "*.ts" },
+      { "id": "text/x-cshtml", "label": "Razor template", "icon": "md-html-file-icon", "pattern": "*.cshtml" }
+    ],
+    "/MonoDevelop/Ide/TextEditorExtensions": [
+      { "id": "WebFormsEditorExtension", "className": "MonoDevelop.AspNet.WebForms.WebFormsEditorExtension", "fileExtensions": ".aspx, .ascx, .master" },
+      { "id": "HtmlEditorExtension", "className": "MonoDevelop.AspNet.Html.HtmlEditorExtension", "mimeTypes": "text/html,application/x-spark" }
+    ],
+    "/MonoDevelop/Html/DocTypes": [
+      { "id": "HTML 5.0", "fullName": "<!DOCTYPE html>", "xsdFile": "Html/Schemas/xhtml1-transitional.xsd" },
+      { "id": "XHTML 1.0 Strict", "fullName": "<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Strict//EN\" \"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd\">", "xsdFile": "Html/Schemas/xhtml1-strict.xsd" },
+      { "id": "XHTML 1.0 Transitional", "fullName": "<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Transitional//EN\" \"http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd\">", "xsdFile": "Html/Schemas/xhtml1-transitional.xsd" },
+      { "id": "XHTML 1.0 Frameset", "fullName": "<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Frameset//EN\" \"http://www.w3.org/TR/xhtml1/DTD/xhtml1-frameset.dtd\">", "xsdFile": "Html/Schemas/xhtml1-frameset.xsd" }
+    ],
+    "/MonoDevelop/Core/ExecutionHandlers": [
+      { "id": "AspNet", "className": "MonoDevelop.AspNet.Execution.AspNetExecutionHandler" }
+    ],
+    "/MonoDevelop/Ide/CompletionCharacters": [
+      { "id": "Html", "language": "Html", "commitOnSpace": true },
+      { "id": "Razor", "language": "Razor", "commitOnSpace": true }
+    ],
+    "/MonoDevelop/SourceEditor2/ContextMenu/Editor": [
+      { "id": "MonoDevelop.AspNet.Commands.AspNetCommands.GoToView", "label": "Go to View", "condition": "FileType=.cs" },
+      { "id": "MonoDevelop.AspNet.Commands.AspNetCommands.AddViewFromController", "label": "Add View from Controller...", "condition": "FileType=.cs" },
+      { "id": "MonoDevelop.AspNet.Commands.AspNetCommands.GoToController", "label": "Go to Controller", "condition": "FileType=.aspx|text/x-cshtml" }
+    ],
+    "/MonoDevelop/Ide/CodeTemplates": [
+      { "id": "RazorTemplates", "file": "Razor/Razor-templates.xml" }
+    ],
+    "/MonoDevelop/Ide/CodeFormatters": [
+      { "id": "RazorCSharpFormatter", "className": "MonoDevelop.AspNet.Razor.RazorCSharpFormatter", "mimeType": "text/x-cshtml" }
+    ],
+    "/MonoDevelop/Ide/CustomTools": [
+      { "id": "RazorTemplatePreprocessor", "className": "MonoDevelop.AspNet.Razor.Generator.RazorTemplatePreprocessor", "extensions": ".cshtml" }
+    ],
+    "/MonoDevelop/Ide/FileTemplateConditionTypes": [
+      { "id": "AspNetMvc", "className": "MonoDevelop.AspNet.Projects.AspNetMvcFileTemplateCondition" }
+    ],
+    "/MonoDevelop/Ide/ProjectTemplateWizards": [
+      { "id": "MonoDevelop.AspNet.ProjectTemplateWizard", "className": "MonoDevelop.AspNet.Projects.AspNetProjectTemplateWizard" }
+    ],
+    "/MonoDevelop/Ide/TemplateImages": [
+      { "id": "md-aspnet-empty-project", "resource": "aspnet-sidebar.png" }
+    ],
+    "/MonoDevelop/Core/StockIcons": [
+      { "id": "md-aspnet-empty-project", "resource": "aspnet-project.png" }
+    ]
+  }
+}

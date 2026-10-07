@@ -1,0 +1,33 @@
+{
+  "identity": {
+    "id": "MonoDevelop.ILAsmBinding",
+    "displayName": "ILAsm Binding",
+    "name": "ILAsmBinding",
+    "publisher": "MonoDevelop",
+    "version": "9.0.0",
+    "description": "ILAsm (IL assembler) language binding: project templates, file filters, compiler options (Avalonia add-in)."
+  },
+  "assetType": "Microsoft.VisualStudio.MefComponent",
+  "installationTarget": { "id": "MonoDevelop.Avalonia", "version": "9.0" },
+  "tags": [ "ilasm", "il", "binding", "templates" ],
+  "categories": [ "Language Bindings" ],
+  "dependencies": [ { "id": "MonoDevelop.Ide", "versionRange": "[9.0,*)" } ],
+  "autoLoad": true,
+  "extensions": {
+    "/MonoDevelop/Ide/ProjectTemplates": [
+      { "id": "MonoDevelop.IL.ConsoleProject", "label": "ILAsm Console Application" }
+    ],
+    "/MonoDevelop/Ide/FileFilters": [
+      { "id": "ILAsm Files", "label": "ILAsm Files" }
+    ],
+    "/MonoDevelop/ProjectModel/Gui/ItemOptionPanels/Build": [
+      { "id": "ILAsmCompilerParametersPanel", "label": "Compiler", "className": "ILAsmBinding.CompilerParametersPanel" }
+    ],
+    "/MonoDevelop/ProjectModel/LanguageBindings": [
+      { "id": "IL", "label": "ILAsm" }
+    ],
+    "/MonoDevelop/ProjectModel/MSBuildItemTypes": [
+      { "id": "ILAsmProject", "label": "ILAsm", "className": "ILAsmBinding.ILAsmProject" }
+    ]
+  }
+}

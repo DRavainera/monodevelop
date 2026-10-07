@@ -1,0 +1,85 @@
+{
+  "identity": {
+    "id": "MonoDevelop.AspNetCore",
+    "displayName": "ASP.NET Core",
+    "name": "AspNetCore",
+    "publisher": "MonoDevelop",
+    "version": "9.0.0",
+    "description": "ASP.NET Core binding: .NET Core Web project templates (SDK-gated), scaffolding, publish commands, execution handler and run configuration editor (Avalonia add-in)."
+  },
+  "assetType": "Microsoft.VisualStudio.MefComponent",
+  "installationTarget": { "id": "MonoDevelop.Avalonia", "version": "9.0" },
+  "tags": [ "asp.net core", "web", "scaffolding", "publish" ],
+  "categories": [ "Language Bindings" ],
+  "dependencies": [
+    { "id": "MonoDevelop.Ide", "versionRange": "[9.0,*)" },
+    { "id": "MonoDevelop.DotNetCore", "versionRange": "[9.0,*)" }
+  ],
+  "autoLoad": true,
+  "extensions": {
+    "/MonoDevelop/Ide/FileTemplates": [
+      { "id": "AspNetCoreMiddlewareClass", "label": "Middleware Class", "file": "Templates/MiddlewareClass.xft.xml" },
+      { "id": "AspNetCoreMvcController", "label": "MVC Controller", "file": "Templates/MvcController.xft.xml" },
+      { "id": "AspNetCoreRazorTagHelper", "label": "Razor Tag Helper", "file": "Templates/RazorTagHelper.xft.xml" },
+      { "id": "AspNetCoreStartupClass", "label": "Startup Class", "file": "Templates/StartupClass.xft.xml" },
+      { "id": "AspNetCoreWebApiController", "label": "Web API Controller", "file": "Templates/WebApiController.xft.xml" },
+      { "id": "AspNetCoreRazorComponent", "label": "Razor Component", "file": "Templates/RazorComponent.xft.xml" },
+      { "id": "AspNetCoreMVCViewImportsPage", "label": "MVC View Imports Page", "file": "Templates/MVCViewImportsPage.xft.xml" },
+      { "id": "AspNetCoreMVCViewLayoutPage", "label": "MVC View Layout Page", "file": "Templates/MVCViewLayoutPage.xft.xml" },
+      { "id": "AspNetCoreMVCViewPage", "label": "MVC View Page", "file": "Templates/MVCViewPage.xft.xml" },
+      { "id": "AspNetCoreMVCViewStartPage", "label": "MVC View Start Page", "file": "Templates/MVCViewStartPage.xft.xml" },
+      { "id": "AspNetCoreRazorPage", "label": "Razor Page", "file": "Templates/RazorPage.xft.xml" },
+      { "id": "AspNetCoreRazorPageWithPageModel", "label": "Razor Page with Page Model", "file": "Templates/RazorPageWithPageModel.xft.xml" },
+      { "id": "AspNetCoreAppSettingsFile", "label": "App Settings File", "file": "Templates/AppSettingsFile.xft.xml" }
+    ],
+    "/MonoDevelop/Ide/ProjectTemplateCategories/netcore/app": [
+      { "id": "aspnet", "label": "ASP.NET Core" }
+    ],
+    "/MonoDevelop/Ide/Templates": [
+      { "id": "Microsoft.Web.Empty.CSharp", "label": "Empty", "condition": "AspNetCoreSdkInstalled, UseNetCore31=true", "category": "netcore/app/aspnet" },
+      { "id": "Microsoft.Web.Empty.FSharp", "label": "Empty", "condition": "AspNetCoreSdkInstalled, UseNetCore31=true", "category": "netcore/app/aspnet" },
+      { "id": "Microsoft.Web.WebApi.CSharp", "label": "API", "condition": "AspNetCoreSdkInstalled, UseNetCore31=true", "category": "netcore/app/aspnet" },
+      { "id": "Microsoft.Web.WebApi.FSharp", "label": "API", "condition": "AspNetCoreSdkInstalled, UseNetCore31=true", "category": "netcore/app/aspnet" },
+      { "id": "Microsoft.Worker.Empty.CSharp", "label": "Worker Service", "condition": "AspNetCoreSdkInstalled, UseNetCore31=true", "category": "netcore/app/aspnet" },
+      { "id": "Microsoft.Web.RazorPages.CSharp", "label": "Web Application", "condition": "AspNetCoreSdkInstalled, UseNetCore31=true", "category": "netcore/app/aspnet" },
+      { "id": "Microsoft.Web.Mvc.CSharp", "label": "Web Application (Model-View-Controller)", "condition": "AspNetCoreSdkInstalled, UseNetCore31=true", "category": "netcore/app/aspnet" },
+      { "id": "Microsoft.Web.Mvc.FSharp", "label": "Web Application (Model-View-Controller)", "condition": "AspNetCoreSdkInstalled, UseNetCore31=true", "category": "netcore/app/aspnet" },
+      { "id": "Microsoft.Web.Blazor.Server.CSharp", "label": "Blazor Server App", "condition": "AspNetCoreSdkInstalled, UseNetCore31=true", "category": "netcore/app/aspnet" },
+      { "id": "Microsoft.Web.Razor.Library.CSharp", "label": "Razor Class Library", "condition": "AspNetCoreSdkInstalled, UseNetCore31=true", "category": "netcore/app/aspnet" },
+      { "id": "Microsoft.Web.Spa.Angular.CSharp", "label": "Angular", "condition": "AspNetCoreSdkInstalled, UseNetCore31=true", "category": "netcore/app/aspnet" },
+      { "id": "Microsoft.Web.Spa.React.CSharp", "label": "React.js", "condition": "AspNetCoreSdkInstalled, UseNetCore31=true", "category": "netcore/app/aspnet" },
+      { "id": "Microsoft.Web.Spa.ReactRedux.CSharp", "label": "React.js and Redux", "condition": "AspNetCoreSdkInstalled, UseNetCore31=true", "category": "netcore/app/aspnet" }
+    ],
+    "/MonoDevelop/Core/ExecutionHandlers": [
+      { "id": "AspNetCore", "className": "MonoDevelop.AspNetCore.AspNetCoreExecutionHandler" }
+    ],
+    "/MonoDevelop/Ide/RunConfigurationEditors": [
+      { "id": "AspNetCoreRunConfigurationEditor", "className": "MonoDevelop.AspNetCore.AspNetCoreRunConfigurationEditor", "runConfigurationType": "MonoDevelop.AspNetCore.AspNetCoreRunConfiguration" }
+    ],
+    "/MonoDevelop/Ide/FileTemplateConditionTypes": [
+      { "id": "AspNetCore", "className": "MonoDevelop.AspNetCore.Templating.AspNetCoreFileTemplateCondition" }
+    ],
+    "/MonoDevelop/Ide/Pads/ProjectPad": [
+      { "id": "AspNetCoreScaffolder", "className": "MonoDevelop.AspNetCore.Commands.ScaffoldNodeExtension" }
+    ],
+    "/MonoDevelop/Ide/ContextMenu/ProjectPad": [
+      { "id": "MonoDevelop.AspNetCore.Commands.AspNetCoreCommands.Scaffold", "label": "New Scaffolding...", "autohide": true }
+    ],
+    "/MonoDevelop/Ide/Commands/Project": [
+      { "id": "MonoDevelop.AspNetCore.Commands.PublishToFolder", "label": "Publish to Folder..." },
+      { "id": "MonoDevelop.AspNetCore.Commands.PublishToFolderProfiles", "label": "Publish" },
+      { "id": "MonoDevelop.AspNetCore.Commands.AspNetCoreCommands.Scaffold", "label": "New Scaffolding..." }
+    ],
+    "/MonoDevelop/Ide/ContextMenu/ProjectPad/Publish": [
+      { "id": "MonoDevelop.AspNetCore.Commands.PublishToFolder", "label": "Publish to Folder...", "condition": "ItemType=Project" },
+      { "id": "MonoDevelop.AspNetCore.Commands.PublishToFolderProfiles", "label": "Publish", "condition": "ItemType=Project" }
+    ],
+    "/MonoDevelop/Ide/MainMenu/Build": [
+      { "id": "MonoDevelop.AspNetCore.Commands.PublishToFolder", "label": "Publish to Folder..." },
+      { "id": "MonoDevelop.AspNetCore.Commands.PublishToFolderProfiles", "label": "Publish" }
+    ],
+    "/MonoDevelop/Ide/ProjectTemplateWizards": [
+      { "id": "MonoDevelop.AspNetCore.ProjectTemplateWizard", "className": "MonoDevelop.AspNetCore.ProjectTemplateWizard" }
+    ]
+  }
+}
