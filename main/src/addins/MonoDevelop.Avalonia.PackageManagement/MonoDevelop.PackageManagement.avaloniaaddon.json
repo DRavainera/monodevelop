@@ -56,8 +56,8 @@
     ],
     "/MonoDevelop/Ide/GlobalOptionsDialog": [
       { "id": "NuGetPackageManagement", "label": "NuGet" },
-      { "id": "NuGetGeneral", "label": "General", "className": "MonoDevelop.PackageManagement.Gui.PackageManagementOptionsPanel", "icon": "md-prefs-package" },
-      { "id": "PackageSources", "label": "Sources", "className": "MonoDevelop.PackageManagement.Gui.PackageSourcesOptionsPanel", "icon": "md-prefs-package-source" }
+      { "id": "NuGetGeneral", "label": "General", "className": "MonoDevelop.PackageManagement.Gui.PackageManagementOptionsPanel", "icon": "md-prefs-package", "childId": "NuGetPackageManagement" },
+      { "id": "PackageSources", "label": "Sources", "className": "MonoDevelop.PackageManagement.Gui.PackageSourcesOptionsPanel", "icon": "md-prefs-package-source", "childId": "NuGetPackageManagement" }
     ],
     "/MonoDevelop/Ide/ProjectTemplatePackageInstallers": [
       { "id": "NuGet", "className": "MonoDevelop.PackageManagement.ProjectTemplateNuGetPackageInstaller" }

@@ -15,6 +15,7 @@ using Avalonia.Platform.Storage;
 using Avalonia.Styling;
 using MonoDevelop.Ide.Services;
 using MonoDevelop.Components.Commands;
+using MonoDevelop.AvaloniaAddons.Manifests;
 using NuGet.Configuration;
 using NuGet.Common;
 
@@ -185,15 +186,19 @@ public partial class PreferencesDialog : Window
 		},
 		["/MonoDevelop/Ide/GlobalOptionsDialog/Other"] = new (StringComparer.Ordinal) {
 			["FSharp"] = "fsharp",
-			["Performance Diagnostics"] = "perfgeneral",
+			["Performance Diagnostics"] = "perfdiag",
 		},
 	};
+
+	// Root extension point of the dialog. Merged separately from MergePoints: in the
+	// legacy model the sections registered there are top-level categories (NuGet,
+	// insertafter="VersionControl"), not panels of "Projects".
+	const string RootOptionsPoint = "/MonoDevelop/Ide/GlobalOptionsDialog";
 
 	// Extension points whose contributed sections are merged into the tree, with the
 	// category they belong to and the id of the parent node inside that category
 	// (empty = the category itself).
 	static readonly (string Point, string Category, string Parent)[] MergePoints = {
-		("/MonoDevelop/Ide/GlobalOptionsDialog", "Projects", ""),
 		("/MonoDevelop/Ide/GlobalOptionsDialog/TextEditor", "Text Editor", ""),
 		("/MonoDevelop/Ide/GlobalOptionsDialog/Projects/SdkLocations", "Projects", "sdklocations"),
 		("/MonoDevelop/Ide/GlobalOptionsDialog/VersionControl", "Version Control", ""),
@@ -211,34 +216,65 @@ public partial class PreferencesDialog : Window
 		if (reg is null)
 			return tree;
 		int merged = 0;
+
+		// Root point: the legacy sections registered there are top-level categories
+		// (e.g. NuGetPackageManagement "NuGet", insertafter="VersionControl"), with
+		// their panels linked by childId. A category whose label already exists in
+		// the skeleton is adopted; otherwise a new top-level category is appended.
+		var rootNodes = reg.GetExtensionNodes (RootOptionsPoint).ToList ();
+		foreach (var node in rootNodes.Where (n => string.IsNullOrEmpty (n.ChildId) || rootNodes.All (p => p.Id != n.ChildId))) {
+			var label = string.IsNullOrEmpty (node.Label) ? node.Id : node.Label;
+			var cat = tree.FirstOrDefault (c => string.Equals (c.Label, label, StringComparison.OrdinalIgnoreCase));
+			if (cat is null) {
+				cat = new PrefsNode ("", label, "", new List<PrefsNode> ());
+				tree.Add (cat);
+			}
+			foreach (var child in rootNodes.Where (n => n.ChildId == node.Id))
+				merged += AddSection (cat, child, RootOptionsPoint);
+		}
+
 		foreach (var (point, category, parentId) in MergePoints) {
 			foreach (var node in reg.GetExtensionNodes (point)) {
-				var label = string.IsNullOrEmpty (node.Label) ? node.Id : node.Label;
-				
-				// Look up in the point-specific map, or fallback to normalized id.
-				var id = (LegacySectionMap.TryGetValue (point, out var pointMap) && pointMap.TryGetValue (node.Id, out var mapped)) ? mapped
-					: node.Id.ToLowerInvariant ().Replace (" ", "").Replace (".", "").Replace ("#", "");
-				
 				var cat = tree.FirstOrDefault (c => c.Label == category);
 				if (cat is null)
 					continue;
-
-				// Find the parent node (either the category or a specific child within it).
-				var target = string.IsNullOrEmpty (parentId) ? cat : cat.Children.FirstOrDefault (ch => ch.Id == parentId);
+				// The parent may be nested inside the category (e.g. analysis-csharp
+				// under Source Analysis): the legacy point path implies the hierarchy.
+				var target = string.IsNullOrEmpty (parentId) ? cat : FindNode (cat, parentId);
 				if (target is null)
 					continue;
-
-				if (target.Children.Any (ch => ch.Id == id || ch.Label == label))
-					continue;
-				var leaf = new PrefsNode (id, label, node.Icon ?? "md-prefs-generic", new List<PrefsNode> ());
-				if (!string.IsNullOrEmpty (node.ChildId))
-					leaf.Children.Add (new PrefsNode (node.ChildId.ToLowerInvariant (), node.ChildId, "md-prefs-generic", new ()));
-				target.Children.Add (leaf);
-				merged++;
+				merged += AddSection (target, node, point);
 			}
 		}
 		MainWindow.Instance?.Output ($"[prefs] addon sections merged={merged} (registry points={reg.ExtensionPoints.Count})");
 		return tree;
+	}
+
+	/// <summary>Maps a registry node to its panel id (point-specific legacy map, then
+	/// normalized id) and appends the leaf to the target, skipping duplicates.
+	/// Returns 1 when a leaf was added.</summary>
+	static int AddSection (PrefsNode target, AddonExtensionNode node, string point)
+	{
+		var label = string.IsNullOrEmpty (node.Label) ? node.Id : node.Label;
+		var id = (LegacySectionMap.TryGetValue (point, out var pointMap) && pointMap.TryGetValue (node.Id, out var mapped)) ? mapped
+			: node.Id.ToLowerInvariant ().Replace (" ", "").Replace (".", "").Replace ("#", "");
+		if (target.Children.Any (ch => ch.Id == id || ch.Label == label))
+			return 0;
+		target.Children.Add (new PrefsNode (id, label, node.Icon ?? "md-prefs-generic", new List<PrefsNode> ()));
+		return 1;
+	}
+
+	/// <summary>Depth-first lookup of a descendant by id.</summary>
+	static PrefsNode? FindNode (PrefsNode parent, string id)
+	{
+		foreach (var ch in parent.Children) {
+			if (ch.Id == id)
+				return ch;
+			var sub = FindNode (ch, id);
+			if (sub is not null)
+				return sub;
+		}
+		return null;
 	}
 
 	static List<PrefsNode> BuildModelCore () => new () {
@@ -292,14 +328,14 @@ public partial class PreferencesDialog : Window
 			Leaf ("git", "Git", "md-prefs-solution"),
 			Leaf ("changelog", "ChangeLog Integration", "md-prefs-generic")),
 		Cat ("NuGet",
-			Leaf ("nugetgeneral", "General", "md-prefs-generic"),
-			Leaf ("packagesources", "Sources", "md-prefs-generic")),
+			Leaf ("nugetgeneral", "General", "md-prefs-package"),
+			Leaf ("packagesources", "Sources", "md-prefs-package-source")),
 		Cat ("Other",
 			Leaf ("feedback", "Feedback", "md-prefs-feedback"),
 			Leaf ("maintenance", "MonoDevelop Maintenance", "md-prefs-maintenance"),
 			Leaf ("fsharp", "F# Settings", "md-prefs-source")),
 		Cat ("Performance Diagnostics",
-			Leaf ("perfgeneral", "General", "md-prefs-performance")),
+			Leaf ("perfdiag", "General", "md-prefs-performance")),
 	};
 
 	/// <summary>Preferences tree: core skeleton + add-in contributions.</summary>

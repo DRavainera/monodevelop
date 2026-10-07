@@ -122,6 +122,16 @@ public static class IconService
 		["md-step-over-debug"] = ("step-over-16", "MonoDevelop.Debugger"),
 		["md-continue-debug"] = ("continue-16", "MonoDevelop.Debugger"),
 		["md-pause-debug"] = ("pause-16", "MonoDevelop.Debugger"),
+
+		// NuGet preferences stock ids (MonoDevelop.PackageManagement.addin.xml): the
+		// package icons of the NuGet preferences category and its panels.
+		["md-prefs-package"] = ("prefs-package-16", "MonoDevelop.PackageManagement"),
+		["md-prefs-package-source"] = ("prefs-package-source-16", "MonoDevelop.PackageManagement"),
+
+		// Source-analysis preferences stock ids (MonoDevelop.Refactoring.addin.xml):
+		// the Code Actions / Code Rules panels under Text Editor > Source Analysis > C#.
+		["md-prefs-code-actions"] = ("prefs-code-actions-16", "MonoDevelop.Refactoring"),
+		["md-prefs-code-rules"] = ("prefs-code-rules-16", "MonoDevelop.Refactoring"),
 	};
 
 	static readonly Dictionary<(string Resource, bool Dark, bool Disabled, int Scale), Bitmap?> cache = new ();
