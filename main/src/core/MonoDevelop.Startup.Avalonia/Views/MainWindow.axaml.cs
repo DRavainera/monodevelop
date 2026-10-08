@@ -5429,13 +5429,11 @@ public partial class MainWindow : Window
 	public void OnPreferencesMenu ()
 		=> new PreferencesDialog { WindowStartupLocation = WindowStartupLocation.CenterOwner }.ShowDialog (this);
 
-	/// <summary>Tools > Add-ins (Avalonia)...: raw catalog of the new add-in host
-	/// (same data as the Add-in Manager, as a QA state list).</summary>
+	/// <summary>Tools > Add-ins (Avalonia)...: the new add-in host catalog (the
+	/// "Extensions…" item above is the full Add-in Manager over the same host).</summary>
 	public void OnAvaloniaAddonManagerMenu ()
 		=> new AddonManagerDialog { WindowStartupLocation = WindowStartupLocation.CenterOwner }.ShowDialog (this);
 
-	/// <summary>Tools > Extensions...: the Add-in Manager over the new add-in host
-	/// (MonoDevelop.Avalonia.Addons) — Installed list with per-add-in icons.</summary>
 	public void OnAddinManagerMenu ()
 		=> new AddinManagerDialog { WindowStartupLocation = WindowStartupLocation.CenterOwner }.ShowDialog (this);
 

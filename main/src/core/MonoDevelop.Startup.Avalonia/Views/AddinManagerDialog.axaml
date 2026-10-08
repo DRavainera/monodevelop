@@ -36,15 +36,13 @@
       </Grid>
     </Border>
 
-    <!-- Notebook page: left = header + tree, right = details. The new add-in system
-         (MonoDevelop.Avalonia.Addons) has no remote repositories, so the legacy
-         Updates/Gallery tabs have no backend in this shell: the GTK IDE dialog keeps
-         them. Only Installed is offered here. -->
+    <!-- Notebook: Installed | Updates | Gallery (legacy top tabs) + page:
+         left = repo/updates header + tree, right = AddinInfoView (fixed width) -->
     <Grid Grid.Row="1" RowDefinitions="Auto,*" Margin="0,0,0,0">
 
-      <!-- Tab row (legacy notebook tab strip) -->
+      <!-- Tab row (legacy notebook tabs with icons) -->
       <ListBox x:Name="TabList" Classes="addintabs" Grid.Row="0" SelectionMode="Single"
-               Margin="8,8,8,0" Background="Transparent" BorderThickness="0">
+               SelectionChanged="OnTabSelected" Margin="8,8,8,0" Background="Transparent" BorderThickness="0">
         <ListBox.ItemsPanel>
           <ItemsPanelTemplate><StackPanel Orientation="Horizontal" Spacing="4"/></ItemsPanelTemplate>
         </ListBox.ItemsPanel>
@@ -54,19 +52,49 @@
             <TextBlock Text="Installed" VerticalAlignment="Center" Foreground="{DynamicResource IdeFgBrush}"/>
           </StackPanel>
         </ListBoxItem>
+        <ListBoxItem Tag="updates">
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <Image Width="22" Height="22" Name="TabIconUpdates" />
+            <TextBlock x:Name="UpdatesTabLabel" Text="Updates" VerticalAlignment="Center" Foreground="{DynamicResource IdeFgBrush}"/>
+          </StackPanel>
+        </ListBoxItem>
+        <ListBoxItem Tag="gallery">
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <Image Width="16" Height="16" Name="TabIconGallery" />
+            <TextBlock Text="Gallery" VerticalAlignment="Center" Foreground="{DynamicResource IdeFgBrush}"/>
+          </StackPanel>
+        </ListBoxItem>
       </ListBox>
 
       <!-- Page content: left tree column + right details (legacy hbox2/hbox8) -->
       <Grid Grid.Row="1" ColumnDefinitions="*,300" Margin="8,6,8,8">
         <Grid Grid.Column="0" RowDefinitions="Auto,Auto,*">
-          <!-- Header row (legacy eboxRepo HeaderBox): count label + search -->
+          <!-- Repo / updates header row (legacy eboxRepo / eboxRepoUpdates HeaderBox) -->
           <Border Grid.Row="0" Background="{DynamicResource IdeChromeBgBrush}" Padding="8,5"
                   BorderBrush="{DynamicResource IdeBorderBrush}" BorderThickness="0,0,0,1"
                   CornerRadius="3">
             <Grid ColumnDefinitions="*,Auto">
-              <TextBlock x:Name="PageHeaderLabel" Text="" VerticalAlignment="Center"
-                         Foreground="{DynamicResource IdeFgBrush}"/>
+              <StackPanel Orientation="Horizontal" Spacing="8">
+                <TextBlock x:Name="PageHeaderLabel" Text="" VerticalAlignment="Center"
+                           Foreground="{DynamicResource IdeFgBrush}"/>
+                <Button x:Name="UpdateAllButton" Padding="6,2" MinHeight="24" Click="OnUpdateAllClicked" IsVisible="False">
+                  <StackPanel Orientation="Horizontal" Spacing="4">
+                    <Image Width="16" Height="16" Source="avares://MonoDevelop.AvaloniaShell/Addins/download-16.png"/>
+                    <TextBlock Text="Update All"/>
+                  </StackPanel>
+                </Button>
+              </StackPanel>
               <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
+                <!-- Legacy repoCombo (Gallery page) -->
+                <Button x:Name="RepoCombo" Content="All repositories" Padding="8,2" MinHeight="24"
+                        Click="OnRepoMenuClicked" IsVisible="False" />
+                <Button x:Name="RefreshButton" Padding="6,2" MinHeight="24" Click="OnRefreshClicked" IsVisible="False">
+                  <StackPanel Orientation="Horizontal" Spacing="4">
+                    <Image Width="16" Height="16" Source="avares://MonoDevelop.AvaloniaShell/Addins/update-16.png"/>
+                    <TextBlock Text="Refresh"/>
+                  </StackPanel>
+                </Button>
+                <!-- Legacy SearchEntry floats at the notebook top-right -->
                 <TextBox x:Name="FilterBox" Watermark="Search" Width="200" Height="26"/>
               </StackPanel>
             </Grid>
@@ -78,7 +106,16 @@
             <ListBox.ItemTemplate>
               <DataTemplate x:DataType="views:AddinItem">
                 <Grid ColumnDefinitions="Auto,*">
-                  <Image Source="{Binding Icon}" Width="32" Height="32" VerticalAlignment="Top" />
+                  <Panel Width="32" Height="32" VerticalAlignment="Top">
+                    <Image Source="avares://MonoDevelop.AvaloniaShell/Addins/plugin-32.png"
+                           IsVisible="{Binding ShowInstalledIcon}" Width="32" Height="32"/>
+                    <Image Source="avares://MonoDevelop.AvaloniaShell/Addins/plugin-avail-32.png"
+                           IsVisible="{Binding ShowAvailableIcon}" Width="32" Height="32"/>
+                    <Image Source="{Binding Icon}" IsVisible="{Binding HasIcon}" Width="32" Height="32"/>
+                    <Image Source="avares://MonoDevelop.AvaloniaShell/Addins/update-available-overlay-16.png"
+                           IsVisible="{Binding HasUpdate}" Width="16" Height="16"
+                           HorizontalAlignment="Right" VerticalAlignment="Bottom"/>
+                  </Panel>
                   <StackPanel Grid.Column="1" Margin="8,0,0,0" VerticalAlignment="Center">
                     <TextBlock Text="{Binding DisplayName}" TextWrapping="Wrap"
                                Foreground="{Binding NameBrush}"/>
@@ -91,12 +128,12 @@
           </ListBox>
         </Grid>
 
-        <!-- Details panel -->
+        <!-- Details panel (AddinInfoView) -->
         <Border x:Name="DetailsPanel" Grid.Column="1" Margin="8,0,0,0"
                 Background="{DynamicResource IdeChromeBgBrush}" CornerRadius="3"
                 BorderBrush="{DynamicResource IdeBorderBrush}" BorderThickness="1">
-          <Grid RowDefinitions="Auto,Auto,*">
-            <!-- Status header (legacy boxHeader: state icon + message) -->
+          <Grid RowDefinitions="Auto,Auto,*,Auto">
+            <!-- Status header (boxHeader: warning icon + message) -->
             <Border Grid.Row="0" Background="{DynamicResource IdeTabHoverBrush}" Padding="8,4"
                     IsVisible="False" x:Name="DetailsHeader">
               <StackPanel Orientation="Horizontal" Spacing="6">
@@ -111,28 +148,46 @@
                          Foreground="{DynamicResource IdeFgBrush}"/>
               <TextBlock x:Name="DetailsVersion" Opacity="0.8" Foreground="{DynamicResource IdeFgBrush}"/>
             </StackPanel>
-            <!-- Description + author + tags + extension points -->
+            <!-- Description + author + More information -->
             <ScrollViewer Grid.Row="2" Margin="12,4,12,0">
               <StackPanel Spacing="6">
                 <TextBlock x:Name="DetailsAuthor" Opacity="0.8" Foreground="{DynamicResource IdeFgBrush}"/>
                 <TextBlock x:Name="DetailsDesc" TextWrapping="Wrap" Foreground="{DynamicResource IdeFgBrush}"/>
-                <TextBlock Text="Tags" FontWeight="SemiBold" Margin="0,4,0,0"
-                           Foreground="{DynamicResource IdeFgBrush}"/>
-                <TextBlock x:Name="DetailsTags" Opacity="0.8" TextWrapping="Wrap"
-                           Foreground="{DynamicResource IdeFgBrush}"/>
-                <TextBlock Text="Extension points" FontWeight="SemiBold" Margin="0,4,0,0"
-                           Foreground="{DynamicResource IdeFgBrush}"/>
-                <TextBlock x:Name="DetailsNodes" Opacity="0.8" TextWrapping="Wrap"
-                           Foreground="{DynamicResource IdeFgBrush}"/>
+                <Button x:Name="UrlButton" Classes="welcomelink" HorizontalAlignment="Left" Padding="0"
+                        Click="OnUrlClicked" IsVisible="False">
+                  <StackPanel Orientation="Horizontal" Spacing="4">
+                    <Image Width="16" Height="16" Source="avares://MonoDevelop.AvaloniaShell/Addins/web-search-16.png"/>
+                    <TextBlock Text="More information"/>
+                  </StackPanel>
+                </Button>
               </StackPanel>
             </ScrollViewer>
+            <!-- Action buttons (legacy btnInstall/btnUpdate/btnDisable/btnUninstall) -->
+            <StackPanel Grid.Row="3" Orientation="Horizontal" Spacing="6" Margin="12,6,12,10">
+              <Button x:Name="InstallButton" Click="OnInstallClicked" IsVisible="False">
+                <StackPanel Orientation="Horizontal" Spacing="4">
+                  <Image Width="16" Height="16" Source="avares://MonoDevelop.AvaloniaShell/Addins/download-16.png"/>
+                  <TextBlock Text="Install..."/>
+                </StackPanel>
+              </Button>
+              <Button x:Name="UpdateButton" Click="OnUpdateClicked" IsVisible="False">
+                <StackPanel Orientation="Horizontal" Spacing="4">
+                  <Image Width="16" Height="16" Source="avares://MonoDevelop.AvaloniaShell/Addins/update-16.png"/>
+                  <TextBlock Text="Update"/>
+                </StackPanel>
+              </Button>
+              <Button x:Name="DisableButton" Classes="chromebtn" Click="OnEnableDisableClicked" IsVisible="False" Content="Disable"/>
+              <Button x:Name="EnableButton" Classes="chromebtn" Click="OnEnableDisableClicked" IsVisible="False" Content="Enable"/>
+              <Button x:Name="UninstallButton" Classes="chromebtn" Click="OnUninstallClicked" IsVisible="False" Content="Uninstall..."/>
+            </StackPanel>
           </Grid>
         </Border>
       </Grid>
     </Grid>
 
-    <!-- Bottom action bar -->
+    <!-- Bottom action bar (legacy ActionArea: Install from file..., Close) -->
     <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="12,8">
+      <Button x:Name="InstallFromFileButton" Classes="chromebtn" Content="Install from file..." Width="140" Click="OnInstallFromFileClicked"/>
       <Button x:Name="CloseButton" Classes="chromebtn" Content="Close" Width="90" Click="OnCloseClicked"/>
     </StackPanel>
   </Grid>
