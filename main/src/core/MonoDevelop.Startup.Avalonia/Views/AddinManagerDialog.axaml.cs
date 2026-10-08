@@ -1,8 +1,11 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Templates;
 using Avalonia.Interactivity;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
@@ -31,13 +34,12 @@ public class AddinItem
 	public string Url { get; set; } = "";
 
 	// Row rendering: "Name" + secondary description line (the legacy markup cell puts
-	// the first description line under the name; the version lives in the details);
-	// disabled addins render grey like UpdateRow's <span foreground="grey">.
+	// the first description line under the name; the version lives in the details).
+	// NameBrush is set by the dialog: theme foreground for enabled addins,
+	// <span foreground="grey"> equivalent for disabled ones (legacy UpdateRow).
 	public string DisplayName => Subtitle == "__category__" ? Category : Name;
 	public string SecondaryText => Subtitle == "__category__" ? "" : Description;
-	public Avalonia.Media.IBrush NameBrush =>
-		Subtitle == "__category__" ? Avalonia.Media.Brushes.SteelBlue :
-		Enabled ? Avalonia.Media.Brushes.White : Avalonia.Media.Brushes.Gray;
+	public IBrush? NameBrush { get; set; }
 	public bool IsCategory => Subtitle == "__category__";
 	public bool IsInstalled { get => !IsCategory && isInstalled; set => isInstalled = value; }
 	bool isInstalled;
@@ -54,7 +56,12 @@ public partial class AddinManagerDialog : Window
 	static readonly Dictionary<string, Bitmap> iconCache = new ();
 
 	readonly AddonHost? host;
+	readonly Dictionary<string, HashSet<string>> expandedByTab = new ();
+	IBrush? themeFg;
+	IDataTemplate? rowTemplate;
+	bool expandInstalledAll, expandGalleryAll;
 	string currentTab = "installed";
+	string renderedTab = "installed";
 	bool updatingDetails;
 
 	public AddinManagerDialog ()
@@ -62,13 +69,27 @@ public partial class AddinManagerDialog : Window
 		InitializeComponent ();
 		MonoDevelop.AvaloniaShell.Controls.DialogWindow.Apply (this);
 		host = MonoDevelop.AvaloniaShell.App.Addins;
+		// Row name color follows the theme (legacy markup cell uses the default
+		// foreground; a hardcoded white was invisible on the light theme).
+		themeFg = (IBrush?)Avalonia.Application.Current?.FindResource ("IdeFgBrush");
+		rowTemplate = (IDataTemplate?)this.FindResource ("AddinRowTemplate");
 
 		// Tab icons (same resources the legacy tabs load: plugin-22 / plugin-update-22 / update-16).
 		TabIconInstalled!.Source = LoadIcon ("plugin-22.png");
 		TabIconUpdates!.Source = LoadIcon ("plugin-update-22.png");
 		TabIconGallery!.Source = LoadIcon ("update-16.png");
 
-		FilterBox!.TextChanged += (_, _) => ReloadCurrentTab ();
+		// Legacy repoCombo is a listbox of repositories; the new host ships a single
+		// local catalog, so it has one entry ("All repositories").
+		RepoCombo!.Items.Add (new ComboBoxItem { Content = "All repositories" });
+
+		FilterBox!.TextChanged += (_, _) => {
+			// Legacy: a filter change reloads the pages and expands the category
+			// trees (installed + gallery; the updates page has no categories).
+			expandInstalledAll = true;
+			expandGalleryAll = true;
+			ReloadCurrentTab ();
+		};
 		RefreshButton!.Click += OnRefreshClicked;
 		UpdateAllButton!.Click += OnUpdateAllClicked;
 		InstallFromFileButton!.Click += OnInstallFromFileClicked;
@@ -117,6 +138,7 @@ public partial class AddinManagerDialog : Window
 
 	void LoadAddins ()
 	{
+		SaveExpanded ();
 		var items = currentTab switch {
 			"updates" => LoadUpdates (),
 			"gallery" => LoadGallery (),
@@ -136,19 +158,97 @@ public partial class AddinManagerDialog : Window
 		};
 		UpdatesTabLabel.Text = "Updates" + (currentTab != "updates" && FilterBox!.Text?.Length > 0 && items.Count > 0 ? $" ({items.Count})" : "");
 
-		// Category grouping (legacy AddinTreeWidget.ShowCategories): one header row
-		// per category, "Other" last — implemented as grouped items with a flag.
-		List<AddinItem> grouped = new ();
-		foreach (var g in items.GroupBy (i => string.IsNullOrEmpty (i.Category) ? "Other" : i.Category)
-			.OrderBy (g => g.Key == "Other" ? "\uFFFF" : g.Key)) {
-			grouped.Add (new AddinItem { Name = g.Key, Subtitle = "__category__" });
-			foreach (var it in g.OrderBy (i => i.Name))
-				grouped.Add (it);
-		}
-		AddinList!.ItemsSource = grouped;
+		BuildTree (items);
 		Console.WriteLine ($"[addins] tab={currentTab} items={items.Count} host={host is not null}");
 		if (items.Count == 0)
 			ShowEmptyDetails ();
+	}
+
+	// Legacy AddinTreeWidget.SaveStatus: the category expand state is preserved
+	// across reloads (captured before the tree is rebuilt; the tree still shows the
+	// previously rendered tab when switching tabs).
+	void SaveExpanded ()
+	{
+		var set = ExpandedFor (renderedTab);
+		set.Clear ();
+		foreach (var o in AddinList?.Items ?? (IEnumerable)Array.Empty<object?> ())
+			if (o is TreeViewItem { IsExpanded: true, Tag: AddinItem { IsCategory: true } cat })
+				set.Add (cat.Name);
+	}
+
+	HashSet<string> ExpandedFor (string tab) =>
+		expandedByTab.TryGetValue (tab, out var s) ? s : (expandedByTab [tab] = new HashSet<string> (StringComparer.Ordinal));
+
+	// Builds the addin tree: collapsible category nodes (legacy ShowCategories) —
+	// the updates page is flat like the legacy updatesTree (ShowCategories=false).
+	void BuildTree (List<AddinItem> items)
+	{
+		var list = AddinList!;
+		AddinItem? prev = list.SelectedItem is TreeViewItem { Tag: AddinItem ai } && !ai.IsCategory ? ai : null;
+		list.Items.Clear ();
+
+		bool useCategories = currentTab != "updates";
+		var saved = ExpandedFor (currentTab);
+		if (useCategories && ((currentTab == "installed" && expandInstalledAll) || (currentTab == "gallery" && expandGalleryAll))) {
+			// Legacy: a filter change expands all category nodes.
+			expandInstalledAll = expandGalleryAll = false;
+			foreach (var it in items)
+				saved.Add (string.IsNullOrEmpty (it.Category) ? "Other" : it.Category);
+		}
+
+		if (useCategories) {
+			foreach (var g in items.GroupBy (i => string.IsNullOrEmpty (i.Category) ? "Other" : i.Category)
+				.OrderBy (g => g.Key == "Other" ? "\uFFFF" : g.Key)) {
+				var cat = new TreeViewItem {
+					Tag = new AddinItem { Name = g.Key, Subtitle = "__category__" },
+					Header = g.Key
+				};
+				cat.IsExpanded = saved.Contains (g.Key);
+				foreach (var it in g.OrderBy (i => i.Name))
+					cat.Items.Add (MakeRowItem (it));
+				list.Items.Add (cat);
+			}
+		} else {
+			foreach (var it in items.OrderBy (i => i.Name))
+				list.Items.Add (MakeRowItem (it));
+		}
+
+		// Legacy RestoreStatus: keep the selection (and its category expanded)
+		// across reloads.
+		if (prev is not null) {
+			var target = FindRowItem (list.Items, prev.Id);
+			if (target is not null) {
+				foreach (var o in list.Items)
+					if (o is TreeViewItem cat && cat.Items.Contains (target))
+						cat.IsExpanded = true;
+				list.SelectedItem = target;
+			}
+		}
+		renderedTab = currentTab;
+	}
+
+	AddinItem? SelectedRow () => (AddinList?.SelectedItem as TreeViewItem)?.Tag as AddinItem;
+
+	TreeViewItem MakeRowItem (AddinItem it)
+	{
+		// Legacy markup cell: default (theme) foreground for enabled addins,
+		// <span foreground="grey"> for the disabled ones.
+		it.NameBrush = it.Enabled ? themeFg : Brushes.Gray;
+		return new TreeViewItem { Tag = it, Header = it, HeaderTemplate = rowTemplate };
+	}
+
+	static TreeViewItem? FindRowItem (IEnumerable items, string id)
+	{
+		foreach (var o in items) {
+			if (o is not TreeViewItem tv)
+				continue;
+			if (tv.Tag is AddinItem { IsCategory: false, Id: string rowId } && rowId == id)
+				return tv;
+			var nested = FindRowItem (tv.Items, id);
+			if (nested is not null)
+				return nested;
+		}
+		return null;
 	}
 
 	List<AddinItem> ApplyFilter (List<AddinItem> items)
@@ -214,11 +314,15 @@ public partial class AddinManagerDialog : Window
 		if (host is null)
 			return list;
 		try {
-			// New add-in host: the catalog of add-ins this build ships. Loaded
-			// add-ins render installed; the rest render available — the legacy
-			// gallery's plugin-32 / plugin-avail-32 split.
-			foreach (var state in host.Addons)
-				list.Add (RowFor (state, installed: state.Loaded));
+			// New add-in host: the catalog minus the installed (loaded) add-ins —
+			// those belong to the Installed page. The remaining rows render
+			// "available" (plugin-avail-32), like the legacy gallery's
+			// not-installed rows.
+			foreach (var state in host.Addons) {
+				if (state.Loaded)
+					continue;
+				list.Add (RowFor (state, installed: false));
+			}
 		} catch (Exception ex) {
 			Console.WriteLine ("[addins] load gallery failed: " + ex.Message);
 		}
@@ -285,7 +389,14 @@ public partial class AddinManagerDialog : Window
 
 	void OnAddinSelected (object? sender, SelectionChangedEventArgs e)
 	{
-		if (AddinList?.SelectedItem is not AddinItem item) {
+		var item = (AddinList?.SelectedItem as TreeViewItem)?.Tag as AddinItem;
+		if (item is null) {
+			ShowEmptyDetails ();
+			return;
+		}
+		if (item.IsCategory) {
+			// Legacy: category nodes carry no add-in (ColAddin == null) → empty
+			// details.
 			ShowEmptyDetails ();
 			return;
 		}
@@ -341,13 +452,13 @@ public partial class AddinManagerDialog : Window
 	{
 		// The new add-in host does not expose enable/disable yet (the legacy toggle
 		// edited the Mono.Addins registry).
-		if (AddinList?.SelectedItem is AddinItem item)
+		if (SelectedRow () is { } item)
 			Console.WriteLine ("[addins] enable/disable not available in the new add-in host: " + item.Id);
 	}
 
 	void OnUninstallClicked (object? sender, RoutedEventArgs e)
 	{
-		if (AddinList?.SelectedItem is AddinItem item)
+		if (SelectedRow () is { } item)
 			Console.WriteLine ("[addins] uninstall not available in the new add-in host: " + item.Id);
 	}
 
@@ -363,17 +474,29 @@ public partial class AddinManagerDialog : Window
 
 	void InstallSelected ()
 	{
-		if (AddinList?.SelectedItem is AddinItem item)
+		if (SelectedRow () is { } item)
 			Console.WriteLine ("[addins] install not available in the new add-in host: " + item.Id);
 	}
 
 	void OnUpdateAllClicked (object? sender, RoutedEventArgs e)
 	{
-		var pending = (AddinList?.ItemsSource as IEnumerable<AddinItem>)?
-			.Count (i => i.HasUpdate) ?? 0;
+		var pending = CountRowItems (AddinList?.Items, i => i.HasUpdate);
 		if (pending == 0)
 			return;
 		Console.WriteLine ("[addins] update-all not available in the new add-in host (" + pending + " pending)");
+	}
+
+	static int CountRowItems (IEnumerable? items, Func<AddinItem, bool> match)
+	{
+		int n = 0;
+		foreach (var o in items ?? (IEnumerable)Array.Empty<object?> ()) {
+			if (o is not TreeViewItem tv)
+				continue;
+			if (tv.Tag is AddinItem { IsCategory: false } it && match (it))
+				n++;
+			n += CountRowItems (tv.Items, match);
+		}
+		return n;
 	}
 
 	void OnRefreshClicked (object? sender, RoutedEventArgs e)
@@ -384,16 +507,18 @@ public partial class AddinManagerDialog : Window
 		LoadAddins ();
 	}
 
-	void OnRepoMenuClicked (object? sender, RoutedEventArgs e)
+	void OnRepoComboChanged (object? sender, SelectionChangedEventArgs e)
 	{
-		// Legacy repoCombo: All repositories / per-repo / Manage Repositories...
-		// The new host ships a single local catalog: keep the label static for now.
+		// Legacy repoCombo: picking a repository reloads the gallery for it; the
+		// new host ships a single local catalog, so any selection reloads it.
+		if (currentTab != "gallery")
+			return;
 		LoadAddins ();
 	}
 
 	void OnUrlClicked (object? sender, RoutedEventArgs e)
 	{
-		if (AddinList?.SelectedItem is not AddinItem item || item.Url.Length == 0)
+		if (SelectedRow () is not { } item || item.Url.Length == 0)
 			return;
 		try {
 			System.Diagnostics.Process.Start (new System.Diagnostics.ProcessStartInfo (item.Url) { UseShellExecute = true });
