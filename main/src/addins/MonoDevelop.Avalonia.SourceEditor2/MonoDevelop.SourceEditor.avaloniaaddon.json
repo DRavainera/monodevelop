@@ -4,7 +4,8 @@
     "name": "Source Editor",
     "publisher": "MonoDevelop",
     "version": "9.0.0",
-    "description": "Text editor options: general, markers, behavior, IntelliSense and color theme (Avalonia add-in)."
+    "description": "Text editor options: general, markers, behavior, IntelliSense and color theme (Avalonia add-in).",
+    "icon": "core:file-source-32.png"
   },
   "assetType": "Microsoft.VisualStudio.MefComponent",
   "installationTarget": { "id": "MonoDevelop.Avalonia", "version": "9.0" },

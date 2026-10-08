@@ -5,7 +5,8 @@
     "name": "TextTemplating",
     "publisher": "MonoDevelop",
     "version": "9.0.0",
-    "description": "T4 text template processing: mime types, parser, editor extension, file templates and generation tools (Avalonia add-in)."
+    "description": "T4 text template processing: mime types, parser, editor extension, file templates and generation tools (Avalonia add-in).",
+    "icon": "core:file-script-32.png"
   },
   "assetType": "Microsoft.VisualStudio.MefComponent",
   "installationTarget": { "id": "MonoDevelop.Avalonia", "version": "9.0" },

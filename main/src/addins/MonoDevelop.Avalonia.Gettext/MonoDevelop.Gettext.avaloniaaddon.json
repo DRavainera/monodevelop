@@ -5,7 +5,8 @@
     "name": "Gettext",
     "publisher": "MonoDevelop",
     "version": "9.0.0",
-    "description": "Gettext translation and localization tools (Avalonia add-in)."
+    "description": "Gettext translation and localization tools (Avalonia add-in).",
+    "icon": "MonoDevelop.Gettext/icons/file-locale-32.png"
   },
   "assetType": "Microsoft.VisualStudio.MefComponent",
   "installationTarget": { "id": "MonoDevelop.Avalonia", "version": "9.0" },

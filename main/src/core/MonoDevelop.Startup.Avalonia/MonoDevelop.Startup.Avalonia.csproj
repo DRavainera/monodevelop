@@ -60,8 +60,6 @@
     <AvaloniaResource Include="branding\welcome-tile@2x.png" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\..\external\mono-addins\Mono.Addins\Mono.Addins.csproj" />
-    <ProjectReference Include="..\..\..\external\mono-addins\Mono.Addins.Setup\Mono.Addins.Setup.csproj" />
     <!-- MonoDevelop.Core is part of the shell (same unified build tree): the non-GTK
          backend (commands, key bindings, options) lives there. -->
     <ProjectReference Include="..\MonoDevelop.Core\MonoDevelop.Core.csproj" />

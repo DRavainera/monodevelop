@@ -5,7 +5,8 @@
     "name": "ILAsmBinding",
     "publisher": "MonoDevelop",
     "version": "9.0.0",
-    "description": "ILAsm (IL assembler) language binding: project templates, file filters, compiler options (Avalonia add-in)."
+    "description": "ILAsm (IL assembler) language binding: project templates, file filters, compiler options (Avalonia add-in).",
+    "icon": "core:file-class-32.png"
   },
   "assetType": "Microsoft.VisualStudio.MefComponent",
   "installationTarget": { "id": "MonoDevelop.Avalonia", "version": "9.0" },

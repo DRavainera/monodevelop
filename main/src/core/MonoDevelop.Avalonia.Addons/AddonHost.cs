@@ -58,7 +58,7 @@ namespace MonoDevelop.AvaloniaAddons
 					var m = JsonSerializer.Deserialize<AddonManifest> (File.ReadAllText (file));
 					if (m?.Identity is null || string.IsNullOrEmpty (m.Identity.Id)) { Note ("invalid manifest: " + file); continue; }
 
-					state = new AddonLoadState { Manifest = m };
+					state = new AddonLoadState { Manifest = m, ManifestPath = file };
 					addons.Add (state);
 
 					if (m.EntryPoint is not { Length: > 0 } && (m.Assets == null || m.Assets.Count == 0)) {
@@ -114,6 +114,49 @@ namespace MonoDevelop.AvaloniaAddons
 				return m.EntryPoint;
 			}
 			
+			return null;
+		}
+
+		/// <summary>Resolves the identity icon declared in the manifest (identity.icon) to a
+		/// file on disk. "core:file.png" points at the legacy core icon set; any other value
+		/// is a path relative to the add-ins root (or to the add-in's own folder when it
+		/// exists there). Returns null when the file is not found so the UI can fall back to
+		/// the generic add-in icon (the legacy dialog's plugin-32 fallback). Resolution walks
+		/// up from the binary directory, mirroring IconService, so both the repo tree and a
+		/// staged build resolve.</summary>
+		public string? ResolveIconFile (AddonLoadState state)
+		{
+			var icon = state?.Manifest?.Identity?.Icon;
+			if (string.IsNullOrEmpty (icon))
+				return null;
+			if (icon.StartsWith ("core:", StringComparison.Ordinal))
+				return FindFile (new[] { Path.Combine ("src", "core", "MonoDevelop.Ide", "icons") }, icon.Substring ("core:".Length));
+			if (state?.ManifestPath is { Length: > 0 }) {
+				var direct = Path.GetFullPath (Path.Combine (Path.GetDirectoryName (state.ManifestPath) ?? root, icon));
+				if (File.Exists (direct))
+					return direct;
+			}
+			return FindFile (new[] { Path.Combine ("src", "addins"), "addins", "AddIns" }, icon);
+		}
+
+		static string? FindFile (string[] subdirs, string fileName)
+		{
+			var baseDir = AppContext.BaseDirectory;
+			var candidates = new List<string> ();
+			foreach (var sub in subdirs) {
+				candidates.Add (Path.GetFullPath (Path.Combine (baseDir, sub, fileName)));
+				candidates.Add (Path.GetFullPath (Path.Combine (baseDir, "..", "..", sub, fileName)));
+			}
+			var dir = baseDir;
+			for (int i = 0; i < 8 && dir is not null; i++) {
+				foreach (var sub in subdirs)
+					candidates.Add (Path.GetFullPath (Path.Combine (dir, sub, fileName)));
+				dir = Path.GetDirectoryName (dir);
+			}
+			foreach (var c in candidates) {
+				if (File.Exists (c))
+					return c;
+			}
 			return null;
 		}
 

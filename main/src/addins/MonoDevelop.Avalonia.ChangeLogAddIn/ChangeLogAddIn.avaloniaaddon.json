@@ -5,7 +5,8 @@
     "name": "ChangeLogAddIn",
     "publisher": "MonoDevelop",
     "version": "9.0.0",
-    "description": "ChangeLog integration options (Avalonia add-in)."
+    "description": "ChangeLog integration options (Avalonia add-in).",
+    "icon": "core:file-text-32.png"
   },
   "assetType": "Microsoft.VisualStudio.MefComponent",
   "installationTarget": { "id": "MonoDevelop.Avalonia", "version": "9.0" },

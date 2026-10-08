@@ -5,7 +5,8 @@
     "name": "PerformanceDiagnostics",
     "publisher": "MonoDevelop",
     "version": "9.0.0",
-    "description": "UI thread hang monitoring, profiling, leak tracker and reliability diagnostics (Avalonia add-in)."
+    "description": "UI thread hang monitoring, profiling, leak tracker and reliability diagnostics (Avalonia add-in).",
+    "icon": "core:file-information-32.png"
   },
   "assetType": "Microsoft.VisualStudio.MefComponent",
   "installationTarget": { "id": "MonoDevelop.Avalonia", "version": "9.0" },

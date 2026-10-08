@@ -5,7 +5,8 @@
     "name": "NuGet",
     "publisher": "MonoDevelop",
     "version": "9.0.0",
-    "description": "NuGet package management options (Avalonia add-in)."
+    "description": "NuGet package management options (Avalonia add-in).",
+    "icon": "core:package-32.png"
   },
   "assetType": "Microsoft.VisualStudio.MefComponent",
   "installationTarget": { "id": "MonoDevelop.Avalonia", "version": "9.0" },

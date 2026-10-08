@@ -5,7 +5,8 @@
     "name": "TextEditor",
     "publisher": "MonoDevelop",
     "version": "9.0.0",
-    "description": "Text editor: editor commands, VS command mapping, editor context menu and legacy-editor feature switch (Avalonia add-in)."
+    "description": "Text editor: editor commands, VS command mapping, editor context menu and legacy-editor feature switch (Avalonia add-in).",
+    "icon": "core:file-text-32.png"
   },
   "assetType": "Microsoft.VisualStudio.MefComponent",
   "installationTarget": { "id": "MonoDevelop.Avalonia", "version": "9.0" },

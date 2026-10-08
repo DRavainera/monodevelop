@@ -5,7 +5,8 @@
     "name": "ConnectedServices",
     "publisher": "MonoDevelop",
     "version": "9.0.0",
-    "description": "Connected services: service providers, project model extension, solution pad nodes and service gallery (Avalonia add-in)."
+    "description": "Connected services: service providers, project model extension, solution pad nodes and service gallery (Avalonia add-in).",
+    "icon": "core:information-32.png"
   },
   "assetType": "Microsoft.VisualStudio.MefComponent",
   "installationTarget": { "id": "MonoDevelop.Avalonia", "version": "9.0" },

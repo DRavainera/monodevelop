@@ -5,7 +5,8 @@
     "name": "Packaging",
     "publisher": "MonoDevelop",
     "version": "9.0.0",
-    "description": "NuGet packaging: .nuproj project type, packaging project flavor, templates, wizards, option panels and Create NuGet Package command (Avalonia add-in)."
+    "description": "NuGet packaging: .nuproj project type, packaging project flavor, templates, wizards, option panels and Create NuGet Package command (Avalonia add-in).",
+    "icon": "core:project-package-32.png"
   },
   "assetType": "Microsoft.VisualStudio.MefComponent",
   "installationTarget": { "id": "MonoDevelop.Avalonia", "version": "9.0" },

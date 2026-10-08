@@ -5,7 +5,8 @@
     "name": "CSharpBinding",
     "publisher": "MonoDevelop",
     "version": "9.0.0",
-    "description": "C# coding standards and behavior options (Avalonia add-in)."
+    "description": "C# coding standards and behavior options (Avalonia add-in).",
+    "icon": "core:file-source-32.png"
   },
   "assetType": "Microsoft.VisualStudio.MefComponent",
   "installationTarget": { "id": "MonoDevelop.Avalonia", "version": "9.0" },

@@ -5,7 +5,8 @@
     "name": "Debugger",
     "publisher": "MonoDevelop",
     "version": "9.0.0",
-    "description": "Debugging options (Avalonia add-in)."
+    "description": "Debugging options (Avalonia add-in).",
+    "icon": "MonoDevelop.Debugger/icons/exception-48.png"
   },
   "assetType": "Microsoft.VisualStudio.MefComponent",
   "installationTarget": { "id": "MonoDevelop.Avalonia", "version": "9.0" },

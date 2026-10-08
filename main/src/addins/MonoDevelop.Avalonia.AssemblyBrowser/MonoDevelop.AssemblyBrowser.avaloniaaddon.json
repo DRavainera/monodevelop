@@ -5,7 +5,8 @@
     "name": "AssemblyBrowser",
     "publisher": "MonoDevelop",
     "version": "9.0.0",
-    "description": "Assembly browser and dependency inspector (Avalonia add-in)."
+    "description": "Assembly browser and dependency inspector (Avalonia add-in).",
+    "icon": "core:file-class-32.png"
   },
   "assetType": "Microsoft.VisualStudio.MefComponent",
   "installationTarget": { "id": "MonoDevelop.Avalonia", "version": "9.0" },

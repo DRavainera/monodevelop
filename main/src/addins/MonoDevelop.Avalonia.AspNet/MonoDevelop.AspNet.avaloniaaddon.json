@@ -5,7 +5,8 @@
     "name": "AspNet",
     "publisher": "MonoDevelop",
     "version": "9.0.0",
-    "description": "ASP.NET (WebForms/MVC) binding: project templates, file templates, file filters, parsers, project flavors, XSP execution and MVC navigation commands (Avalonia add-in)."
+    "description": "ASP.NET (WebForms/MVC) binding: project templates, file templates, file filters, parsers, project flavors, XSP execution and MVC navigation commands (Avalonia add-in).",
+    "icon": "core:file-web-32.png"
   },
   "assetType": "Microsoft.VisualStudio.MefComponent",
   "installationTarget": { "id": "MonoDevelop.Avalonia", "version": "9.0" },

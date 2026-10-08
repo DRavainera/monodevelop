@@ -5,7 +5,8 @@
     "name": "UnitTesting.NUnit",
     "publisher": "MonoDevelop",
     "version": "9.0.0",
-    "description": "NUnit test provider: system test provider, NUnit project/file templates and test method/class markers (Avalonia add-in)."
+    "description": "NUnit test provider: system test provider, NUnit project/file templates and test method/class markers (Avalonia add-in).",
+    "icon": "core:file-unit-test-32.png"
   },
   "assetType": "Microsoft.VisualStudio.MefComponent",
   "installationTarget": { "id": "MonoDevelop.Avalonia", "version": "9.0" },

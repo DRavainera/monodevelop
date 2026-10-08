@@ -5,7 +5,8 @@
     "name": "Deployment",
     "publisher": "MonoDevelop",
     "version": "9.0.0",
-    "description": "Deployment and packaging: package builders, deploy handlers, deploy directories/platforms and packaging project support (Avalonia add-in)."
+    "description": "Deployment and packaging: package builders, deploy handlers, deploy directories/platforms and packaging project support (Avalonia add-in).",
+    "icon": "Deployment/MonoDevelop.Deployment/icons/package-32.png"
   },
   "assetType": "Microsoft.VisualStudio.MefComponent",
   "installationTarget": { "id": "MonoDevelop.Avalonia", "version": "9.0" },

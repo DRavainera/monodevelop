@@ -5,7 +5,8 @@
     "name": "DesignerSupport",
     "publisher": "MonoDevelop",
     "version": "9.0.0",
-    "description": "Toolbox and designer support for Avalonia projects (Avalonia add-in)."
+    "description": "Toolbox and designer support for Avalonia projects (Avalonia add-in).",
+    "icon": "core:file-gtk-32.png"
   },
   "assetType": "Microsoft.VisualStudio.MefComponent",
   "installationTarget": { "id": "MonoDevelop.Avalonia", "version": "9.0" },

@@ -4,7 +4,8 @@
     "name": ".NET Core",
     "publisher": "MonoDevelop",
     "version": "9.0.0",
-    "description": ".NET Core SDK location options (Avalonia add-in)."
+    "description": ".NET Core SDK location options (Avalonia add-in).",
+    "icon": "core:project-crossplatform-shared-32.png"
   },
   "assetType": "Microsoft.VisualStudio.MefComponent",
   "installationTarget": { "id": "MonoDevelop.Avalonia", "version": "9.0" },

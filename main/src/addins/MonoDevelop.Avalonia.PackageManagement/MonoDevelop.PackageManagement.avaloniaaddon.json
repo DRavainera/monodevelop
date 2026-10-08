@@ -5,7 +5,8 @@
     "name": "PackageManagement",
     "publisher": "MonoDevelop",
     "version": "9.0.0",
-    "description": "NuGet package management: add/manage/restore/update packages, package node builders in the project pad, NuGet preferences and template package installers (Avalonia add-in)."
+    "description": "NuGet package management: add/manage/restore/update packages, package node builders in the project pad, NuGet preferences and template package installers (Avalonia add-in).",
+    "icon": "MonoDevelop.PackageManagement/icons/package-source-32.png"
   },
   "assetType": "Microsoft.VisualStudio.MefComponent",
   "installationTarget": { "id": "MonoDevelop.Avalonia", "version": "9.0" },

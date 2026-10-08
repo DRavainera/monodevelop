@@ -5,7 +5,8 @@
     "name": "UnitTesting",
     "publisher": "MonoDevelop",
     "version": "9.0.0",
-    "description": "Unit testing tools and runner for Avalonia (Avalonia add-in)."
+    "description": "Unit testing tools and runner for Avalonia (Avalonia add-in).",
+    "icon": "core:file-unit-test-32.png"
   },
   "assetType": "Microsoft.VisualStudio.MefComponent",
   "installationTarget": { "id": "MonoDevelop.Avalonia", "version": "9.0" },

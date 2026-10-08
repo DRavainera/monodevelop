@@ -5,7 +5,8 @@
     "name": "AspNetCore",
     "publisher": "MonoDevelop",
     "version": "9.0.0",
-    "description": "ASP.NET Core binding: .NET Core Web project templates (SDK-gated), scaffolding, publish commands, execution handler and run configuration editor (Avalonia add-in)."
+    "description": "ASP.NET Core binding: .NET Core Web project templates (SDK-gated), scaffolding, publish commands, execution handler and run configuration editor (Avalonia add-in).",
+    "icon": "core:file-web-32.png"
   },
   "assetType": "Microsoft.VisualStudio.MefComponent",
   "installationTarget": { "id": "MonoDevelop.Avalonia", "version": "9.0" },

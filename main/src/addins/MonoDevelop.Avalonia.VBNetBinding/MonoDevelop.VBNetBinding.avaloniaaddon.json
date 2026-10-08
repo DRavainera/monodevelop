@@ -5,7 +5,8 @@
     "name": "VBNetBinding",
     "publisher": "MonoDevelop",
     "version": "9.0.0",
-    "description": "VB.NET language binding: project type, language binding, templates, option panels, MIME and text editor extension (Avalonia add-in)."
+    "description": "VB.NET language binding: project type, language binding, templates, option panels, MIME and text editor extension (Avalonia add-in).",
+    "icon": "core:file-source-32.png"
   },
   "assetType": "Microsoft.VisualStudio.MefComponent",
   "installationTarget": { "id": "MonoDevelop.Avalonia", "version": "9.0" },

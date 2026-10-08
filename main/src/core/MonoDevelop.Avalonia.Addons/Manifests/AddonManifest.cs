@@ -49,6 +49,7 @@ namespace MonoDevelop.AvaloniaAddons.Manifests
 		[JsonPropertyName ("publisher")] public string Publisher { get; set; } = "";
 		[JsonPropertyName ("version")] public string Version { get; set; } = "1.0.0";
 		[JsonPropertyName ("description")] public string Description { get; set; } = "";
+		[JsonPropertyName ("icon")] public string Icon { get; set; } = "";
 		[JsonPropertyName ("preview")] public bool Preview { get; set; } = false;
 		[JsonPropertyName ("language")] public string Language { get; set; } = "en-US";
 	}

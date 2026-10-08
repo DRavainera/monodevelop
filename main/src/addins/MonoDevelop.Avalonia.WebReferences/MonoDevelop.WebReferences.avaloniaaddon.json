@@ -5,7 +5,8 @@
     "name": "WebReferences",
     "publisher": "MonoDevelop",
     "version": "9.0.0",
-    "description": "Web reference management and tools (Avalonia add-in)."
+    "description": "Web reference management and tools (Avalonia add-in).",
+    "icon": "core:file-web-32.png"
   },
   "assetType": "Microsoft.VisualStudio.MefComponent",
   "installationTarget": { "id": "MonoDevelop.Avalonia", "version": "9.0" },

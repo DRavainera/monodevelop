@@ -5,7 +5,8 @@
     "name": "HexEditor",
     "publisher": "MonoDevelop",
     "version": "9.0.0",
-    "description": "Binary file hex editor (Avalonia add-in)."
+    "description": "Binary file hex editor (Avalonia add-in).",
+    "icon": "core:file-generic-32.png"
   },
   "assetType": "Microsoft.VisualStudio.MefComponent",
   "installationTarget": { "id": "MonoDevelop.Avalonia", "version": "9.0" },
