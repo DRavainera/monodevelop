@@ -21,6 +21,7 @@
       { "id": "MonoDevelop.ConnectedServices.Commands.OpenServicesGallery", "label": "Service Capabilities" }
     ],
     "/MonoDevelop/Ide/MainMenu/Project": [
+      { "id": "ConnectedServicesGallerySeparator" },
       { "id": "MonoDevelop.ConnectedServices.Commands.OpenServicesGallery", "label": "Service Capabilities" }
     ],
     "/MonoDevelop/Ide/Pads/ProjectPad": [
@@ -33,7 +34,7 @@
       { "id": "MonoDevelop.ConnectedServices.Commands.OpenServicesGalleryFromServicesNode", "label": "Open Service Gallery" },
       { "id": "MonoDevelop.ConnectedServices.Commands.OpenServiceDetails", "label": "Open Service Details" },
       { "id": "MonoDevelop.ConnectedServices.Commands.RemoveService", "label": "Remove Service…" },
-      { "id": "MonoDevelop.ConnectedServices.Commands.AddServiceTelemetry", "label": "Add Service" }
+      { "id": "MonoDevelop.ConnectedServices.Commands.AddServiceTelemetry", "label": "Add" }
     ]
   }
 }

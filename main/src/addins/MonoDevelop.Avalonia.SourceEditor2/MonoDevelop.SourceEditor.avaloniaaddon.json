@@ -14,11 +14,13 @@
   "autoLoad": true,
   "extensions": {
     "/MonoDevelop/Ide/GlobalOptionsDialog/TextEditor": [
-      { "id": "General", "label": "General", "icon": "md-prefs-text-editor-general" },
-      { "id": "Markers", "label": "Markers and Rulers", "icon": "md-prefs-markers-rulers" },
-      { "id": "Behavior", "label": "Behavior", "icon": "md-prefs-text-editor-behavior" },
-      { "id": "CodeCompletion", "label": "IntelliSense", "icon": "md-prefs-completion", "childId": "CompletionBehavior" },
-      { "id": "SyntaxHighlighting", "label": "Color Theme", "icon": "md-prefs-syntax-highlighting" }
+      { "id": "General", "label": "General", "icon": "md-prefs-text-editor-general", "className": "MonoDevelop.SourceEditor.OptionPanels.GeneralOptionsPanel" },
+      { "id": "Markers", "label": "Markers and Rulers", "icon": "md-prefs-markers-rulers", "className": "MonoDevelop.SourceEditor.OptionPanels.MarkerPanel" },
+      { "id": "Behavior", "label": "Behavior", "icon": "md-prefs-text-editor-behavior", "className": "MonoDevelop.SourceEditor.OptionPanels.BehaviorPanel" },
+      { "id": "CodeCompletion", "label": "IntelliSense", "icon": "md-prefs-completion" },
+      { "id": "CompletionBehavior", "label": "Behavior", "icon": "md-prefs-completion", "className": "MonoDevelop.SourceEditor.OptionPanels.CompletionOptionsPanel", "childId": "CodeCompletion" },
+      { "id": "CompletionAppearance", "label": "Appearance", "icon": "md-prefs-completion", "className": "MonoDevelop.SourceEditor.OptionPanels.CompletionAppearancePanel", "childId": "CodeCompletion" },
+      { "id": "SyntaxHighlighting", "label": "Color Theme", "icon": "md-prefs-syntax-highlighting", "className": "MonoDevelop.SourceEditor.OptionPanels.HighlightingPanel" }
     ]
   }
 }

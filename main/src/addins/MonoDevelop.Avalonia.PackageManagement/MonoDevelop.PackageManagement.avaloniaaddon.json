@@ -16,16 +16,16 @@
   "extensions": {
     "/MonoDevelop/Ide/Commands": [
       { "id": "NuGet", "label": "NuGet" },
-      { "id": "MonoDevelop.PackageManagement.Commands.AddPackages", "label": "Add NuGet Packages..." },
-      { "id": "MonoDevelop.PackageManagement.Commands.ManageNuGetPackages", "label": "Manage NuGet Packages (Solution)..." },
-      { "id": "MonoDevelop.PackageManagement.Commands.ManageNuGetPackagesInProject", "label": "Manage NuGet Packages..." },
-      { "id": "MonoDevelop.PackageManagement.Commands.RestorePackages", "label": "Restore NuGet Packages" },
-      { "id": "MonoDevelop.PackageManagement.Commands.Restore", "label": "Restore" },
-      { "id": "MonoDevelop.PackageManagement.Commands.PackageReferenceNodeCommands.ReinstallPackage", "label": "Retarget" },
-      { "id": "MonoDevelop.PackageManagement.Commands.PackageReferenceNodeCommands.UpdatePackage", "label": "Update" },
-      { "id": "MonoDevelop.PackageManagement.Commands.UpdateAllPackagesInProject", "label": "Update" },
-      { "id": "MonoDevelop.PackageManagement.Commands.UpdateAllPackagesInSolution", "label": "Update NuGet Packages" },
-      { "id": "MonoDevelop.PackageManagement.Commands.PackagesFolderNodeCommands.ReinstallAllPackagesInProject", "label": "Retarget" }
+      { "id": "MonoDevelop.PackageManagement.Commands.AddPackages", "label": "Add NuGet Packages...", "childId": "NuGet" },
+      { "id": "MonoDevelop.PackageManagement.Commands.ManageNuGetPackages", "label": "Manage NuGet Packages...", "childId": "NuGet" },
+      { "id": "MonoDevelop.PackageManagement.Commands.ManageNuGetPackagesInProject", "label": "Manage NuGet Packages...", "childId": "NuGet" },
+      { "id": "MonoDevelop.PackageManagement.Commands.RestorePackages", "label": "Restore NuGet Packages", "childId": "NuGet" },
+      { "id": "MonoDevelop.PackageManagement.Commands.Restore", "label": "Restore", "childId": "NuGet" },
+      { "id": "MonoDevelop.PackageManagement.Commands.PackageReferenceNodeCommands.ReinstallPackage", "label": "Retarget", "childId": "NuGet" },
+      { "id": "MonoDevelop.PackageManagement.Commands.PackageReferenceNodeCommands.UpdatePackage", "label": "Update", "childId": "NuGet" },
+      { "id": "MonoDevelop.PackageManagement.Commands.UpdateAllPackagesInProject", "label": "Update", "childId": "NuGet" },
+      { "id": "MonoDevelop.PackageManagement.Commands.UpdateAllPackagesInSolution", "label": "Update NuGet Packages", "childId": "NuGet" },
+      { "id": "MonoDevelop.PackageManagement.Commands.PackagesFolderNodeCommands.ReinstallAllPackagesInProject", "label": "Retarget", "childId": "NuGet" }
     ],
     "/MonoDevelop/Ide/MainMenu/Project": [
       { "id": "MonoDevelop.PackageManagement.Commands.ManageNuGetPackages", "label": "Manage NuGet Packages (Solution)..." },
@@ -33,9 +33,11 @@
       { "id": "MonoDevelop.PackageManagement.Commands.RestorePackages", "label": "Restore NuGet Packages" }
     ],
     "/MonoDevelop/Ide/ContextMenu/ProjectPad": [
-      { "id": "MonoDevelop.PackageManagement.Commands.ManageNuGetPackages", "label": "Manage NuGet Packages (Solution)...", "condition": "ItemType=Solution" },
+      { "id": "MonoDevelop.PackageManagement.ProjectPad.Separator", "condition": "ItemType=Solution" },
+      { "id": "MonoDevelop.PackageManagement.Commands.ManageNuGetPackages", "label": "Manage NuGet Packages...", "condition": "ItemType=Solution" },
       { "id": "MonoDevelop.PackageManagement.Commands.UpdateAllPackagesInSolution", "label": "Update NuGet Packages", "condition": "ItemType=Solution" },
       { "id": "MonoDevelop.PackageManagement.Commands.RestorePackages", "label": "Restore NuGet Packages", "condition": "ItemType=Solution" },
+      { "id": "MonoDevelop.PackageManagement.ProjectPad.Separator", "condition": "ItemType=DotNetProject" },
       { "id": "MonoDevelop.PackageManagement.Commands.ManageNuGetPackagesInProject", "label": "Manage NuGet Packages...", "condition": "ItemType=DotNetProject" },
       { "id": "MonoDevelop.PackageManagement.Commands.ManageNuGetPackagesInProject", "label": "Manage NuGet Packages...", "condition": "ItemType=MonoDevelop.PackageManagement.NodeBuilders.ProjectPackagesFolderNode" },
       { "id": "MonoDevelop.PackageManagement.Commands.PackagesFolderNodeCommands.ReinstallAllPackagesInProject", "label": "Retarget", "condition": "ItemType=MonoDevelop.PackageManagement.NodeBuilders.ProjectPackagesFolderNode" },
@@ -43,7 +45,7 @@
       { "id": "MonoDevelop.PackageManagement.Commands.Restore", "label": "Restore", "condition": "ItemType=MonoDevelop.PackageManagement.NodeBuilders.ProjectPackagesFolderNode" }
     ],
     "/MonoDevelop/Ide/ContextMenu/ProjectPad/Add": [
-      { "id": "MonoDevelop.PackageManagement.Commands.AddPackages", "label": "Add NuGet Packages...", "condition": "ItemType=Project" }
+      { "id": "MonoDevelop.PackageManagement.Commands.AddPackages", "label": "NuGet Packages...", "condition": "ItemType=Project" }
     ],
     "/MonoDevelop/Core/StockIcons": [
       { "id": "md-nuget-package", "resource": "package-48.png" },

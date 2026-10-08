@@ -15,7 +15,7 @@
   "autoLoad": true,
   "extensions": {
     "/MonoDevelop/Ide/GlobalOptionsDialog/Projects": [
-      { "id": "Debugger", "label": "Debugger", "icon": "md-prefs-debugger" }
+      { "id": "Debugger", "label": "Debugger", "icon": "md-prefs-debugger", "className": "MonoDevelop.Debugger.DebuggerOptionsPanel" }
     ]
   }
 }

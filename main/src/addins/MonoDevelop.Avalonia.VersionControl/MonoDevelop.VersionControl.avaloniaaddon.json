@@ -14,9 +14,9 @@
   "autoLoad": true,
   "extensions": {
     "/MonoDevelop/Ide/GlobalOptionsDialog/VersionControl": [
-      { "id": "General", "label": "General", "icon": "md-prefs-version-control" },
-      { "id": "Commit Message Style", "label": "Commit Message Style", "icon": "md-prefs-solution" },
-      { "id": "Git", "label": "Git", "icon": "md-prefs-solution" },
+      { "id": "General", "label": "General", "icon": "md-prefs-version-control", "className": "MonoDevelop.VersionControl.VersionControlGeneralOptionsPanel" },
+      { "id": "Commit Message Style", "label": "Commit Message Style", "icon": "md-prefs-commit-message-style", "className": "MonoDevelop.VersionControl.VersionControlPolicyPanel" },
+      { "id": "Git", "label": "Git", "icon": "md-prefs-git" },
       { "id": "ChangeLog Integration", "label": "ChangeLog Integration", "icon": "md-prefs-generic" }
     ]
   }

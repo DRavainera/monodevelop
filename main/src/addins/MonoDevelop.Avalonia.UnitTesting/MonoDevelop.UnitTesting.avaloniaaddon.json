@@ -15,10 +15,35 @@
   "autoLoad": true,
   "extensions": {
     "/MonoDevelop/Ide/Commands": [
-      { "id": "MonoDevelop.UnitTesting.RunTests", "label": "Run All Tests", "icon": "md-prefs-run" }
+      { "id": "UnitTesting", "label": "Unit Testing" },
+      { "id": "MonoDevelop.UnitTesting.Commands.TestCommands.RunAllTests", "label": "Run Unit Tests", "icon": "md-run-unit-tests", "childId": "UnitTesting" },
+      { "id": "MonoDevelop.UnitTesting.Commands.TestCommands.RunTestWith", "label": "Run With", "childId": "UnitTesting" },
+      { "id": "MonoDevelop.UnitTesting.Commands.TestCommands.DebugTest", "label": "Debug Test", "childId": "UnitTesting" },
+      { "id": "MonoDevelop.UnitTesting.Commands.TestCommands.DebugAllTests", "label": "Debug All Tests", "childId": "UnitTesting" },
+      { "id": "MonoDevelop.UnitTesting.Commands.TestCommands.RunTest", "label": "Run Test", "childId": "UnitTesting" },
+      { "id": "MonoDevelop.UnitTesting.Commands.TestCommands.ShowTestCode", "label": "Show test source code", "childId": "UnitTesting" },
+      { "id": "MonoDevelop.UnitTesting.Commands.TestCommands.GoToFailure", "label": "Go to failure", "childId": "UnitTesting" },
+      { "id": "MonoDevelop.UnitTesting.Commands.TestCommands.SelectTestInTree", "label": "Select test in tree", "childId": "UnitTesting" },
+      { "id": "MonoDevelop.UnitTesting.Commands.TestCommands.ShowTestDetails", "label": "Show results pad", "childId": "UnitTesting" },
+      { "id": "MonoDevelop.UnitTesting.Commands.TestCommands.RerunTest", "label": "Rerun test", "childId": "UnitTesting" },
+      { "id": "MonoDevelop.UnitTesting.Commands.TestChartCommands.UseTimeScale", "label": "Proportional time scale", "childId": "UnitTesting" },
+      { "id": "MonoDevelop.UnitTesting.Commands.TestChartCommands.SingleDayResult", "label": "Show one result per day", "childId": "UnitTesting" },
+      { "id": "MonoDevelop.UnitTesting.Commands.TestChartCommands.ShowResults", "label": "Results chart", "childId": "UnitTesting" },
+      { "id": "MonoDevelop.UnitTesting.Commands.TestChartCommands.ShowTime", "label": "Time chart", "childId": "UnitTesting" },
+      { "id": "MonoDevelop.UnitTesting.Commands.TestChartCommands.ShowSuccessfulTests", "label": "Show successful tests", "childId": "UnitTesting" },
+      { "id": "MonoDevelop.UnitTesting.Commands.TestChartCommands.ShowFailedTests", "label": "Show failed tests", "childId": "UnitTesting" },
+      { "id": "MonoDevelop.UnitTesting.Commands.TestChartCommands.ShowIgnoredTests", "label": "Show ignored tests", "childId": "UnitTesting" },
+      { "id": "MonoDevelop.UnitTesting.Commands.TextEditorCommands.RunTestAtCaret", "label": "Run Test at Caret", "childId": "UnitTesting" },
+      { "id": "MonoDevelop.UnitTesting.Commands.TextEditorCommands.DebugTestAtCaret", "label": "Debug Test at Caret", "childId": "UnitTesting" },
+      { "id": "MonoDevelop.UnitTesting.Commands.TextEditorCommands.SelectTestAtCaret", "label": "Select Test at Caret", "childId": "UnitTesting" }
     ],
     "/MonoDevelop/Ide/Pads": [
-      { "id": "MonoDevelop.UnitTesting.TestPad", "label": "Tests", "icon": "md-prefs-test" }
+      { "id": "MonoDevelop.UnitTesting.TestPad", "label": "Unit Tests", "icon": "nunit-pad-icon", "className": "MonoDevelop.UnitTesting.TestPad" },
+      { "id": "ShowTestTime", "label": "Show Test Time", "defaultValue": "False", "childId": "MonoDevelop.UnitTesting.TestPad" },
+      { "id": "ShowTestCounters", "label": "Show Test Counters", "defaultValue": "False", "childId": "MonoDevelop.UnitTesting.TestPad" },
+      { "id": "CombineTestNamespaces", "label": "Combine Test Namespaces", "defaultValue": "True", "childId": "MonoDevelop.UnitTesting.TestPad" },
+      { "id": "TestNode", "className": "MonoDevelop.UnitTesting.TestNodeBuilder", "childId": "MonoDevelop.UnitTesting.TestPad" },
+      { "id": "MonoDevelop.UnitTesting.TestResultsPad", "label": "Test Results", "className": "MonoDevelop.UnitTesting.TestResultsPad" }
     ]
   }
 }

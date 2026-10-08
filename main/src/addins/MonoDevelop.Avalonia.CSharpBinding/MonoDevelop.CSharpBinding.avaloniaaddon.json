@@ -15,10 +15,10 @@
   "autoLoad": true,
   "extensions": {
     "/MonoDevelop/Ide/GlobalOptionsDialog/TextEditor/Behavior": [
-      { "id": "CSharpOnTheFlyFormattingPanel", "label": "C#", "icon": "md-prefs-code-formatting" }
+      { "id": "CSharpOnTheFlyFormattingPanel", "label": "C#", "icon": "md-prefs-code-formatting", "className": "MonoDevelop.SourceEditor.OptionPanels.OnTheFlyFormattingPanel" }
     ],
     "/MonoDevelop/Ide/GlobalOptionsDialog/TextEditor/Analysis/C#": [
-      { "id": "CodeStylePanel", "label": "Code Style", "icon": "md-prefs-code-rules" }
+      { "id": "CodeStylePanel", "label": "Code Style", "icon": "md-prefs-code-rules", "className": "MonoDevelop.CSharp.OptionProvider.CodeStylePage" }
     ]
   }
 }

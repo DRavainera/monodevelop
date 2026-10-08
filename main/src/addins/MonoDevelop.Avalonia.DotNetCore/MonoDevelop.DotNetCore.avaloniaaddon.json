@@ -14,7 +14,8 @@
   "autoLoad": true,
   "extensions": {
     "/MonoDevelop/Ide/GlobalOptionsDialog/Projects/SdkLocations": [
-      { "id": "DotNetCore", "label": ".NET Core", "icon": "md-platform-netcore" }
+      { "id": "DotNetCore", "label": ".NET Core", "icon": "md-platform-netcore" },
+      { "id": "DotNetCoreSdkSettings", "label": ".NET Core", "className": "MonoDevelop.DotNetCore.Gui.DotNetCoreSdkLocationPanel" }
     ]
   }
 }

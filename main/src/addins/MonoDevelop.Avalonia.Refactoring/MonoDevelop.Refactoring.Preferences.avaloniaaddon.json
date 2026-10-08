@@ -32,24 +32,27 @@
         "id": "Analysis",
         "label": "Source Analysis",
         "icon": "md-prefs-code-analysis",
-        "class": "MonoDevelop.AvaloniaAddons.Demo.AnalysisPlaceholder"
+        "className": "MonoDevelop.AnalysisCore.Gui.AnalysisOptionsPanel"
       }
     ],
     "/MonoDevelop/Ide/GlobalOptionsDialog/TextEditor/Analysis/C#": [
       {
-        "id": "Code Actions",
+        "id": "CodeActions",
         "label": "Code Actions",
-        "icon": "md-prefs-code-actions"
+        "icon": "md-prefs-code-actions",
+        "className": "MonoDevelop.CodeActions.CodeActionPanel"
       },
       {
-        "id": "Code Generation",
+        "id": "CodeGeneration",
         "label": "Code Generation",
-        "icon": "md-prefs-generic"
+        "icon": "md-prefs-generic",
+        "className": "MonoDevelop.Refactoring.CodeGenerationPanel"
       },
       {
-        "id": "Code Rules",
+        "id": "CodeRules",
         "label": "Code Rules",
-        "icon": "md-prefs-code-rules"
+        "icon": "md-prefs-code-rules",
+        "className": "MonoDevelop.CodeIssues.CodeRulePanel"
       }
     ]
   }

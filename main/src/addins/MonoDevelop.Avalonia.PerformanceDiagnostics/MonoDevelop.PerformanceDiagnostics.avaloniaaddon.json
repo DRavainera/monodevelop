@@ -28,7 +28,20 @@
       { "id": "PerformanceDiagnosticsAddIn.InduceNativePInvokeCrash", "label": "Induce PInvoke Crash" }
     ],
     "/MonoDevelop/Ide/MainMenu/Help": [
-      { "id": "Diagnostics", "label": "Diagnostics" }
+      { "id": "Diagnostics", "label": "Diagnostics" },
+      { "id": "PerformanceDiagnosticsAddIn.StartStopListeningUIThreadMonitorHandler", "childId": "Diagnostics" },
+      { "id": "PerformanceDiagnosticsAddIn.ProfileFor5SecondsHandler", "childId": "Diagnostics" },
+      { "id": "PerformanceDiagnosticsAddIn.ToggleProfileHandler", "childId": "Diagnostics" },
+      { "id": "PerformanceDiagnosticsAddIn.EnhanceSampleFile", "childId": "Diagnostics" },
+      { "id": "PerformanceDiagnosticsAddIn.SpinDumpFor5SecondsHandler", "childId": "Diagnostics" },
+      { "id": "Diagnostics", "label": "Diagnostics", "condition": "FeatureSwitch=WidgetLeaks,FeatureSwitch=true" },
+      { "id": "PerformanceDiagnosticsAddIn.DumpLiveWidgetsHandler", "condition": "FeatureSwitch=WidgetLeaks,FeatureSwitch=true", "childId": "Diagnostics" },
+      { "id": "Diagnostics", "label": "Diagnostics" },
+      { "id": "PerformanceDiagnosticsAddIn.InduceUIThreadCrash", "childId": "Diagnostics" },
+      { "id": "PerformanceDiagnosticsAddIn.InduceManagedCrash", "childId": "Diagnostics" },
+      { "id": "PerformanceDiagnosticsAddIn.InduceNativeCrash", "childId": "Diagnostics" },
+      { "id": "PerformanceDiagnosticsAddIn.InduceHang", "childId": "Diagnostics" },
+      { "id": "PerformanceDiagnosticsAddIn.InduceNativePInvokeCrash", "childId": "Diagnostics" }
     ],
     "/MonoDevelop/Ide/GlobalOptionsDialog/PerformanceDiagnostics": [
       { "id": "PerformanceDiagnosticsGeneral", "label": "General", "icon": "md-prefs-performance", "className": "PerformanceDiagnosticsAddIn.GlobalOptionsPanel" }

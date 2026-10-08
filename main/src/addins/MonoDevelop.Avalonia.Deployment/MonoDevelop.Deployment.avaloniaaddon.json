@@ -16,9 +16,9 @@
   "extensions": {
     "/MonoDevelop/Ide/Commands": [
       { "id": "Deployment", "label": "Deployment" },
-      { "id": "MonoDevelop.Deployment.Commands.CreatePackage", "label": "Create Package..." },
-      { "id": "MonoDevelop.Deployment.Commands.AddPackage", "label": "Add Package..." },
-      { "id": "MonoDevelop.Deployment.Commands.Install", "label": "Install..." }
+      { "id": "MonoDevelop.Deployment.Commands.CreatePackage", "label": "Create Package...", "childId": "Deployment" },
+      { "id": "MonoDevelop.Deployment.Commands.AddPackage", "label": "Add Package...", "childId": "Deployment" },
+      { "id": "MonoDevelop.Deployment.Commands.Install", "label": "Install...", "childId": "Deployment" }
     ],
     "/MonoDevelop/Ide/MainMenu/Project": [
       { "id": "MonoDevelop.Deployment.Commands.CreatePackage", "label": "Create Package..." }

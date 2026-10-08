@@ -15,7 +15,7 @@
   "autoLoad": true,
   "extensions": {
     "/MonoDevelop/Ide/GlobalOptionsDialog/VersionControl": [
-      { "id": "DefaultChangeLogIntegration", "label": "ChangeLog Integration", "icon": "md-prefs-generic" }
+      { "id": "DefaultChangeLogIntegration", "label": "ChangeLog Integration", "icon": "md-prefs-generic", "className": "MonoDevelop.ChangeLogAddIn.ProjectOptionPanel" }
     ]
   }
 }

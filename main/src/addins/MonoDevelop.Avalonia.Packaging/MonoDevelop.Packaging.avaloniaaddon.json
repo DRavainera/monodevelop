@@ -48,8 +48,8 @@
     ],
     "/MonoDevelop/Ide/Commands": [
       { "id": "NuGet", "label": "NuGet" },
-      { "id": "MonoDevelop.Packaging.Commands.CreateNuGetPackage", "label": "Create NuGet _Package", "className": "MonoDevelop.Packaging.CreateNuGetPackageHandler" },
-      { "id": "MonoDevelop.Packaging.Commands.AddPlatformImplementation", "label": "Add _Platform Implementation...", "className": "MonoDevelop.Packaging.AddPlatformImplementationHandler" }
+      { "id": "MonoDevelop.Packaging.Commands.CreateNuGetPackage", "label": "Create NuGet _Package", "className": "MonoDevelop.Packaging.CreateNuGetPackageHandler", "childId": "NuGet" },
+      { "id": "MonoDevelop.Packaging.Commands.AddPlatformImplementation", "label": "Add _Platform Implementation...", "className": "MonoDevelop.Packaging.AddPlatformImplementationHandler", "childId": "NuGet" }
     ],
     "/MonoDevelop/Ide/MainMenu/Build": [
       { "id": "CreateNuGetPackageSeparator", "type": "separator", "condition": "ProjectHasNuGetMetadata" },

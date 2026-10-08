@@ -70,7 +70,7 @@
       { "id": "AspNetMvc2", "guid": "{F85E285D-A4E0-4152-9332-AB1D724D3325}", "className": "MonoDevelop.AspNet.Projects.AspMvc2ProjectFlavor" },
       { "id": "AspNetMvc3", "guid": "{E53F8FEA-EAE0-44A6-8774-FFD645390401}", "className": "MonoDevelop.AspNet.Projects.AspMvc3ProjectFlavor" },
       { "id": "AspNetMvc4", "guid": "{E3E379DF-F4C6-4180-9B81-6769533ABE47}", "className": "MonoDevelop.AspNet.Projects.AspMvc4ProjectFlavor" },
-      { "id": "AspNetApp", "guid": "{349C5851-65DF-11DA-9384-00065B846F21}", "className": "MonoDevelop.AspNet.Projects.AspNetAppProjectFlavor" }
+      { "id": "MonoDevelop.AspNet.Projects.AspNetAppProjectFlavor", "guid": "{349C5851-65DF-11DA-9384-00065B846F21}", "className": "MonoDevelop.AspNet.Projects.AspNetAppProjectFlavor" }
     ],
     "/MonoDevelop/TypeSystem/Parser": [
       { "id": "WebFormsParser", "className": "MonoDevelop.AspNet.WebForms.WebFormsParser", "mimeType": "application/x-aspx, application/x-ascx, application/x-master-page" },
@@ -91,17 +91,19 @@
     ],
     "/MonoDevelop/Ide/Commands": [
       { "id": "AspNet", "label": "ASP.NET" },
-      { "id": "MonoDevelop.AspNet.Commands.AspNetCommands.AddAspNetDirectory", "label": "ASP.NET Directory" },
-      { "id": "MonoDevelop.AspNet.Commands.AspNetCommands.AddController", "label": "Add Controller..." },
-      { "id": "MonoDevelop.AspNet.Commands.AspNetCommands.AddView", "label": "Add View..." },
-      { "id": "MonoDevelop.AspNet.Commands.AspNetCommands.GoToView", "label": "Go to View" },
-      { "id": "MonoDevelop.AspNet.Commands.AspNetCommands.AddViewFromController", "label": "Add View from Controller..." },
-      { "id": "MonoDevelop.AspNet.Commands.AspNetCommands.GoToController", "label": "Go to Controller" }
+      { "id": "MonoDevelop.AspNet.Commands.AspNetCommands.AddAspNetDirectory", "label": "ASP.NET Directory", "childId": "AspNet" },
+      { "id": "MonoDevelop.AspNet.Commands.AspNetCommands.AddController", "label": "Controller...", "childId": "AspNet" },
+      { "id": "MonoDevelop.AspNet.Commands.AspNetCommands.AddView", "label": "View...", "childId": "AspNet" },
+      { "id": "MonoDevelop.AspNet.Commands.AspNetCommands.GoToView", "label": "Go to View", "childId": "AspNet" },
+      { "id": "MonoDevelop.AspNet.Commands.AspNetCommands.AddViewFromController", "label": "Add View...", "childId": "AspNet" },
+      { "id": "MonoDevelop.AspNet.Commands.AspNetCommands.GoToController", "label": "Go to Controller", "childId": "AspNet" }
     ],
     "/MonoDevelop/Ide/ContextMenu/ProjectPad/Add": [
-      { "id": "AspNetDirectories", "label": "ASP.NET Directory", "commandId": "MonoDevelop.AspNet.Commands.AspNetCommands.AddAspNetDirectory", "autohide": true },
-      { "id": "MonoDevelop.AspNet.Commands.AspNetCommands.AddController", "label": "Add Controller..." },
-      { "id": "MonoDevelop.AspNet.Commands.AspNetCommands.AddView", "label": "Add View..." }
+      { "id": "AspNetDirectories", "label": "ASP.NET Directory", "autohide": true },
+      { "id": "MonoDevelop.AspNet.Commands.AspNetCommands.AddAspNetDirectory", "childId": "AspNetDirectories" },
+      { "id": "MonoDevelop.AspNet.Commands.AspNetCommands.AddController", "label": "Controller..." },
+      { "id": "MonoDevelop.AspNet.Commands.AspNetCommands.AddView", "label": "View..." },
+      { "id": "MvcAddSeparator" }
     ],
     "/MonoDevelop/Ide/Pads/ProjectPad": [
       { "id": "AspNetProjectNodeBuilderExtension", "className": "MonoDevelop.AspNet.ProjectPad.AspNetProjectNodeBuilderExtension" },
@@ -144,8 +146,12 @@
     ],
     "/MonoDevelop/SourceEditor2/ContextMenu/Editor": [
       { "id": "MonoDevelop.AspNet.Commands.AspNetCommands.GoToView", "label": "Go to View", "condition": "FileType=.cs" },
-      { "id": "MonoDevelop.AspNet.Commands.AspNetCommands.AddViewFromController", "label": "Add View from Controller...", "condition": "FileType=.cs" },
-      { "id": "MonoDevelop.AspNet.Commands.AspNetCommands.GoToController", "label": "Go to Controller", "condition": "FileType=.aspx|text/x-cshtml" }
+      { "id": "MonoDevelop.AspNet.Commands.AspNetCommands.AddViewFromController", "label": "Add View...", "condition": "FileType=.cs" },
+      { "id": "MvcSeparator1", "condition": "FileType=.cs" },
+      { "id": "MonoDevelop.AspNet.Commands.AspNetCommands.GoToController", "label": "Go to Controller", "condition": "FileType=.aspx" },
+      { "id": "MvcSeparator2", "condition": "FileType=.aspx" },
+      { "id": "MonoDevelop.AspNet.Commands.AspNetCommands.GoToController", "label": "Go to Controller", "condition": "FileType=text/x-cshtml" },
+      { "id": "MvcSeparator2", "condition": "FileType=text/x-cshtml" }
     ],
     "/MonoDevelop/Ide/CodeTemplates": [
       { "id": "RazorTemplates", "file": "Razor/Razor-templates.xml" }

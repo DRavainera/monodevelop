@@ -229,21 +229,40 @@ public partial class PreferencesDialog : Window
 				cat = new PrefsNode ("", label, "", new List<PrefsNode> ());
 				tree.Add (cat);
 			}
-			foreach (var child in rootNodes.Where (n => n.ChildId == node.Id))
-				merged += AddSection (cat, child, RootOptionsPoint);
+			foreach (var child in rootNodes.Where (n => n.ChildId == node.Id)) {
+				int before = cat.Children.Count;
+				if (AddSection (cat, child, RootOptionsPoint) is not null && cat.Children.Count > before)
+					merged++;
+			}
 		}
 
 		foreach (var (point, category, parentId) in MergePoints) {
-			foreach (var node in reg.GetExtensionNodes (point)) {
-				var cat = tree.FirstOrDefault (c => c.Label == category);
-				if (cat is null)
+			var nodes = reg.GetExtensionNodes (point).ToList ();
+			var cat = tree.FirstOrDefault (c => c.Label == category);
+			if (cat is null)
+				continue;
+			// The parent may be nested inside the category (e.g. analysis-csharp
+			// under Source Analysis): the legacy point path implies the hierarchy.
+			var target = string.IsNullOrEmpty (parentId) ? cat : FindNode (cat, parentId);
+			if (target is null)
+				continue;
+			// Flattened point model: nodes point at their parent through childId.
+			// Place the top-level nodes first, then attach the children under the node
+			// their parent resolved to (the skeleton leaf it matched, or a new one).
+			var placed = new Dictionary<string, PrefsNode> ();
+			foreach (var node in nodes.Where (n => string.IsNullOrEmpty (n.ChildId) || nodes.All (p => p.Id != n.ChildId))) {
+				int before = target.Children.Count;
+				var leaf = AddSection (target, node, point);
+				if (leaf is not null) {
+					placed[node.Id] = leaf;
+					if (target.Children.Count > before)
+						merged++;
+				}
+			}
+			foreach (var node in nodes) {
+				if (string.IsNullOrEmpty (node.ChildId) || !placed.TryGetValue (node.ChildId, out var parent))
 					continue;
-				// The parent may be nested inside the category (e.g. analysis-csharp
-				// under Source Analysis): the legacy point path implies the hierarchy.
-				var target = string.IsNullOrEmpty (parentId) ? cat : FindNode (cat, parentId);
-				if (target is null)
-					continue;
-				merged += AddSection (target, node, point);
+				AddSection (parent, node, point);
 			}
 		}
 		MainWindow.Instance?.Output ($"[prefs] addon sections merged={merged} (registry points={reg.ExtensionPoints.Count})");
@@ -251,17 +270,19 @@ public partial class PreferencesDialog : Window
 	}
 
 	/// <summary>Maps a registry node to its panel id (point-specific legacy map, then
-	/// normalized id) and appends the leaf to the target, skipping duplicates.
-	/// Returns 1 when a leaf was added.</summary>
-	static int AddSection (PrefsNode target, AddonExtensionNode node, string point)
+	/// normalized id) and appends the leaf to the target. Returns the appended leaf, or
+	/// the existing leaf when the node duplicates one (same id or label).</summary>
+	static PrefsNode? AddSection (PrefsNode target, AddonExtensionNode node, string point)
 	{
 		var label = string.IsNullOrEmpty (node.Label) ? node.Id : node.Label;
 		var id = (LegacySectionMap.TryGetValue (point, out var pointMap) && pointMap.TryGetValue (node.Id, out var mapped)) ? mapped
 			: node.Id.ToLowerInvariant ().Replace (" ", "").Replace (".", "").Replace ("#", "");
-		if (target.Children.Any (ch => ch.Id == id || ch.Label == label))
-			return 0;
-		target.Children.Add (new PrefsNode (id, label, node.Icon ?? "md-prefs-generic", new List<PrefsNode> ()));
-		return 1;
+		var existing = target.Children.FirstOrDefault (ch => ch.Id == id || ch.Label == label);
+		if (existing is not null)
+			return existing;
+		var leaf = new PrefsNode (id, label, node.Icon ?? "md-prefs-generic", new List<PrefsNode> ());
+		target.Children.Add (leaf);
+		return leaf;
 	}
 
 	/// <summary>Depth-first lookup of a descendant by id.</summary>
@@ -297,35 +318,35 @@ public partial class PreferencesDialog : Window
 			new PrefsNode ("sdklocations", "SDK Locations", "md-prefs-sdk-locations", new () {
 				Leaf ("netcore", ".NET Core", "md-platform-netcore"),
 			}),
-			Leaf ("debugger", "Debugger", "md-prefs-generic"),
+			Leaf ("debugger", "Debugger", "md-prefs-debugger"),
 			Leaf ("uidesigner", "UI Designer", "md-prefs-generic")),
 		Cat ("Text Editor",
-			Leaf ("general", "General", "md-prefs-generic"),
-			Leaf ("markers", "Markers and Rulers", "md-prefs-generic"),
-			new PrefsNode ("behavior", "Behavior", "md-prefs-generic", new () {
-				Leaf ("xml", "XML", "md-prefs-generic"),
+			Leaf ("general", "General", "md-prefs-text-editor-general"),
+			Leaf ("markers", "Markers and Rulers", "md-prefs-markers-rulers"),
+			new PrefsNode ("behavior", "Behavior", "md-prefs-text-editor-behavior", new () {
+				Leaf ("xml", "XML", "md-prefs-xml"),
 				Leaf ("csharpformat", "C#", "md-prefs-code-formatting"),
 			}),
-			new PrefsNode ("intellisense", "IntelliSense", "md-prefs-generic", new () {
-				Leaf ("intellisense-behavior", "Behavior", "md-prefs-generic"),
-				Leaf ("intellisense-appearance", "Appearance", "md-prefs-generic"),
+			new PrefsNode ("intellisense", "IntelliSense", "md-prefs-completion", new () {
+				Leaf ("intellisense-behavior", "Behavior", "md-prefs-completion"),
+				Leaf ("intellisense-appearance", "Appearance", "md-prefs-completion"),
 			}),
-			Leaf ("colortheme", "Color Theme", "md-prefs-generic"),
+			Leaf ("colortheme", "Color Theme", "md-prefs-syntax-highlighting"),
 			Leaf ("formatting", "Formatting", "md-prefs-code-formatting"),
 			Leaf ("codesnippets", "Code Snippets", "md-prefs-code-templates"),
 			Leaf ("languagebundles", "Language Bundles", "md-prefs-generic"),
-			new PrefsNode ("analysis", "Source Analysis", "md-prefs-generic", new () {
-				Leaf ("analysis-csharp", "C#", "md-prefs-generic"),
+			new PrefsNode ("analysis", "Source Analysis", "md-prefs-code-analysis", new () {
+				Leaf ("analysis-csharp", "C#", "md-prefs-source"),
 			}),
-			Leaf ("xmlschemas", "XML Schemas", "md-prefs-generic")),
+			Leaf ("xmlschemas", "XML Schemas", "md-prefs-xml")),
 		Cat ("Source Code",
 			Leaf ("naming", ".NET Naming Policies", "md-prefs-dotnet-naming-policies"),
 			Leaf ("codeformatting", "Code Formatting", "md-prefs-code-formatting"),
 			Leaf ("standardheader", "Standard Header", "md-prefs-header")),
 		Cat ("Version Control",
-			Leaf ("vcgeneral", "General", "md-prefs-solution"),
-			Leaf ("vccommit", "Commit Message Style", "md-prefs-solution"),
-			Leaf ("git", "Git", "md-prefs-solution"),
+			Leaf ("vcgeneral", "General", "md-prefs-version-control"),
+			Leaf ("vccommit", "Commit Message Style", "md-prefs-commit-message-style"),
+			Leaf ("git", "Git", "md-prefs-git"),
 			Leaf ("changelog", "ChangeLog Integration", "md-prefs-generic")),
 		Cat ("NuGet",
 			Leaf ("nugetgeneral", "General", "md-prefs-package"),

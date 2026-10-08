@@ -14,8 +14,17 @@
   "dependencies": [ { "id": "MonoDevelop.Ide", "versionRange": "[9.0,*)" } ],
   "autoLoad": true,
   "extensions": {
+    "/MonoDevelop/Ide/Commands": [
+      { "id": "MonoDevelop.Gettext.Commands.AddTranslation", "label": "Add Translation...", "icon": "md-gettext-locale" },
+      { "id": "MonoDevelop.Gettext.Commands.UpdateTranslations", "label": "Update Translations" },
+      { "id": "MonoDevelop.Gettext.Commands.UpdateTranslation", "label": "Update Translation" },
+      { "id": "MonoDevelop.Gettext.Commands.ScanForTranslations", "label": "Scan for Translations" }
+    ],
     "/MonoDevelop/Ide/ContextMenu/ProjectPad": [
-      { "id": "MonoDevelop.Gettext.TranslateProject", "label": "Translate Project", "icon": "md-prefs-generic" }
+      { "id": "MonoDevelop.Ide.Commands.ViewCommands.Open", "condition": "ItemType=MonoDevelop.Gettext.Translation" },
+      { "id": "MonoDevelop.Gettext.Commands.UpdateTranslation", "condition": "ItemType=MonoDevelop.Gettext.Translation" },
+      { "id": "MonoDevelop.Gettext.Commands.UpdateTranslations", "condition": "ItemType=MonoDevelop.Gettext.TranslationProject" },
+      { "id": "MonoDevelop.Gettext.Commands.AddTranslation", "condition": "ItemType=MonoDevelop.Gettext.TranslationProject" }
     ]
   }
 }

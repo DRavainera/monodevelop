@@ -99,9 +99,17 @@ public static class IconService
 		["md-prefs-language"] = "prefs-language-16",
 		["md-prefs-generic"] = "prefs-generic-16",
 
+		// Icon of the Immediate bottom pad (legacy pad-immediate-16.png, same resource as
+		// the legacy md-view-debug-immediate stock id).
+		["md-command-window"] = "pad-immediate-16",
+
 		// Rendered directly by resource name (no StockIcon entry): the About glyph of the
 		// Help menu.
 		["about-md-16"] = "about-md-16",
+
+		// VB file icon (VBNetBinding.addin.xml): a stock-to-stock alias in legacy
+		// (md-vb-file → md-file-source); mapped here directly to the same PNG.
+		["md-vb-file"] = "file-source-16",
 	};
 
 	// Addin stock ids → (resource, addin icons directory under main/src/addins).
@@ -132,6 +140,47 @@ public static class IconService
 		// the Code Actions / Code Rules panels under Text Editor > Source Analysis > C#.
 		["md-prefs-code-actions"] = ("prefs-code-actions-16", "MonoDevelop.Refactoring"),
 		["md-prefs-code-rules"] = ("prefs-code-rules-16", "MonoDevelop.Refactoring"),
+
+		// Text editor preferences stock ids (MonoDevelop.SourceEditor.addin.xml): the
+		// Text Editor category sections of the options dialog.
+		["md-prefs-text-editor-general"] = ("prefs-text-editor-general-16", "MonoDevelop.SourceEditor2"),
+		["md-prefs-markers-rulers"] = ("prefs-markers-rulers-16", "MonoDevelop.SourceEditor2"),
+		["md-prefs-text-editor-behavior"] = ("prefs-text-editor-behavior-16", "MonoDevelop.SourceEditor2"),
+		["md-prefs-completion"] = ("prefs-completion-16", "MonoDevelop.SourceEditor2"),
+		["md-prefs-syntax-highlighting"] = ("prefs-syntax-highlighting-16", "MonoDevelop.SourceEditor2"),
+
+		// Debugger preferences stock id (MonoDevelop.Debugger.addin.xml): the Debugger
+		// section of the Projects category.
+		["md-prefs-debugger"] = ("prefs-debugger-16", "MonoDevelop.Debugger"),
+
+		// Source-analysis category stock id (MonoDevelop.Refactoring.addin.xml): the
+		// Source Analysis section of the Text Editor category.
+		["md-prefs-code-analysis"] = ("prefs-code-analysis-16", "MonoDevelop.Refactoring"),
+
+		// Version control preferences stock ids (VersionControl.addin.xml): the General,
+		// Commit Message Style and Git sections of the Version Control category.
+		["md-prefs-version-control"] = ("prefs-version-control-16", "VersionControl/MonoDevelop.VersionControl"),
+		["md-prefs-commit-message-style"] = ("prefs-commit-message-style-16", "VersionControl/MonoDevelop.VersionControl"),
+		["md-prefs-git"] = ("prefs-git-16", "VersionControl/MonoDevelop.VersionControl"),
+
+		// XML editor preferences stock id (MonoDevelop.XmlEditor.addin.xml): the XML
+		// Schemas section and the XML behavior panel.
+		["md-prefs-xml"] = ("prefs-xml-16", "Xml"),
+
+		// Pad stock ids of the docked pads (legacy pad icons of the add-ins that owned
+		// them): without these the pad tabs lost the icon the legacy GTK UI showed.
+		["md-view-debug-call-stack"] = ("pad-call-stack-16", "MonoDevelop.Debugger"),
+		["md-view-debug-locals"] = ("pad-locals-16", "MonoDevelop.Debugger"),
+		["md-view-debug-threads"] = ("pad-threads-16", "MonoDevelop.Debugger"),
+		["md-view-debug-watch"] = ("pad-watch-16", "MonoDevelop.Debugger"),
+		["md-properties-pad"] = ("pad-properties-16", "MonoDevelop.DesignerSupport"),
+		["md-toolbox-pad"] = ("pad-toolbox-16", "MonoDevelop.DesignerSupport"),
+		["md-pad-document-outline"] = ("pad-document-outline-16", "MonoDevelop.DesignerSupport"),
+		["nunit-pad-icon"] = ("pad-unit-test-16", "MonoDevelop.UnitTesting/Gui"),
+
+		// Gettext stock id (MonoDevelop.Gettext.addin.xml): the "Add Translation"
+		// command icon.
+		["md-gettext-locale"] = ("locale-16", "MonoDevelop.Gettext"),
 	};
 
 	static readonly Dictionary<(string Resource, bool Dark, bool Disabled, int Scale), Bitmap?> cache = new ();

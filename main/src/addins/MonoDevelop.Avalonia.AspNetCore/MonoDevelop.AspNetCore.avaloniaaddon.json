@@ -72,10 +72,12 @@
     ],
     "/MonoDevelop/Ide/ContextMenu/ProjectPad/Publish": [
       { "id": "MonoDevelop.AspNetCore.Commands.PublishToFolder", "label": "Publish to Folder...", "condition": "ItemType=Project" },
+      { "id": "ProfilesSeparator", "condition": "ItemType=Project" },
       { "id": "MonoDevelop.AspNetCore.Commands.PublishToFolderProfiles", "label": "Publish", "condition": "ItemType=Project" }
     ],
     "/MonoDevelop/Ide/MainMenu/Build": [
       { "id": "MonoDevelop.AspNetCore.Commands.PublishToFolder", "label": "Publish to Folder..." },
+      { "id": "ProfilesSeparator" },
       { "id": "MonoDevelop.AspNetCore.Commands.PublishToFolderProfiles", "label": "Publish" }
     ],
     "/MonoDevelop/Ide/ProjectTemplateWizards": [

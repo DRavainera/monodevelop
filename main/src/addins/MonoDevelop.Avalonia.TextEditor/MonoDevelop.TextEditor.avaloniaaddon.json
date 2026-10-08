@@ -21,12 +21,12 @@
     ],
     "/MonoDevelop/Ide/Commands": [
       { "id": "TextEditor", "label": "Text Editor" },
-      { "id": "MonoDevelop.Ide.Commands.TextEditorCommands.InsertNextMatchingCaret", "label": "Insert next matching caret", "shortcut": "Shift+Alt+." },
-      { "id": "MonoDevelop.Ide.Commands.TextEditorCommands.InsertAllMatchingCarets", "label": "Insert carets at all matching", "shortcut": "Shift+Alt+;" },
-      { "id": "MonoDevelop.Ide.Commands.TextEditorCommands.RemoveLastSecondaryCaret", "label": "Remove last caret", "shortcut": "Shift+Alt+," },
-      { "id": "MonoDevelop.Ide.Commands.TextEditorCommands.MoveLastCaretDown", "label": "Move last caret down", "shortcut": "Shift+Alt+/" },
-      { "id": "MonoDevelop.Ide.Commands.TextEditorCommands.RotatePrimaryCaretNext", "label": "Rotate primary caret down" },
-      { "id": "MonoDevelop.Ide.Commands.TextEditorCommands.RotatePrimaryCaretPrevious", "label": "Rotate primary caret up" }
+      { "id": "MonoDevelop.Ide.Commands.TextEditorCommands.InsertNextMatchingCaret", "label": "Insert next matching caret", "shortcut": "Shift+Alt+.", "childId": "TextEditor" },
+      { "id": "MonoDevelop.Ide.Commands.TextEditorCommands.InsertAllMatchingCarets", "label": "Insert carets at all matching", "shortcut": "Shift+Alt+;", "childId": "TextEditor" },
+      { "id": "MonoDevelop.Ide.Commands.TextEditorCommands.RemoveLastSecondaryCaret", "label": "Remove last caret", "shortcut": "Shift+Alt+,", "childId": "TextEditor" },
+      { "id": "MonoDevelop.Ide.Commands.TextEditorCommands.MoveLastCaretDown", "label": "Move last caret down", "shortcut": "Shift+Alt+/", "childId": "TextEditor" },
+      { "id": "MonoDevelop.Ide.Commands.TextEditorCommands.RotatePrimaryCaretNext", "label": "Rotate primary caret down", "childId": "TextEditor" },
+      { "id": "MonoDevelop.Ide.Commands.TextEditorCommands.RotatePrimaryCaretPrevious", "label": "Rotate primary caret up", "childId": "TextEditor" }
     ],
     "/MonoDevelop/TextEditor/CommandMapping": [
       { "id": "MonoDevelop.Ide.Commands.TextEditorCommands.InsertAllMatchingCarets", "argsType": "Microsoft.VisualStudio.Text.Editor.Commanding.Commands.InsertAllMatchingCaretsCommandArgs" },

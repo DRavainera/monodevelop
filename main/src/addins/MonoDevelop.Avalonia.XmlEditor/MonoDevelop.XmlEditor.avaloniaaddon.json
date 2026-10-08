@@ -14,10 +14,10 @@
   "autoLoad": true,
   "extensions": {
     "/MonoDevelop/Ide/GlobalOptionsDialog/TextEditor": [
-      { "id": "XmlSchemas", "label": "XML Schemas", "icon": "md-prefs-xml" }
+      { "id": "XmlSchemas", "label": "XML Schemas", "icon": "md-prefs-xml", "className": "MonoDevelop.Xml.Editor.XmlSchemasPanel" }
     ],
     "/MonoDevelop/Ide/GlobalOptionsDialog/TextEditor/Behavior": [
-      { "id": "XmlFormattingOptions", "label": "XML", "icon": "md-prefs-xml" }
+      { "id": "XmlFormattingOptions", "label": "XML", "icon": "md-prefs-xml", "className": "MonoDevelop.Xml.Editor.XmlEditorOptionsPanel" }
     ]
   }
 }
