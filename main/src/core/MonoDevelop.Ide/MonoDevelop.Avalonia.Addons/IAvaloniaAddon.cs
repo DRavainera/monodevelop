@@ -64,6 +64,28 @@ namespace MonoDevelop.AvaloniaAddons
 		void Log (string message);
 	}
 
+	/// <summary>
+	/// Platform hooks contributed by the host's platform add-in (MacPlatform /
+	/// WindowsPlatform / LinuxPlatform). The shell resolves the first loaded
+	/// implementor from the add-in host and uses it for the desktop operations it
+	/// cannot do portably (open a URL, open a folder, default monospace face, MIME
+	/// lookup for a file). It lives in this assembly — shared between the shell
+	/// (default context) and the add-in load contexts — so the hook needs no
+	/// reflection and no MonoDevelop.Ide type ever crosses the contexts.
+	/// </summary>
+	public interface IPlatformHooks
+	{
+		string Name { get; }
+
+		string DefaultMonospaceFont { get; }
+
+		void ShowUrl (string url);
+
+		void OpenFolder (string path);
+
+		string GetMimeTypeForUri (string uri);
+	}
+
 	public interface ICommandService
 	{
 		void RegisterCommand (Command cmd);

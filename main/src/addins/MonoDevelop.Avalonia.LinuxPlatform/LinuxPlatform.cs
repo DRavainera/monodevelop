@@ -1,135 +1,107 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.IO;
-using System.Linq;
 using MonoDevelop.AvaloniaAddons;
+using MonoDevelop.Core;
+using MonoDevelop.Core.Execution;
+using MonoDevelop.Ide.Desktop;
 
 namespace MonoDevelop.Platform
 {
-    /// <summary>
-    /// Linux platform implementation for Avalonia shell.
-    /// Basic implementation compatible with the addin system.
-    /// </summary>
-    public class LinuxPlatform : IAvaloniaAddon
-    {
-        public string Id => "MonoDevelop.Avalonia.LinuxPlatform";
+	/// <summary>
+	/// Linux platform implementation for the Avalonia shell (GnomePlatform
+	/// successor): xdg-open for URLs and folders, the desktop terminal
+	/// (x-terminal-emulator), and the default monospace face. The host composes
+	/// it as an add-in and the shell resolves it as the platform backend through
+	/// <see cref="IPlatformHooks"/> (App.Platform) — it does not touch the GTK
+	/// DesktopService, which belongs to the legacy --old-gui path.
+	/// </summary>
+	public class LinuxPlatform : PlatformService, IAvaloniaAddon, IPlatformHooks
+	{
+		public string Id => "MonoDevelop.Avalonia.LinuxPlatform";
 
-        public void Initialize(IAddonContext context)
-        {
-            // Initialize Linux platform service
-            TryRegisterPlatformService();
-        }
+		public void Initialize (IAddonContext context)
+		{
+			if (!System.OperatingSystem.IsLinux ())
+				return;
+			context.Log ("LinuxPlatform ready");
+		}
 
-        public void Load()
-        {
-            Log("LinuxPlatform loaded");
-        }
+		public void Load ()
+		{
+		}
 
-        public void Unload()
-        {
-            Log("LinuxPlatform unloaded");
-        }
+		public void Unload ()
+		{
+		}
 
-        private void TryRegisterPlatformService()
-        {
-            try
-            {
-                // Try to create and register the platform service
-                var platformService = CreatePlatformService();
-                if (platformService != null)
-                {
-                    // Use reflection to access DesktopService if available
-                    RegisterPlatformService(platformService);
-                }
-            }
-            catch (Exception ex)
-            {
-                Log($"Failed to register platform service: {ex.Message}");
-            }
-        }
+		public override string DefaultMonospaceFont => "Monospace 11";
 
-        private object CreatePlatformService()
-        {
-            // Create a basic platform service implementation
-            // This will be expanded when MonoDevelop.Ide assemblies are available
-            return new BasicLinuxPlatformService();
-        }
+		public override string Name => "Linux";
 
-        private void RegisterPlatformService(object platformService)
-        {
-            try
-            {
-                // Use reflection to find and call DesktopService.SetPlatformService
-                var desktopServiceType = Type.GetType("MonoDevelop.Ide.Desktop.DesktopService, MonoDevelop.Ide");
-                if (desktopServiceType != null)
-                {
-                    var setPlatformServiceMethod = desktopServiceType.GetMethod("SetPlatformService");
-                    if (setPlatformServiceMethod != null)
-                    {
-                        setPlatformServiceMethod.Invoke(null, new[] { platformService });
-                        Log("Platform service registered successfully");
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                Log($"Failed to register platform service via reflection: {ex.Message}");
-            }
-        }
+		public override void ShowUrl (string url)
+		{
+			StartProcess ("xdg-open", url);
+		}
 
-        private void Log(string message)
-        {
-            Console.WriteLine($"[LinuxPlatform] {message}");
-        }
+		public override void OpenFolder (FilePath folderPath, FilePath [] selectFiles)
+		{
+			StartProcess ("xdg-open", folderPath.ToString ());
+		}
 
-        // Basic platform service implementation
-        private class BasicLinuxPlatformService
-        {
-            public string DefaultMonospaceFont => "Monospace 10";
-            public string Name => "Linux";
-            public bool CanOpenTerminal => true;
-            public bool IsWindows => false;
-            public bool IsMac => false;
-            public bool IsLinux => true;
-            
-            public string GetDesktopEnvironment()
-            {
-                string desktop = Environment.GetEnvironmentVariable("XDG_CURRENT_DESKTOP")?.ToUpperInvariant() ??
-                               Environment.GetEnvironmentVariable("DESKTOP_SESSION")?.ToUpperInvariant() ??
-                               string.Empty;
+		// IPlatformHooks surface for the shell (the base OpenFolder takes a FilePath).
+		public void OpenFolder (string path) => OpenFolder (new FilePath (path), new FilePath [0]);
 
-                return desktop switch
-                {
-                    string s when s.Contains("GNOME") => "GNOME",
-                    string s when s.Contains("KDE") => "KDE",
-                    string s when s.Contains("XFCE") => "XFCE",
-                    string s when s.Contains("LXDE") => "LXDE",
-                    string s when s.Contains("MATE") => "MATE",
-                    string s when s.Contains("CINNAMON") => "CINNAMON",
-                    string s when s.Contains("BUDGIE") => "BUDGIE",
-                    string s when s.Contains("UNITY") => "UNITY",
-                    _ => "Unknown"
-                };
-            }
+		public override bool CanOpenTerminal => true;
 
-            public void ShowUrl(string url)
-            {
-                try
-                {
-                    Process.Start(new ProcessStartInfo
-                    {
-                        FileName = "xdg-open",
-                        Arguments = url,
-                        UseShellExecute = false,
-                        CreateNoWindow = true
-                    });
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"[LinuxPlatform] Failed to open URL '{url}': {ex.Message}");
-                }
-            }
-        }
-    }
+		public override void OpenTerminal (FilePath directory, IDictionary<string, string> environmentVariables, string title)
+		{
+			var dir = directory.ToString ();
+			var psi = new ProcessStartInfo ("x-terminal-emulator") {
+				UseShellExecute = false,
+				CreateNoWindow = true,
+				WorkingDirectory = string.IsNullOrEmpty (dir) ? Environment.CurrentDirectory : dir,
+			};
+			if (environmentVariables != null)
+				foreach (var env in environmentVariables)
+					psi.EnvironmentVariables [env.Key] = env.Value;
+			try {
+				Process.Start (psi);
+			} catch (Exception ex) {
+				LoggingService.LogError ($"Failed to open a terminal: {ex.Message}");
+			}
+		}
+
+		// Plain console process (the GnomePlatform gnome-terminal-server app-id dance
+		// is desktop-specific and not needed here); pauseWhenFinished is ignored.
+		public override ProcessAsyncOperation StartConsoleProcess (string command, string arguments, string workingDirectory,
+			IDictionary<string, string> environmentVariables, string title, bool pauseWhenFinished)
+		{
+			var proc = new ProcessWrapper ();
+			proc.StartInfo = new ProcessStartInfo (command, arguments) {
+				CreateNoWindow = true,
+				UseShellExecute = false,
+				WorkingDirectory = workingDirectory,
+			};
+			if (environmentVariables != null)
+				foreach (var env in environmentVariables)
+					proc.StartInfo.EnvironmentVariables [env.Key] = env.Value;
+			proc.Start ();
+			return proc.ProcessAsyncOperation;
+		}
+
+		static void StartProcess (string fileName, string arguments)
+		{
+			try {
+				Process.Start (new ProcessStartInfo {
+					FileName = fileName,
+					Arguments = arguments,
+					UseShellExecute = false,
+					CreateNoWindow = true,
+				});
+			} catch (Exception ex) {
+				LoggingService.LogError ($"Failed to run '{fileName} {arguments}': {ex.Message}");
+			}
+		}
+	}
 }

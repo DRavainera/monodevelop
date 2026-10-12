@@ -87,6 +87,8 @@ Hecho. Creados:
 
 `GnomePlatform` y el resto de add-ins GTK intactos. Manifiestos `.avaloniaaddon.json` solo en carpetas `MonoDevelop.Avalonia.*`. QA de la fase 3: aprobado.
 
+**Track 1 (2026-10-12) — hooks de plataforma operativos**: los add-ins de plataforma se **activan** de verdad (fix de identidad de tipos en `AddonLoadContext`: los ensamblajes core se comparten con `AssemblyLoadContext.Default` en vez de doble-cargarse en el ALC del add-in), el host gatea por el campo `"os"` del manifiesto (`linux`/`macos`/`windows`), y la shell resuelve el add-in de plataforma como su backend vía `IPlatformHooks` (`App.Platform`: `ShowUrl`, `OpenFolder`, `DefaultMonospaceFont`, `GetMimeTypeForUri`). El módulo `MonoDevelop.Avalonia.Addons` vive en `main/src/core/MonoDevelop.Ide/MonoDevelop.Avalonia.Addons/` y todos los builds salen a `main/build/`. `DesktopService` (GTK) queda intacto: sin `SetPlatformService` (la UI GTK no se toca; sigue con `Mono.Addins` + add-ins legacy). El manager provisional `AddonManagerDialog` (`--addonmanager`) se eliminó; el manager real `AddinManagerDialog` (`--addins`) muestra el estado correcto. Ver handoff completo en `docs/migration-status-report.md` (sección Track 1, 2026-10-12).
+
 ## Cómo validar
 
 - Compilar `MonoDevelop.Avalonia.Addons` (0 errores).

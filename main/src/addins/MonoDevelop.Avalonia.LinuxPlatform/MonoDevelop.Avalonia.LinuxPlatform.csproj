@@ -13,8 +13,14 @@
     <Reference Include="MonoDevelop.Core">
       <HintPath>../../../build/MonoDevelop.Core.dll</HintPath>
     </Reference>
+    <Reference Include="MonoDevelop.Ide">
+      <HintPath>../../../build/MonoDevelop.Ide.dll</HintPath>
+    </Reference>
     <Reference Include="MonoDevelop.Avalonia.Addons">
       <HintPath>../../../build/MonoDevelop.Avalonia.Addons.dll</HintPath>
+    </Reference>
+    <Reference Include="Xwt">
+      <HintPath>../../../build/Xwt.dll</HintPath>
     </Reference>
   </ItemGroup>
 </Project>

@@ -1377,7 +1377,12 @@ public partial class PreferencesDialog : Window
 	{
 		try {
 			Directory.CreateDirectory (ColorThemesDir);
-			System.Diagnostics.Process.Start (new System.Diagnostics.ProcessStartInfo ("xdg-open", ColorThemesDir) { UseShellExecute = true });
+			// Platform hooks (xdg-open/open/explorer); xdg-open fallback when no
+			// platform add-in is loaded.
+			if (App.Platform is { } platform)
+				platform.OpenFolder (ColorThemesDir);
+			else
+				System.Diagnostics.Process.Start (new System.Diagnostics.ProcessStartInfo ("xdg-open", ColorThemesDir) { UseShellExecute = true });
 		} catch (Exception ex) { MainWindow.Instance?.Output ("[prefs] open folder failed: " + ex.Message); }
 	}
 

@@ -313,8 +313,6 @@ public partial class MainWindow : Window
 					dlg.SelectPanel (arg);
 			} else if (qa == "--about") {
 				new AboutDialog { WindowStartupLocation = WindowStartupLocation.CenterOwner }.ShowDialog (this);
-			} else if (qa == "--addonmanager") {
-				new AddonManagerDialog { WindowStartupLocation = WindowStartupLocation.CenterOwner }.ShowDialog (this);
 			} else if (qa == "--addins") {
 				new AddinManagerDialog { WindowStartupLocation = WindowStartupLocation.CenterOwner }.ShowDialog (this);
 			} else if (qa == "--encodings") {
@@ -3786,7 +3784,8 @@ public partial class MainWindow : Window
 	}
 
 	// FileCommands.OpenContainingFolder on a node (legacy opens the file manager;
-	// the shell runs xdg-open on the directory).
+	// the platform hooks open it — xdg-open on Linux, `open` on Mac, explorer on
+	// Windows; falls back to xdg-open when no platform add-in is loaded).
 	void OpenContextContainingFolder ()
 	{
 		var target = contextNodePath;
@@ -3802,11 +3801,14 @@ public partial class MainWindow : Window
 			return;
 		}
 		try {
-			System.Diagnostics.Process.Start (new System.Diagnostics.ProcessStartInfo {
-				FileName = "xdg-open",
-				Arguments = $"\"{dir}\"",
-				UseShellExecute = false,
-			});
+			if (App.Platform is { } platform)
+				platform.OpenFolder (dir);
+			else
+				System.Diagnostics.Process.Start (new System.Diagnostics.ProcessStartInfo {
+					FileName = "xdg-open",
+					Arguments = $"\"{dir}\"",
+					UseShellExecute = false,
+				});
 			Output ("[open] " + dir);
 		} catch (Exception ex) {
 			Output ("[open] failed: " + ex.Message);
@@ -5428,11 +5430,6 @@ public partial class MainWindow : Window
 
 	public void OnPreferencesMenu ()
 		=> new PreferencesDialog { WindowStartupLocation = WindowStartupLocation.CenterOwner }.ShowDialog (this);
-
-	/// <summary>Tools > Add-ins (Avalonia)...: the new add-in host catalog (the
-	/// "Extensions…" item above is the full Add-in Manager over the same host).</summary>
-	public void OnAvaloniaAddonManagerMenu ()
-		=> new AddonManagerDialog { WindowStartupLocation = WindowStartupLocation.CenterOwner }.ShowDialog (this);
 
 	public void OnAddinManagerMenu ()
 		=> new AddinManagerDialog { WindowStartupLocation = WindowStartupLocation.CenterOwner }.ShowDialog (this);

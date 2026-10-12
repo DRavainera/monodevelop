@@ -18,6 +18,7 @@
 	"categories": ["Platform"],
 	"dependencies": [],
 	"autoLoad": true,
+	"os": "linux",
 	"assets": [
 		{
 			"type": "Microsoft.VisualStudio.MefComponent",

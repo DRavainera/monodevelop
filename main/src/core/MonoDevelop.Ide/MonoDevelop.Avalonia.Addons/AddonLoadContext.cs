@@ -61,7 +61,20 @@ namespace MonoDevelop.AvaloniaAddons
 
         protected override Assembly Load(AssemblyName assemblyName)
         {
-            // Try to resolve using AssemblyDependencyResolver first
+            // Shared assemblies (the shell core: MonoDevelop.Avalonia.Addons,
+            // MonoDevelop.Core, Xwt, ... — everything the shell itself loads)
+            // must come from the default context: a second copy in this ALC would
+            // break type identity (the add-in's IAvaloniaAddon/PlatformService
+            // would not be assignable to the host's types, so LoadAll would never
+            // activate the add-in's parts). Returning null lets the default
+            // context serve the already-loaded instance.
+            foreach (var a in AssemblyLoadContext.Default.Assemblies)
+            {
+                if (string.Equals(a.GetName().Name, assemblyName.Name, StringComparison.Ordinal))
+                    return null;
+            }
+
+            // Add-in-private dependencies: resolve with the add-in's own deps.
             var assemblyPath = resolver.ResolveAssemblyToPath(assemblyName);
             if (assemblyPath != null)
             {

@@ -40,6 +40,9 @@ namespace MonoDevelop.AvaloniaAddons
 		public IReadOnlyList<string> Log => log;
 		public string RootDirectory => root;
 
+		/// <summary>Composed parts of every loaded add-in (platform services, packages, ...).</summary>
+		public IReadOnlyList<object> Parts => composition.Parts;
+
 		void Note (string m) { log.Add (m); Console.WriteLine ("[avalonia-addons] " + m); }
 
 		/// <summary>Discovers manifests (one level of subfolders) and registers them.
@@ -60,6 +63,12 @@ namespace MonoDevelop.AvaloniaAddons
 
 					state = new AddonLoadState { Manifest = m, ManifestPath = file };
 					addons.Add (state);
+
+					if (!string.IsNullOrEmpty (m.Os) && !MatchesCurrentOs (m.Os)) {
+						state.Error = $"not supported on this platform (requires: {m.Os})";
+						Note ($"{m.Identity.Id}: skipped (requires {m.Os})");
+						continue;
+					}
 
 					if (m.EntryPoint is not { Length: > 0 } && (m.Assets == null || m.Assets.Count == 0)) {
 						// Manifest-only add-in: no assembly to load; it contributes
@@ -310,6 +319,13 @@ namespace MonoDevelop.AvaloniaAddons
 		static IEnumerable<Type> SafeGetTypes (Assembly asm) {
 			try { return asm.GetTypes (); } catch (ReflectionTypeLoadException ex) { return (ex.Types ?? Array.Empty<Type> ()).Where (t => t is not null); }
 		}
+
+		static bool MatchesCurrentOs (string os) => os.Trim ().ToLowerInvariant () switch {
+			"linux" => System.OperatingSystem.IsLinux (),
+			"macos" or "osx" or "mac" => System.OperatingSystem.IsMacOS (),
+			"windows" or "win" => System.OperatingSystem.IsWindows (),
+			_ => true,
+		};
 
 		public void Dispose () => UnloadAll ();
 

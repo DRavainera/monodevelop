@@ -34,6 +34,13 @@ namespace MonoDevelop.AvaloniaAddons.Manifests
 		[JsonPropertyName ("autoLoad")]
 		public bool AutoLoad { get; set; } = true;
 
+		/// <summary>OS gate: empty = all OSes; "linux" | "macos" | "windows" loads the
+		/// add-in only on that OS (the host skips it elsewhere with a clear state
+		/// error). Needed for the platform add-ins, whose DLLs are cross-compiled and
+		/// present in the build tree of every OS.</summary>
+		[JsonPropertyName ("os")]
+		public string Os { get; set; } = "";
+
 		[JsonPropertyName ("assets")]
 		public List<AddonAsset> Assets { get; set; } = new ();
 

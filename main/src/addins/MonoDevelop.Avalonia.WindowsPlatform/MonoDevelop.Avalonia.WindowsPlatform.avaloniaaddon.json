@@ -16,6 +16,7 @@
 	"categories": ["Platform"],
 	"dependencies": [],
 	"autoLoad": true,
+	"os": "windows",
 	"assets": [
 		{
 			"type": "Microsoft.VisualStudio.MefComponent",
