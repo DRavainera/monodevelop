@@ -1,9 +1,22 @@
 <Project>
-  <!-- Compilación restringida a macOS: fuera de macOS el proyecto es no-op
-       (no produce DLL ni deps.json en main/build/). -->
-  <Target Name="CoreCompile" Condition=" $([MSBuild]::IsOSPlatform('OSX')) != 'true' " />
-  <Target Name="CopyFilesToOutputDirectory" Condition=" $([MSBuild]::IsOSPlatform('OSX')) != 'true' " />
-  <Target Name="SkipPlatformBuildCleanup" AfterTargets="Build" Condition=" $([MSBuild]::IsOSPlatform('OSX')) != 'true' ">
-    <Delete Files="$(OutDir)$(AssemblyName).deps.json" />
+  <!-- Compilación restringida a macOS: fuera de macOS el build es no-op
+       (no produce DLL ni deps.json en main/build/).
+       No se redefine CoreCompile: en este MSBuild la definición posterior de un
+       target con el mismo nombre invalida la del SDK en todos los SO, con o sin
+       condición (el no-op original, que redefinía CoreCompile, nunca compiló en
+       ningún SO). En su lugar se vacían los ítems @(Compile) antes de
+       CoreCompile y se limpian los artefactos vacíos después del Build.
+       La comparación usa 'True' (mayúscula): $([MSBuild]::IsOSPlatform(...))
+       devuelve "True"/"False" y la comparación de cadenas es case-sensitive. -->
+  <PropertyGroup Condition=" $([MSBuild]::IsOSPlatform('OSX')) != 'True' ">
+    <NoWarn>$(NoWarn);CS2008</NoWarn>
+  </PropertyGroup>
+  <Target Name="PlatformNoOp_StripCompileSources" BeforeTargets="CoreCompile" Condition=" $([MSBuild]::IsOSPlatform('OSX')) != 'True' ">
+    <ItemGroup>
+      <Compile Remove="@(Compile)" />
+    </ItemGroup>
+  </Target>
+  <Target Name="SkipPlatformBuildCleanup" AfterTargets="Build" Condition=" $([MSBuild]::IsOSPlatform('OSX')) != 'True' ">
+    <Delete Files="$(OutDir)$(AssemblyName).dll;$(OutDir)$(AssemblyName).pdb;$(OutDir)$(AssemblyName).deps.json;$(OutDir)$(AssemblyName).xml" />
   </Target>
 </Project>
