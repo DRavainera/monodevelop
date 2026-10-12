@@ -474,5 +474,5 @@
     <InternalsVisibleTo Include="MonoDevelop.Ide.Tests" />
     <InternalsVisibleTo Include="MonoDevelop.VBNetBinding" />
   </ItemGroup>
-  <Import Project="..\..\core\Mono.TextEditor.Shared\Mono.TextEditor.Shared.projitems" Label="Shared" Condition="Exists('..\..\core\Mono.TextEditor.Shared\Mono.TextEditor.Shared.projitems')" />
+  <Import Project="..\..\core\MonoDevelop.Ide\Mono.TextEditor.Shared\Mono.TextEditor.Shared.projitems" Label="Shared" Condition="Exists('..\..\core\MonoDevelop.Ide\Mono.TextEditor.Shared\Mono.TextEditor.Shared.projitems')" />
 </Project>

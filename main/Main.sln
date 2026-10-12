@@ -249,7 +249,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MacPlatform.Tests", "tests\
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TestRunner", "tests\TestRunner\TestRunner.csproj", "{EBFC7F90-C2E5-4A4C-A327-E35021BEC181}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MonoDevelop.TextEditor.Tests", "src\core\MonoDevelop.TextEditor.Tests\MonoDevelop.TextEditor.Tests.csproj", "{9E4BA410-8338-42EC-AF9C-422C35ECED81}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MonoDevelop.TextEditor.Tests", "tests\MonoDevelop.TextEditor.Tests\MonoDevelop.TextEditor.Tests.csproj", "{9E4BA410-8338-42EC-AF9C-422C35ECED81}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MonoDevelop.Ide.Tests", "tests\Ide.Tests\MonoDevelop.Ide.Tests.csproj", "{73D4CC8B-BAB9-4A29-841B-F25C6311F067}"
 EndProject
@@ -276,7 +276,7 @@ Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "MonoDevelop.FSharpInteracti
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "MonoDevelop.FSharp.Tests", "external\fsharpbinding\MonoDevelop.FSharp.Tests\MonoDevelop.FSharp.Tests.fsproj", "{A1A45375-7FB8-4F2A-850F-FBCC67739927}"
 EndProject
-Project("{D954291E-2A0B-460D-934E-DC6B0785DB48}") = "Mono.TextEditor.Shared", "src\core\Mono.TextEditor.Shared\Mono.TextEditor.Shared.shproj", "{FBAAD910-F29B-4AC5-9FC0-27F6EB36C495}"
+Project("{D954291E-2A0B-460D-934E-DC6B0785DB48}") = "Mono.TextEditor.Shared", "src\core\MonoDevelop.Ide\Mono.TextEditor.Shared\Mono.TextEditor.Shared.shproj", "{FBAAD910-F29B-4AC5-9FC0-27F6EB36C495}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "MonoDevelop.Packaging", "MonoDevelop.Packaging", "{07BADCA3-CE39-42D4-8EFB-B1E5573FF2BD}"
 EndProject
@@ -483,8 +483,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "AvaloniaShell.Editor.Tests"
 EndProject
 Global
 	GlobalSection(SharedMSBuildProjectFiles) = preSolution
-		src\core\Mono.TextEditor.Shared\Mono.TextEditor.Shared.projitems*{f8f92aa4-a376-4679-a9d4-60e7b7fbf477}*SharedItemsImports = 4
-		src\core\Mono.TextEditor.Shared\Mono.TextEditor.Shared.projitems*{fbaad910-f29b-4ac5-9fc0-27f6eb36c495}*SharedItemsImports = 13
+		src\core\MonoDevelop.Ide\Mono.TextEditor.Shared\Mono.TextEditor.Shared.projitems*{f8f92aa4-a376-4679-a9d4-60e7b7fbf477}*SharedItemsImports = 4
+		src\core\MonoDevelop.Ide\Mono.TextEditor.Shared\Mono.TextEditor.Shared.projitems*{fbaad910-f29b-4ac5-9fc0-27f6eb36c495}*SharedItemsImports = 13
 	EndGlobalSection
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
