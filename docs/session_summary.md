@@ -554,12 +554,12 @@ documento + keywords).
 - Pads Locals/Watch llenan con valores reales del proceso detenido; línea de
   ejecución resaltada en el editor (SetExecutionLine). QA `--locals` verde:
   stopped@10 → highlight=True → values=answer=42,greeting=null →
-  pad-realized=2 → cleanup. Captura `docs/img/locals-pad.png`.
+  pad-realized=2 → cleanup.
 - Attach to Process REHECHO como tab del pad inferior
   (`AttachToProcessPanel`, UserControl): /proc real (603 procesos, skip
   kernels/self), filtro + Refresh + Attach. NUNCA ventanas con borde de OS —
   chrome Avalonia. QA `--attachdlg` verde (pad-realized=1,
-  window-chrome=Avalonia). Captura `docs/img/attach-to-process-pad.png`.
+  window-chrome=Avalonia).
 - Run con debug respeta breakpoints persistidos: para en la línea y el IDE la
   resalta (mismo flujo del DebuggingService legacy).
 - Staging automático del runtime GTK tras Main.sln (`after.Main.sln.targets`
@@ -579,7 +579,7 @@ documento + keywords).
   (`threads=1 frames=1`, `evaluate(answer)=42`).
 - Watch con evaluate DAP real: add/remove (menú del pad + InputDialog
   Avalonia), reevaluación en cada stop. QA `--watch`: `answer = 42`,
-  `answer + 1 = 43`, remove → rows=1. Captura `docs/img/watch-pad.png`;
+  `answer + 1 = 43`, remove → rows=1.
   `MD_QA_HOLD` mantiene pads en pantalla para capturas.
 - Breakpoints condicionales + hit count + tracepoints: persisten en
   .userprefs (`condition`/`hitcount`/`tracepoint`, formato Mono.Debugging),
@@ -659,10 +659,9 @@ documento + keywords).
   `(15,75,122)` del glifo). Click XTEST real sobre el centro →
   `properties tab visible=False selected=properties visibleTabs=[]` y
   `View > Pads > Properties checked=False`; el pad desaparece del lado derecho.
-  **Re-validado desde un arranque limpio** (capturas `padclose_verified.png` y
-  `padclose_verified2.png`): el ✕ funciona, no hay bug de hit-test. El intento
-  intermedio que falló fue porque el pad derecho ya estaba **colapsado** por un
-  click de control sobre el chevron "Collapse pad": con el host colapsado el ✕
+  **Re-validado desde un arranque limpio**: el ✕ funciona, no hay bug de hit-test
+  . El intento intermedio que falló fue porque el pad derecho ya estaba **colapsado**
+  por un click de control sobre el chevron "Collapse pad": con el host colapsado el ✕
   no está en el árbol visual y no es hittable. El QA del ✕ debe correr sobre un
   arranque limpio.
 - **Listener de captura en `--padclose`**: se añadió un `PointerPressed` con
@@ -693,9 +692,6 @@ documento + keywords).
   entre comandos; reactivar con `wmctrl -i -a 0x0260000f` antes de cada click.
 - **Artefactos de QA de agentes**: `~/opencode/` (no `/tmp/`, que es tmpfs).
   Scripts nuevos: `qa_searchpopup.sh`, `qa_padclose.sh`.
-- **Restauración**: los PNG de `docs/img/` (attach-to-process-pad,
-  breakpoints-pad, locals-pad, watch-pad) estaban borrados en el working tree
-  por los QA de capturas; restaurados con `git checkout -- docs/img/`.
 - **M26 propuesto** (pendiente de aprobación): paridad de los 6 pads
   placeholder, con recomendación de empezar por `documentoutline`, `classes` y
   `codeissues` (reutilizan el índice de símbolos y el parser de diagnósticos ya
@@ -1455,8 +1451,6 @@ Diferidos (fuera de las oleadas): backends debugger (Gdb, Soft, VSCodeDebugProto
 - EP `/MonoDevelop/Deployment/DeployDirectoryResolvers` (legacy) sin declarar: en el host los EP se auto-declaran al registrar el primer nodo (`AddonHost.cs`); el sub-add-in pendiente `MonoDevelop.Deployment.Linux` lo extiende y se migrará con él.
 - EP `/MonoDevelop/Asp/CompletionBuilders` (consumidor: CSharpBinding legacy) sin declarar hasta migrar su consumidor; `commitChars` de `CompletionCharacters` y detalles `isText`/`baseType` de MIME descartados en el aplanado (se conservan `commitOnSpace`/`pattern`).
 
-**QA (§18.5, 2 rondas):** ronda 1 **NO APTO** (2 MEDIO: 3 FileTemplates faltantes en AspNetCore → añadidos con su atributo `file`, y los `file` faltantes de los 10 existentes; 4 PNG de `docs/img/` borrados accidentalmente del working tree → restaurados con `git checkout -- docs/img/...`, mismo remedio que el precedente de `docs/session_summary.md:696-698`) + 3 BAJO aceptados como decisiones del plan; ronda 2 **APTO**: build 0 errores; smoke `discovered=28` / `loaded 25/28` (los 3 nuevos `loaded=True`, `FileTemplates nodes=49`, `MonoDevelop.CSharpBinding` una sola vez, solo los 3 fallos esperados, 0 FATAL); 28 manifiestos con 0 IDs duplicados; 0 manifiestos en carpetas legacy; 0 cambios en archivos legacy (ruta GTK intacta).
-
 #### Migración GnomePlatform→LinuxPlatform (completa, 2026-10-06)
 
 **Decisión del operador**: seguir la migración ya iniciada en `main/src/addins/MonoDevelop.Avalonia.LinuxPlatform/`; los archivos `LinuxPlatform.avaloniaaddon.json` y `LinuxPlatform.csproj` (sin prefijo Avalonia) **no son residuo**: forman parte de la migración y deben funcionar ahí. **Sin borrados.**
@@ -1722,3 +1716,41 @@ Diferidos (fuera de las oleadas): backends debugger (Gdb, Soft, VSCodeDebugProto
 - `Mono.Addins.Setup` (referenciado por `MonoDevelop.Core`) sigue sin target net10.0 (hasta net8.0): funciona en runtime net10; añadir net10.0 si se uniforma el submódulo.
 - `Mono.Addins.Gui.dll` / `Mono.Addins.Setup.dll` estagiados en `main/build/` son builds antiguos (sep 11 / oct 3): funcionan en runtime net10; actualizar al tocar la UI GTK del Add-in Manager.
 - El log de consola de la shell (`SHELL_LOG`) queda vacío en el smoke `--old-gui` (buffering de stdout); el log real del IDE legacy está en `~/.cache/MonoDevelop/9.0/Logs/`.
+
+### Track B — B.3: APIs del host del Add-in Manager (enable/disable, install, update, uninstall) + cableado del diálogo (2026-10-13)
+
+**Contexto**: el Add-in Manager de la shell Avalonia (diálogo de 3 pestañas desde el 2026-10-07) era solo lectura: el host `MonoDevelop.Avalonia.Addons` solo tenía `Discover`/`LoadAll` y los botones del diálogo (Enable/Disable, Uninstall, Update, Update All, Install, Install from File) no tenían acción. B.3 añade las APIs de gestión al host, cablea el diálogo y aporta la segunda raíz de add-ins de usuario (`~/.local/share/MonoDevelop-Avalonia/UserAddIns`), para que la instalación nunca escriba en el repo ni en `main/build/`.
+
+**Cambios** (7 ficheros; sin submódulos):
+
+1. `AddonLoadState.cs`: + `Enabled`, `Superseded`, `IsUserAddin` (`Loaded` = ensamblaje en ALC; `Enabled` = parts + nodos activos).
+2. `AddonRegistry.cs`: + `RemoveNode` (deregistra un nodo por path).
+3. `Extensions/CompositionHost.cs`: + `RemoveRange` (quita un rango de parts de la composición).
+4. `AddonHost.cs` (reescrito de la capa de gestión; `Discover`/`LoadAll` conservados):
+   - ctor `(rootDirectory, userRootDirectory = null)`; `StateStore` (`IAddonUserState`); `UserRootDirectory`.
+   - **Persistencia vía `IAddonUserState { string Get(string key); void Set(string key, string value); }`**: el módulo Addons es standalone (solo System.Text.Json, sin referencia a `MonoDevelop.Core`), así que la shell lo cablea con el adapter `ShellAddonUserState` (`App.axaml.cs`) sobre `SettingsStore` (`MonoDevelopProperties.xml`). Claves: `MonoDevelop.Avalonia.Addins.Disabled` / `MonoDevelop.Avalonia.Addins.Uninstalled` (arrays JSON de ids; `Set(key, null)` borra).
+   - **Precedencia por versión**: mismo id en shipped y user → gana la más reciente (`Version.TryParse` ?? 0.0; empate → user); las perdedoras quedan `Superseded` (aparecen en la pestaña Updates y NUNCA se cargan). `MarkSuperseded()` idempotente (resetea y recalcula).
+   - **APIs**: `FindAddon`, `FindVersions`, `SetEnabled` (unload/recompone parts desde el ALC vivo), `Uninstall` (user → borra la carpeta; shippado → marker por id que oculta todas las versiones shippadas de ese id — solo se pone si el ganador es user), `Update` (requiere 2+ versiones staged; si el ganador es shippado → limpieza de sesión solo), `UpdateAll`, `InstallFromDirectory`, `InstallFromFile` (solo `.zip`, v1; zip sin manifiesto rechazado), `LoadAddon`, `ActivateId`.
+   - **Decisiones de diseño**: `AddonLoadContext` no-colectible → enable/disable en runtime = unload/reinstancia de parts desde el ALC vivo (sin restart del proceso); contextos perezosos (`Discover()` no crea ALCs; `EnsureContext` envuelve la creación de `AddonLoadContext` en try/catch porque lanza `FileNotFoundException` si falta el assembly); `Discover()` empieza con `UnloadAll()` (composición/extensions limpias en re-descubrimiento); tracking de parts por id de add-in (`partsByAddon`/`nodesByAddon`); `ComposeAddon` es handover (descompone antes lo compuesto del id); `Update`/`Uninstall` → `MarkSuperseded()` + `ActivateId(id)` (carga y compone la versión que queda activa, si la hay); `UnloadAddon` solo invoca `IPackage.Unload()` (convención preexistente); `ValidateDependencies` prefiere la dependencia no-superseded; sin anotaciones nullable nuevas (`Nullable` deshabilitado en ambos proyectos → sin CS8632 nuevos).
+5. `Program.cs`: + `UserAddinsDirectory` (env `MONODEVELOP_AVALONIA_USER_ADDINS` ?? `~/.local/share/MonoDevelop-Avalonia/UserAddIns`).
+6. `App.axaml.cs`: `new AddonHost (Program.AddonsDirectory, Program.UserAddinsDirectory)` + `addons.StateStore = new ShellAddonUserState ()` + logs de diagnóstico `[addins]` (userRoot, enabled, superseded).
+7. `AddinManagerDialog.axaml.cs`: cableado de handlers — Enable/Disable → `SetEnabled`; Uninstall → ventana de confirmación (patrón de `MainWindow.DeleteContextNode`) + `Uninstall`; Install → `Update` (fila instalada) / `LoadAddon` (fila de galería) + cambio a la pestaña installed; Update All → `UpdateAll`; Install from File → `FilePickerOpenOptions` (*.zip) + `InstallFromFile` (try/catch). `RowFor` null-safe + `Enabled = installed ? state.Loaded && state.Enabled && !state.Superseded : true`; `LoadUpdates` por `FindVersions (id).Count > 1` (eliminado `CompareVersions`, sin uso); `LoadGallery` salta Superseded; botones de acción ocultos en filas superseded; helper `SelectTab`.
+
+**Cómo validar**:
+
+1. **Builds 0 errores**: `MonoDevelop.Avalonia.Addons.csproj` (0 errores / 2 warnings — NU1510 preexistentes; antes 14) y `MonoDevelop.Startup.Avalonia.csproj` en `net10.0` y `net10.0-windows` (0 errores; 738 warnings, todos preexistentes).
+2. **Harness funcional** (`~/opencode/qa_b3/harness/`, QaB3Harness con `ProjectReference` a Addons): **50/50 ALL PASS** (dual-root shipped+user, precedencia por versión y superseded, `SetEnabled` round-trip + persistencia, `Uninstall` user/shipped + limpieza de markers, `Update` con ganador user/shippado, `UpdateAll`, `InstallFromDirectory`/`InstallFromFile` zip + rechazo de zip sin manifiesto, `ActivateId`, dependencias, OS gating, estados de error). El add-in sintético (`part/PartTest.cs`) escribe Load/Unload a un fichero vía env `QA_ADDON_LOG`: el harness NO referencia PartTest → identidad de tipos correcta a través del ALC.
+3. **Extratest del QA Senior** (`~/opencode/qa_b3/qa_senior/extratest/`, QaB3Extra): **25/25** (incluye el caso H1 — uninstalled user que shadoweaba un shippado → el shippado queda activo — y el caso H2 — deshabilitado no cargado persiste deshabilitado).
+4. **Test enfocado `ActivateId`**: 12/12.
+5. **Smoke shell real** (`~/opencode/qa_b3/smoke.sh`, user root `smoke/user/` con el add-in solo-manifiesto `Qa.UserSmoke`): `discovered=33` (32 shippados + 1 user), `loaded 31/33` (2 = Mac/WindowsPlatform por OS gate), `Qa.UserSmoke v1.0.0 loaded=True enabled=True`, `[addins] tab=installed items=33`, gallery items=2, sin `Exception` en el log. La ruta `--old-gui` queda sin efecto (sin cambios del lado GTK; cubierta por el smoke de B.5).
+
+**QA (§18.5)**: Tester QA Senior, 2 rondas. Ronda 1 **FAIL**: H1 bloqueante (`Uninstall` sin `MarkSuperseded()` → estado huérfano cuando un user shadoweaba un shippado: `FindAddon` devolvía null); H2 menor (`SetEnabled` persistía `a.Loaded && !a.Enabled` y perdía el estado deshabilitado de add-ins no cargados); H3 menor (4 CS8632 nuevos); H4 (aceptado por diseño: `Update` descompone/recompone transitoriamente las parts del ganador); H5 (`Discover()` no limpiaba la composición en re-descubrimiento); H6 parcial (`RowFor` null-safe + try/catch; feedback de errores en diálogo = follow-up). Todos corregidos y re-verificados. Ronda 2 **PASS** — 0 hallazgos abiertos: builds 0 errores (3 proyectos/TFMs), harness 50/50, extratest 25/25, `ActivateId` 12/12, smoke exacto, fixes confirmados por lectura (`AddonHost.cs:512-518` Uninstall, `:677-691` `ActivateId`).
+
+**Cierre**: B.3 completa: el Add-in Manager es un manager real en la shell Avalonia — enable/disable, install (directorio/zip), update (incl. multi-versión), uninstall (user/shippado) — con estado persistido en `SettingsStore` y precedencia por id entre la raíz shippada (`main/src/addins/`) y la raíz de usuario. La ruta `--old-gui` queda sin cambios.
+
+**Pendiente / follow-up**:
+
+- **B.4** (siguiente task del Track B): MIME/iconos de plataforma en los hooks de plataforma.
+- Feedback de errores en el diálogo (resto de H6): los fallos de `SetEnabled`/`Update`/`Install*` quedan hoy solo en el log (línea `[addins]` + estado de la fila); mostrarlos con diálogo de error.
+- `Update` con ganador shippado es limpieza de sesión (no escribe marker a disco) — documentado en el código; decidir si se quiere persistir.
+- `InstallFromFile` solo acepta `.zip` (v1); el uninstall de shippados es por id (oculta todas sus versiones).

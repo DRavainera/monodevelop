@@ -14,6 +14,19 @@ namespace MonoDevelop.AvaloniaAddons
         public string Error { get; set; }
         public DateTime LoadTime { get; private set; }
 
+        /// <summary>Active flag: a loaded add-in can be disabled at runtime (its parts
+        /// and extension nodes are removed; the assembly stays in its ALC). Persists
+        /// across restarts via the host's user-state store.</summary>
+        public bool Enabled { get; set; } = true;
+
+        /// <summary>Set by the host when a newer version of the same id was discovered:
+        /// the superseded state is listed (the manager's Updates tab) but never loaded.</summary>
+        public bool Superseded { get; internal set; }
+
+        /// <summary>Set by the host for add-ins discovered under the user root (outside
+        /// the shipped tree); uninstalling them removes their folder from disk.</summary>
+        public bool IsUserAddin { get; internal set; }
+
         /// <summary>Absolute path of the <c>*.avaloniaaddon.json</c> that produced this state
         /// (empty for states created without a manifest file). Lets the host resolve add-in
         /// assets — e.g. the identity icon — relative to the add-in folder.</summary>

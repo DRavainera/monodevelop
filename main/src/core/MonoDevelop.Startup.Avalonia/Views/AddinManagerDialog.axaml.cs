@@ -7,8 +7,10 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Templates;
 using Avalonia.Interactivity;
+using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
+using Avalonia.Platform.Storage;
 using MonoDevelop.AvaloniaAddons;
 
 namespace MonoDevelop.AvaloniaShell.Views;
@@ -275,15 +277,23 @@ public partial class AddinManagerDialog : Window
 	AddinItem RowFor (AddonLoadState state, bool installed)
 	{
 		var id = state.Manifest.Identity;
+		// User-installed manifests may carry explicit nulls the model defaults do not
+		// cover; coerce so the row bindings never NRE.
+		var version = id.Version ?? "";
+		var name = string.IsNullOrEmpty (id.DisplayName) ? id.Name : id.DisplayName;
 		return new AddinItem {
-			Name = string.IsNullOrEmpty (id.DisplayName) ? id.Name : id.DisplayName,
-			Subtitle = id.Version,
-			Id = id.Id,
-			Version = id.Version,
+			Name = name ?? id.Id ?? "",
+			Subtitle = version,
+			Id = id.Id ?? "",
+			Version = version,
 			Description = FirstLine (id.Description) ?? "",
-			Author = id.Publisher,
-			Category = state.Manifest.Categories.Count > 0 ? state.Manifest.Categories [0] : "Other",
-			Enabled = installed ? state.Loaded : true,
+			Author = id.Publisher ?? "",
+			Category = state.Manifest.Categories.Count > 0 && state.Manifest.Categories [0] is not null
+				? state.Manifest.Categories [0]
+				: "Other",
+			// Superseded rows (an older staged version of an active add-in) render
+			// grey like disabled ones: they are not the running version.
+			Enabled = installed ? state.Loaded && state.Enabled && !state.Superseded : true,
 			IsInstalled = installed,
 			State = state
 		};
@@ -319,7 +329,8 @@ public partial class AddinManagerDialog : Window
 			// "available" (plugin-avail-32), like the legacy gallery's
 			// not-installed rows.
 			foreach (var state in host.Addons) {
-				if (state.Loaded)
+				// Superseded versions live in the Updates tab, not the gallery.
+				if (state.Loaded || state.Superseded)
 					continue;
 				list.Add (RowFor (state, installed: false));
 			}
@@ -335,26 +346,16 @@ public partial class AddinManagerDialog : Window
 		if (host is null)
 			return list;
 		try {
-			// New add-in host: an update is a newer version of a running add-in in
-			// the discovered catalog (the host stages one manifest per add-in, so
-			// this only fires when a newer version is staged next to it).
+			// New add-in host: an add-in is updatable when several versions of it are
+			// staged (shipped tree and/or user root): the newest one is active, the
+			// older ones are superseded — the Update action applies the newest and
+			// discards the older versions.
 			foreach (var state in host.Addons) {
-				if (!state.Loaded)
+				if (state.Superseded)
 					continue;
-				var id = state.Manifest.Identity;
-				string? best = null;
-				foreach (var other in host.Addons) {
-					if (ReferenceEquals (other, state) || other.Manifest.Identity.Id != id.Id)
-						continue;
-					var v = other.Manifest.Identity.Version;
-					if (CompareVersions (id.Version, v) < 0 && (best is null || CompareVersions (best, v) < 0))
-						best = v;
-				}
-				if (best is null)
+				if (host.FindVersions (state.Manifest.Identity.Id).Count < 2)
 					continue;
-				var row = RowFor (state, installed: true);
-				row.Subtitle = best;
-				row.Version = best;
+				var row = RowFor (state, installed: state.Loaded);
 				row.HasUpdate = true;
 				list.Add (row);
 			}
@@ -362,21 +363,6 @@ public partial class AddinManagerDialog : Window
 			Console.WriteLine ("[addins] load updates failed: " + ex.Message);
 		}
 		return list;
-	}
-
-	// Numeric version comparison (the versions in play are dotted numerics; this
-	// matches Mono.Addins' comparison for well-formed versions).
-	static int CompareVersions (string v1, string v2)
-	{
-		Version.TryParse (v1, out var a);
-		Version.TryParse (v2, out var b);
-		if (a is null && b is null)
-			return string.CompareOrdinal (v1, v2);
-		if (a is null)
-			return -1;
-		if (b is null)
-			return 1;
-		return a.CompareTo (b);
 	}
 
 	void OnTabSelected (object? sender, SelectionChangedEventArgs e)
@@ -404,12 +390,15 @@ public partial class AddinManagerDialog : Window
 
 		// Details buttons exactly like the legacy ShowAddin switch:
 		//  installed+update → Update (+Disable/Uninstall); installed → Disable/Uninstall
-		//  (CanDisable/CanUninstall); not installed → Install.
-		UpdateButton.IsVisible = item.HasUpdate;
-		InstallButton.IsVisible = !item.IsInstalled;
-		DisableButton.IsVisible = item.IsInstalled && item.Enabled;
-		EnableButton.IsVisible = item.IsInstalled && !item.Enabled;
-		UninstallButton.IsVisible = item.IsInstalled;
+		//  (CanDisable/CanUninstall); not installed → Install. Superseded rows (an
+		//  older staged version of an active add-in) are information only: the actions
+		//  operate on the active version through the Updates page.
+		var active = item.State is not { Superseded: true };
+		UpdateButton.IsVisible = item.HasUpdate && active;
+		InstallButton.IsVisible = !item.IsInstalled && active;
+		DisableButton.IsVisible = item.IsInstalled && item.Enabled && active;
+		EnableButton.IsVisible = item.IsInstalled && !item.Enabled && active;
+		UninstallButton.IsVisible = item.IsInstalled && active;
 
 		// Status header (legacy boxHeader: update-available / disabled / broken notices).
 		DetailsHeader.IsVisible = item.HasUpdate || (item.IsInstalled && !item.Enabled);
@@ -450,16 +439,57 @@ public partial class AddinManagerDialog : Window
 
 	void OnEnableDisableClicked (object? sender, RoutedEventArgs e)
 	{
-		// The new add-in host does not expose enable/disable yet (the legacy toggle
-		// edited the Mono.Addins registry).
-		if (SelectedRow () is { } item)
-			Console.WriteLine ("[addins] enable/disable not available in the new add-in host: " + item.Id);
+		if (SelectedRow () is not { } item || host is null)
+			return;
+		var enable = !item.Enabled;
+		if (!host.SetEnabled (item.Id, enable, out var error)) {
+			Console.WriteLine ("[addins] " + error);
+			return;
+		}
+		// BuildTree keeps the selection across the reload.
+		LoadAddins ();
 	}
 
 	void OnUninstallClicked (object? sender, RoutedEventArgs e)
 	{
-		if (SelectedRow () is { } item)
-			Console.WriteLine ("[addins] uninstall not available in the new add-in host: " + item.Id);
+		if (SelectedRow () is not { } item || host is null)
+			return;
+		var name = string.IsNullOrEmpty (item.Name) ? item.Id : item.Name;
+		var id = item.Id;
+		// Same confirmation shape as MainWindow.DeleteContextNode.
+		var msg = new Window {
+			Title = "Uninstall Add-in",
+			Width = 380,
+			SizeToContent = SizeToContent.Height,
+			WindowStartupLocation = WindowStartupLocation.CenterOwner,
+			Content = new StackPanel {
+				Margin = new Thickness (16),
+				Spacing = 12,
+				Children = {
+					new TextBlock { Text = $"Uninstall {name}?", TextWrapping = TextWrapping.Wrap },
+					new StackPanel {
+						Orientation = Orientation.Horizontal,
+						HorizontalAlignment = HorizontalAlignment.Right,
+						Spacing = 8,
+						Children = {
+							new Button { Content = "Cancel" },
+							new Button { Content = "Uninstall" },
+						},
+					},
+				},
+			},
+		};
+		var sp = (StackPanel)msg.Content!;
+		var buttons = ((StackPanel)sp.Children [1]).Children.OfType<Button> ().ToList ();
+		buttons [0].Click += (_, _) => msg.Close ();
+		buttons [1].Click += (_, _) => {
+			msg.Close ();
+			if (host.Uninstall (id, out var error))
+				LoadAddins ();
+			else
+				Console.WriteLine ("[addins] " + error);
+		};
+		_ = msg.ShowDialog (this);
 	}
 
 	void OnInstallClicked (object? sender, RoutedEventArgs e)
@@ -474,16 +504,43 @@ public partial class AddinManagerDialog : Window
 
 	void InstallSelected ()
 	{
-		if (SelectedRow () is { } item)
-			Console.WriteLine ("[addins] install not available in the new add-in host: " + item.Id);
+		if (SelectedRow () is not { } item || host is null || item.State is null)
+			return;
+		string error;
+		// Updates page: apply the newest staged version of the id (the older
+		// versions are discarded). Gallery page: retry the load of an add-in that
+		// did not load at startup (e.g. its assembly was restored since).
+		var ok = item.IsInstalled
+			? host.Update (item.Id, out error)
+			: host.LoadAddon (item.State, out error);
+		if (!ok) {
+			Console.WriteLine ("[addins] " + error);
+			return;
+		}
+		if (!item.IsInstalled)
+			SelectTab ("installed");
+		LoadAddins ();
+	}
+
+	void SelectTab (string tab)
+	{
+		foreach (var o in TabList?.Items ?? (IEnumerable)Array.Empty<object> ())
+			if (o is ListBoxItem { Tag: string t } && t == tab) {
+				TabList!.SelectedItem = o;
+				return;
+			}
 	}
 
 	void OnUpdateAllClicked (object? sender, RoutedEventArgs e)
 	{
+		if (host is null)
+			return;
 		var pending = CountRowItems (AddinList?.Items, i => i.HasUpdate);
 		if (pending == 0)
 			return;
-		Console.WriteLine ("[addins] update-all not available in the new add-in host (" + pending + " pending)");
+		var count = host.UpdateAll (out var error);
+		Console.WriteLine (error is null ? $"[addins] updated {count} add-in(s)" : "[addins] " + error);
+		LoadAddins ();
 	}
 
 	static int CountRowItems (IEnumerable? items, Func<AddinItem, bool> match)
@@ -527,9 +584,27 @@ public partial class AddinManagerDialog : Window
 		}
 	}
 
-	void OnInstallFromFileClicked (object? sender, RoutedEventArgs e)
+	async void OnInstallFromFileClicked (object sender, RoutedEventArgs e)
 	{
-		Console.WriteLine ("[addins] install from file not available in the new add-in host");
+		if (host is null || TopLevel.GetTopLevel (this)?.StorageProvider is not { } sp)
+			return;
+		try {
+			var files = await sp.OpenFilePickerAsync (new FilePickerOpenOptions {
+				AllowMultiple = false,
+				Title = "Select the add-in package (.zip)",
+				FileTypeFilter = new [] { new FilePickerFileType ("Add-in package") { Patterns = new [] { "*.zip" } } },
+			});
+			if (files.Count == 0 || files [0].TryGetLocalPath () is not { } path)
+				return;
+			if (!host.InstallFromFile (path, out var error)) {
+				Console.WriteLine ("[addins] install from file: " + error);
+				return;
+			}
+			SelectTab ("installed");
+			LoadAddins ();
+		} catch (Exception ex) {
+			Console.WriteLine ("[addins] install from file: " + ex.Message);
+		}
 	}
 
 	void OnCloseClicked (object? sender, RoutedEventArgs e) => Close ();

@@ -134,6 +134,19 @@ internal static class Program
 		}
 	}
 
+	/// <summary>Per-user folder where the Add-in Manager installs add-ins (outside the
+	/// shipped tree, so installing never writes into the repo/build). MONODEVELOP_AVALONIA_USER_ADDINS
+	/// overrides it (automated runs point it at a scratch directory).</summary>
+	public static string UserAddinsDirectory {
+		get {
+			var env = Environment.GetEnvironmentVariable ("MONODEVELOP_AVALONIA_USER_ADDINS");
+			if (!string.IsNullOrEmpty (env))
+				return env;
+			var home = Environment.GetFolderPath (Environment.SpecialFolder.UserProfile);
+			return Path.Combine (home, ".local", "share", "MonoDevelop-Avalonia", "UserAddIns");
+		}
+	}
+
 	// QA hooks: --about | --prefs | --addins open the corresponding dialog at startup
 	// so automated runs can validate each migrated dialog without UI navigation.
 	// --prefs also accepts a value (--prefs=light|dark|<panelId>) to drive the dialog

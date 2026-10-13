@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.IO.Compression;
 using System.Linq;
 using System.Reflection;
 using System.Runtime.Loader;
@@ -14,82 +15,184 @@ namespace MonoDevelop.AvaloniaAddons
 {
 
 	/// <summary>
-	/// Hosts the shell add-ins: discovers manifests under a root folder, loads each in its
-	/// own AssemblyLoadContext, builds the MEF-like composition and activates packages.
-	/// Independent from Mono.Addins (which stays with the GTK IDE).
+	/// Persistence of per-user add-in state (disabled / uninstalled ids) for
+	/// <see cref="AddonHost"/>. The add-on module is standalone (no dependency on the
+	/// shell's services), so the host exposes this minimal contract and the shell wires
+	/// it to its own settings store. When no store is set the runtime operations still
+	/// work, but their state does not survive a restart.
+	/// </summary>
+	public interface IAddonUserState
+	{
+		string Get (string key);
+		void Set (string key, string value);
+	}
+
+	/// <summary>
+	/// Hosts the shell add-ins: discovers manifests under the shipped root and the user
+	/// root, loads each in its own AssemblyLoadContext, builds the MEF-like composition
+	/// and activates packages. Also exposes the Add-in Manager runtime operations
+	/// (enable/disable, update, install from directory or file, uninstall). Independent
+	/// from Mono.Addins (which stays with the GTK IDE).
 	/// </summary>
 	public sealed class AddonHost : IDisposable
 	{
 		public const string ManifestSuffix = ".avaloniaaddon.json";
+
+		public const string StateKeyDisabled = "MonoDevelop.Avalonia.Addins.Disabled";
+		public const string StateKeyUninstalled = "MonoDevelop.Avalonia.Addins.Uninstalled";
 
 		readonly List<AddonLoadState> addons = new ();
 		readonly AddonExtensionRegistry extensions = new ();
 		readonly CompositionHost composition = new ();
 		readonly List<string> log = new ();
 		readonly string root;
+		readonly string userRoot;
+		readonly Dictionary<string, List<object>> partsByAddon = new (StringComparer.Ordinal);
+		readonly Dictionary<string, List<(string Path, AddonExtensionNode Node)>> nodesByAddon = new (StringComparer.Ordinal);
 
-		public AddonHost (string rootDirectory)
+		public AddonHost (string rootDirectory, string userRootDirectory = null)
 		{
 			root = rootDirectory;
+			userRoot = userRootDirectory;
 			foreach (var p in ExtensionPoints.All)
 				extensions.DeclareExtensionPoint (p);
 		}
+
+		/// <summary>Optional persistence for the disabled/uninstalled sets. Wired by the
+		/// shell (e.g. to SettingsStore); null when the host runs standalone.</summary>
+		public IAddonUserState StateStore { get; set; }
 
 		public IReadOnlyList<AddonLoadState> Addons => addons;
 		public IAddonExtensionRegistry Extensions => extensions;
 		public IReadOnlyList<string> Log => log;
 		public string RootDirectory => root;
 
+		/// <summary>Root where user installs land (outside the shipped tree); null when
+		/// the host was created without one, in which case install-from-directory is
+		/// unavailable.</summary>
+		public string UserRootDirectory => userRoot;
+
 		/// <summary>Composed parts of every loaded add-in (platform services, packages, ...).</summary>
 		public IReadOnlyList<object> Parts => composition.Parts;
 
 		void Note (string m) { log.Add (m); Console.WriteLine ("[avalonia-addons] " + m); }
 
-		/// <summary>Discovers manifests (one level of subfolders) and registers them.
-		/// Dependency validation happens in <see cref="LoadAll"/>, once the whole
-		/// discovered set is known.</summary>
+		/// <summary>Discovers manifests under the shipped root and the user root and
+		/// registers them. No assembly is loaded here: contexts are created lazily by
+		/// <see cref="EnsureContext"/>, so a missing assembly surfaces as a load error,
+		/// not a discovery error. Dependency validation happens in <see cref="LoadAll"/>,
+		/// once the whole discovered set is known.</summary>
 		public void Discover ()
 		{
+			// A re-discovery on a live host must start from a clean composition:
+			// drop the parts/nodes of the previous set before registering new ones.
+			UnloadAll ();
 			addons.Clear ();
-			if (!Directory.Exists (root)) { Note ($"root not found: {root}"); return; }
-			var manifests = new List<string> ();
-			foreach (var f in Directory.EnumerateFiles (root, "*" + ManifestSuffix, SearchOption.AllDirectories).OrderBy (f => f))
-				manifests.Add (f);
-			foreach (var file in manifests) {
-				AddonLoadState state = null;
+			partsByAddon.Clear ();
+			nodesByAddon.Clear ();
+			DiscoverIn (root, userAddin: false);
+			if (userRoot is { Length: > 0 } && Directory.Exists (userRoot))
+				DiscoverIn (userRoot, userAddin: true);
+			MarkSuperseded ();
+		}
+
+		void DiscoverIn (string dir, bool userAddin)
+		{
+			if (!Directory.Exists (dir)) {
+				Note ($"root not found: {dir}");
+				return;
+			}
+			var disabled = LoadIdSet (StateKeyDisabled);
+			var uninstalled = LoadIdSet (StateKeyUninstalled);
+			foreach (var file in Directory.EnumerateFiles (dir, "*" + ManifestSuffix, SearchOption.AllDirectories).OrderBy (f => f)) {
+				AddonManifest m;
 				try {
-					var m = JsonSerializer.Deserialize<AddonManifest> (File.ReadAllText (file));
-					if (m?.Identity is null || string.IsNullOrEmpty (m.Identity.Id)) { Note ("invalid manifest: " + file); continue; }
-
-					state = new AddonLoadState { Manifest = m, ManifestPath = file };
-					addons.Add (state);
-
-					if (!string.IsNullOrEmpty (m.Os) && !MatchesCurrentOs (m.Os)) {
-						state.Error = $"not supported on this platform (requires: {m.Os})";
-						Note ($"{m.Identity.Id}: skipped (requires {m.Os})");
-						continue;
-					}
-
-					if (m.EntryPoint is not { Length: > 0 } && (m.Assets == null || m.Assets.Count == 0)) {
-						// Manifest-only add-in: no assembly to load; it contributes
-						// its extension nodes (preferences panels, platform hooks, ...).
-						state.MarkLoaded ();
-						continue;
-					}
-
-					var asm = ResolveAssembly (m, file);
-					var manifestDir = Path.GetDirectoryName (file) ?? root;
-					if (asm is null) {
-						state.Error = "assembly not found for entry point";
-						continue;
-					}
-					// The context resolves + loads the assembly; LoadAll composes
-					// its parts (IPackage/IAvaloniaAddon) and marks the state.
-					state.Context = new AddonLoadContext (asm, manifestDir);
+					m = JsonSerializer.Deserialize<AddonManifest> (File.ReadAllText (file));
 				} catch (Exception ex) {
-					if (state is not null) state.Error = ex.Message;
 					Note ($"manifest error {file}: {ex.Message}");
+					continue;
 				}
+				if (m?.Identity is null || string.IsNullOrEmpty (m.Identity.Id)) {
+					Note ("invalid manifest: " + file);
+					continue;
+				}
+				// A shipped add-in can be uninstalled (hidden) by the manager; the user
+				// root never carries uninstall markers — uninstalling a user add-in
+				// removes its folder from disk.
+				if (!userAddin && uninstalled.Contains (m.Identity.Id)) {
+					Note ($"{m.Identity.Id}: skipped (uninstalled)");
+					continue;
+				}
+				RegisterManifest (file, m, userAddin, disabled);
+			}
+		}
+
+		/// <summary>Adds a parsed manifest to the discovered set, applying the OS gate
+		/// and the persisted disabled flag.</summary>
+		AddonLoadState RegisterManifest (string file, AddonManifest m, bool userAddin, IReadOnlySet<string> disabled)
+		{
+			AddonLoadState state = null;
+			try {
+				state = new AddonLoadState { Manifest = m, ManifestPath = file, IsUserAddin = userAddin, Enabled = !disabled.Contains (m.Identity.Id) };
+				addons.Add (state);
+				if (!string.IsNullOrEmpty (m.Os) && !MatchesCurrentOs (m.Os)) {
+					state.Error = $"not supported on this platform (requires: {m.Os})";
+					Note ($"{m.Identity.Id}: skipped (requires {m.Os})");
+				}
+			} catch (Exception ex) {
+				if (state is not null) state.Error = ex.Message;
+				Note ($"manifest error {file}: {ex.Message}");
+			}
+			return state;
+		}
+
+		/// <summary>Lazily creates the add-in's AssemblyLoadContext. Manifest-only add-ins
+		/// (no entry point and no assets) never get one. Returns false — and records the
+		/// error on the state — when the assembly cannot be resolved.</summary>
+		bool EnsureContext (AddonLoadState state)
+		{
+			if (state.Context is not null)
+				return true;
+			var m = state.Manifest;
+			if (m.EntryPoint is not { Length: > 0 } && (m.Assets == null || m.Assets.Count == 0))
+				return true;
+			var asm = ResolveAssembly (m, state.ManifestPath);
+			if (asm is null) {
+				state.Error = "assembly not found for entry point";
+				Note ($"{m.Identity.Id}: assembly not found for entry point");
+				return false;
+			}
+			var manifestDir = Path.GetDirectoryName (state.ManifestPath) ?? root;
+			try {
+				state.Context = new AddonLoadContext (asm, manifestDir);
+			} catch (Exception ex) {
+				state.Error = ex.Message;
+				Note ($"{m.Identity.Id}: {ex.Message}");
+				return false;
+			}
+			return true;
+		}
+
+		/// <summary>Among the states sharing an id (shipped and user roots), the highest
+		/// version wins; the rest are flagged <see cref="AddonLoadState.Superseded"/> so
+		/// the manager can list them without loading them. Ties (same version) favour the
+		/// user add-in. Idempotent, so runtime operations can re-run it after adding or
+		/// removing states.</summary>
+		void MarkSuperseded ()
+		{
+			foreach (var a in addons)
+				a.Superseded = false;
+			foreach (var group in addons.Where (a => a.Error is null)
+				.GroupBy (a => a.Manifest.Identity.Id, StringComparer.Ordinal)) {
+				if (group.Count () < 2)
+					continue;
+				var newest = group
+					.OrderByDescending (a => VersionOrZero (a.Manifest.Identity.Version))
+					.ThenBy (a => a.IsUserAddin ? 0 : 1)
+					.First ();
+				foreach (var a in group)
+					if (!ReferenceEquals (a, newest))
+						a.Superseded = true;
 			}
 		}
 
@@ -176,8 +279,10 @@ namespace MonoDevelop.AvaloniaAddons
 			foreach (var dep in m.Dependencies) {
 				if (dep.Id is null || string.IsNullOrEmpty (dep.Id)) continue;
 				
-				// Find dependency addon
-				var depAddon = addons.FirstOrDefault (a => a.Manifest.Identity.Id == dep.Id);
+				// Find dependency addon (the active, non-superseded version when several
+				// are staged under the same id)
+				var depAddon = addons.FirstOrDefault (a => a.Manifest.Identity.Id == dep.Id && !a.Superseded)
+					?? addons.FirstOrDefault (a => a.Manifest.Identity.Id == dep.Id);
 				if (depAddon is null) {
 					// Dependency on a core component (e.g. MonoDevelop.Ide) provided
 					// by the host, not by another add-in: satisfied.
@@ -258,62 +363,415 @@ namespace MonoDevelop.AvaloniaAddons
 		{
 			// Phase 1: dependency validation against the full discovered set.
 			foreach (var state in addons) {
-				if (state.Error is not null) continue;
+				if (state.Error is not null || state.Superseded) continue;
 				if (!ValidateDependencies (state.Manifest)) {
 					state.Error = "dependencies not satisfied";
 					Note ($"{state.Manifest.Identity.Id}: dependencies not satisfied");
 				}
 			}
-			
-			// Phase 2: load assemblies (manifest-only add-ins are already loaded).
+
+			// Phase 2: load assemblies, then compose the enabled add-ins (their parts
+			// and extension nodes).
 			foreach (var state in addons) {
-				if (state.Loaded || state.Error is not null) continue;
+				if (state.Error is not null || state.Superseded) continue;
 				try {
-					if (state.Context is { } alc) {
-						foreach (var t in SafeGetTypes (alc.Assembly)) {
-							if (t is null || t.IsAbstract || t.IsInterface) continue;
-							if (!typeof(IPackage).IsAssignableFrom (t) && !typeof(IAvaloniaAddon).IsAssignableFrom (t)) continue;
-							
-							object inst = null;
-							try { inst = Activator.CreateInstance (t); } 
-							catch (Exception ex) { Note ($"{state.Manifest.Identity.Id}: ctor {t.Name}: {ex.Message}"); continue; }
-							composition.Add (inst);
-							
-							if (inst is IAvaloniaAddon addon) {
-								addon.Initialize (new Context (root, extensions, composition, state.Manifest.Identity.Id, Note));
-								if (addon.GetType ().GetCustomAttribute<ProvideAutoLoadAttribute> () is not null) addon.Load ();
-							}
-							
-							if (inst is IPackage pkg) {
-								pkg.Initialize (new Context (root, extensions, composition, state.Manifest.Identity.Id, Note));
-								if (pkg.GetType ().GetCustomAttribute<ProvideAutoLoadAttribute> () is not null) pkg.Load ();
-							}
-						}
-					}
+					if (!EnsureContext (state))
+						continue;
+					if (state.Context is { } alc)
+						_ = SafeGetTypes (alc.Assembly); // force load: surface broken references early
 					state.MarkLoaded ();
-				} catch (Exception ex) { 
-					state.Error = ex.Message; 
+					if (state.Enabled)
+						ComposeAddon (state);
+				} catch (Exception ex) {
+					state.Error = ex.Message;
 					Note ($"{state.Manifest.Identity.Id}: {ex.Message}");
 				}
 			}
-			
-			// register extension nodes from the manifests (only for add-ins that
-			// loaded and autoLoad is not disabled, so the UI never renders nodes
-			// whose classes are unavailable)
-			foreach (var state in addons) {
-				if (!state.Loaded || !state.Manifest.AutoLoad) continue;
-				foreach (var (path, nodes) in state.Manifest.Extensions) {
-					if (!extensions.HasExtensionPoint (path)) extensions.DeclareExtensionPoint (path);
-					foreach (var node in nodes ?? new List<AddonExtensionNode> ()) extensions.AddNode (path, node);
+
+			Note ($"loaded {addons.Count (a => a.Loaded && a.Enabled && !a.Superseded)}/{addons.Count} add-in(s)");
+		}
+
+		/// <summary>Instantiates the add-in's IPackage/IAvaloniaAddon parts, registers
+		/// them in the composition and contributes the manifest's extension nodes.
+		/// Idempotent: the add-in's previous parts and nodes are removed first.</summary>
+		void ComposeAddon (AddonLoadState state)
+		{
+			UnloadAddon (state);
+			var id = state.Manifest.Identity.Id;
+			var parts = new List<object> ();
+			if (state.Context is { } alc) {
+				foreach (var t in SafeGetTypes (alc.Assembly)) {
+					if (t is null || t.IsAbstract || t.IsInterface) continue;
+					if (!typeof (IPackage).IsAssignableFrom (t) && !typeof (IAvaloniaAddon).IsAssignableFrom (t)) continue;
+
+					object inst = null;
+					try { inst = Activator.CreateInstance (t); }
+					catch (Exception ex) { Note ($"{id}: ctor {t.Name}: {ex.Message}"); continue; }
+					composition.Add (inst);
+					parts.Add (inst);
+
+					if (inst is IAvaloniaAddon addon) {
+						addon.Initialize (new Context (root, extensions, composition, id, Note));
+						if (addon.GetType ().GetCustomAttribute<ProvideAutoLoadAttribute> () is not null) addon.Load ();
+					}
+
+					if (inst is IPackage pkg) {
+						pkg.Initialize (new Context (root, extensions, composition, id, Note));
+						if (pkg.GetType ().GetCustomAttribute<ProvideAutoLoadAttribute> () is not null) pkg.Load ();
+					}
 				}
 			}
-			// activate autoloaded packages
-			foreach (var p in composition.GetExports (typeof (IPackage)).OfType<IPackage> ()) _ = p;
-			foreach (var inst in composition.Parts) {
-				if (inst is IPackage pkg && inst.GetType ().GetCustomAttribute<ProvideAutoLoadAttribute> () is not null) pkg.Load ();
+			partsByAddon [id] = parts;
+
+			var nodes = new List<(string Path, AddonExtensionNode Node)> ();
+			if (state.Manifest.AutoLoad) {
+				foreach (var (path, nodesList) in state.Manifest.Extensions) {
+					if (!extensions.HasExtensionPoint (path)) extensions.DeclareExtensionPoint (path);
+					foreach (var node in nodesList ?? new List<AddonExtensionNode> ()) {
+						extensions.AddNode (path, node);
+						nodes.Add ((path, node));
+					}
+				}
 			}
-			foreach (var st in addons) st.MarkLoaded ();
-			Note ($"loaded {addons.Count (a => a.Loaded)}/{addons.Count} add-in(s)");
+			nodesByAddon [id] = nodes;
+		}
+
+		/// <summary>Reverts <see cref="ComposeAddon"/>: unloads the add-in's packages,
+		/// removes its parts from the composition and its nodes from the registry. The
+		/// assembly stays in its (non-collectible) ALC, so re-enabling recomposes the
+		/// same parts.</summary>
+		void UnloadAddon (AddonLoadState state)
+		{
+			var id = state.Manifest.Identity.Id;
+			if (partsByAddon.TryGetValue (id, out var parts)) {
+				foreach (var inst in parts) {
+					if (inst is IPackage pkg) {
+						try { pkg.Unload (); }
+						catch (Exception ex) { Note ($"{id}: unload {inst.GetType ().Name}: {ex.Message}"); }
+					}
+				}
+				composition.RemoveRange (parts);
+				partsByAddon.Remove (id);
+			}
+			if (nodesByAddon.TryGetValue (id, out var nodes)) {
+				foreach (var (path, node) in nodes)
+					extensions.RemoveNode (path, node);
+				nodesByAddon.Remove (id);
+			}
+		}
+
+		/// <summary>The active (non-superseded) state of an add-in, or null.</summary>
+		public AddonLoadState FindAddon (string id)
+			=> addons.FirstOrDefault (a => a.Manifest.Identity.Id == id && !a.Superseded);
+
+		/// <summary>All discovered states with the given id, newest first. More than one
+		/// entry means the add-in has staged updates (<see cref="UpdateAll"/>).</summary>
+		public IReadOnlyList<AddonLoadState> FindVersions (string id)
+			=> addons.Where (a => a.Manifest.Identity.Id == id)
+				.OrderByDescending (a => VersionOrZero (a.Manifest.Identity.Version))
+				.ThenBy (a => a.IsUserAddin ? 0 : 1)
+				.ToList ();
+
+		/// <summary>Enables or disables an add-in at runtime: its parts and extension
+		/// nodes are composed or removed, while the assembly stays in its
+		/// (non-collectible) ALC. The choice persists across restarts via the state
+		/// store.</summary>
+		public bool SetEnabled (string id, bool enabled, out string error)
+		{
+			var state = FindAddon (id);
+			if (state is null) { error = $"add-in '{id}' not found"; return false; }
+			if (state.Error is not null) { error = $"add-in '{id}' has an error: {state.Error}"; return false; }
+			if (!EnsureContext (state)) { error = state.Error ?? "cannot load add-in"; return false; }
+			state.MarkLoaded ();
+			state.Enabled = enabled;
+			if (enabled)
+				ComposeAddon (state);
+			else
+				UnloadAddon (state);
+			// Persist the user's disabled choice even when the add-in did not load
+			// (broken assembly): it was disabled on purpose and must stay disabled
+			// once it loads again. Enabled is only ever false by user choice or by
+			// restoring this same set, so no other state ends up in it.
+			var disabled = new SortedSet<string> (StringComparer.Ordinal);
+			foreach (var a in addons)
+				if (!a.Enabled)
+					disabled.Add (a.Manifest.Identity.Id);
+			SaveIdSet (StateKeyDisabled, disabled);
+			Note ($"{id}: {(enabled ? "enabled" : "disabled")}");
+			error = null;
+			return true;
+		}
+
+		/// <summary>Uninstalls an add-in: a user add-in's folder is removed from disk; a
+		/// shipped one is hidden with a persisted uninstalled marker (the shipped tree is
+		/// source, not writable). The add-in disappears from the discovered set.</summary>
+		public bool Uninstall (string id, out string error)
+		{
+			var state = FindAddon (id) ?? addons.FirstOrDefault (a => a.Manifest.Identity.Id == id);
+			if (state is null) { error = $"add-in '{id}' not found"; return false; }
+			RemoveState (state);
+			// Re-run the version precedence: removing the active version of an id can
+			// un-supersede an older one (e.g. uninstalling a user add-in that shadowed
+			// a shipped one) — it must become active (and composed) again, not be left
+			// orphaned with a stale Superseded flag.
+			MarkSuperseded ();
+			ActivateId (id);
+			if (state.IsUserAddin) {
+				DeleteFolder (state.ManifestPath);
+				Note ($"uninstalled {id} {state.Manifest.Identity.Version} (user add-in removed)");
+			} else {
+				var uninstalled = LoadIdSet (StateKeyUninstalled);
+				uninstalled.Add (id);
+				SaveIdSet (StateKeyUninstalled, uninstalled);
+				Note ($"uninstalled {id} {state.Manifest.Identity.Version} (shipped add-in hidden)");
+			}
+			error = null;
+			return true;
+		}
+
+		/// <summary>Applies the newest staged version of an add-in and discards the older
+		/// ones: an older user version is removed from disk, an older shipped one is
+		/// hidden with an uninstalled marker (only when the winner is a user add-in — a
+		/// marker would hide every shipped version of the id, so a shipped winner never
+		/// sets one). The winning version is composed so a mid-session update takes
+		/// effect.</summary>
+		public bool Update (string id, out string error)
+		{
+			var versions = FindVersions (id);
+			if (versions.Count < 2) { error = $"no staged update for '{id}'"; return false; }
+			var newest = versions [0];
+			if (newest.Error is not null) { error = $"newest version of '{id}' has an error: {newest.Error}"; return false; }
+			foreach (var old in versions.Skip (1)) {
+				RemoveState (old);
+				if (old.IsUserAddin)
+					DeleteFolder (old.ManifestPath);
+				else if (newest.IsUserAddin) {
+					var uninstalled = LoadIdSet (StateKeyUninstalled);
+					uninstalled.Add (old.Manifest.Identity.Id);
+					SaveIdSet (StateKeyUninstalled, uninstalled);
+					Note ($"{old.Manifest.Identity.Id}: shipped version hidden after update to {newest.Manifest.Identity.Version}");
+				}
+			}
+			MarkSuperseded ();
+			if (newest.Enabled && !newest.Superseded) {
+				if (!EnsureContext (newest)) { error = newest.Error ?? "cannot load add-in"; return false; }
+				newest.MarkLoaded ();
+				ComposeAddon (newest);
+			}
+			Note ($"updated {id} -> {newest.Manifest.Identity.Version}");
+			error = null;
+			return true;
+		}
+
+		/// <summary>Updates every add-in that has staged versions to discard. Returns the
+		/// number of updated ids; stops at the first failure.</summary>
+		public int UpdateAll (out string error)
+		{
+			var count = 0;
+			foreach (var id in addons.Select (a => a.Manifest.Identity.Id).Distinct (StringComparer.Ordinal)
+				.Where (i => FindVersions (i).Count > 1)
+				.OrderBy (i => i, StringComparer.Ordinal)) {
+				if (!Update (id, out error))
+					return count;
+				count++;
+			}
+			error = null;
+			return count;
+		}
+
+		/// <summary>Installs an add-in from a directory (the manifest either directly in
+		/// it or inside a single subfolder) into the user root, replacing any previous
+		/// user version of the same id. The installed add-in is loaded and composed
+		/// immediately when it has no errors.</summary>
+		public bool InstallFromDirectory (string sourceDir, out string error)
+		{
+			if (userRoot is null) { error = "no user add-in root configured"; return false; }
+			if (!Directory.Exists (sourceDir)) { error = $"directory not found: {sourceDir}"; return false; }
+			var manifestFile = FindManifest (sourceDir);
+			if (manifestFile is null) { error = $"no {ManifestSuffix} found in {sourceDir}"; return false; }
+
+			AddonManifest m;
+			try {
+				m = JsonSerializer.Deserialize<AddonManifest> (File.ReadAllText (manifestFile));
+			} catch (Exception ex) {
+				error = "invalid manifest: " + ex.Message;
+				return false;
+			}
+			if (m?.Identity is null || string.IsNullOrEmpty (m.Identity.Id)) { error = "manifest has no identity id"; return false; }
+			var id = m.Identity.Id;
+
+			var addonDir = Path.GetDirectoryName (manifestFile) ?? sourceDir;
+			var dest = Path.Combine (userRoot, id);
+			try {
+				Directory.CreateDirectory (userRoot);
+				if (Directory.Exists (dest))
+					Directory.Delete (dest, recursive: true);
+				CopyDirectory (addonDir, dest);
+			} catch (Exception ex) {
+				error = "copy failed: " + ex.Message;
+				return false;
+			}
+			Note ($"installed {id} {m.Identity.Version} -> {dest}");
+
+			// Drop the previous user state (its folder was replaced) and register the
+			// new one.
+			foreach (var old in addons.Where (a => a.IsUserAddin && a.Manifest.Identity.Id == id).ToList ())
+				RemoveState (old);
+			var state = RegisterManifest (Path.Combine (dest, Path.GetFileName (manifestFile)), m, userAddin: true, LoadIdSet (StateKeyDisabled));
+			if (state is null) { error = "manifest could not be registered after install"; return false; }
+			MarkSuperseded ();
+			if (state.Error is null && !state.Superseded)
+				LoadAddon (state, out _);
+			error = null;
+			return true;
+		}
+
+		/// <summary>Installs an add-in package file. v1 supports .zip archives only: the
+		/// archive is extracted to a temporary folder and installed as a directory.</summary>
+		public bool InstallFromFile (string packageFile, out string error)
+		{
+			if (!File.Exists (packageFile)) { error = $"file not found: {packageFile}"; return false; }
+			if (!packageFile.EndsWith (".zip", StringComparison.OrdinalIgnoreCase)) { error = "only .zip packages are supported (v1)"; return false; }
+			var temp = Path.Combine (Path.GetTempPath (), "md-avalonia-addon-" + Guid.NewGuid ().ToString ("N"));
+			try {
+				ZipFile.ExtractToDirectory (packageFile, temp, overwriteFiles: true);
+				return InstallFromDirectory (temp, out error);
+			} catch (Exception ex) {
+				error = "could not extract package: " + ex.Message;
+				return false;
+			} finally {
+				try { if (Directory.Exists (temp)) Directory.Delete (temp, recursive: true); } catch { }
+			}
+		}
+
+		/// <summary>Loads a single add-in (used after the user fixed the cause of a load
+		/// error, e.g. a missing assembly). Superseded versions cannot be loaded: only
+		/// the newest staged version of an id is active.</summary>
+		public bool LoadAddon (AddonLoadState state, out string error)
+		{
+			if (state is null) { error = "no add-in"; return false; }
+			if (state.Superseded) { error = "superseded by a newer staged version"; return false; }
+			state.Error = null;
+			if (!EnsureContext (state)) { error = state.Error ?? "cannot load add-in"; return false; }
+			try {
+				if (state.Context is { } alc)
+					_ = SafeGetTypes (alc.Assembly);
+				state.MarkLoaded ();
+				if (state.Enabled)
+					ComposeAddon (state);
+			} catch (Exception ex) {
+				state.Error = ex.Message;
+				error = ex.Message;
+				Note ($"{state.Manifest.Identity.Id}: {ex.Message}");
+				return false;
+			}
+			error = null;
+			return true;
+		}
+
+		/// <summary>Loads and composes the active (non-superseded) state of an id when it
+		/// is enabled and error-free. Used after a runtime operation flips which version
+		/// of an id is active (e.g. uninstalling a version that shadowed an older one):
+		/// the older version was superseded and never composed, so it needs a one-shot
+		/// load+compose to become actually active.</summary>
+		void ActivateId (string id)
+		{
+			var state = FindAddon (id);
+			if (state is null || state.Error is not null)
+				return;
+			if (!EnsureContext (state))
+				return;
+			if (!state.Loaded) {
+				if (state.Context is { } alc)
+					_ = SafeGetTypes (alc.Assembly);
+				state.MarkLoaded ();
+			}
+			if (state.Enabled)
+				ComposeAddon (state);
+		}
+
+		/// <summary>Drops a state: its parts and nodes are removed (if composed) and it
+		/// leaves the discovered set.</summary>
+		void RemoveState (AddonLoadState state)
+		{
+			var id = state.Manifest.Identity.Id;
+			if (partsByAddon.ContainsKey (id) || nodesByAddon.ContainsKey (id))
+				UnloadAddon (state);
+			addons.Remove (state);
+		}
+
+		/// <summary>Removes the folder containing the given manifest (user add-ins are
+		/// uninstalled by deleting them from disk).</summary>
+		void DeleteFolder (string manifestPath)
+		{
+			if (manifestPath is not { Length: > 0 })
+				return;
+			var dir = Path.GetDirectoryName (manifestPath);
+			if (dir is null || !Directory.Exists (dir))
+				return;
+			try {
+				Directory.Delete (dir, recursive: true);
+			} catch (Exception ex) {
+				Note ($"could not remove {dir}: {ex.Message}");
+			}
+		}
+
+		SortedSet<string> LoadIdSet (string key)
+		{
+			var set = new SortedSet<string> (StringComparer.Ordinal);
+			var raw = StateStore?.Get (key);
+			if (raw is not { Length: > 0 })
+				return set;
+			try {
+				var arr = JsonSerializer.Deserialize<string[]> (raw);
+				if (arr is not null)
+					foreach (var id in arr)
+						if (id is { Length: > 0 })
+							set.Add (id);
+			} catch {
+				// Corrupt user state: start from an empty set rather than failing the
+				// whole discovery.
+			}
+			return set;
+		}
+
+		void SaveIdSet (string key, IReadOnlySet<string> set)
+		{
+			if (StateStore is null)
+				return;
+			try {
+				StateStore.Set (key, set.Count == 0 ? null : JsonSerializer.Serialize (set.OrderBy (x => x, StringComparer.Ordinal).ToArray ()));
+			} catch (Exception ex) {
+				Note ($"could not persist add-in state '{key}': {ex.Message}");
+			}
+		}
+
+		static Version VersionOrZero (string v) => Version.TryParse (v, out var ver) ? ver : new Version (0, 0);
+
+		static void CopyDirectory (string source, string dest)
+		{
+			Directory.CreateDirectory (dest);
+			foreach (var file in Directory.EnumerateFiles (source, "*", SearchOption.AllDirectories)) {
+				var target = Path.Combine (dest, Path.GetRelativePath (source, file));
+				Directory.CreateDirectory (Path.GetDirectoryName (target));
+				File.Copy (file, target, overwrite: true);
+			}
+		}
+
+		/// <summary>Finds the add-in manifest in <paramref name="dir"/>: directly in it,
+		/// or inside a single subfolder (package wrappers).</summary>
+		static string FindManifest (string dir)
+		{
+			var direct = Directory.EnumerateFiles (dir, "*" + ManifestSuffix).FirstOrDefault ();
+			if (direct is not null)
+				return direct;
+			var subdirs = Directory.GetDirectories (dir);
+			if (subdirs.Length == 1) {
+				var inSub = Directory.EnumerateFiles (subdirs [0], "*" + ManifestSuffix).FirstOrDefault ();
+				if (inSub is not null)
+					return inSub;
+			}
+			return null;
 		}
 
 		static IEnumerable<Type> SafeGetTypes (Assembly asm) {
@@ -330,7 +788,9 @@ namespace MonoDevelop.AvaloniaAddons
 		public void Dispose () => UnloadAll ();
 
 		void UnloadAll () {
-			foreach (var inst in composition.Parts.OfType<IPackage> ()) inst.Unload ();
+			foreach (var state in addons)
+				if (partsByAddon.ContainsKey (state.Manifest.Identity.Id) || nodesByAddon.ContainsKey (state.Manifest.Identity.Id))
+					UnloadAddon (state);
 		}
 
 		sealed class Context : IAddonContext {

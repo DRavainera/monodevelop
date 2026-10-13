@@ -37,6 +37,14 @@ namespace MonoDevelop.AvaloniaAddons
 				Add (x);
 		}
 
+		/// <summary>Removes parts (by reference) from the composition — used when an
+		/// add-in is disabled or uninstalled at runtime.</summary>
+		public void RemoveRange (IEnumerable<object> toRemove)
+		{
+			foreach (var x in toRemove)
+				parts.Remove (x);
+		}
+
 		public IEnumerable<object> GetExports (Type contractType, string contractName = null)
 		{
 			foreach (var p in parts) {

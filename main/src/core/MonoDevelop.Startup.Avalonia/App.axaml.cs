@@ -25,8 +25,13 @@ public partial class App : Application
 
 	public override void OnFrameworkInitializationCompleted ()
 	{
-		// New Avalonia add-in host (Mono.Addins stays with the GTK IDE).
-		var addons = new MonoDevelop.AvaloniaAddons.AddonHost (Program.AddonsDirectory);
+		// New Avalonia add-in host (Mono.Addins stays with the GTK IDE). User installs
+		// land in Program.UserAddinsDirectory, outside the shipped tree.
+		var addons = new MonoDevelop.AvaloniaAddons.AddonHost (Program.AddonsDirectory, Program.UserAddinsDirectory);
+		// Persist the disabled/uninstalled ids in the same per-user property store as
+		// the rest of the settings (MonoDevelopProperties.xml), so the choices survive
+		// a restart.
+		addons.StateStore = new ShellAddonUserState ();
 		addons.Discover ();
 		addons.LoadAll ();
 		Addins = addons;
@@ -34,10 +39,10 @@ public partial class App : Application
 		// backend (the host gates it by the manifest "os" field, so at most one
 		// registers per OS).
 		Platform = addons.Parts.OfType <MonoDevelop.AvaloniaAddons.IPlatformHooks> ().FirstOrDefault ();
-		Console.WriteLine ($"[avalonia-addons] root={addons.RootDirectory} discovered={addons.Addons.Count}");
+		Console.WriteLine ($"[avalonia-addons] root={addons.RootDirectory} userRoot={addons.UserRootDirectory} discovered={addons.Addons.Count}");
 		Console.WriteLine ($"[avalonia-addons] platform={Platform?.Name ?? "(none)"} monospace={Platform?.DefaultMonospaceFont ?? "-"}");
 		foreach (var a in addons.Addons)
-			Console.WriteLine ($"[avalonia-addons] {a.Manifest.Identity.Id} v{a.Manifest.Identity.Version} loaded={a.Loaded}{(a.Error is null ? "" : " error=" + a.Error)}");
+			Console.WriteLine ($"[avalonia-addons] {a.Manifest.Identity.Id} v{a.Manifest.Identity.Version} loaded={a.Loaded} enabled={a.Enabled}{(a.Superseded ? " superseded" : "")}{(a.Error is null ? "" : " error=" + a.Error)}");
 		foreach (var path in addons.Extensions.ExtensionPoints)
 			Console.WriteLine ($"[avalonia-addons] ep {path} nodes={addons.Extensions.GetExtensionNodes (path).Count}");
 
@@ -53,4 +58,13 @@ public partial class App : Application
 
 		base.OnFrameworkInitializationCompleted ();
 	}
+}
+
+/// <summary>Routes the add-in host's per-user state (disabled/uninstalled ids) to the
+/// legacy property store (MonoDevelopProperties.xml); the Add-ons module is standalone,
+/// so the shell provides the persistence.</summary>
+sealed class ShellAddonUserState : MonoDevelop.AvaloniaAddons.IAddonUserState
+{
+	public string Get (string key) => MonoDevelop.Ide.Services.SettingsStore.GetString (key);
+	public void Set (string key, string value) => MonoDevelop.Ide.Services.SettingsStore.SetString (key, value);
 }

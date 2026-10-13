@@ -40,6 +40,16 @@ namespace MonoDevelop.AvaloniaAddons
 			list.Add (node);
 		}
 
+		/// <summary>Removes a previously added node (by reference) — used when its
+		/// add-in is disabled or uninstalled at runtime.</summary>
+		public void RemoveNode (string path, AddonExtensionNode node)
+		{
+			if (string.IsNullOrEmpty (path) || node is null)
+				return;
+			if (nodes.TryGetValue (path, out var list))
+				list.Remove (node);
+		}
+
 		public IReadOnlyList<AddonExtensionNode> GetExtensionNodes (string path)
 			=> path is not null && nodes.TryGetValue (path, out var list) ? list : Array.Empty<AddonExtensionNode> ();
 
