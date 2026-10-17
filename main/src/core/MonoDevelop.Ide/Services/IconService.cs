@@ -212,6 +212,12 @@ public static class IconService
 		return null;
 	}
 
+	/// <summary>Returns the PNG file ImageService would pick for a stock id under the
+	/// current theme (plain, not disabled, scale 1). Lets non-Avalonia consumers
+	/// (the Xwt-embedded tree) load the same PNG by file path.</summary>
+	public static string? ResolveFilePath (string stockId)
+		=> ResolveFile (stockId, Application.Current?.ActualThemeVariant == ThemeVariant.Dark, false, 1);
+
 	/// <summary>Returns the PNG file that ImageService would pick for a stock id.</summary>
 	static string? ResolveFile (string stockId, bool dark, bool disabled, int scale)
 	{
@@ -328,6 +334,10 @@ public static class IconService
 				if (!File.Exists (addinXml))
 					return parsedStockMap = new Dictionary<string, string> ();
 				var map = new Dictionary<string, string> ();
+				// Some stock ids declare a Menu (16 px) + Dnd (32 px) pair; the 16 px
+				// resource is what ResolveFile serves into 16 px UI cells, so it must
+				// win. Dnd entries only act as fallback for ids without a Menu entry.
+				var dndFallback = new Dictionary<string, string> ();
 				var doc = System.Xml.Linq.XDocument.Load (addinXml);
 				foreach (var el in doc.Descendants ("StockIcon")) {
 					var id = (string?)el.Attribute ("stockid");
@@ -335,10 +345,16 @@ public static class IconService
 					if (string.IsNullOrEmpty (id) || string.IsNullOrEmpty (res))
 						continue;
 					// resource may carry a subdirectory prefix (add-in relative)
-					map[id] = Path.GetFileName (res!).EndsWith (".png", StringComparison.OrdinalIgnoreCase)
+					var baseRes = Path.GetFileName (res!).EndsWith (".png", StringComparison.OrdinalIgnoreCase)
 						? res! [..^4]
 						: res!;
+					if ((string?)el.Attribute ("size") == "Dnd")
+						dndFallback[id] = baseRes;
+					else
+						map[id] = baseRes;
 				}
+				foreach (var kv in dndFallback)
+					map.TryAdd (kv.Key, kv.Value);
 				parsedStockMap = map;
 			} catch {
 				parsedStockMap = new Dictionary<string, string> ();

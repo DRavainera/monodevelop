@@ -91,7 +91,9 @@ namespace MonoDevelop.Ide.Desktop
 			return Xwt.Toolkit.CurrentEngine;
 		}
 
-		public string GetMimeTypeForUri (string uri)
+		// Virtual so the Avalonia platform add-ins can swap the lookup for their
+		// catalog (the GTK IDE never overrides it: same behaviour as before).
+		public virtual string GetMimeTypeForUri (string uri)
 		{
 			if (!String.IsNullOrEmpty (uri)) {
 				MimeTypeNode mt = MimeTypeCatalog.Instance.FindMimeTypeForFile (uri);
@@ -114,7 +116,9 @@ namespace MonoDevelop.Ide.Desktop
 			return "application/octet-stream";
 		}
 
-		public string GetMimeTypeDescription (string mimeType)
+		// Virtual: the Avalonia platform add-ins resolve descriptions through their
+		// mime catalog (the GTK IDE never overrides it).
+		public virtual string GetMimeTypeDescription (string mimeType)
 		{
 			if (mimeType == "text/plain")
 				return GettextCatalog.GetString ("Text file");

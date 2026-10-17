@@ -52,6 +52,15 @@ namespace MonoDevelop.Platform
 		// IPlatformHooks surface for the shell (the base OpenFolder takes a FilePath).
 		public void OpenFolder (string path) => OpenFolder (new FilePath (path), new FilePath [0]);
 
+		// Real mime lookup for the Avalonia shell: the shared catalog (built-in table
+		// + the add-ins' /MonoDevelop/Core/MimeTypes manifest nodes). The inherited
+		// PlatformService version leans on the GTK MimeTypeCatalog, which stays empty
+		// without Mono.Addins (the --old-gui world), so it would only ever answer
+		// text/plain or application/octet-stream.
+		public override string GetMimeTypeForUri (string uri) => MimeCatalog.GetMimeTypeForFile (uri);
+
+		public override string GetMimeTypeDescription (string mimeType) => MimeCatalog.GetMimeTypeDescription (mimeType);
+
 		public override bool CanOpenTerminal => true;
 
 		public override void OpenTerminal (FilePath directory, IDictionary<string, string> environmentVariables, string title)

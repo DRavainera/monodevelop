@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace MonoDevelop.AvaloniaAddons.Manifests
@@ -88,5 +89,47 @@ namespace MonoDevelop.AvaloniaAddons.Manifests
 		[JsonPropertyName ("icon")] public string Icon { get; set; } = "";
 		[JsonPropertyName ("className")] public string ClassName { get; set; }
 		[JsonPropertyName ("childId")] public string ChildId { get; set; }
+
+		// /MonoDevelop/Core/MimeTypes nodes (legacy MimeTypeNode shape): the mime
+		// type's base type, whether it is a text format and the file patterns it
+		// supports ("*.cs" globs or bare names like "Makefile", "|" separated).
+		// Older manifests carry a single legacy "pattern" and a comma-separated
+		// "fileExtensions" string, so the converter accepts both shapes.
+		[JsonPropertyName ("baseType")] public string BaseType { get; set; } = "";
+		[JsonPropertyName ("isText")] public bool IsText { get; set; }
+		[JsonPropertyName ("pattern")] public string Pattern { get; set; } = "";
+		[JsonPropertyName ("fileExtensions")]
+		[JsonConverter (typeof (FileExtensionsJsonConverter))]
+		public List<string> FileExtensions { get; set; } = new ();
+	}
+
+	/// <summary>Accepts the file-pattern list either as a JSON array of strings or as
+	/// a (comma-separated) string, the two shapes the shipped manifests use.</summary>
+	public sealed class FileExtensionsJsonConverter : JsonConverter<List<string>>
+	{
+		public override List<string> Read (ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+		{
+			var list = new List<string> ();
+			if (reader.TokenType == JsonTokenType.String) {
+				var raw = reader.GetString () ?? "";
+				foreach (var part in raw.Split (',')) {
+					var p = part.Trim ();
+					if (p.Length > 0)
+						list.Add (p);
+				}
+				return list;
+			}
+			while (reader.Read () && reader.TokenType != JsonTokenType.EndArray) {
+				if (reader.TokenType == JsonTokenType.String) {
+					var p = reader.GetString ();
+					if (p is { Length: > 0 })
+						list.Add (p);
+				}
+			}
+			return list;
+		}
+
+		public override void Write (Utf8JsonWriter writer, List<string> value, JsonSerializerOptions options)
+			=> throw new NotSupportedException ();
 	}
 }

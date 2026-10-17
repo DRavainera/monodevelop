@@ -39,8 +39,13 @@ public partial class App : Application
 		// backend (the host gates it by the manifest "os" field, so at most one
 		// registers per OS).
 		Platform = addons.Parts.OfType <MonoDevelop.AvaloniaAddons.IPlatformHooks> ().FirstOrDefault ();
+		// Mime/icon catalog: merge the /MonoDevelop/Core/MimeTypes nodes the loaded
+		// add-ins declare (e.g. CSharpBinding's text/x-csharp) into the shared table.
+		MonoDevelop.AvaloniaAddons.MimeCatalog.SetExtensionRegistry (addons.Extensions);
 		Console.WriteLine ($"[avalonia-addons] root={addons.RootDirectory} userRoot={addons.UserRootDirectory} discovered={addons.Addons.Count}");
 		Console.WriteLine ($"[avalonia-addons] platform={Platform?.Name ?? "(none)"} monospace={Platform?.DefaultMonospaceFont ?? "-"}");
+		// B.4 probe: mime/icon resolution through the hooks (QA smoke asserts it).
+		Console.WriteLine ($"[avalonia-addons] mime .cs={Platform?.GetMimeTypeForUri ("probe.cs") ?? "-"} icon .cs={Platform?.GetIconIdForFile ("probe.cs") ?? "-"} desc .cs={Platform?.GetMimeTypeDescription (Platform?.GetMimeTypeForUri ("probe.cs") ?? "") ?? "-"}");
 		foreach (var a in addons.Addons)
 			Console.WriteLine ($"[avalonia-addons] {a.Manifest.Identity.Id} v{a.Manifest.Identity.Version} loaded={a.Loaded} enabled={a.Enabled}{(a.Superseded ? " superseded" : "")}{(a.Error is null ? "" : " error=" + a.Error)}");
 		foreach (var path in addons.Extensions.ExtensionPoints)

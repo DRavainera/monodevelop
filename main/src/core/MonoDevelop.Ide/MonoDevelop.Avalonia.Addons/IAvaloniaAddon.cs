@@ -84,6 +84,16 @@ namespace MonoDevelop.AvaloniaAddons
 		void OpenFolder (string path);
 
 		string GetMimeTypeForUri (string uri);
+
+		// Mime/icon lookups (B.4): the defaults resolve through the shared mime
+		// catalog, so platform add-ins compiled before these members existed (stale
+		// Mac/Windows builds) answer without a class-side implementation. A platform
+		// add-in may still override any of them for OS-specific resolution.
+		string GetMimeTypeDescription (string mimeType) => MimeCatalog.GetMimeTypeDescription (mimeType);
+
+		string GetIconIdForFile (string fileName) => MimeCatalog.GetIconIdForFile (fileName);
+
+		string GetIconIdForType (string mimeType) => MimeCatalog.GetIconIdForType (mimeType);
 	}
 
 	public interface ICommandService

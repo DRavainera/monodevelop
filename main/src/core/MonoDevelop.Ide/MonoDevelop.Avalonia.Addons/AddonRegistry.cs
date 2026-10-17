@@ -11,6 +11,10 @@ namespace MonoDevelop.AvaloniaAddons
 		IReadOnlyList<AddonExtensionNode> GetExtensionNodes (string path);
 		bool HasExtensionPoint (string path);
 		IReadOnlyList<string> ExtensionPoints { get; }
+
+		/// <summary>Monotonically increasing mutation counter (cache invalidation for
+		/// consumers that snapshot the nodes, e.g. the mime catalog).</summary>
+		int Version { get; }
 	}
 
 	/// <summary>In-memory registry of extension points + nodes contributed by add-ins.</summary>
@@ -22,6 +26,11 @@ namespace MonoDevelop.AvaloniaAddons
 
 		public IReadOnlyList<string> ExtensionPoints => order;
 
+		/// <summary>Monotonically increasing mutation counter: consumers that cache a
+		/// snapshot of the nodes (e.g. the mime catalog) can tell when a rebuild is due
+		/// without enumerating anything.</summary>
+		public int Version { get; private set; }
+
 		public void DeclareExtensionPoint (string path)
 		{
 			if (string.IsNullOrEmpty (path) || !points.Add (path))
@@ -29,16 +38,18 @@ namespace MonoDevelop.AvaloniaAddons
 			order.Add (path);
 			if (!nodes.TryGetValue (path, out _))
 				nodes [path] = new List<AddonExtensionNode> ();
+			Version++;
 		}
 
 		public void AddNode (string path, AddonExtensionNode node)
 		{
 			if (string.IsNullOrEmpty (path) || node is null)
 				return;
-			if (!nodes.TryGetValue (path, out var list))
-				nodes [path] = list = new List<AddonExtensionNode> ();
-			list.Add (node);
-		}
+		if (!nodes.TryGetValue (path, out var list))
+			nodes [path] = list = new List<AddonExtensionNode> ();
+		list.Add (node);
+		Version++;
+	}
 
 		/// <summary>Removes a previously added node (by reference) — used when its
 		/// add-in is disabled or uninstalled at runtime.</summary>
@@ -48,6 +59,8 @@ namespace MonoDevelop.AvaloniaAddons
 				return;
 			if (nodes.TryGetValue (path, out var list))
 				list.Remove (node);
+			if (list is not null)
+				Version++;
 		}
 
 		public IReadOnlyList<AddonExtensionNode> GetExtensionNodes (string path)
@@ -64,12 +77,15 @@ namespace MonoDevelop.AvaloniaAddons
 		public const string GlobalOptionsDialog = "/MonoDevelop/Ide/GlobalOptionsDialog";
 		/// <summary>Per-mime-type policy pages (legacy MimeTypePolicyPanels).</summary>
 		public const string MimeTypePolicyPanels = "/MonoDevelop/ProjectModel/Gui/MimeTypePolicyPanels";
+		/// <summary>Mime-type to file-extension mappings (legacy /MonoDevelop/Core/MimeTypes,
+		/// consumed by the mime catalog behind the platform hooks).</summary>
+		public const string MimeTypes = "/MonoDevelop/Core/MimeTypes";
 		public const string StartupHandlers = "/MonoDevelop/Ide/StartupHandlers";
 		public const string Pads = "/MonoDevelop/Ide/Pads";
 		public const string Docking = "/MonoDevelop/Ide/Docking";
 
 		public static IEnumerable<string> All { get; } = new [] {
-			GlobalOptionsDialog, MimeTypePolicyPanels, StartupHandlers, Pads, Docking,
+			GlobalOptionsDialog, MimeTypePolicyPanels, MimeTypes, StartupHandlers, Pads, Docking,
 		};
 	}
 }

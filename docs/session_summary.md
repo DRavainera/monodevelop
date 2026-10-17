@@ -1750,7 +1750,47 @@ Diferidos (fuera de las oleadas): backends debugger (Gdb, Soft, VSCodeDebugProto
 
 **Pendiente / follow-up**:
 
-- **B.4** (siguiente task del Track B): MIME/iconos de plataforma en los hooks de plataforma.
+- **B.4** (completada el 2026-10-17): MIME/iconos de plataforma en los hooks — sección siguiente.
 - Feedback de errores en el diálogo (resto de H6): los fallos de `SetEnabled`/`Update`/`Install*` quedan hoy solo en el log (línea `[addins]` + estado de la fila); mostrarlos con diálogo de error.
 - `Update` con ganador shippado es limpieza de sesión (no escribe marker a disco) — documentado en el código; decidir si se quiere persistir.
 - `InstallFromFile` solo acepta `.zip` (v1); el uninstall de shippados es por id (oculta todas sus versiones).
+
+### Track B — B.4: MIME/iconos de plataforma en los hooks de plataforma de la shell Avalonia (2026-10-17)
+
+**Contexto**: la shell Avalonia no tenía resolución real de MIME/iconos: `PlatformService.GetMimeTypeForUri`/`GetMimeTypeDescription` se apoyan en el `MimeTypeCatalog` de GTK (vacío sin Mono.Addins → solo respondían `text/plain`/`application/octet-stream`) y el árbol usaba un switch local por extensiones (`FileIconResource`/`FileIconId` en `MainWindow.axaml.cs`). B.4 lleva la resolución MIME + iconos a los hooks de plataforma (`IPlatformHooks` del Track 1) con un catálogo compartido alimentado desde los propios manifiestos de los add-ins (misma fuente de verdad que el extension point legacy `/MonoDevelop/Core/MimeTypes`).
+
+**Cambios** (10 ficheros en el repo principal + 2 en el submódulo xwt):
+
+1. `MonoDevelop.Avalonia.Addons/MimeCatalog.cs` (nuevo, 312 líneas): catálogo MIME/iconos de la shell. `MimeEntry` (id, descripción, icono stock, baseType, isText, patrones). Construido desde una tabla estática que espeja las declaraciones core legacy + formatos modernos, **superpuesta** por los nodos `/MonoDevelop/Core/MimeTypes` que declaran los add-ins en sus manifiestos (el overlay gana — mismo contrato que el extension point legacy; CSharpBinding sigue siendo dueño de `text/x-csharp`). `SetExtensionRegistry(registry)` lo cablea la shell; invalidación de caché por el contador `Version` del registro. APIs: `GetMimeTypeForFile`, `GetMimeTypeDescription`, `GetIconIdForFile`, `GetIconIdForType`.
+2. `IAvaloniaAddon.cs` (`IPlatformHooks`): + `GetMimeTypeDescription`, `GetIconIdForFile`, `GetIconIdForType` con **implementación por defecto** (default interface methods) que resuelve vía `MimeCatalog` — los add-ins de plataforma compilados antes de estos miembros (builds Mac/Windows stale) siguen funcionando sin implementación de lado clase; un add-in de plataforma puede sobreescribirlos para resolución específica de SO.
+3. `LinuxPlatform.cs` (add-in de plataforma): sobreescribe `GetMimeTypeForUri` + `GetMimeTypeDescription` → `MimeCatalog` (la versión heredada se apoyaba en el `MimeTypeCatalog` de GTK, que queda vacío sin Mono.Addins).
+4. `PlatformService.cs` (capa compartida): `GetMimeTypeForUri`/`GetMimeTypeDescription` → `virtual`. El IDE GTK **no** los sobreescribe: comportamiento idéntico al de antes (regla 18.4, la ruta `--old-gui` no se toca).
+5. `AddonManifest.cs` (manifiesto del host): `MimeTypeNode` + `baseType`, `isText`, `pattern`, `fileExtensions` (forma de `MimeTypeNode` legacy) + `FileExtensionsJsonConverter` que acepta la lista de patrones como array JSON **o** como string comma-separated (las dos formas que usan los manifiestos shipped).
+6. `AddonRegistry.cs` (host): + `Version` (contador monótono de mutaciones para invalidación de caché de consumidores que snapshotean nodos) + extension point `ExtensionPoints.MimeTypes = "/MonoDevelop/Core/MimeTypes"` (incluido en `All`).
+7. `App.axaml.cs` (shell): `MimeCatalog.SetExtensionRegistry (addons.Extensions)` (funde los nodos de los add-ins cargados en el catálogo) + línea de sonda al log del smoke: `[avalonia-addons] mime .cs=… icon .cs=… desc .cs=…` (el smoke de QA lo aserta).
+8. `MonoDevelop.CSharpBinding.avaloniaaddon.json`: + nodo `/MonoDevelop/Core/MimeTypes` — `text/x-csharp` (.cs/.csx, label "C# source code", icono `md-file-source`, isText) y `application/x-csproject` (.csproj, icono `md-project`, baseType `application/x-msbuild`).
+9. `MainWindow.axaml.cs` (árbol): `FileIconResource`/`FileIconId` preguntan primero a los hooks de plataforma (`App.Platform?.GetIconIdForFile`); si el hook responde un icono id conocido (`IconService.IsKnown`), se usa (`IconService.ResolveFilePath` para la ruta del PNG en el set de iconos). El switch por extensiones queda solo como fallback sin-plataforma/unknown.
+10. `IconService.cs`: + `ResolveFilePath(stockId)` público (el fichero PNG que `ImageService` elegiría bajo el tema actual — permite a consumidores no-Avalonia cargar el mismo PNG por ruta de fichero).
+
+**Fixes del pipeline de iconos** (hallados y validados durante el QA de B.4):
+
+11. `IconService.cs` (fix #1, `ParsedStockMap`): bug last-write-wins — `StockIcons.addin.xml` declara pares Menu(16px)+Dnd(32px) y el 32px ganaba → celdas de 16px degradadas. Ahora: las entradas Menu (16px) ganan; las Dnd solo actúan como fallback para ids sin entrada Menu.
+12. `Xwt.Avalonia/DrawingBackends.cs` (fix #2a, submódulo xwt): `GetBitmap` size-aware (antes colapsaba a 1×1 para imágenes con size explícito).
+13. `Xwt.Avalonia/ListBackends.cs` (fix #2b, submódulo xwt): `ImageToSource` llamaba la sobrecarga 1-args `GetBitmap(backend)` (→ `Size.Zero` → 1×1 cacheado en `d.Bitmap`); ahora llama `GetBitmap(backend, image.Size)`.
+
+**Cómo validar** (evidencia completa en `~/opencode/qa_b4/`, índice `qa_report_b4.md`):
+
+1. **Builds 0 errores**: shell (`MonoDevelop.Startup.Avalonia.csproj`) y submódulo xwt.
+2. **Smoke `--addins` + `--sln`**: `discovered=32`, loaded 30/32 (2 = Mac/WindowsPlatform por OS gate), línea de sonda exacta `mime .cs=text/x-csharp icon .cs=md-file-source desc .cs=C# source code`, `Loaded QaB4.sln`, 0 `Exception` en el log.
+3. **Validación arbitral de iconos (P3e)**: 17/17 filas del árbol de QaB4 correctas en build limpio — cadena PNG→SKBitmap→WriteableBitmap→pantalla fiel (src==wb byte-identical 17/17; SAD pantalla 0–39; cross-identificación sin intercambios; variantes `~dark` reales bajo tema oscuro).
+4. **Regresión `--old-gui` (regla 18.4)**: proceso legacy vivo, ventana renderizada, árbol de QaB4 pintado con iconos, 0 TypeLoad/MissingMethod/GetMimeType. Nota de entorno: los smokes en `env -i` necesitan `DOTNET_ROOT=~/.dotnet` para que el apphost `MonoDevelop.MSBuildBuilder.exe` arranque; sin él, los loads de sln reportan `Connection failed`/restore errors no relacionados con el código.
+5. **avprobe** (probe del pipeline real de celda en app Avalonia): 5/5 `PROBE DONE fails=0`.
+
+**QA (§18.5)**: Tester QA Senior, iteraciones P1–P5. P1 PASS (builds + harness). P2 PASS (smokes). P3: dos bugs reales hallados y corregidos — fix #1 (last-write-wins 32px) y fix #2 (pipeline del árbol colapsaba a 1×1; en dos complementos: backend size-aware + llamada 2-args en `ImageToSource`) — cerrado en **P3e con 17/17** (la iteración P3d fue un FAIL a falso: el analista usó referencias BASE en vez de las variantes `~dark` y geometría obsoleta; la captura "fallada" resultó píxel-identical a la del build limpio). P4: core dump del probe QA → **resuelto, no es bug de la app** (era del probe: un `using var conv` dentro de un bloque `if` liberaba el backend antes de tocar el `SKBitmap` crudo extraído por reflection; el clone byte-a-byte crasheaba 5/5 y el probe corregido 0/5; la app opera estable y su pipeline no libera el backend antes de pintar). P5: regresión `--old-gui` PASS + checks estáticos limpios (git diff = solo B.4 + los 3 fixes; sin código de diagnóstico residual). **Veredicto final: POSITIVO — sin hallazgos abiertos.**
+
+**Cierre**: B.4 completa: los hooks de plataforma de la shell Avalonia son dueños de la resolución MIME + iconos real (catálogo compartido + manifiestos por add-in; CSharpBinding dueño de `text/x-csharp`), el árbol muestra iconos por tipo desde el set de iconos (variantes `~dark` bajo tema oscuro) y la ruta `--old-gui` queda sin efecto (los métodos de `PlatformService` solo pasan a `virtual`; el IDE GTK no los sobreescribe). Submódulo xwt: 2 ficheros (fixes #2a/#2b) commiteados dentro del submódulo (rama `net10`) y puntero actualizado en el repo principal.
+
+**Pendiente / follow-up**:
+
+- Extender el catálogo a policy panels por mime type: el extension point `/MonoDevelop/ProjectModel/Gui/MimeTypePolicyPanels` ya existe en el registro del host pero sin consumidores.
+- El campo `icon` de los nodos MimeTypes es un stock id (ej. `md-file-source`); si algún manifiesto quisiera un resource path directo haría falta convención.

@@ -4097,10 +4097,17 @@ public partial class MainWindow : Window
 		}
 	}
 
-	// DesktopService.GetIconForFile equivalent → embedded icon resource name.
+	// DesktopService.GetIconForFile equivalent → embedded icon resource name. The
+	// platform hooks (B.4) own the mime→icon resolution; the extension switch below
+	// only survives as the no-platform fallback.
 	static string FileIconResource (string fileName)
 	{
-		var ext = Path.GetExtension (fileName).ToLowerInvariant ();			return ext switch {
+		if (App.Platform?.GetIconIdForFile (fileName) is { } iconId) {
+			var file = MonoDevelop.Ide.Services.IconService.ResolveFilePath (iconId);
+			if (file is not null)
+				return System.IO.Path.GetFileName (file);
+		}
+		var ext = System.IO.Path.GetExtension (fileName).ToLowerInvariant ();			return ext switch {
 				".cs" => "file-source-16.png",
 				".csproj" or ".props" or ".targets" => "project-16.png",
 				".sln" => "solution-16.png",
@@ -4124,9 +4131,14 @@ public partial class MainWindow : Window
 		}
 	}
 
-	// DesktopService.GetIconForFile equivalent over the migrated icon set.
+	// DesktopService.GetIconForFile equivalent over the migrated icon set. The
+	// platform hooks (B.4) own the mime→icon resolution; the extension switch below
+	// only survives as the no-platform / unknown-icon fallback.
 	static string FileIconId (string fileName)
 	{
+		if (App.Platform?.GetIconIdForFile (fileName) is { } iconId &&
+			MonoDevelop.Ide.Services.IconService.IsKnown (iconId))
+			return iconId;
 		var ext = Path.GetExtension (fileName).ToLowerInvariant ();
 		return ext switch {
 			".cs" => "md-file-source",

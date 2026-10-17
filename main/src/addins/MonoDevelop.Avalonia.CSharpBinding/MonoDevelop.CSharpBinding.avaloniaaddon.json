@@ -15,6 +15,10 @@
   "dependencies": [ { "id": "MonoDevelop.Ide", "versionRange": "[9.0,*)" } ],
   "autoLoad": true,
   "extensions": {
+    "/MonoDevelop/Core/MimeTypes": [
+      { "id": "text/x-csharp", "label": "C# source code", "icon": "md-file-source", "isText": true, "fileExtensions": [ "*.cs", "*.csx" ] },
+      { "id": "application/x-csproject", "label": "C# project file", "icon": "md-project", "baseType": "application/x-msbuild", "fileExtensions": [ "*.csproj" ] }
+    ],
     "/MonoDevelop/Ide/GlobalOptionsDialog/TextEditor/Behavior": [
       { "id": "CSharpOnTheFlyFormattingPanel", "label": "C#", "icon": "md-prefs-code-formatting", "className": "MonoDevelop.SourceEditor.OptionPanels.OnTheFlyFormattingPanel" }
     ],
