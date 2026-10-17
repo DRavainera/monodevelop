@@ -54,7 +54,7 @@ Dejar en verde el build del núcleo de MonoDevelop en Linux usando `dotnet msbui
 - Límite: ~24 proyectos activos + 0 errores alcanzable; el resto es deuda estructural (toolchain legacy) no programática.
 
 ## Next steps (post-decisión)
-1. (Pendiente de aprobar) Commit bloque 1 "núcleo verde": SourceEditor2 2 archivos, CocoaExtras.cs + TextEditor.csproj, CSharpBinding.csproj, MDBuildTasks.targets, mdmonitor.csproj (Cairo), sln (podas), summary. Push a `origin`.
+1. ~~(Pendiente de aprobar) Commit bloque 1 "núcleo verde": SourceEditor2 2 archivos, CocoaExtras.cs + TextEditor.csproj, CSharpBinding.csproj, MDBuildTasks.targets, mdmonitor.csproj (Cairo), sln (podas), summary. Push a `origin`.~~ → **HECHO**: commit `07763ed47c` ("Make MonoDevelop core build on Linux with dotnet msbuild (EXIT=0)", incluye CocoaExtras.cs, CSharpBinding.csproj, MDBuildTasks.targets, mdmonitor.csproj, Main.sln), en la rama del worktree.
 2. Report final con cluster de deuda.
 3. Opcional: `scripts/configure` y otros residuos.
 
@@ -197,7 +197,7 @@ Dejar en verde el build del núcleo de MonoDevelop en Linux usando `dotnet msbui
 - Repro GUI (XTEST): menú Proyecto (~Alt+P) → ítem "Administrar paquetes NuGet" → diálogo `Administrar paquetes NuGet: solución` (0xe0057d). **Sin** error de TypeLoad ni "Unable to load the service index" en `md_run_nuget.log`.
 - Deuda nueva: `Unhandled Exception in HighlightingUsagesExtension` (NRE en `ResolveAsync`) al interactuar con el editor.
 
-**Pendientes**: ~~coloreado de sintaxis~~ (FIX #6, abajo), ~~errores MEF `IDiagnosticService`+`ICodeFixService`~~ (FIX #8, abajo), NRE `HighlightingUsagesExtension` (FIX #6c, abajo), `MonoDevelop.MSBuildBuilder.exe` ausente, tema murrine.
+**Pendientes**: ~~coloreado de sintaxis~~ (FIX #6, abajo), ~~errores MEF `IDiagnosticService`+`ICodeFixService`~~ (FIX #8, abajo), NRE `HighlightingUsagesExtension` (FIX #6c, abajo), `MonoDevelop.MSBuildBuilder.exe` ausente (resuelto luego: presente en main/build y arrancando en net10; verificado 2026-10-17), tema murrine.
 
 ## 2026-09-16 (noche) — Fix #6: coloreado de sintaxis del editor + guard NRE HighlightUsages
 
@@ -224,7 +224,7 @@ Dejar en verde el build del núcleo de MonoDevelop en Linux usando `dotnet msbui
 - Quedan (siguiente fix): `ResultsEditorExtension`/`CodeActionEditorExtension` fallan al instanciarse por falta de exports MEF `IDiagnosticService` e `ICodeFixService` (la cadena del editor se recupera por nodo, pero conviene proveerlos o stubbarlos).
 - Artefactos: diálogo File→Open NO acepta rutas tipeadas (files-asociations de GTK filtran: "Archivo no encontrado: ...7tmp7..." — los `/` llegan como `7`); abrir vía arg posicional funciona.
 
-**Pendientes**: errores MEF `IDiagnosticService`+`ICodeFixService` (ResultsEditorExtension / CodeActionEditorExtension) → resuelto luego (FIX #8), `MonoDevelop.MSBuildBuilder.exe` ausente, tema murrine.
+**Pendientes**: errores MEF `IDiagnosticService`+`ICodeFixService` (ResultsEditorExtension / CodeActionEditorExtension) → resuelto luego (FIX #8), `MonoDevelop.MSBuildBuilder.exe` ausente (resuelto luego: presente en main/build y arrancando en net10; verificado 2026-10-17), tema murrine.
 
 ## 2026-09-16 (noche) — Fix #7: perfil del usuario caía en ~/Documentos (SpecialFolder.Personal)
 
@@ -256,7 +256,7 @@ Dejar en verde el build del núcleo de MonoDevelop en Linux usando `dotnet msbui
 - **Pendiente nuevo detectado**: NRE en `QuickInfoProvider.GetQuickInfoAsync` (tooltip hover, vía editor nuevo) — separado de este fix.
 - **Nota de proceso**: la app muere silenciosamente si el proceso queda hijo del shell del tool; lanzar con `nohup setsid` para que sobreviva.
 
-**Pendientes**: NRE `QuickInfoProvider.GetQuickInfoAsync` (hover), `MonoDevelop.MSBuildBuilder.exe` ausente, tema murrine, evaluación de cargar proyecto (MSBuild SDK resolver).
+**Pendientes**: NRE `QuickInfoProvider.GetQuickInfoAsync` (hover), `MonoDevelop.MSBuildBuilder.exe` ausente (resuelto luego: presente en main/build y arrancando en net10; verificado 2026-10-17), tema murrine, evaluación de cargar proyecto (MSBuild SDK resolver).
 
 ## 2026-09-17 — Fix #9: NRE en QuickInfoProvider.GetQuickInfoAsync (tooltip hover)
 
@@ -283,7 +283,7 @@ Dejar en verde el build del núcleo de MonoDevelop en Linux usando `dotnet msbui
 
 **Cobertura de referencias** (escáner System.Reflection.Metadata sobre 1036 dlls del árbol): los únicos faltantes son gaps preexistentes ya tolerados por carga perezosa (Humanizer, Elfie, SQLitePCLRaw.batteries_v2, MessagePack, ServiceHub.Resources/Telemetry); `System.Runtime.CompilerServices.Unsafe` lo provee el shared framework; WindowsBase/Presentation* solo afectan al camino WPF no usado en GTK.
 
-**Pendientes**: `MonoDevelop.MSBuildBuilder.exe` ausente, tema murrine, evaluación de cargar proyecto (MSBuild SDK resolver), integración real de quick-fixes (el shim inerte sigue; el `CodeFixService` real exige unificar identidad de tipos: `IThreadingContext`, `IEditorOptionsFactoryService`, ...).
+**Pendientes**: `MonoDevelop.MSBuildBuilder.exe` ausente (resuelto luego: presente en main/build y arrancando en net10; verificado 2026-10-17), tema murrine, evaluación de cargar proyecto (MSBuild SDK resolver), integración real de quick-fixes (el shim inerte sigue; el `CodeFixService` real exige unificar identidad de tipos: `IThreadingContext`, `IEditorOptionsFactoryService`, ...).
 
 ## 2026-09-17 — Migración del tooling: /tmp/opencode → ~/opencode
 
@@ -299,7 +299,7 @@ Dejar en verde el build del núcleo de MonoDevelop en Linux usando `dotnet msbui
 
 **Verificación (run 02:44, pid 612419)**: documento abierto, hovers OK, **0 "found 2"** (antes 37), 0 "Expected 1 export", 0 errores de creación de extensiones, 0 FATAL, 0 NRE; coloreado de sintaxis intacto (captura `~/opencode/unify_ef_final.png`: 3.201 colores). Los 92 "MEF composition error" restantes son **latentes** (sin excepción en runtime): parts reales de EditorFeatures que importan `IThreadingContext` (identidad del stub ≠ real) o servicios aún sin export (`IWorkspaceDiagnosticAnalyzerService`-family, `IPreviewService`). Desaparecerán al migrar los consumidores del fork al contrato real o al stagear las exports host que faltan.
 
-**Pendientes**: `MonoDevelop.MSBuildBuilder.exe` ausente, tema murrine, migración profunda de identidad de tipos (consumidores fork → tipos reales de EditorFeatures) para quick fixes/diagnostics reales.
+**Pendientes**: `MonoDevelop.MSBuildBuilder.exe` ausente (resuelto luego: presente en main/build y arrancando en net10; verificado 2026-10-17), tema murrine, migración profunda de identidad de tipos (consumidores fork → tipos reales de EditorFeatures) para quick fixes/diagnostics reales.
 
 ## 2026-09-17 — Fix #11: carga de proyectos desbloqueada (resolver de SDK de MSBuild)
 
@@ -692,10 +692,7 @@ documento + keywords).
   entre comandos; reactivar con `wmctrl -i -a 0x0260000f` antes de cada click.
 - **Artefactos de QA de agentes**: `~/opencode/` (no `/tmp/`, que es tmpfs).
   Scripts nuevos: `qa_searchpopup.sh`, `qa_padclose.sh`.
-- **M26 propuesto** (pendiente de aprobación): paridad de los 6 pads
-  placeholder, con recomendación de empezar por `documentoutline`, `classes` y
-  `codeissues` (reutilizan el índice de símbolos y el parser de diagnósticos ya
-  existentes). Detalle en `docs/interfaz-plan.md` § M26.
+- **M26** (~~propuesto, pendiente de aprobación~~ → **ejecutado**): paridad de pads placeholder — portados `documentoutline`, `classes` y `codeissues` (reutilizan el índice de símbolos y el parser de diagnósticos ya existentes); quedan como cáscara `help`, `toolbox` y `unittests` (frente A del inventario de trabajo abierto, `interfaz-plan.md`). Detalle en `docs/interfaz-plan.md` § M26.
 - Build del shell: 0 errores. Tests del editor: 16/16.
 
 ## 2026-10-02 — M26: paridad de pads `documentoutline`, `classes`, `codeissues`
@@ -919,8 +916,7 @@ Opciones a decidir: (a) referenciar el `MonoDevelop.Ide.dll` **ya compilado** en
 build del shell, o (c) guardas `#if AVALONIA_SHELL` en `CommandManager`/
 `KeyBindingManager` (invasivo, 378 errores de superficie).
 
-**Cierre**: commit de la Fase 1a (referencia a Core). Fase 1b pendiente de la
-decisión (a/b/c).
+**Cierre**: commit de la Fase 1a (referencia a Core). Fase 1b ~~pendiente de la decisión (a/b/c)~~ → **ejecutada con la opción (c)** (guardas `#if AVALONIA_SHELL`, sin GTK) — ver sección siguiente "2026-10-03 (b) — Key Bindings (Fase 1b): plan por pasos (opción c, sin GTK)".
 
 ## 2026-10-03 (b) — Key Bindings (Fase 1b): plan por pasos (opción c, sin GTK)
 
@@ -1386,7 +1382,7 @@ Hecho. Creados:
 ### Pendiente
 
 - Fase 4 del plan de migración de runtime/build (pipeline SDK; no forma parte de este blueprint de add-ins).
-- Completar MIME/iconos en los hooks de plataforma más allá del esqueleto.
+- Completar MIME/iconos en los hooks de plataforma más allá del esqueleto → **CERRADO en B.4 (2026-10-17)**: `MimeCatalog` + nodos `/MonoDevelop/Core/MimeTypes` de los manifiestos + iconos del árbol vía `IPlatformHooks`.
 
 ### Fase 4: oleadas de add-ins legacy → Avalonia (estado: oleada A completa)
 
@@ -1435,7 +1431,7 @@ Diferidos (fuera de las oleadas): backends debugger (Gdb, Soft, VSCodeDebugProto
 - Sin manifiestos en carpetas legacy: `find main/src/addins -name "*.avaloniaaddon.json"` solo devuelve carpetas `MonoDevelop.Avalonia.*`.
 - QA Senior (§18.5): **APTO**. Hallazgos: A-1 (ALTO) cierre §18.2 sin documentación/commit → resuelto con esta documentación (el commit queda pendiente de la decisión del operador); M-1 `LinuxPlatform.avaloniaaddon.json` con ID fantasma → pendiente de la migración GnomePlatform→LinuxPlatform; M-2 duplicado CSharpBinding → resuelto en esta limpieza; B-1 build frágil por MSBuild nodeReuse (ambiental, sin acción de código).
 
-**Pendiente de la Fase 4:** oleadas C–E y la decisión de diseño de la migración GnomePlatform→LinuxPlatform.
+**Pendiente de la Fase 4:** ~~oleadas C–E y la decisión de diseño de la migración GnomePlatform→LinuxPlatform.~~ → **CERRADO**: oleadas C, D y E completadas e informadas abajo (2026-10-06) y la migración GnomePlatform→LinuxPlatform completa (2026-10-06, sección "Migración GnomePlatform→LinuxPlatform" de este registro).
 
 #### Oleada B — informe (2026-10-06)
 
@@ -1471,7 +1467,7 @@ Diferidos (fuera de las oleadas): backends debugger (Gdb, Soft, VSCodeDebugProto
 
 **Verificación**: (1) en Linux los 4 csprojs de Mac/Windows compilan como no-op (0 errores, 0 artefactos en `main/build/`); (2) compilación forzada de las fuentes contra `MonoDevelop.{Core,Ide,Avalonia.Addons}.dll` + `Xwt.dll` (scratch `~/opencode/forced_build/`): **0 errores / 0 advertencias** en los 4 proyectos, y cada DLL contiene solo su clase; (3) build de la shell 0 errores; smoke `--addonmanager`: **35 discovered, 31 loaded=True** — en Linux los 4 add-ins Mac/Windows reportan `Assembly not found` (esperado por diseño: la DLL solo existe al compilar en su plataforma), los 2 Linux siguen `loaded=True`, `ep /MonoDevelop/Core/PlatformService nodes=1`, 0 FATAL. Log: `~/opencode/platform_smoke.log`.
 
-**Pendiente restante:** el enganche runtime GUI de la plataforma (puente entre el registro del host y `AddinManager`/`DesktopService`) es deuda de hooks compartida por las 3 plataformas (ver `docs/fase3-platform-hooks-cleanup.md`); MIME/iconos más allá del esqueleto.
+**Pendiente restante:** ~~el enganche runtime GUI de la plataforma (puente entre el registro del host y `AddinManager`/`DesktopService`) es deuda de hooks compartida por las 3 plataformas (ver `docs/fase3-platform-hooks-cleanup.md`); MIME/iconos más allá del esqueleto.~~ → **CERRADO**: el enganche runtime GUI de la shell Avalonia lo resolvió el Track 1 (2026-10-12: `IPlatformHooks` + `App.Platform` + activación real del add-in vía ALC; el lado GTK mantiene su wiring original vía `Mono.Addins`) y los MIME/iconos lo resolvió B.4 (2026-10-17).
 - QA (rol Tester QA Senior, §18.5): **APTO** (2 rondas). Ronda 1: NO APTO — 1 MEDIO (discrepancia de alcance del prompt QA: los cambios en los csproj de LinuxPlatform son parte aprobada y documentada de la migración de plataformas de esta sesión) + 4 BAJO → corregidos: `return null!` en `OnGetIconForFile` (CS8603 con `<Nullable>enable`), restaurados los 2 PDB sucios del submódulo `mono-addins`, eliminados bin/obj obsoletos de las 3 carpetas de plataforma. Ronda 2: **APTO** — compilación nullable 0 errores/0 advertencias (cada DLL solo con su clase), no-op en Linux sin artefactos en `main/build/`, smoke 35/31 con 0 FATAL; único BAJO no bloqueante (obj/ regenerado por el build de validación, gitignored) limpiado antes del commit. Artefactos: `~/opencode/qa_platforms/`.
 
 ### Oleada C — informe (2026-10-06)
@@ -1685,7 +1681,7 @@ Diferidos (fuera de las oleadas): backends debugger (Gdb, Soft, VSCodeDebugProto
 - **Para ratificar — dedupe (commit `43594c38e0`)**: se eliminaron los duplicados de nombre corto `LinuxPlatform.avaloniaaddon.json`/`LinuxPlatform.csproj` (+ Mac/Win). Eran **rotos**: id `MonoDevelop.LinuxPlatform` y assembly `MonoDevelop.LinuxPlatform.dll` (inexistente; el canónico es `MonoDevelop.Avalonia.LinuxPlatform.dll`). El operador pidió antes "sin borrados" para los archivos `LinuxPlatform`; se conservaron los canónicos (los que funcionan de verdad — activado en smoke). **Decisión**: ratificar el dedupe o restaurar los duplicados (recuperables por git).
 - **Rebuild al cambiar fuentes**: add-in de plataforma Linux → host (`dotnet build`); Mac → Darling (`trace_mac_build.sh`); Windows → WINE (`build_win_addin.sh`). Recuperación de degradación de Darling: sección anterior (2026-10-11).
 - **Convención de builds**: todo a `main/build/` (gitignored). El módulo Addons vive ahora en `main/src/core/MonoDevelop.Ide/MonoDevelop.Avalonia.Addons/` (no lo referencia `MonoDevelop.Ide.csproj` — ese proyecto mantiene lista de ficheros explícita, `EnableDefaultCompileItems=false`).
-- MIME/iconos en los hooks más allá del default heredado de `PlatformService`: diferido (como antes).
+- ~~MIME/iconos en los hooks más allá del default heredado de `PlatformService`: diferido (como antes).~~ → **CERRADO en B.4 (2026-10-17)**: `GetMimeTypeForUri`/`GetMimeTypeDescription` vía `MimeCatalog` (superficie del manifiesto `/MonoDevelop/Core/MimeTypes`) + `GetIconIdForFile`/`GetIconIdForType` en `IPlatformHooks`.
 
 ### Track B — B.5: mono-addins compila con .NET 10 (Cecil 0.10.1 → 0.11.6) (2026-10-12)
 

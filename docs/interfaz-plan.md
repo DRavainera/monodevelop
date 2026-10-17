@@ -2402,7 +2402,7 @@ Hecho. Creados:
 ### Pendiente
 
 - Fase 4 del plan de migración de runtime/build (pipeline SDK; no forma parte de este blueprint de add-ins).
-- Completar MIME/iconos en los hooks de plataforma más allá del esqueleto.
+- Completar MIME/iconos en los hooks de plataforma más allá del esqueleto → **CERRADO en B.4 (2026-10-17)**: `MimeCatalog` + nodos `/MonoDevelop/Core/MimeTypes` de los manifiestos + iconos del árbol vía `IPlatformHooks` (sección Track B — B.4).
 
 ### Fase 4: oleadas de add-ins legacy → Avalonia (estado: oleada A completa)
 
@@ -2451,7 +2451,7 @@ Diferidos (fuera de las oleadas): backends debugger (Gdb, Soft, VSCodeDebugProto
 - Sin manifiestos en carpetas legacy: `find main/src/addins -name "*.avaloniaaddon.json"` solo devuelve carpetas `MonoDevelop.Avalonia.*`.
 - QA Senior (§18.5): **APTO**. Hallazgos: A-1 (ALTO) cierre §18.2 sin documentación/commit → resuelto con esta documentación (el commit queda pendiente de la decisión del operador); M-1 `LinuxPlatform.avaloniaaddon.json` con ID fantasma → pendiente de la migración GnomePlatform→LinuxPlatform; M-2 duplicado CSharpBinding → resuelto en esta limpieza; B-1 build frágil por MSBuild nodeReuse (ambiental, sin acción de código).
 
-**Pendiente de la Fase 4:** oleadas C–E y la decisión de diseño de la migración GnomePlatform→LinuxPlatform.
+**Pendiente de la Fase 4:** ~~oleadas C–E y la decisión de diseño de la migración GnomePlatform→LinuxPlatform.~~ → **CERRADO**: oleadas C, D y E completadas e informadas abajo (2026-10-06) y la migración GnomePlatform→LinuxPlatform completa (2026-10-06; `session_summary.md` § Migración GnomePlatform→LinuxPlatform).
 
 #### Oleada B — informe (2026-10-06)
 
@@ -2489,7 +2489,7 @@ Diferidos (fuera de las oleadas): backends debugger (Gdb, Soft, VSCodeDebugProto
 
 **Verificación**: (1) en Linux los 4 csprojs de Mac/Windows compilan como no-op (0 errores, 0 artefactos en `main/build/`); (2) compilación forzada de las fuentes contra `MonoDevelop.{Core,Ide,Avalonia.Addons}.dll` + `Xwt.dll` (scratch `~/opencode/forced_build/`): **0 errores / 0 advertencias** en los 4 proyectos, y cada DLL contiene solo su clase; (3) build de la shell 0 errores; smoke `--addonmanager`: **35 discovered, 31 loaded=True** — en Linux los 4 add-ins Mac/Windows reportan `Assembly not found` (esperado por diseño: la DLL solo existe al compilar en su plataforma), los 2 Linux siguen `loaded=True`, `ep /MonoDevelop/Core/PlatformService nodes=1`, 0 FATAL. Log: `~/opencode/platform_smoke.log`.
 
-**Pendiente restante:** el enganche runtime GUI de la plataforma (puente entre el registro del host y `AddinManager`/`DesktopService`) es deuda de hooks compartida por las 3 plataformas (ver `docs/fase3-platform-hooks-cleanup.md`); MIME/iconos más allá del esqueleto.
+**Pendiente restante:** ~~el enganche runtime GUI de la plataforma (puente entre el registro del host y `AddinManager`/`DesktopService`) es deuda de hooks compartida por las 3 plataformas (ver `docs/fase3-platform-hooks-cleanup.md`); MIME/iconos más allá del esqueleto.~~ → **CERRADO**: el enganche runtime GUI de la shell Avalonia lo resolvió el Track 1 (2026-10-12: `IPlatformHooks` + `App.Platform` + activación real del add-in vía ALC; el lado GTK mantiene su wiring original vía `Mono.Addins`) y los MIME/iconos lo resolvió B.4 (2026-10-17).
 - QA (rol Tester QA Senior, §18.5): **APTO** (2 rondas). Ronda 1: NO APTO — 1 MEDIO (discrepancia de alcance del prompt QA: los cambios en los csproj de LinuxPlatform son parte aprobada y documentada de la migración de plataformas de esta sesión) + 4 BAJO → corregidos: `return null!` en `OnGetIconForFile` (CS8603 con `<Nullable>enable`), restaurados los 2 PDB sucios del submódulo `mono-addins`, eliminados bin/obj obsoletos de las 3 carpetas de plataforma. Ronda 2: **APTO** — compilación nullable 0 errores/0 advertencias (cada DLL solo con su clase), no-op en Linux sin artefactos en `main/build/`, smoke 35/31 con 0 FATAL; único BAJO no bloqueante (obj/ regenerado por el build de validación, gitignored) limpiado antes del commit. Artefactos: `~/opencode/qa_platforms/`.
 
 ### Oleada C — informe (2026-10-06)
@@ -2628,8 +2628,8 @@ Diferidos (fuera de las oleadas): backends debugger (Gdb, Soft, VSCodeDebugProto
 
 **Pendiente/deferido**:
 
-- Acciones Install/Update/Enable/Disable/Uninstall/Install from file requieren API en el nuevo host (repositorio remoto + instalación + habilitación) — las pestañas y la UI están listas sobre los nuevos componentes.
-- El `CecilReflector` de `main/external/mono-addins` sigue incompatible con el Cecil 0.10.1 del build: afecta al diálogo/registry Mono.Addins **del lado GTK** (no a la shell Avalonia, que ya no lo usa). Parchearlo para Cecil 0.10 es tarea del lado GTK.
+- ~~Acciones Install/Update/Enable/Disable/Uninstall/Install from file requieren API en el nuevo host (repositorio remoto + instalación + habilitación) — las pestañas y la UI están listas sobre los nuevos componentes.~~ → **CERRADO en B.3 (2026-10-13)**: APIs de gestión en `AddonHost` (`SetEnabled`/`Uninstall`/`Update`/`UpdateAll`/`InstallFromDirectory`/`InstallFromFile`) + cableado completo del diálogo.
+- ~~El `CecilReflector` de `main/external/mono-addins` sigue incompatible con el Cecil 0.10.1 del build: afecta al diálogo/registry Mono.Addins **del lado GTK** (no a la shell Avalonia, que ya no lo usa). Parchearlo para Cecil 0.10 es tarea del lado GTK.~~ → **CERRADO en B.5 (2026-10-12)**: el submódulo compila con .NET 10 (Cecil 0.11.6) y el registro de add-ins del lado GTK vuelve a escanearse de runtime (smoke `--old-gui` con rescan forzado, 0 líneas cecil/MissingMethod/TypeLoad).
 
 ### Build de add-ins de plataforma Mac (Darling) y Windows (WINE) → DLL x86_64 en `main/build/` (2026-10-11)
 
@@ -2660,7 +2660,7 @@ Diferidos (fuera de las oleadas): backends debugger (Gdb, Soft, VSCodeDebugProto
 **Pendiente/deferido**:
 
 - **Degradación de estado de Darling** (causa del MSB3374): matar `mldr`/`darlingserver` en plena build o dejar userland residual vivo puede degradar el siguiente arranque de guest (montaje `/Volumes/SystemRoot` ausente o `setattrlist`→`EINVAL`). **Recuperación validada**: matar todo el userland (launchd, memberd, opendirectoryd, iokitd, shellspawn, securityd) + `mldr` + `darlingserver`; `rm ~/.darling/.init.pid ~/.darling/.darlingserver.sock`; relanzar.
-- El add-in de plataforma **Linux** compila en el host (Linux) pero no fue objeto de la validación de esta task (el alcance era Mac + Windows).
+- ~~El add-in de plataforma **Linux** compila en el host (Linux) pero no fue objeto de la validación de esta task (el alcance era Mac + Windows).~~ → **Validado luego en el Track 1 (2026-10-12)**: smoke `LinuxPlatform ready` + activación real del part vía ALC + `--old-gui` regresión limpia.
 - El build Mac depende de **Darling** y el Windows de **WINE** (instalados localmente, con su caché NuGet poblada: `system.componentmodel.composition/7.0.0`, requerida por `main/Directory.Build.props`). Las adaptaciones hechas a Darling para habilitar el build son de la herramienta local y **no se commitean** (fuera del worktree real).
 
 ### Track 1 — Hooks de plataforma: el add-in de plataforma se activa de verdad y la shell lo resuelve vía `IPlatformHooks` (2026-10-12)
@@ -2703,7 +2703,7 @@ Diferidos (fuera de las oleadas): backends debugger (Gdb, Soft, VSCodeDebugProto
 - **Para ratificar — dedupe (commit `43594c38e0`)**: se eliminaron los duplicados de nombre corto `LinuxPlatform.avaloniaaddon.json`/`LinuxPlatform.csproj` (+ Mac/Win). Eran **rotos**: id `MonoDevelop.LinuxPlatform` y assembly `MonoDevelop.LinuxPlatform.dll` (inexistente; el canónico es `MonoDevelop.Avalonia.LinuxPlatform.dll`). El operador pidió antes "sin borrados" para los archivos `LinuxPlatform`; se conservaron los canónicos (los que funcionan de verdad — activado en smoke). **Decisión**: ratificar el dedupe o restaurar los duplicados (recuperables por git).
 - **Rebuild al cambiar fuentes**: add-in de plataforma Linux → host (`dotnet build`); Mac → Darling (`trace_mac_build.sh`); Windows → WINE (`build_win_addin.sh`). Recuperación de degradación de Darling: sección anterior (2026-10-11).
 - **Convención de builds**: todo a `main/build/` (gitignored). El módulo Addons vive ahora en `main/src/core/MonoDevelop.Ide/MonoDevelop.Avalonia.Addons/` (no lo referencia `MonoDevelop.Ide.csproj` — ese proyecto mantiene lista de ficheros explícita, `EnableDefaultCompileItems=false`).
-- MIME/iconos en los hooks más allá del default heredado de `PlatformService`: diferido (como antes).
+- ~~MIME/iconos en los hooks más allá del default heredado de `PlatformService`: diferido (como antes).~~ → **CERRADO en B.4 (2026-10-17)**: `GetMimeTypeForUri`/`GetMimeTypeDescription` vía `MimeCatalog` (superficie del manifiesto `/MonoDevelop/Core/MimeTypes`) + `GetIconIdForFile`/`GetIconIdForType` en `IPlatformHooks`.
 
 ### Track B — B.5: mono-addins compila con .NET 10 (Cecil 0.10.1 → 0.11.6) (2026-10-12)
 
