@@ -840,7 +840,35 @@ Diferidos (fuera de las oleadas): backends debugger (Gdb, Soft, VSCodeDebugProto
 
 **Pendiente / follow-up**:
 
-- Fila I: refactor del modelo de documentos (clavear por ruta completa en vez de nombre de fichero) — tarea propia, ~200 sitios de llamada.
+- Fila I: **CERRADA (2026-10-18)** — refactor del modelo de documentos (clave por ruta completa); ver la sesión *Fila I* de abajo.
 - Fila J: `RunStartupProjectAsync` — elegir el proyecto de arranque desde las referencias del `.sln` (mismo patrón que el fix del build).
 - Fila C: dar comportamiento real (o ocultar) a los 3 stubs de Session Recording; el de `ToggleSessionRecorder` es engañoso tal como está.
 - Frente B (verificado esta sesión): el bloqueo original `Mono.Addins.Setup` (CS1503/CS0012) está resuelto desde B.5; el build completo de `Main.sln` (221 proyectos) sigue sin ser verde por 126 NU1201 (eje legacy net472 vs. core net10.0-only, consecuencia del cutover). El eje legacy queda congelado (DLLs estagiadas de septiembre funcionan — `--old-gui` verificado — pero el fuente no recompila). La decisión D determina si se restaura el multi-TFM del core o se jubila el fuente legacy.
+
+### Fila I — Modelo de documentos claveado por ruta completa (2026-10-18)
+
+**Contexto**: hallazgo no bloqueante del runsheet In3 (fila I del inventario): `OpenFileDocument` claveaba documentos y pestañas por `Path.GetFileName`, y si ya existía un documento con ese nombre hacía early-return activándolo — abrir `A/Program.cs` y luego `B/Program.cs` dejaba editando el primero en vez de abrir el segundo (defecto de corrección: el usuario cree que edita B y edita A).
+
+**Cambios** (`main/src/core/MonoDevelop.Startup.Avalonia/`, 2 ficheros):
+
+1. `MainWindow.axaml.cs` — `OpenFileDocument`: la clave del documento/pestaña pasa a ser `DocKey (path)` (= `Path.GetFullPath`); helper `DocKey` compartido. El header de la pestaña muestra `Path.GetFileName (tag)`; el botón de cierre lee la `Tag` de la pestaña **al hacer click** (antes capturaba el valor y se obsoletaba tras un rename).
+2. `UpdateDocTabTitle`: el buscador de la etiqueta del tab ahora desciende al `StackPanel` del header — hallado durante la tarea: **el marcador de sucio " •" nunca se pintaba** en pestañas de fichero (buscaba hijos directos del `Panel` del header, donde solo hay un `StackPanel`).
+3. Rename de fichero con documento abierto: re-clavea `docs`, la lista `documents` y la `Tag` de la pestaña a la nueva ruta (antes la pestaña quedaba huérfana de su editor: `SelectDocument`/cierre/operaciones por tag fallaban).
+4. Save-As: re-clavea in-place a la nueva ruta (antes quitaba entradas y re-creaba la pestaña con el nombre corto, dejando la pestaña vieja atrás).
+5. Migración de los ~100 sitios de llamada: 24 handlers QA (su `name` ahora es la clave), lookups por ruta (`OpenFileDocumentAtLine`, `IsEditorDirty`, `VerifyCaret`, message bubbles del build, error pad, watch), buscador de toolbar (`CollectFileResults`/`AddFileResult`: dedupe por `DocKey`, filas "(open document)" resueltas por clave, títulos con nombre corto), y literales sueltos (`"Program.cs"` en handlers QA → `DocKey (file)`).
+6. `Program.cs` + handler `--dupdocs` (QA): crea `A/Note.txt` y `B/Note.txt` en un tmp dir y aserta 2 pestañas/2 docs, editores independientes, label de pestaña = nombre corto, buffers independientes, saves por fichero correctos y cierre de A sin afectar a B.
+7. Robustez de harness (hallazgos de QA): NRE preexistente de `--gutterbp` sin sln (la línea `stored=` ahora guarda `loadedSolutionPath is null`) y `--mcaret` deja de asumir la línea 4 (localiza `class Program` dinámicamente, inmune a la deriva del fixture compartido).
+
+**Cómo validar** (evidencia completa en `~/opencode/qa_in3/qa_report_fila_i.md`):
+
+1. **Build 0 errores** de `MonoDevelop.Startup.Avalonia.csproj`.
+2. **`--dupdocs`** (caso central): `tabs=2 docs=2`, `both-independent=True`, `tab-label=Note.txt`, `independent-buffers=True`, `save-correct=True`, `after-close docs=1 B-open=True` — 0 FATAL.
+3. **Regresión de flujos de documentos** (QA Senior, iteración 1): baseline, `--sln`+`--dblclick` (3 carets verificados), `--bmkpad`, `--dirtyfiles`, `--editorpad`, `--windocs`, `--persistqa`, `--mcaret`, `--gutterbp`, `--goto` — todos PASS.
+
+**QA (§18.5)**: 3 iteraciones del Tester QA Senior. Iteración 1: caso central + regresión PASS; hallazgos F1 (regresión real del buscador "(open document)" causada por la migración), F2 (dedupe/título del buscador), F3 (fixture compartido dependiente de líneas), F4 (NRE preexistente de `--gutterbp` sin sln). Iteración 2: F1/F2/F4 corregidos y verificados; F3 abierto (harness). Iteración 3: F3 corregido (línea independiente) y verificado en el estado de fixture que fallaba. **Veredicto final: 4/4 hallazgos CERRADOS — la fila I queda cerrada.**
+
+**Cierre**: el modelo de documentos de la shell Avalonia clavea por ruta completa: dos ficheros con el mismo nombre en directorios distintos son documentos independientes (abrir, editar, guardar y cerrar por separado); rename y save-as re-clavean la pestaña sin dejarla huérfana; y el marcador de sucio de las pestañas por fin se pinta.
+
+**Pendiente / follow-up**:
+
+- Fila J (siguiente candidata): `RunStartupProjectAsync` elige el proyecto de arranque por escaneo del directorio del `.sln` (mismo patrón que el build viejo): si una librería va antes que la consola, `dotnet run` se lanza sobre la librería.

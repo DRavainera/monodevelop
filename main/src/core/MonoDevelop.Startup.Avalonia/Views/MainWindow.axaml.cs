@@ -474,8 +474,8 @@ public partial class MainWindow : Window
 					var backend = Xwt.Toolkit.CurrentEngine.GetSafeBackend (xwtSolutionTree!);
 					var pos = xwtSolutionTree!.SelectedRow;
 					OnXwtSolutionRowActivated (xwtSolutionTree, new Xwt.TreeViewRowEventArgs (pos));
-					bool opened = docs.ContainsKey (Path.GetFileName (progFile!)) &&
-						(DocTabs.SelectedItem as TabItem)?.Tag as string == Path.GetFileName (progFile);
+					bool opened = docs.ContainsKey (DocKey (progFile!)) &&
+						(DocTabs.SelectedItem as TabItem)?.Tag as string == DocKey (progFile!);
 					Output ("[rowactivate] opened=" + opened + " tab=" + ((DocTabs.SelectedItem as TabItem)?.Tag as string ?? "none"));
 				}
 			} else if (qa == "--ctxnewfolder") {
@@ -628,6 +628,46 @@ public partial class MainWindow : Window
 					Output ("[newproject] template=" + newProjTemplate + " created=" + (projPath is not null) + " path=" + projPath + " sln-entry=" + slnText.Contains ("QAAdded") + " mappings=" + slnText.Contains (".Debug|AnyCPU.Build.0"));
 					OpenSolutionInWindow (loadedSolutionPath);
 				}
+			} else if (qa == "--dupdocs") {
+				// QA: two files with the SAME name in different directories must open
+				// as two independent documents (documents are keyed by full path).
+				var tmp = Path.Combine (Path.GetTempPath (), "QADupDocs", Guid.NewGuid ().ToString ("N"));
+				Directory.CreateDirectory (Path.Combine (tmp, "A"));
+				Directory.CreateDirectory (Path.Combine (tmp, "B"));
+				var fileA = Path.Combine (tmp, "A", "Note.txt");
+				var fileB = Path.Combine (tmp, "B", "Note.txt");
+				File.WriteAllText (fileA, "alpha content");
+				File.WriteAllText (fileB, "beta content");
+				OpenFileDocument (fileA);
+				OpenFileDocument (fileB);
+				Output ("[dupdocs] tabs=" + DocTabs!.Items.Count + " docs=" + docs.Count);
+				bool hasA = docs.TryGetValue (DocKey (fileA), out var edA);
+				bool hasB = docs.TryGetValue (DocKey (fileB), out var edB);
+				bool both = hasA && hasB && !ReferenceEquals (edA, edB);
+				Output ("[dupdocs] both-independent=" + both);
+				var tabA = DocTabs!.Items.OfType<TabItem> ().FirstOrDefault (t => (string?)t.Tag == DocKey (fileA));
+				var label = tabA?.Header is Panel hp
+					? (hp.Children.OfType<TextBlock> ().FirstOrDefault ()
+						?? hp.Children.OfType<StackPanel> ().SelectMany (sp => sp.Children)
+							.OfType<TextBlock> ().FirstOrDefault ())?.Text
+					: null;
+				Output ("[dupdocs] tab-label=" + label);
+				if (both) {
+					edA!.InsertAtCaret (" +A");
+					edB!.InsertAtCaret (" +B");
+					Output ("[dupdocs] independent-buffers="
+						+ (edA.Text.Contains ("alpha") && !edA.Text.Contains ("beta")
+							&& edB.Text.Contains ("beta") && !edB.Text.Contains ("alpha")));
+					edA.Save ();
+					edB.Save ();
+					var diskA = File.ReadAllText (fileA);
+					var diskB = File.ReadAllText (fileB);
+					Output ("[dupdocs] save-correct="
+						+ (diskA.Contains ("alpha") && !diskA.Contains ("beta")
+							&& diskB.Contains ("beta") && !diskB.Contains ("alpha")));
+					await CloseDocumentAsync (DocKey (fileA));
+					Output ("[dupdocs] after-close docs=" + docs.Count + " B-open=" + docs.ContainsKey (DocKey (fileB)));
+				}
 			} else if (qa == "--bmkpad") {
 				// QA: Bookmarks pad — toggle two bookmarks, open the pad, list rows,
 				// navigate Next and verify the pad refresh.
@@ -636,7 +676,7 @@ public partial class MainWindow : Window
 					Output ("[bmkpad] no test file");
 				} else {
 					OpenFileDocument (file);
-					var name = Path.GetFileName (file);
+					var name = DocKey (file);
 					if (docs.TryGetValue (name, out var ed)) {
 						SelectDocument (name);
 						SetPadVisible ("bookmarks", true);
@@ -659,7 +699,7 @@ public partial class MainWindow : Window
 					Output ("[bkpad] no test file/solution");
 				} else {
 					OpenFileDocument (file);
-					var name = Path.GetFileName (file);
+					var name = DocKey (file);
 					if (docs.TryGetValue (name, out var ed)) {
 						SelectDocument (name);
 						SetPadVisible ("breakpoints", true);
@@ -712,7 +752,7 @@ public partial class MainWindow : Window
 					// Ensure the breakpoint store has exactly the Program.cs:13 entry.
 					var file = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile), "TestProj", "TestProj", "Program.cs");
 					OpenFileDocument (file);
-					var name = Path.GetFileName (file);
+					var name = DocKey (file);
 					if (docs.TryGetValue (name, out var ed)) {
 						SelectDocument (name);
 						if (ed.BreakpointLines.Count > 0) { ed.ClearBreakpoints (); PersistBreakpoints (); }
@@ -781,7 +821,7 @@ public partial class MainWindow : Window
 				// debug to a stop, verify evaluate in the frame context, cleanup.
 				var file = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile), "TestProj", "TestProj", "Program.cs");
 				OpenFileDocument (file);
-				var name = Path.GetFileName (file);
+				var name = DocKey (file);
 				watchExpressions.Clear ();
 				watchExpressions.AddRange (new[] { "answer", "answer + 1" });
 				if (docs.TryGetValue (name, out var ed)) {
@@ -824,7 +864,7 @@ public partial class MainWindow : Window
 				// manual refresh — proving the pad re-evaluates after every step.
 				var file = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile), "TestProj", "TestProj", "Program.cs");
 				OpenFileDocument (file);
-				var name = Path.GetFileName (file);
+				var name = DocKey (file);
 				watchExpressions.Clear ();
 				watchExpressions.Add ("answer");
 				// The Watch pad ships hidden; the inline editor needs the TreeView
@@ -890,7 +930,7 @@ public partial class MainWindow : Window
 				// live evaluation on a debug stop and the load path (document open).
 				var file = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile), "TestProj", "TestProj", "Program.cs");
 				OpenFileDocument (file);
-				var name = Path.GetFileName (file);
+				var name = DocKey (file);
 				if (docs.TryGetValue (name, out var ed)) {
 					SelectDocument (name);
 					ed.SetPinnedWatches (Array.Empty<(int, string)> ()); // repeatable QA
@@ -1008,7 +1048,7 @@ public partial class MainWindow : Window
 				Output ("[legacyqa] before-open-doc-rows=" + (File.ReadAllText (prefsPath).Split ("<Watch ").Length - 1));
 				OpenFileDocument (file);
 				await Task.Delay (400);
-				var name = Path.GetFileName (file);
+				var name = DocKey (file);
 				if (docs.TryGetValue (name, out var edLegacy)) {
 					Output ("[legacyqa] restored=" + string.Join (" | ", edLegacy.PinnedWatchList.Select (p => (p.Line + 1) + ":" + p.Expression)));
 					var entries = MonoDevelop.Debugger.Services.WatchService.LoadPinned (slnPath);
@@ -1034,7 +1074,7 @@ public partial class MainWindow : Window
 				// pushed to the DAP adapter (session starts OK and stops on the bp).
 				var file = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile), "TestProj", "TestProj", "Program.cs");
 				OpenFileDocument (file);
-				var name = Path.GetFileName (file);
+				var name = DocKey (file);
 				if (docs.TryGetValue (name, out var ed)) {
 					SelectDocument (name);
 					if (ed.BreakpointLines.Count > 0) { ed.ClearBreakpoints (); PersistBreakpoints (); }
@@ -1066,7 +1106,7 @@ public partial class MainWindow : Window
 				// and the pads refresh; then Continue to exit.
 				var file = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile), "TestProj", "TestProj", "Program.cs");
 				OpenFileDocument (file);
-				var name = Path.GetFileName (file);
+				var name = DocKey (file);
 				if (docs.TryGetValue (name, out var ed)) {
 					SelectDocument (name);
 					if (ed.BreakpointLines.Count > 0) { ed.ClearBreakpoints (); PersistBreakpoints (); }
@@ -1102,7 +1142,7 @@ public partial class MainWindow : Window
 				// the tree roots and that a child expansion returns real rows.
 				var file = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile), "TestProj", "TestProj", "Program.cs");
 				OpenFileDocument (file);
-				var name = Path.GetFileName (file);
+				var name = DocKey (file);
 				if (docs.TryGetValue (name, out var ed)) {
 					SelectDocument (name);
 					if (ed.BreakpointLines.Count > 0) { ed.ClearBreakpoints (); PersistBreakpoints (); }
@@ -1138,7 +1178,7 @@ public partial class MainWindow : Window
 				RunImmediate (); // no session yet → honest error row
 				var file = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile), "TestProj", "TestProj", "Program.cs");
 				OpenFileDocument (file);
-				var name = Path.GetFileName (file);
+				var name = DocKey (file);
 				if (docs.TryGetValue (name, out var ed)) {
 					SelectDocument (name);
 					if (ed.BreakpointLines.Count > 0) { ed.ClearBreakpoints (); PersistBreakpoints (); }
@@ -1170,7 +1210,7 @@ public partial class MainWindow : Window
 					// debug stop shows the green value bubble on the paused line.
 					var file = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile), "TestProj", "TestProj", "Program.cs");
 					OpenFileDocument (file);
-					var name = Path.GetFileName (file);
+					var name = DocKey (file);
 					if (docs.TryGetValue (name, out var ed)) {
 						SelectDocument (name);
 						if (ed.BreakpointLines.Count > 0) { ed.ClearBreakpoints (); PersistBreakpoints (); }
@@ -1180,7 +1220,9 @@ public partial class MainWindow : Window
 						Output ("[gutterbp] second click removes → bp@13=" + (ed.BreakpointLines.ContainsKey (12) ? "True" : "False"));
 						ed.ToggleBreakpointAtGutter (12); // leave it on for the debug run
 						PersistBreakpoints ();
-						Output ("[gutterbp] stored=" + File.ReadAllText (loadedSolutionPath!.Substring (0, loadedSolutionPath.Length - 4) + ".userprefs").Contains ("line=\"13\""));
+						Output ("[gutterbp] stored=" + (loadedSolutionPath is null
+							? "False (no solution loaded)"
+							: File.ReadAllText (loadedSolutionPath.Substring (0, loadedSolutionPath.Length - 4) + ".userprefs").Contains ("line=\"13\"")));
 					}
 					_ = RunStartupProjectAsync (debug: true);
 					var deadlineG = DateTime.UtcNow.AddSeconds (60);
@@ -1215,7 +1257,7 @@ public partial class MainWindow : Window
 					// frame reloads the Locals tree from ITS scopes (GetLocalsForFrameAsync).
 					var file = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile), "TestProj", "TestProj", "Program.cs");
 					OpenFileDocument (file);
-					var name = Path.GetFileName (file);
+					var name = DocKey (file);
 					if (docs.TryGetValue (name, out var ed)) {
 						SelectDocument (name);
 						if (ed.BreakpointLines.Count > 0) { ed.ClearBreakpoints (); PersistBreakpoints (); }
@@ -1252,7 +1294,7 @@ public partial class MainWindow : Window
 					// the DAP children of the evaluated prefix, Tab commits list.Count.
 					var file = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile), "TestProj", "TestProj", "Program.cs");
 					OpenFileDocument (file);
-					var name = Path.GetFileName (file);
+					var name = DocKey (file);
 					if (docs.TryGetValue (name, out var ed)) {
 						SelectDocument (name);
 						if (ed.BreakpointLines.Count > 0) { ed.ClearBreakpoints (); PersistBreakpoints (); }
@@ -1294,7 +1336,7 @@ public partial class MainWindow : Window
 					} else {
 						var file = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile), "TestProj", "TestProj", "Program.cs");
 						OpenFileDocument (file);
-						var name = Path.GetFileName (file);
+						var name = DocKey (file);
 						var edP = docs [name];
 						SelectDocument (name);
 						if (edP.BreakpointLines.Count > 0) { edP.ClearBreakpoints (); PersistBreakpoints (); }
@@ -1315,13 +1357,13 @@ public partial class MainWindow : Window
 						await Task.Delay (400);
 						var watched = watchExpressions;
 						var restored = MonoDevelop.Debugger.Services.WatchService.Load (loadedSolutionPath!);
-						var bp13 = docs.TryGetValue ("Program.cs", out var edR) && edR.BreakpointLines.ContainsKey (12);
+						var bp13 = docs.TryGetValue (DocKey (file), out var edR) && edR.BreakpointLines.ContainsKey (12);
 						Output ("[persist] post-reopen watch-exprs=" + string.Join (",", restored) + " restored-pad=" + watched.Contains ("answer + 1"));
 						Output ("[persist] post-reopen bp@13=" + (bp13 ? "True" : "False") + " config=" + MonoDevelop.Ide.Services.ConfigurationService.GetActiveConfiguration (loadedSolutionPath!));
 						// Cleanup so the QA is repeatable.
 						watchExpressions.Clear ();
 						PersistWatches ();
-						if (docs.TryGetValue ("Program.cs", out var edC)) { edC.ClearBreakpoints (); PersistBreakpoints (); }
+						if (docs.TryGetValue (DocKey (file), out var edC)) { edC.ClearBreakpoints (); PersistBreakpoints (); }
 						Output ("[persist] done");
 					}
 				} else if (qa == "--attachreal") {
@@ -1470,13 +1512,16 @@ public partial class MainWindow : Window
 					"TestProj", "TestProj", "Program.cs");
 				if (File.Exists (file)) {
 					OpenFileDocument (file);
-					var name = Path.GetFileName (file);
+					var name = DocKey (file);
 					if (docs.TryGetValue (name, out var ed)) {
 						SelectDocument (name);
-						// Duplicate every 'Program' occurrence so the word has several matches.
-						ed.ReplaceAllInDocument ("Program", "Program Program");
-						ed.GotoLine (4); // 'class Program Program'
-						ed.GotoLineEnd (); // caret after the last 'Program'
+					// Duplicate every 'Program' occurrence so the word has several matches.
+					ed.ReplaceAllInDocument ("Program", "Program Program");
+					// Line-independent: other QA flows mutate the shared fixture, so
+					// locate the class declaration instead of assuming a line number.
+					var classLine = System.Array.FindIndex (ed.Text.Split ('\n'), l => l.Contains ("class Program"));
+					ed.GotoLine (classLine >= 0 ? classLine : 4);
+					ed.GotoLineEnd (); // caret after the last 'Program'
 						int n = ed.InsertAllMatchingCarets ();
 						Output ($"[mcaret] primary + {n} secondary caret(s) on 'Program'");
 						ed.InsertAtAllCarets ("_X");
@@ -1751,7 +1796,7 @@ public partial class MainWindow : Window
 					"TestProj", "TestProj", "Program.cs");
 				if (File.Exists (file)) {
 					OpenFileDocument (file);
-					var name = Path.GetFileName (file);
+					var name = DocKey (file);
 					if (docs.TryGetValue (name, out var ed)) {
 						SelectDocument (name);
 						ed.SetBubbles (new [] { (5, "CS0103: test bubble", true) });
@@ -1772,7 +1817,7 @@ public partial class MainWindow : Window
 					"TestProj", "TestProj", "Program.cs");
 				if (File.Exists (file)) {
 					OpenFileDocument (file);
-					var name = Path.GetFileName (file);
+					var name = DocKey (file);
 					if (docs.TryGetValue (name, out var ed)) {
 						SelectDocument (name);
 						ed.ReplaceAllInDocument ("World", "WorldWide"); // word with a unique longer candidate
@@ -1829,7 +1874,7 @@ public partial class MainWindow : Window
 				if (File.Exists (file)) {
 					var original = File.ReadAllText (file); // QA restores this at the end
 					OpenFileDocument (file);
-					var name = Path.GetFileName (file);
+					var name = DocKey (file);
 					if (docs.TryGetValue (name, out var ed)) {
 						SelectDocument (name);
 						// 1) Backspace removes a character (regression: it stayed).
@@ -1874,7 +1919,7 @@ public partial class MainWindow : Window
 					"TestProj", "TestProj", "Program.cs");
 				if (File.Exists (file) && !docs.Values.Any (d => d.IsDirty)) {
 					OpenFileDocument (file);
-					var name = Path.GetFileName (file);
+					var name = DocKey (file);
 					if (docs.TryGetValue (name, out var ed)) {
 						SelectDocument (name);
 						// Make it dirty programmatically (a real user edit).
@@ -1885,7 +1930,7 @@ public partial class MainWindow : Window
 						var dlg = new DirtyFilesDialog ();
 						dlg.Load (new List<DirtyFilesDialog.DirtyDoc> {
 							new () {
-								Name = name,
+								Name = Path.GetFileName (name),
 								ProjectGroup = ResolveProjectGroupForFile (ed.FilePath),
 								SaveAsync = () => { ed.Save (); UpdateDocTabTitle (name, docDirty: false); return Task.CompletedTask; }
 							}
@@ -1960,7 +2005,7 @@ public partial class MainWindow : Window
 					"TestProj", "TestProj", "Program.cs");
 				if (File.Exists (file)) {
 					OpenFileDocument (file);
-					var name = Path.GetFileName (file);
+					var name = DocKey (file);
 					if (docs.TryGetValue (name, out var ed)) {
 						SelectDocument (name);
 						ed.RebuildFolds ();
@@ -1986,7 +2031,7 @@ public partial class MainWindow : Window
 					"TestProj", "TestProj", "Program.cs");
 				if (File.Exists (file)) {
 					OpenFileDocument (file);
-					var name = Path.GetFileName (file);
+					var name = DocKey (file);
 					if (docs.TryGetValue (name, out var ed)) {
 						SelectDocument (name);
 						string[] linesOf () => ed.Text.Split ('\n');
@@ -2043,12 +2088,12 @@ public partial class MainWindow : Window
 						Output ("[editorpad] tabs=" + items.Count + " distinctTops=" + tops + " horizontal=" + horizontal);
 					// Select Program.cs and move the caret into Main (line 8): the
 					// breadcrumb must show the file and the class.method scope chain.
-					var progItem = items.FirstOrDefault (i => i.Tag as string == "Program.cs");
+					var progItem = items.FirstOrDefault (i => i.Tag as string == DocKey (prog));
 					if (progItem is not null)
 						DocTabs.SelectedItem = progItem;
 					UpdateBreadcrumb ();
 					Output ("[editorpad] breadcrumb file=" + BreadcrumbSegmentsForQa);
-					if (docs.TryGetValue ("Program.cs", out var ed)) {
+					if (docs.TryGetValue (DocKey (prog), out var ed)) {
 						ed.GotoLine (7);
 						UpdateBreadcrumb ();
 					}
@@ -2134,7 +2179,7 @@ public partial class MainWindow : Window
 					"TestProj", "TestProj", "Program.cs");
 				if (File.Exists (file)) {
 					OpenFileDocument (file);
-					if (docs.TryGetValue (Path.GetFileName (file), out var ed)) {
+					if (docs.TryGetValue (DocKey (file), out var ed)) {
 						ed.GotoLine (0); ed.ToggleBookmark ();
 						ed.GotoLine (4); ed.ToggleBookmark ();
 						ed.GotoLine (8); ed.ToggleBookmark ();
@@ -2186,8 +2231,8 @@ public partial class MainWindow : Window
 					"TestProj", "TestProj", "Program.cs");
 				if (File.Exists (file)) {
 					OpenFileDocument (file);
-					if (docs.TryGetValue (Path.GetFileName (file), out var ed)) {
-						SelectDocument (Path.GetFileName (file));
+					if (docs.TryGetValue (DocKey (file), out var ed)) {
+						SelectDocument (DocKey (file));
 						ed.GotoLine (6); // 'static void Main ()' line
 						ed.DuplicateLine ();
 						Output ($"[editops] duplicate → caret line {ed.CurrentLine + 1}, lines now {ed.Text.Count (c => c == '\n') + 1}");
@@ -2212,7 +2257,7 @@ public partial class MainWindow : Window
 					"TestProj", "TestProj", "Program.cs");
 				if (File.Exists (file)) {
 					OpenFileDocument (file);
-					if (docs.TryGetValue (Path.GetFileName (file), out var ed)) {
+					if (docs.TryGetValue (DocKey (file), out var ed)) {
 						int eq = qa.IndexOf ('=');
 						if (eq > 0) {
 							var (line, col) = MonoDevelop.Ide.Controls.SkTextEditor.ParseGotoInput (qa [(eq + 1)..], 1);
@@ -2234,7 +2279,7 @@ public partial class MainWindow : Window
 					"TestProj", "TestProj", "Program.cs");
 				if (File.Exists (file)) {
 					OpenFileDocument (file);
-					var name = Path.GetFileName (file);
+					var name = DocKey (file);
 					if (docs.TryGetValue (name, out var ed)) {
 						SelectDocument (name);
 						// Caret before the '{' of class Program (line 6) → match must land on its closing '}' (line 12).
@@ -2259,7 +2304,7 @@ public partial class MainWindow : Window
 						"TestProj", "TestProj", "Program.cs");
 				if (File.Exists (file)) {
 					OpenFileDocument (file);
-					SelectDocument (Path.GetFileName (file));
+					SelectDocument (DocKey (file));
 				}
 				RefreshOutlinePad ();
 				SetPadVisible ("documentoutline", true);
@@ -2307,7 +2352,7 @@ public partial class MainWindow : Window
 					: Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile), "TestProj", "TestProj", "Program.cs");
 				if (File.Exists (outlineFile)) {
 					OpenFileDocument (outlineFile);
-					SelectDocument (Path.GetFileName (outlineFile));
+					SelectDocument (DocKey (outlineFile));
 				}
 				RefreshOutlinePad ();
 				SetPadVisible ("documentoutline", true);
@@ -3000,8 +3045,15 @@ public partial class MainWindow : Window
 			docs.Add (tag, ed);
 
 		var header = new Panel();
-		var label = new TextBlock { Text = tag, FontSize = 12, VerticalAlignment = VerticalAlignment.Center };
+		// The tab tag is the document key (full path or untitled title); the header
+		// shows only the file name.
+		var label = new TextBlock { Text = Path.GetFileName (tag), FontSize = 12, VerticalAlignment = VerticalAlignment.Center };
 		label.Bind (TextBlock.ForegroundProperty, Application.Current!.GetResourceObservable ("IdeFgBrush"));
+
+		var tab = new TabItem {
+			Tag = tag,
+			Classes = { "island" },
+		};
 
 		if (closable) {
 			var close = new Button {
@@ -3012,8 +3064,9 @@ public partial class MainWindow : Window
 				VerticalAlignment = VerticalAlignment.Center,
 				Background = Brushes.Transparent,
 			};
-			var captured = tag;
-			close.Click += (_, _) => CloseDocument (captured);
+			// Read the tag at click time: a rename retargets the tab tag and the
+			// captured value would go stale.
+			close.Click += (_, _) => CloseDocument ((string)tab.Tag!);
 			// Build the StackPanel before parenting anything: a control can only have
 			// one visual parent in Avalonia.
 			header.Children.Add (new StackPanel { Orientation = Orientation.Horizontal, Children = { label, close } });
@@ -3035,11 +3088,7 @@ public partial class MainWindow : Window
 			}
 		}
 
-		var tab = new TabItem {
-			Header = header,
-			Tag = tag,
-			Classes = { "island" },
-		};
+		tab.Header = header;
 		DocTabs!.Items.Add (tab);
 
 		// After the strip re-measures, refresh the ‹ › visibility and the breadcrumb.
@@ -3560,7 +3609,7 @@ public partial class MainWindow : Window
 			var gate = new DirtyFilesDialog ();
 			gate.Load (new[] {
 				new DirtyFilesDialog.DirtyDoc {
-					Name = tag,
+					Name = Path.GetFileName (tag),
 					SaveAsync = () => { ed.Save (); UpdateDocTabTitle (tag, docDirty: false); return Task.CompletedTask; }
 				}
 			}, closeWorkspace: false);
@@ -4186,7 +4235,9 @@ public partial class MainWindow : Window
 	// the Mono.TextEditor view). Opening from the Solution pad or File > Open lands here.
 	public void OpenFileDocument (string path)
 	{
-		var tag = Path.GetFileName (path);
+		// Documents are keyed by full path (not file name): two files with the same
+		// name in different directories open as two independent documents.
+		var tag = DocKey (path);
 		if (welcomeVisible)
 			HideWelcomePage (); // legacy: opening a document dismisses the welcome overlay
 		if (documents.Any (d => d.Tag == tag)) {
@@ -4245,8 +4296,17 @@ public partial class MainWindow : Window
 	void UpdateDocTabTitle (string tag, bool docDirty)
 	{
 		var tab = DocTabs!.Items.OfType<TabItem> ().FirstOrDefault (t => (string?)t.Tag == tag);
-		if (tab?.Header is Panel panel && panel.Children.OfType<TextBlock> ().FirstOrDefault () is { } lbl) {
-			lbl.Text = docDirty ? tag + " •" : tag;
+		// The label is nested in the header's StackPanel (icon + label + close),
+		// not a direct child of the header panel.
+		TextBlock? lbl = null;
+		if (tab?.Header is Panel panel) {
+			lbl = panel.Children.OfType<TextBlock> ().FirstOrDefault ()
+				?? panel.Children.OfType<StackPanel> ().SelectMany (sp => sp.Children)
+					.OfType<TextBlock> ().FirstOrDefault ();
+		}
+		if (lbl is not null) {
+			var display = Path.GetFileName (tag);
+			lbl.Text = docDirty ? display + " •" : display;
 			ToolTip.SetTip (tab, docs.TryGetValue (tag, out var ed) && !string.IsNullOrEmpty (ed.FilePath) ? ed.FilePath : tag);
 		}
 	}
@@ -4706,13 +4766,23 @@ public partial class MainWindow : Window
 					Directory.Move (path, newPath);
 				else {
 					File.Move (path, newPath);
-					// Retarget an open document to the new path (legacy retitles the tab).
-					var tabName = oldName;
-					if (docs.TryGetValue (tabName, out var ed)) {
+					// Retarget an open document to the new path (legacy retitles the
+					// tab): re-key docs and the tab tag so close/selection keep working.
+					var oldKey = DocKey (path);
+					if (docs.TryGetValue (oldKey, out var ed)) {
+						var newKey = DocKey (newPath);
 						ed.FilePath = newPath;
-						UpdateDocTabTitle (tabName, false);
-						docs.Remove (tabName);
-						docs [dlg.Value] = ed;
+						docs.Remove (oldKey);
+						docs [newKey] = ed;
+						var doc = documents.FirstOrDefault (d => d.Tag == oldKey);
+						if (doc.Tag is not null) {
+							documents.Remove (doc);
+							documents.Add ((newKey, doc.Content));
+						}
+						var tab = DocTabs!.Items.OfType<TabItem> ().FirstOrDefault (t => (string?)t.Tag == oldKey);
+						if (tab is not null)
+							tab.Tag = newKey;
+						UpdateDocTabTitle (newKey, ed.IsDirty);
 					}
 				}
 				contextNodePath = null;
@@ -4772,9 +4842,9 @@ public partial class MainWindow : Window
 				if (isFolder)
 					Directory.Delete (path, recursive: true);
 				else {
-						var tabName = Path.GetFileName (path);
-						if (docs.ContainsKey (tabName))
-							CloseDocument (tabName);
+					var tabKey = DocKey (path);
+					if (docs.ContainsKey (tabKey))
+						CloseDocument (tabKey);
 					File.Delete (path);
 				}
 				// Legacy ProjectFileNodeBuilder.DeleteFromProject: the deleted file
@@ -5164,7 +5234,7 @@ public partial class MainWindow : Window
 		foreach (var file in Directory.EnumerateFiles (projDir, "*", SearchOption.AllDirectories)) {
 			if (file.Contains ("/obj/") || file.Contains ("/bin/") || file.Contains ("/.git/"))
 				continue;
-			if (seen.Contains (Path.GetFileName (file)))
+			if (seen.Contains (DocKey (file)))
 				continue;
 			var name = Path.GetFileName (file);
 			var rel = Path.GetRelativePath (projDir, file);
@@ -5181,10 +5251,12 @@ public partial class MainWindow : Window
 	{
 		if (searchResults.Any (r => r.Subtitle == relPath))
 			return;
+		// "(open document)" rows carry the document key (full path) in name; the
+		// popup shows the short name like every other row.
 		var path = relPath == "(open document)" && docs.TryGetValue (name, out var ed) && !string.IsNullOrEmpty (ed.FilePath) ? ed.FilePath : null;
 		var target = path ?? System.IO.Path.Combine (
 			Path.GetDirectoryName (loadedSolutionPath!)!, relPath);
-		searchResults.Add (("md-class-file", name, relPath, () => {
+		searchResults.Add (("md-class-file", relPath == "(open document)" ? Path.GetFileName (name) : name, relPath, () => {
 			if (File.Exists (target))
 				OpenFileDocument (target);
 			else
@@ -6526,8 +6598,11 @@ public partial class MainWindow : Window
 		return tag is not null && docs.TryGetValue (tag, out var ed) ? ed.FilePath : null;
 	}
 
+	// Document key = normalized full path (OpenFileDocument uses the same form).
+	static string DocKey (string path) => Path.GetFullPath (path);
+
 	public bool IsEditorDirty (string path)
-		=> docs.TryGetValue (Path.GetFileName (path), out var ed) && ed.IsDirty;
+		=> docs.TryGetValue (DocKey (path), out var ed) && ed.IsDirty;
 
 	public void SaveActiveEditor ()
 	{
@@ -6808,18 +6883,18 @@ public partial class MainWindow : Window
 	// double click landed on the declaration and not just opened the file.
 	void VerifyCaret (string file, int expectedLine)
 	{
-		var name = Path.GetFileName (file);
-		if (docs.TryGetValue (name, out var ed))
-			Output ($"[dblclick] caret in {name} at line {ed.CurrentLine + 1} (expected {expectedLine})");
+		var displayName = Path.GetFileName (file);
+		if (docs.TryGetValue (DocKey (file), out var ed))
+			Output ($"[dblclick] caret in {displayName} at line {ed.CurrentLine + 1} (expected {expectedLine})");
 		else
-			Output ($"[dblclick] {name} not open");
+			Output ($"[dblclick] {displayName} not open");
 	}
 
 	// Legacy SearchResultWidget.Activate: opens the document and moves the caret.
 	public void OpenFileDocumentAtLine (string path, int line)
 	{
 		OpenFileDocument (path);
-		if (docs.TryGetValue (Path.GetFileName (path), out var ed))
+		if (docs.TryGetValue (DocKey (path), out var ed))
 			ed.GotoLine (Math.Max (1, line) - 1);
 	}
 
@@ -6979,18 +7054,27 @@ public partial class MainWindow : Window
 		if (string.IsNullOrEmpty (path))
 			return;
 		await File.WriteAllTextAsync (path, ed.Text ?? "");
+		// Retarget the existing document to the new path (legacy retitles the tab)
+		// instead of closing and re-adding: the old tab would otherwise stay behind.
 		var oldTag = DocTabs.SelectedItem is TabItem { Tag: string t } ? t : null;
-		if (oldTag is not null && docs.ContainsKey (oldTag)) {
+		var newKey = DocKey (path);
+		if (oldTag is not null && oldTag != newKey && docs.TryGetValue (oldTag, out var oldEd) && ReferenceEquals (oldEd, ed)) {
 			docs.Remove (oldTag);
 			var doc = documents.FirstOrDefault (d => d.Tag == oldTag);
-			if (doc.Tag is not null)
+			if (doc.Tag is not null) {
 				documents.Remove (doc);
-			CloseDocument (oldTag);
+				documents.Add ((newKey, doc.Content));
+			}
+			var tab = DocTabs!.Items.OfType<TabItem> ().FirstOrDefault (t => (string?)t.Tag == oldTag);
+			if (tab is not null)
+				tab.Tag = newKey;
 		}
 		ed.FilePath = path;
 		ed.IsDirty = false;
 		AttachEditorContextMenu (ed);
-		AddDocument (Path.GetFileName (path), ed);
+		if (!docs.ContainsKey (newKey))
+			docs [newKey] = ed;
+		UpdateDocTabTitle (newKey, docDirty: false);
 		Output ("[save-as] wrote " + path);
 	}
 
@@ -7186,7 +7270,7 @@ public partial class MainWindow : Window
 	// identifier is tried until one evaluates without error. Best effort.
 	async void ShowDataTipForFrame (MonoDevelop.Debugger.Services.DebugFrame frame)
 	{
-		if (!docs.TryGetValue (Path.GetFileName (frame.File), out var ed))
+		if (!docs.TryGetValue (DocKey (frame.File), out var ed))
 			return;
 		ed.SetDataTip (frame.Line - 1, null);
 		if (debugSession is not { IsActive: true } sess)
@@ -7861,8 +7945,7 @@ public partial class MainWindow : Window
 		SetErrors ($"{buildErrors.Count} problem(s) — last: {issue.Message}");
 		// Live message bubble on the affected line of the open document
 		// (legacy MessageBubble appears as soon as the error is reported).
-		var errFile = Path.GetFileName (issue.File);
-		if (docs.TryGetValue (errFile, out var bubbleEd)) {
+		if (docs.TryGetValue (DocKey (issue.File), out var bubbleEd)) {
 			var entry = (issue.Line - 1, // 0-based line
 				$"{issue.Code}: {issue.Message}",
 				issue.Severity == "error");
@@ -7887,7 +7970,7 @@ public partial class MainWindow : Window
 			// Legacy pad double-click → jump to file(line,col).
 			if (list.SelectedItem is string s && errorRows.TryGetValue (s, out var hit)) {
 				OpenFileDocumentAtLine (hit.File, hit.Line);
-				if (docs.TryGetValue (Path.GetFileName (hit.File), out var ed))
+				if (docs.TryGetValue (DocKey (hit.File), out var ed))
 					ed.GotoLinePopupColumn (hit.Col);
 			}
 		};
