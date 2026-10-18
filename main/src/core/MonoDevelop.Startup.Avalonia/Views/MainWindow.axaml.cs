@@ -315,6 +315,34 @@ public partial class MainWindow : Window
 				new AboutDialog { WindowStartupLocation = WindowStartupLocation.CenterOwner }.ShowDialog (this);
 			} else if (qa == "--addins") {
 				new AddinManagerDialog { WindowStartupLocation = WindowStartupLocation.CenterOwner }.ShowDialog (this);
+			} else if (qa == "--menudump") {
+				// QA: dump the main menu model (runsheet In3, item 2): per-menu item
+				// and command counts, no UI interaction needed.
+				var menus = MenuService.BuildMainMenu ();
+				(int Items, int Cmds) TotalCmds (List<MenuService.MenuEntry> entries)
+				{
+					int items = 0, cmds = 0;
+					foreach (var e in entries) {
+						if (e.IsSeparator)
+							continue;
+						items++;
+						if (e.CommandId is not null && !e.Disabled)
+							cmds++;
+						var sub = TotalCmds (e.Children);
+						items += sub.Items;
+						cmds += sub.Cmds;
+					}
+					return (items, cmds);
+				}
+				int allItems = 0, allCmds = 0;
+				var perMenu = new List<string> ();
+				foreach (var m in menus) {
+					var (items, cmds) = TotalCmds (m.Children);
+					allItems += items;
+					allCmds += cmds;
+					perMenu.Add (m.Label + "=" + items + "i/" + cmds + "c");
+				}
+				Output ("[menudump] menus=" + menus.Count + " items=" + allItems + " cmds=" + allCmds + " bindings=" + MenuCommandBindings ().Count + " " + string.Join (" ", perMenu));
 			} else if (qa == "--encodings") {
 				// QA: Select Encodings — dual list populated from the BCL, Add/
 				// Remove/Up/Down and persistence to ConversionEncodings.
@@ -579,21 +607,25 @@ public partial class MainWindow : Window
 					OnMenuCommand ("MonoDevelop.Ide.Commands.ProjectCommands.SelectActiveConfiguration:Debug");
 					Output ("[activeconfig] restored=" + MonoDevelop.Ide.Services.ConfigurationService.GetActiveConfiguration (loadedSolutionPath));
 				}
-			} else if (qa == "--newproject") {
-				// QA: New Project dialog in add-to-solution mode — creates a console
-				// project in a temp dir, wires it into the loaded .sln, reloads the tree.
+			} else if (qa == "--newproject" || qa.StartsWith ("--newproject=", StringComparison.Ordinal)) {
+				// QA: New Project dialog in add-to-solution mode — creates a project
+				// in a temp dir, wires it into the loaded .sln, reloads the tree.
+				// --newproject=<template> selects the template (console|library).
+				var newProjTemplate = qa.StartsWith ("--newproject=", StringComparison.Ordinal)
+					? qa ["--newproject=".Length..]
+					: "console";
 				if (loadedSolutionPath is null) {
 					Output ("[newproject] no solution loaded");
 				} else {
 					var tmpDir = Path.Combine (Path.GetTempPath (), "QAProj", Guid.NewGuid ().ToString ("N"));
-					var dlg = new NewSolutionDialog ("console", tmpDir) { AddToOpenSolution = true, AutoCreateForQa = true };
+					var dlg = new NewSolutionDialog (newProjTemplate, tmpDir) { AddToOpenSolution = true, AutoCreateForQa = true };
 					dlg.SolutionName!.Text = "QAAdded";
 					await dlg.ShowDialog (this);
 					var projPath = dlg.CreatedProjectPath;
 					if (projPath is not null)
 						MonoDevelop.Ide.Services.ConfigurationService.AppendProjectToSolution (projPath, loadedSolutionPath);
 					var slnText = File.ReadAllText (loadedSolutionPath);
-					Output ("[newproject] created=" + (projPath is not null) + " sln-entry=" + slnText.Contains ("QAAdded") + " mappings=" + slnText.Contains (".Debug|AnyCPU.Build.0"));
+					Output ("[newproject] template=" + newProjTemplate + " created=" + (projPath is not null) + " path=" + projPath + " sln-entry=" + slnText.Contains ("QAAdded") + " mappings=" + slnText.Contains (".Debug|AnyCPU.Build.0"));
 					OpenSolutionInWindow (loadedSolutionPath);
 				}
 			} else if (qa == "--bmkpad") {
@@ -6984,10 +7016,27 @@ public partial class MainWindow : Window
 		// Build each project directly: `dotnet build <sln>` only restores the solution
 		// shell without compiling the projects in this SDK setup.
 		var slnDir = Path.GetDirectoryName (sln)!;
-		var projs = Directory.GetFiles (slnDir, "*.csproj", SearchOption.AllDirectories)
-			.Where (p => !p.Contains ("/obj/") && !p.Contains ("/bin/"));
+		// Projects come from the .sln references: a referenced project may live
+		// outside the solution directory, where a directory scan would miss it.
+		var projs = new List<string> ();
+		foreach (var line in File.ReadAllLines (sln)) {
+			var m = System.Text.RegularExpressions.Regex.Match (line,
+				@"^Project\(""[^""]+""\)\s*=\s*""[^""]+""\s*,\s*""([^""]+)""");
+			if (!m.Success)
+				continue;
+			var rel = m.Groups [1].Value.Replace ('\\', '/');
+			if (!rel.EndsWith (".csproj", StringComparison.OrdinalIgnoreCase))
+				continue;
+			var full = Path.GetFullPath (Path.Combine (slnDir, rel));
+			if (File.Exists (full))
+				projs.Add (full);
+		}
+		if (projs.Count == 0)
+			projs = Directory.GetFiles (slnDir, "*.csproj", SearchOption.AllDirectories)
+				.Where (p => !p.Contains ("/obj/") && !p.Contains ("/bin/"))
+				.ToList ();
 		if (projectFilter is not null)
-			projs = projs.Where (p => Path.GetFullPath (p) == Path.GetFullPath (projectFilter));
+			projs = projs.Where (p => Path.GetFullPath (p) == Path.GetFullPath (projectFilter)).ToList ();
 		var failed = false;
 		// Legacy ProjectOperations build the active configuration (SelectActiveConfiguration).
 		var config = !string.IsNullOrEmpty (loadedSolutionPath) && File.Exists (loadedSolutionPath)

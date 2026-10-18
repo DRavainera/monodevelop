@@ -96,27 +96,76 @@ public partial class NewSolutionDialog : Window
 			? Environment.GetFolderPath (Environment.SpecialFolder.UserProfile)
 			: LocationBox.Text!.Trim ();
 
+		// Map the dialog's legacy template ids to dotnet CLI short names.
+		// "shared" has no CLI equivalent: scaffold the minimal .shproj/.projitems
+		// pair directly (legacy SharedAssetsProject format).
+		string cliTemplate = template switch {
+			"console" => "console",
+			"library" => "classlib",
+			"unittest" => "nunit",
+			_ => "",
+		};
+
 		try {
 			var dir = CreateDirectoryCheck?.IsChecked == true ? Path.Combine (location, name) : location;
 			Directory.CreateDirectory (dir);
 			var slnPath = Path.Combine (dir, name + ".sln");
 			var projDir = Path.Combine (dir, name);
 
-			// dotnet CLI scaffolding (same tool the legacy templates wrap) run hidden.
-			var psi = new System.Diagnostics.ProcessStartInfo {
-				FileName = "dotnet",
-				Arguments = $"new {template} -n {name} -o \"{projDir}\"",
-				RedirectStandardOutput = true,
-				RedirectStandardError = true,
-				UseShellExecute = false,
-				CreateNoWindow = true,
-			};
-			using var p = System.Diagnostics.Process.Start (psi);
-			p?.WaitForExit (60000);
+			if (cliTemplate != "") {
+				// dotnet CLI scaffolding (same tool the legacy templates wrap) run hidden.
+				var psi = new System.Diagnostics.ProcessStartInfo {
+					FileName = "dotnet",
+					Arguments = $"new {cliTemplate} -n {name} -o \"{projDir}\"",
+					RedirectStandardOutput = true,
+					RedirectStandardError = true,
+					UseShellExecute = false,
+					CreateNoWindow = true,
+				};
+				using var p = System.Diagnostics.Process.Start (psi);
+				if (p is not null) {
+					var outTask = p.StandardOutput.ReadToEndAsync ();
+					var errTask = p.StandardError.ReadToEndAsync ();
+					p.WaitForExit (60000);
+					var firstErr = (errTask.GetAwaiter ().GetResult () + "\n")
+						.Split ('\n').FirstOrDefault (l => !string.IsNullOrWhiteSpace (l));
+					Console.WriteLine ("[newsolution] dotnet exit=" + p.ExitCode + (string.IsNullOrWhiteSpace (firstErr) ? "" : " err=" + firstErr.Trim ()));
+					_ = outTask;
+				} else {
+					Console.WriteLine ("[newsolution] dotnet CLI not available");
+				}
+			} else {
+				Directory.CreateDirectory (projDir);
+				var shGuid = Guid.NewGuid ().ToString ().ToUpperInvariant ();
+				File.WriteAllText (Path.Combine (projDir, name + ".shproj"),
+					"<Project ToolsVersion=\"4.0\" xmlns=\"http://schemas.microsoft.com/developer/msbuild/2003\">\n" +
+					"  <PropertyGroup>\n" +
+					"    <SchemaVersion>2.0</SchemaVersion>\n" +
+					$"    <ProjectGuid>{{{shGuid}}}</ProjectGuid>\n" +
+					"  </PropertyGroup>\n" +
+					"  <Import Project=\"$(MSBuildExtensionsPath32)\\Microsoft\\VisualStudio\\v$(VisualStudioVersion)\\CodeSharing\\Microsoft.CodeSharing.Common.props\" />\n" +
+					$"  <Import Project=\"{name}.projitems\" Label=\"Shared\" />\n" +
+					"  <Import Project=\"$(MSBuildExtensionsPath32)\\Microsoft\\VisualStudio\\v$(VisualStudioVersion)\\CodeSharing\\Microsoft.CodeSharing.CSharp.targets\" />\n" +
+					"</Project>\n");
+				File.WriteAllText (Path.Combine (projDir, name + ".projitems"),
+					"<?xml version=\"1.0\" encoding=\"utf-8\"?>\n" +
+					"<Project xmlns=\"http://schemas.microsoft.com/developer/msbuild/2003\">\n" +
+					"  <PropertyGroup>\n" +
+					"    <HasSharedItems>true</HasSharedItems>\n" +
+					"  </PropertyGroup>\n" +
+					"  <ItemGroup>\n" +
+					"    <Compile Include=\"$(MSBuildThisFileDirectory)Class1.cs\" />\n" +
+					"  </ItemGroup>\n" +
+					"</Project>\n");
+				File.WriteAllText (Path.Combine (projDir, "Class1.cs"),
+					"namespace " + name + "\n{\n\tpublic class Class1\n\t{\n\t}\n}\n");
+			}
 
 			// Add-to-solution mode: only the project is created; MainWindow wires it
 			// into the loaded .sln (legacy ProjectOperations.AddSolutionItem).
-			var createdProj = Directory.GetFiles (projDir, "*.csproj").FirstOrDefault ();
+			var createdProj = Directory.Exists (projDir)
+				? Directory.GetFiles (projDir, "*.csproj").FirstOrDefault () ?? Directory.GetFiles (projDir, "*.shproj").FirstOrDefault ()
+				: null;
 			if (AddToOpenSolution) {
 				CreatedProjectPath = createdProj;
 				CreatedSolutionPath = null;
@@ -127,10 +176,14 @@ public partial class NewSolutionDialog : Window
 			// Fallback: minimal valid .sln if dotnet CLI is unavailable/failed.
 			if (!File.Exists (slnPath)) {
 				var guid = Guid.NewGuid ().ToString ().ToUpperInvariant ();
+				var projFile = createdProj is null ? name + ".csproj" : Path.GetFileName (createdProj);
+				var projType = projFile.EndsWith (".shproj", StringComparison.Ordinal)
+					? "D954291E-2A0B-460D-934E-DC6B0785DB48"
+					: "FAE04EC0-301F-11D3-BF4B-00C04F79EFBC";
 				File.WriteAllText (slnPath,
 					"Microsoft Visual Studio Solution File, Format Version 12.00\n" +
 					"# Visual Studio Version 17\n" +
-					$"Project(\"{{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}}\") = \"{name}\", \"{name}\\{name}.csproj\", \"{{{guid}}}\"\n" +
+					$"Project(\"{{{projType}}}\") = \"{name}\", \"{name}\\{projFile}\", \"{{{guid}}}\"\n" +
 					"EndProject\n" +
 					"Global\n\tGlobalSection(SolutionConfigurationPlatforms) = preSolution\n\t\tDebug|Any CPU = Debug|Any CPU\n\t\tRelease|Any CPU = Release|Any CPU\n\tEndGlobalSection\n" +
 					"Global\nEndGlobal\n");

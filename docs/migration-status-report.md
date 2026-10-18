@@ -819,3 +819,28 @@ Diferidos (fuera de las oleadas): backends debugger (Gdb, Soft, VSCodeDebugProto
 
 - Extender el catálogo a policy panels por mime type: el extension point `/MonoDevelop/ProjectModel/Gui/MimeTypePolicyPanels` ya existe en el registro del host pero sin consumidores.
 - El campo `icon` de los nodos MimeTypes es un stock id (ej. `md-file-source`); si algún manifiesto quisiera un resource path directo haría falta convención.
+
+### In3 — Runsheet de smoke tests de GUI (criterio de aceptación): ejecutado, gate CERRADO (2026-10-17)
+
+**Contexto**: In3 es el gate de aceptación de la fase de migración (runsheet: 1 arranque limpio; 2 menús; 3 About; 4 Preferences; 5 AddinManager; 6 crear/compilar C# Library; 7 abrir `.sln` y navegar; cierre: 0 críticas nuevas). Quedó pendiente "hasta correr la GUI bajo runtime .NET 10"; con la shell Avalonia net10 funcionando (B.4 cerrada) se volvió ejecutable. Se preparó el harness en `~/opencode/qa_in3/` (`smoke_in3.sh`, fixture `proj/` = copia de QaB4 con `Program.cs` real de 21 líneas) y se extendió la shell con dos flags QA: `--newproject=<template>` (console|library) y `--menudump` (volcado del modelo de menús de `MenuService`; AT-SPI no está disponible en el entorno — sin `at-spi-bus-launcher`).
+
+**Fixes de producto encontrados y resueltos por el runsheet**:
+
+1. `NewSolutionDialog.axaml.cs`: la etiqueta interna de plantilla (`library`) se pasaba tal cual a `dotnet new`, cuyo short name en el SDK es `classlib` → el scaffold fallaba en silencio (el stderr del CLI se descartaba). Ahora: mapeo de etiquetas (console/classlib/nunit), scaffold mínimo `.shproj`/`.projitems` para `shared` (formato legacy `SharedAssetsProject`, GUID `D954291E-…`), log del stderr/exit del CLI (`[newsolution] dotnet exit=…`) y el fallback de `.sln` referencia el fichero realmente creado con su GUID de proyecto.
+2. `MainWindow.axaml.cs` (`RunBuildAsync`): enumeraba los proyectos por escaneo del directorio del `.sln` (`Directory.GetFiles`), de modo que un proyecto referenciado fuera de ese directorio (p. ej. uno añadido desde otra ubicación) nunca se compilaba. Ahora parsea las referencias `Project(…) = …, "ruta"` del `.sln` (con fallback al escaneo si el sln no aporta nada).
+
+**Cómo validar** (evidencia completa en `~/opencode/qa_in3/`, índice `qa_report_in3.md`):
+
+1. **7/7 PASS** ejecutados por el subagente Tester QA Senior en un run independiente (logs `smoke/in3_r*.log`, capturas `smoke/in3_q*.png`): arranque limpio (0 FATAL/Unhandled, `LinuxPlatform ready`, 30/32 addins, pads pintados); menús (`menus=11 items=203 bindings=180-181`, 11 menús, barra pintada); About (ventana 560×520, 99,9 % de píxel pintado); Preferences (paneles reales: keybindings 180 cmds/5 schemes, themes 4/Dark, cfmt, vc; 0 missing); AddinManager (`tab=installed items=32 host=True`); crear/compilar C# Library (`created=True sln-entry=True mappings=True`, build de la solución compila QaB4 + QAAdded —fuera del dir del sln—, ambos 0 errores); abrir `.sln` y navegar (classes→caret línea 5, outline→caret línea 5, code issues→caret línea 12, 0 errores).
+2. **Checks estáticos**: 0 `TypeLoadException`/`MissingMethodException` en los 8 logs; 176 IDs de comando de menú vs. los `case` de `OnMenuCommand` (solo el dummy deshabilitado `...` sin case; los 3 de Session Recording son stubs que loguean, `MainWindow.axaml.cs:6306-6314`); 0 errores no-NU1201 en el build de la solución del eje net10.
+
+**QA (§18.5)**: ciclo Tester QA Senior → dev → revalidación. La primera pasada del dev (pre-subagente) detectó y corrigió los 2 fixes de producto del ítem 6; el subagente repitió el runsheet completo de forma independiente: **7/7 PASS, 0 críticas nuevas**. Hallazgos no bloqueantes (ver sección In3 de `docs/interfaz-plan.md`): colisión de documentos por nombre de fichero (medio, refactor diferido), `RunStartupProjectAsync` con escaneo de directorio (bajo/medio), stubs de Session Recording (bajo, uno engañoso), y 4 menores (umbrales de estado en el conteo de bindings, fixture de code issues intencional, warning Roslyn-key preexistente, líneas duplicadas/cosméticas).
+
+**Cierre**: el gate de aceptación de la fase de migración **queda superado**: la shell Avalonia net10 cumple los 7 ítem del runsheet sin críticas nuevas. Documentación en la sección *In3* de `docs/interfaz-plan.md` (con el inventario actualizado: filas B/C/G cerradas o reescritas, y las filas I/J nuevas para los hallazgos no bloqueantes).
+
+**Pendiente / follow-up**:
+
+- Fila I: refactor del modelo de documentos (clavear por ruta completa en vez de nombre de fichero) — tarea propia, ~200 sitios de llamada.
+- Fila J: `RunStartupProjectAsync` — elegir el proyecto de arranque desde las referencias del `.sln` (mismo patrón que el fix del build).
+- Fila C: dar comportamiento real (o ocultar) a los 3 stubs de Session Recording; el de `ToggleSessionRecorder` es engañoso tal como está.
+- Frente B (verificado esta sesión): el bloqueo original `Mono.Addins.Setup` (CS1503/CS0012) está resuelto desde B.5; el build completo de `Main.sln` (221 proyectos) sigue sin ser verde por 126 NU1201 (eje legacy net472 vs. core net10.0-only, consecuencia del cutover). El eje legacy queda congelado (DLLs estagiadas de septiembre funcionan — `--old-gui` verificado — pero el fuente no recompila). La decisión D determina si se restaura el multi-TFM del core o se jubila el fuente legacy.
