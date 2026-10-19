@@ -841,8 +841,8 @@ Diferidos (fuera de las oleadas): backends debugger (Gdb, Soft, VSCodeDebugProto
 **Pendiente / follow-up**:
 
 - Fila I: **CERRADA (2026-10-18)** — refactor del modelo de documentos (clave por ruta completa); ver la sesión *Fila I* de abajo.
-- Fila J: `RunStartupProjectAsync` — elegir el proyecto de arranque desde las referencias del `.sln` (mismo patrón que el fix del build).
-- Fila C: dar comportamiento real (o ocultar) a los 3 stubs de Session Recording; el de `ToggleSessionRecorder` es engañoso tal como está.
+- Fila J: **CERRADA (2026-10-19)** — build/run desde las referencias del `.sln` con prioridad Exe; ver la sesión *Fila J + Fila C* de abajo.
+- Fila C: **CERRADA (2026-10-19)** — los 3 comandos de Session Recording con comportamiento real en el shell (grabador en formato XML legacy, viewer in-proceso, replay por re-dispatch); ver la sesión *Fila J + Fila C* de abajo.
 - Frente B (verificado esta sesión): el bloqueo original `Mono.Addins.Setup` (CS1503/CS0012) está resuelto desde B.5; el build completo de `Main.sln` (221 proyectos) sigue sin ser verde por 126 NU1201 (eje legacy net472 vs. core net10.0-only, consecuencia del cutover). El eje legacy queda congelado (DLLs estagiadas de septiembre funcionan — `--old-gui` verificado — pero el fuente no recompila). La decisión D determina si se restaura el multi-TFM del core o se jubila el fuente legacy.
 
 ### Fila I — Modelo de documentos claveado por ruta completa (2026-10-18)
@@ -871,4 +871,42 @@ Diferidos (fuera de las oleadas): backends debugger (Gdb, Soft, VSCodeDebugProto
 
 **Pendiente / follow-up**:
 
-- Fila J (siguiente candidata): `RunStartupProjectAsync` elige el proyecto de arranque por escaneo del directorio del `.sln` (mismo patrón que el build viejo): si una librería va antes que la consola, `dotnet run` se lanza sobre la librería.
+- Fila J: **CERRADA (2026-10-19)** — `RunStartupProjectAsync` elige el proyecto de arranque desde las referencias del `.sln` con prioridad a `<OutputType>Exe</OutputType>`; ver la sesión *Fila J + Fila C* de abajo.
+
+### Fila J + Fila C — Build/run desde referencias `.sln` + Session Recording real (2026-10-19)
+
+**Contexto**: dos hallazgos no bloqueantes del runsheet In3 cerrados en la misma sesión:
+
+- **Fila J (bajo/medio)**: `RunStartupProjectAsync` elegía el proyecto de arranque por escaneo del directorio del `.sln` (mismo defecto que el build viejo corregido en In3): si una librería iba antes que la consola en el sln, `dotnet run` se lanzaba sobre la librería, y un proyecto referenciado fuera del directorio del sln nunca entraba en el candidato.
+- **Fila C (bajo)**: los 3 comandos de Session Recording (`ToggleSessionRecorder`, `InstrumentationViewer`, `ReplaySession`) eran stubs que solo logueaban; `ToggleSessionRecorder` era engañoso (aviso "recording to the log" sin grabar nada).
+
+Directrices del operador para esta tarea: (1) los cambios en `MonoDevelop.Ide.*`/`MonoDevelop.Core.*` no deben romper la shell GTK legacy (`--old-gui`); (2) no se añaden `#if !AVALONIA_SHELL` a archivos de `MonoDevelop.Ide`; (3) la integración **total** del backend `MonoDevelop.Ide.*`/`MonoDevelop.Core.*` en el shell Avalonia (reutilizando los módulos no-GTK y porteando los GTK a Avalonia) es una **fase posterior**, cuando terminen todos los pendientes — por eso los 3 comandos corren sobre un grabador local al shell que habla el mismo formato en disco, no sobre el subsistema `AutoTest` completo.
+
+**Cambios** (5 ficheros, `main/src/core/MonoDevelop.Startup.Avalonia/` + 1 en `MonoDevelop.Ide`):
+
+1. `MainWindow.axaml.cs` — **Fila J**: `SolutionProjects (sln)` (parsea las referencias `Project(…) = …, "ruta"` del `.sln`, resuelve la ruta relativa contra el directorio del sln, fallback al escaneo si el sln no aporta nada) y `PickStartupProject (projs)` (primero el candidato con `<OutputType>Exe</OutputType>`, fallback al primero) — ambos extraídos del `RunBuildAsync` que ya usaba el parseo de In3; `RunStartupProjectAsync` pasa a usarlos y loguea el proyecto elegido con su tipo (`(Exe)` / `(no OutputType=Exe)`).
+2. `Views/SessionRecorder.cs` (nuevo) — grabador local del shell (Fila C): registra los ids de comando que pasan por `OnMenuCommand` (el único punto de dispatch: menús, hotkeys y replay) y escribe el **mismo formato XML del legacy** `MonoDevelop.Components.AutoTest.SessionRecord` (raíz `xs-event-replay-log`, `event type="CommandEvent"`, `commandID`, `dataItemIndex`), de modo que los registros son intercambiables con los de GTK. Excluye los ids `ToggleSessionRecorder`/`ReplaySession` (como el legacy) y `LoadFromLogFile` omite los tipos de evento Gdk (`KeyPress`/`StringEvent`) para poder reproducir grabaciones legacy.
+3. `Views/InstrumentationViewerDialog.axaml` + `.axaml.cs` (nuevos) — viewer in-proceso (Fila C): equivalente del legacy mdmonitor (la herramienta Gtk# no se empaqueta). Sondea `InstrumentationService.GetCategories()` cada 500 ms (DispatcherTimer) y muestra Name/Category/Count/Total/Last/Since/Message, columnas del monitor legacy. Chrome de diálogo estándar del shell (`DialogWindow.Apply`).
+4. `MainWindow.axaml.cs` — **Fila C**: hook `sessionRecorder.Record (commandId)` al inicio de `OnMenuCommand`; los 3 casos del switch dejan de ser stubs: `ToggleSessionRecorder` (start —gateado por la preferencia `MonoDevelop.EnableAutomatedTesting`, paridad con el legacy `Runtime.Preferences.EnableAutomatedTesting`— / stop con `SaveFilePickerAsync`, Cancel sigue grabando como el legacy; label del menú Start/Stop re-derivado en cada `BuildMenu`), `InstrumentationViewer` (`PublishService` una vez + viewer no modal) y `ReplaySession` (`OpenFilePickerAsync` + re-dispatch de cada evento por `OnMenuCommand` con 50 ms de separación, el equivalente shell al pump `GLib.Idle` del legacy). Counters reales de `InstrumentationService` (`Documents.Opened`/`Documents.Closed`/`Builds`) incrementados en los flujos reales (open/close de documento, build). QA flags: `--sessionrec=<path>`, `--sessionreplay=<path>`, `--instrview`.
+5. `Program.cs` — `QaDialogArg`: + `--instrview` y prefijos `--sessionrec=`/`--sessionreplay=`.
+6. `main/src/core/MonoDevelop.Ide/MonoDevelop.Components.Commands/CommandManager.cs` — `CommandActivationEventArgs` + `enum CommandSource` movidos del bloque `#if !AVALONIA_SHELL` a la zona compartida (fuera de cualquier `#if`; sin Gdk, válidos en ambos builds), y bajo `#if AVALONIA_SHELL` la clase estática helper se amplía a una **clase instancia no-GTK `CommandManager`** (registry de comandos, `DispatchCommand` con la pipeline `CommandActivating`→handler→`CommandActivated`, `IsEnabled`, `ToCommandId`). La clase GTK (líneas 55-3239) no fue tocada. **Esta superficie no tiene consumidores en el shell todavía**: es el módulo no-GTK reutilizable previsto para la fase posterior de integración total del backend (la grabación/reproducción de esta tarea corre sobre el grabador local, que no necesita el command manager legacy).
+
+**Cómo validar** (artefactos en `~/opencode/`: runner `qa_filac_run.sh`, fixture `qa_filac/QaFix.sln` con lib primero + Exe después + proyecto **fuera** del directorio del sln `qa_filac_ext/ExtProj`, logs `qa_filac_*.log`, sesión grabada `qa_filac/session_qa.xml`):
+
+1. **Build**: `MonoDevelop.Startup.Avalonia.csproj` → 0 errores (baseline ~1462 warnings, MSB3245 gtk-sharp esperados).
+2. **QA-J1** (`--sln=…/QaFix.sln --build`): `[build] project LibFirst.csproj`, `[build] project ExeAfter.csproj`, `[build] project ExtProj.csproj` — los 3 en el orden del sln, incluido el externo al directorio — y 0 errores por proyecto.
+3. **QA-J2** (`--run`): `[run] startup project ExeAfter.csproj (Exe)` (prioridad Exe pese a que la lib va antes), `QA_EXE_AFTER_RAN`, `exited with 0`.
+4. **QA-C1** (`--sessionrec=…/session_qa.xml`): `[sessionrec] 2 events saved to …` y XML con la estructura legacy exacta (`xs-event-replay-log` / 2× `event type="CommandEvent"` / `commandID=pad:output` / `dataItemIndex=-1`).
+5. **QA-C2** (`--sessionreplay=…/session_qa.xml`): `[session] replaying 2 events from session_qa.xml …` y `[session] replay finished`.
+6. **QA-C3** (`--instrview` con `--sln`): build real ×3, `[tools] instrumentation monitor opened`, `[instrview] rows=3 status='3 counter(s)'` y `[instrview] docsOpened=1 docsClosed=1 builds=1` (counters incrementados por los flujos reales: open/close de un probe + build).
+7. **QA-REG** (`--menudump`): arranque sin excepción, `menus=11 items=203 bindings=184` (línea idéntica a los logs QA previos — sin regresión estructural; Tools mantiene la sub "Session Recorder" con 2 hijos y Help mantiene "Instrumentation Monitor").
+8. **Compatibilidad GTK (R2, a nivel de fuente — el build GTK completo no es construible en el entorno por falta de Gtk#/Mono, preexistente)**: 1× `CommandActivationEventArgs` y 1× `CommandSource` en zona compartida (fuera de #if); la clase GTK conserva su `ToCommandId` (línea 2681) y `CommandTargetRoute` (3196); el bloque `#if !AVALONIA_SHELL` (53→3239) íntegro con `HandlerCallback` dentro; el bloque `#if AVALONIA_SHELL` (3241-3346) solo afecta al build del shell.
+
+**QA (§18.5)**: 1 iteración del Tester QA Senior: **10/10 validaciones PASAN** (build, J1, J2, C1, C2, C3, REG, R1 sin `#if !AVALONIA_SHELL` añadidos, R2 compatibilidad GTK a fuente, R3 sin rutas absolutas en el repo). 1 hallazgo menor sin acción: `SessionRecorder.Clear()` sin consumidores (API de paridad con el legacy `SessionRecord`, la clase documenta la equivalencia). 0 hallazgos de bloqueo/mayor.
+
+**Cierre**: el build y el run de la shell Avalonia consumen las referencias del `.sln` (proyectos fuera del directorio incluidos) y el run elige el proyecto Exe por delante de una librería listada antes; y los 3 comandos de Tools > Session Recording / Help > Instrumentation Monitor tienen comportamiento real sin stubs: grabación en el formato XML legacy intercambiable con GTK, reproducción por re-dispatch y monitor de instrumentación in-proceso con counters vivos.
+
+**Pendiente / follow-up**:
+
+- **Fase posterior (directriz del operador, cuando terminen todos los pendientes)**: integración total del backend `MonoDevelop.Ide.*` + `MonoDevelop.Core.*` en el shell Avalonia — reutilizar los módulos no-GTK (el núcleo no-GTK de `CommandManager` de esta tarea es el primer bloque) y portar los módulos GTK a Avalonia; en esa fase el grabador local puede ser sustituido por el subsistema `AutoTest` real (sus `SessionRecord`/`AutoTestSession` ya hablan el mismo XML).
+- Resto del inventario In3 sin cerrar: filas A (pads), F (iconos), H (NRefactory/Cecil), decisiones D/E y EP `DeployDirectoryResolvers` (ver los bloques Pendiente de arriba).

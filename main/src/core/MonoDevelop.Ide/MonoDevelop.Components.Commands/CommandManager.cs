@@ -3193,38 +3193,6 @@ Gtk.Widget GetFocusedChild (Control widget)
 
 	delegate void HandlerCallback ();
 		
-	public class CommandActivationEventArgs : EventArgs
-	{
-		public CommandActivationEventArgs (object commandId, CommandInfo commandInfo, object dataItem, object target, CommandSource source, TimeSpan executionTime = default(TimeSpan))
-		{
-			this.CommandId = commandId;
-			this.CommandInfo = commandInfo;
-			this.Target = target;
-			this.Source = source;
-			this.DataItem = dataItem;
-			this.ExecutionTime = executionTime;
-		}			
-		
-		public object CommandId  { get; private set; }
-		public CommandInfo CommandInfo  { get; private set; }
-		public object Target  { get; private set; }
-		public CommandSource Source { get; private set; }
-		public object DataItem  { get; private set; }
-		public TimeSpan ExecutionTime { get; private set; }
-	}
-	
-	public enum CommandSource
-	{
-		MainMenu,
-		ContextMenu,
-		MainToolbar,
-		Keybinding,
-		Unknown,
-		MacroPlayback,
-		WelcomePage,
-		Startup,
-	}
-	
 	public class CommandTargetRoute
 	{
 		List<object> targets = new List<object> ();
@@ -3271,10 +3239,99 @@ Gtk.Widget GetFocusedChild (Control widget)
 #endif
 
 #if AVALONIA_SHELL
-	/// <summary>Non-GTK equivalent (AVALONIA_SHELL): only the command-id helper the shell
-	/// needs from the GTK CommandManager (the rest — menus/toolbars/GTK dispatch — is GTK-only).</summary>
-	public static class CommandManager
+	/// <summary>
+	/// Non-GTK CommandManager core (AVALONIA_SHELL). The GTK version dispatches
+	/// commands through a widget target chain (focus, accel groups, toolbars);
+	/// the shell has none of that, so this reduced core keeps exactly the part
+	/// the non-GTK backend needs: the command registry and the activation
+	/// pipeline (CommandActivating → DefaultHandler run → CommandActivated),
+	/// which is what AutoTestService.SessionRecord records and replays.
+	/// </summary>
+	public class CommandManager
 	{
+		Dictionary<object, Command> cmds = new Dictionary<object, Command> ();
+
+		public bool IsEnabled { get; set; }
+
+		public event EventHandler<CommandActivationEventArgs> CommandActivating;
+		public event EventHandler<CommandActivationEventArgs> CommandActivated;
+
+		public CommandManager ()
+		{
+			IsEnabled = true;
+		}
+
+		public void RegisterCommand (Command cmd)
+		{
+			cmds[cmd.Id] = cmd;
+		}
+
+		public void UnregisterCommand (Command cmd)
+		{
+			cmds.Remove (cmd.Id);
+		}
+
+		public Command GetCommand (object cmdId)
+		{
+			cmds.TryGetValue (ToCommandId (cmdId), out Command cmd);
+			return cmd;
+		}
+
+		public ActionCommand GetActionCommand (object cmdId)
+		{
+			return GetCommand (cmdId) as ActionCommand;
+		}
+
+		/// <summary>
+		/// Runs the command through its DefaultHandler and raises the activation
+		/// events (the GTK DefaultDispatchCommand path without the widget target
+		/// chain; initialTarget is accepted for signature parity).
+		/// </summary>
+		public bool DispatchCommand (object commandId, object dataItem, object initialTarget, CommandSource source)
+		{
+			commandId = ToCommandId (commandId);
+			var cmd = GetActionCommand (commandId);
+			if (cmd == null)
+				return false;
+
+			var info = new CommandInfo (cmd);
+			if (cmd.DefaultHandler == null) {
+				if (cmd.DefaultHandlerType == null) {
+					info.Enabled = false;
+					if (!cmd.DisabledVisible)
+						info.Visible = false;
+					return false;
+				}
+				cmd.DefaultHandler = (CommandHandler) Activator.CreateInstance (cmd.DefaultHandlerType);
+			}
+			if (IsEnabled)
+				cmd.DefaultHandler.InternalUpdate (info);
+			info.Enabled &= IsEnabled;
+			info.CancelAsyncUpdate ();
+			if (!info.Enabled || !info.Visible)
+				return false;
+
+			OnCommandActivating (cmd.Id, info, dataItem, initialTarget, source);
+			var sw = Stopwatch.StartNew ();
+			try {
+				cmd.DefaultHandler.InternalRun (dataItem);
+			} finally {
+				sw.Stop ();
+				OnCommandActivated (cmd.Id, info, dataItem, initialTarget, source, sw.Elapsed);
+			}
+			return true;
+		}
+
+		void OnCommandActivating (object commandId, CommandInfo info, object dataItem, object target, CommandSource source)
+		{
+			CommandActivating?.Invoke (this, new CommandActivationEventArgs (commandId, info, dataItem, target, source));
+		}
+
+		void OnCommandActivated (object commandId, CommandInfo info, object dataItem, object target, CommandSource source, TimeSpan time)
+		{
+			CommandActivated?.Invoke (this, new CommandActivationEventArgs (commandId, info, dataItem, target, source, time));
+		}
+
 		public static object ToCommandId (object ob)
 		{
 			// Include the type name when converting enum members to ids.
@@ -3287,5 +3344,39 @@ Gtk.Widget GetFocusedChild (Control widget)
 		}
 	}
 #endif
+
+	// Shared by both builds: the activation event args and the source enum the
+	// dispatch/recording pipeline (AutoTestService.SessionRecord) is built on.
+	public class CommandActivationEventArgs : EventArgs
+	{
+		public CommandActivationEventArgs (object commandId, CommandInfo commandInfo, object dataItem, object target, CommandSource source, TimeSpan executionTime = default(TimeSpan))
+		{
+			this.CommandId = commandId;
+			this.CommandInfo = commandInfo;
+			this.Target = target;
+			this.Source = source;
+			this.DataItem = dataItem;
+			this.ExecutionTime = executionTime;
+		}			
+		
+		public object CommandId  { get; private set; }
+		public CommandInfo CommandInfo  { get; private set; }
+		public object Target  { get; private set; }
+		public CommandSource Source { get; private set; }
+		public object DataItem  { get; private set; }
+		public TimeSpan ExecutionTime { get; private set; }
+	}
+	
+	public enum CommandSource
+	{
+		MainMenu,
+		ContextMenu,
+		MainToolbar,
+		Keybinding,
+		Unknown,
+		MacroPlayback,
+		WelcomePage,
+		Startup,
+	}
 }
 

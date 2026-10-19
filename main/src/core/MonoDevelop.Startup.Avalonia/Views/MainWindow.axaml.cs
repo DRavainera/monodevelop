@@ -2382,6 +2382,17 @@ public partial class MainWindow : Window
 					_ = MonoDevelop.Ide.Services.ExternalToolRunner.Run (first);
 				else
 					Output ("[tool] no external tools configured (Preferences > External Tools)");
+			} else if (qa.StartsWith ("--sessionrec=", StringComparison.Ordinal)) {
+				// QA (Fila C): record a deterministic command sequence to the
+				// given path in the legacy SessionRecord XML format.
+				SessionRecordQa (qa.Substring ("--sessionrec=".Length));
+			} else if (qa.StartsWith ("--sessionreplay=", StringComparison.Ordinal)) {
+				// QA (Fila C): replay the given session file via re-dispatch.
+				_ = ReplaySessionFileAsync (qa.Substring ("--sessionreplay=".Length));
+			} else if (qa == "--instrview") {
+				// QA (Fila C): exercise the real counters (open/close document,
+				// build) and open the in-process instrumentation viewer.
+				await InstrumentationViewerQaAsync ();
 			}
 		};
 
@@ -2425,6 +2436,7 @@ public partial class MainWindow : Window
 			MainMenu.Items.Add (item);
 		// Re-attach on every rebuild: the items are new instances each time.
 		MonoDevelop.Ide.Services.KeyboardShortcutRegistry.AttachHotKeys (this);
+		SetSessionRecorderMenuLabel (sessionRecorder.IsRecording);
 		// Run > Run With mirrors the execution modes (legacy ExecutionModeCommandService
 		// fills the submenu per run target); selection persists in the settings store.
 		FillRunWithMenu ();
@@ -3624,6 +3636,7 @@ public partial class MainWindow : Window
 			DocTabs.Items.Remove (tab);
 		documents.Remove (doc);
 		docs.Remove (tag);
+		docsClosedCounter.Inc (Path.GetFileName (tag));
 		SelectFirstDocument ();
 		return true;
 	}
@@ -4287,6 +4300,7 @@ public partial class MainWindow : Window
 			}
 			AttachEditorContextMenu (editor);
 			AddDocument (tag, editor);
+			docsOpenedCounter.Inc (Path.GetFileName (path));
 		} catch (Exception ex) {
 			Output ("Cannot open " + Path.GetFileName (path) + ": " + ex.Message);
 		}
@@ -5559,6 +5573,9 @@ public partial class MainWindow : Window
 
 	public void OnMenuCommand (string commandId, string? nodeContext)
 	{
+		// Fila C: every menu click, hotkey and replayed command flows through
+		// this method — the single dispatch point the session recorder hooks.
+		sessionRecorder.Record (commandId);
 		// Context-menu commands carry the node path (legacy CommandHandler Run(dataItem));
 		// build/rename/remove on a node act on that node instead of the active document.
 		if (nodeContext is not null)
@@ -6375,19 +6392,161 @@ public partial class MainWindow : Window
 			_ = prefsTools.ShowDialog (this);
 			prefsTools.Opened += (_, _) => prefsTools.SelectPanel ("externaltools");
 			return;
+		// ----- Session recording (Fila C): the shell-local recorder writes the
+		// legacy SessionRecord XML format, the viewer is in-process (no mdmonitor)
+		// and replay re-dispatches the recorded commands through this method. -----
 		case "MonoDevelop.Ide.Commands.ToolCommands.ToggleSessionRecorder":
-			Output ("[tools] session recorder toggled (recording to the log)");
+			_ = ToggleSessionRecordingAsync ();
 			return;
 		case "MonoDevelop.Ide.Commands.ToolCommands.InstrumentationViewer":
-			Output ("[tools] instrumentation viewer requires the monitoring service (not bundled)");
+			ShowInstrumentationViewer ();
 			return;
 		case "MonoDevelop.Ide.Commands.ToolCommands.ReplaySession":
-			Output ("[tools] session replay requires a recorded session");
+			_ = ReplaySessionAsync ();
 			return;
 		}
 		var message = $"'{commandId}' is not wired in the new UI yet — its GTK implementation remains available through --old-gui until the cutover.";
 		Output ("[menu] " + message);
 		Console.WriteLine ("[menu] " + message);
+	}
+
+	// ---------- Session recording (Fila C) ----------
+	// The legacy AutoTest subsystem (MonoDevelop.Components.AutoTest) is not
+	// compiled into the shell, so the three Tools menu commands run on a
+	// shell-local recorder that speaks the same on-disk XML format; the
+	// full non-GTK backend integration is a later phase.
+
+	readonly SessionRecorder sessionRecorder = new ();
+	InstrumentationViewerDialog? instrumentationViewer;
+	static bool instrumentationServicePublished;
+	static readonly MonoDevelop.Core.Instrumentation.Counter docsOpenedCounter = MonoDevelop.Core.Instrumentation.InstrumentationService.CreateCounter ("Documents.Opened", "Documents");
+	static readonly MonoDevelop.Core.Instrumentation.Counter docsClosedCounter = MonoDevelop.Core.Instrumentation.InstrumentationService.CreateCounter ("Documents.Closed", "Documents");
+	static readonly MonoDevelop.Core.Instrumentation.Counter buildsCounter = MonoDevelop.Core.Instrumentation.InstrumentationService.CreateCounter ("Builds", "Build");
+
+	// Legacy ToggleSessionRecorderHandler: without a session, start recording
+	// (gated on the EnableAutomatedTesting preference); with one open, save it
+	// — Cancel keeps recording, like the GTK FileSelectorDialog flow.
+	async System.Threading.Tasks.Task ToggleSessionRecordingAsync ()
+	{
+		if (!sessionRecorder.IsRecording) {
+			if (!MonoDevelop.Ide.Services.SettingsStore.GetBool ("MonoDevelop.EnableAutomatedTesting", false)) {
+				Output ("[session] enable 'Enable automated testing' in Preferences first");
+				return;
+			}
+			sessionRecorder.Start ();
+			Output ("[session] recording started");
+			SetSessionRecorderMenuLabel (true);
+			return;
+		}
+		var files = await StorageProvider.SaveFilePickerAsync (new Avalonia.Platform.Storage.FilePickerSaveOptions {
+			Title = "Save session as...",
+			SuggestedFileName = "session.xml",
+			FileTypeChoices = new[] { new Avalonia.Platform.Storage.FilePickerFileType ("Session log") { Patterns = new[] { "*.xml" } } },
+		});
+		if (files is null)
+			return; // Cancel: keep recording (legacy behavior)
+		sessionRecorder.Stop ();
+		sessionRecorder.WriteLogToFile (files.Path.LocalPath);
+		Output ($"[session] saved {sessionRecorder.EventCount} events to {files.Path.LocalPath}");
+		SetSessionRecorderMenuLabel (false);
+	}
+
+	// Legacy ReplaySessionHandler: pick a session file and replay it.
+	async System.Threading.Tasks.Task ReplaySessionAsync ()
+	{
+		var files = await StorageProvider.OpenFilePickerAsync (new Avalonia.Platform.Storage.FilePickerOpenOptions {
+			Title = "Open session",
+			AllowMultiple = false,
+			FileTypeFilter = new[] { new Avalonia.Platform.Storage.FilePickerFileType ("Session log") { Patterns = new[] { "*.xml" } } },
+		});
+		if (files.Count == 0)
+			return;
+		await ReplaySessionFileAsync (files [0].Path.LocalPath);
+	}
+
+	// Replay = re-dispatch each recorded command id through OnMenuCommand (the
+	// legacy AutoTestSession executes commands on the same command manager;
+	// 50 ms between events so async handlers settle like the GLib.Idle pump).
+	async System.Threading.Tasks.Task ReplaySessionFileAsync (string filepath)
+	{
+		var rec = new SessionRecorder ();
+		if (!rec.LoadFromLogFile (filepath)) {
+			Output ("[session] could not load " + filepath);
+			return;
+		}
+		Output ($"[session] replaying {rec.EventCount} events from {Path.GetFileName (filepath)} …");
+		foreach (var ev in rec.Events) {
+			OnMenuCommand (ev.CommandId);
+			await System.Threading.Tasks.Task.Delay (50);
+		}
+		Output ("[session] replay finished");
+	}
+
+	// Legacy InstrumentationViewerHandler.Run: publish the service (mdmonitor
+	// connected to this port in GTK) and show the monitor. The shell shows the
+	// in-process viewer instead — same service, no external tool.
+	void ShowInstrumentationViewer ()
+	{
+		// PublishService binds a loopback listener per call — publish once.
+		if (!instrumentationServicePublished) {
+			MonoDevelop.Core.Instrumentation.InstrumentationService.PublishService ();
+			instrumentationServicePublished = true;
+		}
+		if (instrumentationViewer is { } open) {
+			open.Activate ();
+			Output ("[tools] instrumentation monitor activated");
+			return;
+		}
+		instrumentationViewer = new InstrumentationViewerDialog ();
+		instrumentationViewer.Closed += (_, _) => instrumentationViewer = null;
+		instrumentationViewer.Show ();
+		Output ("[tools] instrumentation monitor opened");
+	}
+
+	// Legacy ToggleSessionRecorderHandler.Update switches the menu text
+	// Start/Stop Session Recorder; the menu is rebuilt on several events, so the
+	// state is re-applied at the end of every BuildMenu.
+	void SetSessionRecorderMenuLabel (bool recording)
+	{
+		if (FindCommandItem ("MonoDevelop.Ide.Commands.ToolCommands.ToggleSessionRecorder") is { } item)
+			item.Header = recording ? "Stop Session Recorder" : "Start Session Recorder";
+	}
+
+	// MenuBuilder tags every built MenuItem with its command id.
+	MenuItem? FindCommandItem (string commandId)
+	{
+		return this.GetVisualDescendants ()
+			.OfType<MenuItem> ()
+			.FirstOrDefault (m => (string?)m.Tag == commandId);
+	}
+
+	// QA (Fila C): record a deterministic command sequence to the given path in
+	// the legacy SessionRecord XML format.
+	void SessionRecordQa (string filepath)
+	{
+		sessionRecorder.Start ();
+		OnMenuCommand ("pad:output");
+		OnMenuCommand ("pad:output");
+		sessionRecorder.Stop ();
+		sessionRecorder.WriteLogToFile (filepath);
+		Output ($"[sessionrec] {sessionRecorder.EventCount} events saved to {filepath}");
+	}
+
+	// QA (Fila C): increment the real counters through the normal code paths
+	// (document open/close, solution build), open the viewer and dump its state.
+	async System.Threading.Tasks.Task InstrumentationViewerQaAsync ()
+	{
+		var probe = Path.Combine (Path.GetTempPath (), "instrqa_probe.txt");
+		File.WriteAllText (probe, "// probe\n");
+		OpenFileDocument (probe);
+		await CloseDocumentAsync (DocKey (probe));
+		if (!string.IsNullOrEmpty (loadedSolutionPath))
+			await RunBuildAsync ();
+		ShowInstrumentationViewer ();
+		await System.Threading.Tasks.Task.Delay (1500); // a few viewer refresh ticks
+		if (instrumentationViewer is { } v)
+			Output ($"[instrview] rows={v.StatusForQa ().Rows} status='{v.StatusForQa ().Status}'");
+		Output ($"[instrview] docsOpened={docsOpenedCounter.TotalCount} docsClosed={docsClosedCounter.TotalCount} builds={buildsCounter.TotalCount}");
 	}
 
 	public void Output (string message)
@@ -7084,24 +7243,12 @@ public partial class MainWindow : Window
 
 	System.Diagnostics.Process? runningProc;
 
-	async System.Threading.Tasks.Task RunBuildAsync (bool rebuild = false, bool clean = false, string? projectFilter = null)
+	// Referenced .csproj files of a .sln (relative paths resolved against the
+	// solution directory). A directory scan is only a fallback for slns that
+	// yield nothing — a referenced project may live outside the solution dir.
+	List<string> SolutionProjects (string sln)
 	{
-		var sln = loadedSolutionPath;
-		if (string.IsNullOrEmpty (sln)) {
-			Output ("[build] no solution loaded");
-			return;
-		}
-		var target = clean ? "clean" : rebuild ? "rebuild" : "build";
-		Output ($"[build] {target} {Path.GetFileName (projectFilter ?? sln)} …");
-		// Legacy BuildCycle: the ErrorListPad starts each build empty and keeps the
-		// diagnostics of the finished build on screen.
-		buildErrors.Clear ();
-		errorRows.Clear ();
-		// Build each project directly: `dotnet build <sln>` only restores the solution
-		// shell without compiling the projects in this SDK setup.
 		var slnDir = Path.GetDirectoryName (sln)!;
-		// Projects come from the .sln references: a referenced project may live
-		// outside the solution directory, where a directory scan would miss it.
 		var projs = new List<string> ();
 		foreach (var line in File.ReadAllLines (sln)) {
 			var m = System.Text.RegularExpressions.Regex.Match (line,
@@ -7119,6 +7266,40 @@ public partial class MainWindow : Window
 			projs = Directory.GetFiles (slnDir, "*.csproj", SearchOption.AllDirectories)
 				.Where (p => !p.Contains ("/obj/") && !p.Contains ("/bin/"))
 				.ToList ();
+		return projs;
+	}
+
+	// Legacy RunSingleStartupProject runs the console project: prefer the first
+	// referenced project with <OutputType>Exe</OutputType>, fall back to the
+	// first referenced project.
+	string? PickStartupProject (IReadOnlyList<string> projs)
+	{
+		var exe = projs.FirstOrDefault (p => {
+			try {
+				return File.ReadAllText (p).Contains ("<OutputType>Exe</OutputType>", StringComparison.OrdinalIgnoreCase);
+			} catch {
+				return false;
+			}
+		});
+		return exe ?? projs.FirstOrDefault ();
+	}
+
+	async System.Threading.Tasks.Task RunBuildAsync (bool rebuild = false, bool clean = false, string? projectFilter = null)
+	{
+		var sln = loadedSolutionPath;
+		if (string.IsNullOrEmpty (sln)) {
+			Output ("[build] no solution loaded");
+			return;
+		}
+		var target = clean ? "clean" : rebuild ? "rebuild" : "build";
+		Output ($"[build] {target} {Path.GetFileName (projectFilter ?? sln)} …");
+		// Legacy BuildCycle: the ErrorListPad starts each build empty and keeps the
+		// diagnostics of the finished build on screen.
+		buildErrors.Clear ();
+		errorRows.Clear ();
+		// Build each project directly: `dotnet build <sln>` only restores the solution
+		// shell without compiling the projects in this SDK setup.
+		var projs = SolutionProjects (sln);
 		if (projectFilter is not null)
 			projs = projs.Where (p => Path.GetFullPath (p) == Path.GetFullPath (projectFilter)).ToList ();
 		var failed = false;
@@ -7133,6 +7314,7 @@ public partial class MainWindow : Window
 			if (runningProc is { HasExited: true } p && p.ExitCode != 0)
 				failed = true;
 		}
+		buildsCounter.Inc (target);
 	}
 
 	async System.Threading.Tasks.Task RunStartupProjectAsync (bool debug = false)
@@ -7142,13 +7324,16 @@ public partial class MainWindow : Window
 			Output ("[run] no solution loaded");
 			return;
 		}
-		// Legacy RunSingleStartupProject: run the (first) console project.
-		var proj = Directory.GetFiles (Path.GetDirectoryName (sln)!, "*.csproj", SearchOption.AllDirectories)
-			.FirstOrDefault (p => !p.Contains ("/obj/") && !p.Contains ("/bin/"));
+		// Legacy RunSingleStartupProject: run the (first) console project. The
+		// candidates come from the .sln references (a project outside the solution
+		// dir would be missed by a directory scan).
+		var proj = PickStartupProject (SolutionProjects (sln));
 		if (proj is null) {
 			Output ("[run] no runnable project found");
 			return;
 		}
+		Output ("[run] startup project " + Path.GetFileName (proj)
+			+ (File.ReadAllText (proj).Contains ("<OutputType>Exe</OutputType>", StringComparison.OrdinalIgnoreCase) ? " (Exe)" : " (no OutputType=Exe)"));
 		var runConfig = !string.IsNullOrEmpty (loadedSolutionPath) && File.Exists (loadedSolutionPath)
 			? MonoDevelop.Ide.Services.ConfigurationService.GetActiveConfiguration (loadedSolutionPath)
 			: activeConfiguration;

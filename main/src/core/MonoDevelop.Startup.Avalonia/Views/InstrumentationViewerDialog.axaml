@@ -1,0 +1,63 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="MonoDevelop.AvaloniaShell.Views.InstrumentationViewerDialog"
+        Title="Instrumentation Monitor"
+        Width="640" Height="420" MinWidth="480" MinHeight="280"
+        WindowStartupLocation="CenterOwner"
+        CanResize="True"
+        SystemDecorations="None"
+        ExtendClientAreaToDecorationsHint="True"
+        Background="{DynamicResource IdeWindowBgBrush}">
+
+  <Window.Styles>
+    <Style Selector="TextBlock">
+      <Setter Property="Foreground" Value="{DynamicResource IdeFgBrush}" />
+    </Style>
+    <Style Selector="Button">
+      <Setter Property="Foreground" Value="{DynamicResource IdeFgBrush}" />
+      <Setter Property="Background" Value="{DynamicResource IdeChromeBgBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource IdeBorderBrush}" />
+      <Setter Property="Padding" Value="12,5" />
+      <Setter Property="MinHeight" Value="28" />
+    </Style>
+    <Style Selector="Button:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource IdeHoverBgBrush}" />
+    </Style>
+    <Style Selector="ScrollViewer">
+      <Setter Property="Background" Value="{DynamicResource IdeChromeBgBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource IdeBorderBrush}" />
+      <Setter Property="BorderThickness" Value="1" />
+    </Style>
+  </Window.Styles>
+
+  <Grid RowDefinitions="Auto,Auto,*,Auto">
+    <!-- Custom chrome (Avalonia border, like the rest of the ported dialogs) -->
+    <Border Grid.Row="0" Classes="dialogchrome" Background="{DynamicResource IdeChromeBgBrush}"
+            BorderBrush="{DynamicResource IdeBorderBrush}" BorderThickness="0,0,0,1">
+      <Grid ColumnDefinitions="*,Auto">
+        <TextBlock Text="Instrumentation Monitor" Margin="12,6" FontWeight="SemiBold" />
+        <Button Grid.Column="1" Classes="caption captionclose" Content="&#x2715;" Click="OnClose" />
+      </Grid>
+    </Border>
+
+    <!-- Header row of the counter table (legacy mdmonitor columns) -->
+    <Grid Grid.Row="1" Margin="12,8,12,4" ColumnDefinitions="*,120,90,90,90,90,90">
+      <TextBlock Text="Name" FontWeight="SemiBold" />
+      <TextBlock Grid.Column="1" Text="Category" FontWeight="SemiBold" />
+      <TextBlock Grid.Column="2" Text="Count" FontWeight="SemiBold" />
+      <TextBlock Grid.Column="3" Text="Total" FontWeight="SemiBold" />
+      <TextBlock Grid.Column="4" Text="Last" FontWeight="SemiBold" />
+      <TextBlock Grid.Column="5" Text="Since" FontWeight="SemiBold" />
+      <TextBlock Grid.Column="6" Text="Message" FontWeight="SemiBold" />
+    </Grid>
+
+    <ScrollViewer Grid.Row="2" Margin="12,4" x:Name="CountersScroll" VerticalScrollBarVisibility="Auto">
+      <ItemsControl x:Name="CountersList" />
+    </ScrollViewer>
+
+    <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Margin="12,4,12,10" Spacing="8">
+      <TextBlock x:Name="StatusText" VerticalAlignment="Center" Margin="0,0,8,0" Opacity="0.8" />
+      <Button Content="Close" Click="OnClose" />
+    </StackPanel>
+  </Grid>
+</Window>
