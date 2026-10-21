@@ -137,7 +137,7 @@ The assistant holds this specification for the full duration of the session. It 
 Estas reglas son obligatorias para todo agente que trabaje en este repositorio y tienen prioridad sobre cualquier preferencia de estilo o conveniencia de implementación.
 
 18.1 Idioma
-Toda respuesta, documentación, mensaje de commit, comentario de revisión y artefacto de handoff se escribe en español. Los identificadores de código, nombres de API y rutas se mantienen en su forma original.
+Toda respuesta, documentación, comentario de revisión y artefacto de handoff se escribe en español. Los identificadores de código, mensaje de commit, nombres de API y rutas se mantienen en su forma original.
 
 18.2 Cierre obligatorio de cada tarea
 Ninguna tarea se considera terminada hasta que se cumplan las tres condiciones, en este orden:
@@ -148,6 +148,8 @@ Ninguna tarea se considera terminada hasta que se cumplan las tres condiciones, 
 
 Si un submódulo fue modificado, su commit y push son parte de la misma tarea y no pueden quedar diferidos.
 
+Si el operador ha realizado modificaciones, se deben realizar su correspondiente commit y push.
+
 18.3 Addins y submódulos
 Los addins (`main/src/addins/`) y los submódulos (`main/external/`) son parte integral del proyecto, no dependencias externas intocables. Se trabaja en ellos con el mismo estándar que en el núcleo: se corrigen, se migran y se documentan. Un cambio que requiera tocar un submódulo se completa dentro de ese submódulo y se refleja en el commit del repositorio principal mediante la actualización del puntero del submódulo.
 
@@ -156,6 +158,7 @@ La aplicación expone dos interfaces sobre el mismo binario de arranque:
 
 - La interfaz Gtk legacy se ejecuta con `AvaloniaShell.dll --old-gui`.
 - La interfaz Avalonia es el camino por defecto.
+- Ambas interfaces comparten el mismo backend.
 
 Reglas de implementación:
 
@@ -170,4 +173,4 @@ Cada tarea se valida con un subagente con el rol de Tester QA Senior, que ejecut
 Los artefactos de prueba de los agentes (scripts de QA, fixtures, capturas, logs, configuraciones temporales) se guardan en `~/opencode/`. No se usa `/tmp/`, porque es un tmpfs que se borra al reiniciar y pierde el estado entre sesiones. `~/opencode/` es persistente y queda fuera del repositorio, por lo que no se commitea.
 
 18.7 Pull requests
-Los agentes no crean pull requests. El operador los crea y gestiona manualmente en GitHub. El cierre de una tarea por parte de un agente termina en commit y push a la rama correspondiente.
+Los agentes no crean pull requests. El operador los crea y gestiona manualmente en GitHub. El cierre de una tarea por parte de un agente termina en commit y push a la rama correspondiente. Solo cuando el operador lo solicite explicitamente el agente puede crear un pull request.

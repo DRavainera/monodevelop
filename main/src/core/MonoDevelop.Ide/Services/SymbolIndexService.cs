@@ -210,8 +210,9 @@ public static class SymbolIndexService
 
 	/// <summary>Tracks <c>/* */</c>, <c>@"..."</c> and <c>"""..."""</c> state
 	/// across lines so declarations inside comments or string literals do not
-	/// become symbols.</summary>
-	static void UpdateLexState (string line, ref bool inBlockComment, ref bool inVerbatimString, ref bool inRawString)
+	/// become symbols. Internal: UnitTestDiscoveryService reuses the same
+	/// lex state so a commented-out <c>[Test]</c> is never discovered.</summary>
+	internal static void UpdateLexState (string line, ref bool inBlockComment, ref bool inVerbatimString, ref bool inRawString)
 	{
 		int i = 0;
 		while (i < line.Length) {

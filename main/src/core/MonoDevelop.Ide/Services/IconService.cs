@@ -178,6 +178,16 @@ public static class IconService
 		["md-pad-document-outline"] = ("pad-document-outline-16", "MonoDevelop.DesignerSupport"),
 		["nunit-pad-icon"] = ("pad-unit-test-16", "MonoDevelop.UnitTesting/Gui"),
 
+		// Unit Tests pad node icons (legacy TestStatusIcon): the legacy loads
+		// these resources directly (Xwt.Drawing.Image.FromResource), the shell
+		// needs a stock id per UnitTestState for the same PNGs.
+		["md-unit-test-not-run"] = ("unit-not-yet-run-16", "MonoDevelop.UnitTesting/Gui"),
+		["md-unit-test-running"] = ("unit-running-16", "MonoDevelop.UnitTesting/Gui"),
+		["md-unit-test-success"] = ("unit-success-16", "MonoDevelop.UnitTesting/Gui"),
+		["md-unit-test-failure"] = ("unit-failed-16", "MonoDevelop.UnitTesting/Gui"),
+		["md-unit-test-skipped"] = ("unit-skipped-16", "MonoDevelop.UnitTesting/Gui"),
+		["md-unit-test-mixed"] = ("unit-mixed-results-16", "MonoDevelop.UnitTesting/Gui"),
+
 		// Gettext stock id (MonoDevelop.Gettext.addin.xml): the "Add Translation"
 		// command icon.
 		["md-gettext-locale"] = ("locale-16", "MonoDevelop.Gettext"),

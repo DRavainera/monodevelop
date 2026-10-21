@@ -65,7 +65,8 @@ public static class SolutionLoader
 			var title = Path.GetFileNameWithoutExtension (slnPath);
 			return (title, entries);
 		} catch (Exception ex) {
-			Console.WriteLine ("[solution] load failed: " + ex.Message);
+			var inner = ex is TargetInvocationException tie && tie.InnerException is not null ? tie.InnerException : ex;
+			Console.WriteLine ("[solution] load failed: " + inner.Message);
 			return null;
 		}
 	}

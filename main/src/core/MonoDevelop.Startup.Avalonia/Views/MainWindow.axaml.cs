@@ -2316,6 +2316,10 @@ public partial class MainWindow : Window
 				RefreshClassesPad ();
 				SetPadVisible ("classes", true);
 				DumpClassesTree ();
+			} else if (qa == "--unittests" || qa.StartsWith ("--unittests-run", StringComparison.Ordinal)) {
+				// QA (Fila A): Unit Tests pad — real discovery over the loaded
+				// solution; --unittests-run additionally does a real `dotnet test`.
+				await UnitTestsQaAsync (qa);
 			} else if (qa == "--codeissues") {
 				// QA: Code Issues pad fed with synthetic diagnostics (the shell has no
 				// Roslyn analyzer host, so the pad mirrors the build output).
@@ -2550,6 +2554,7 @@ public partial class MainWindow : Window
 			var qaArg = Program.QaDialogArg;
 			if (qaArg is "--collapse" or "--collapsebottom"
 				|| qaArg.StartsWith ("--outline", StringComparison.Ordinal)
+				|| qaArg.StartsWith ("--unittests", StringComparison.Ordinal)
 				|| qaArg is "--classes" or "--codeissues")
 				return;
 			var raw = SettingsStore.GetString ("Monodevelop.PadsLayout");
@@ -2672,6 +2677,27 @@ public partial class MainWindow : Window
 	TreeView? outlineTree;
 	TreeView? classesTree;
 
+	// Unit Tests pad (legacy TestPad): the tree over the loaded solution's test
+	// projects, the node→TreeViewItem map for live state updates, the selection,
+	// the test-run process and the details pane (legacy detailsPad, no chart).
+	TreeView? unitTestTree;
+	UnitTestNode? unitTestRoot;
+	Dictionary<UnitTestNode, TreeViewItem> unitTestItems = new (ReferenceEqualityComparer.Instance);
+	UnitTestNode? unitTestSelection;
+	System.Diagnostics.Process? testRunProc;
+	System.Threading.Tasks.Task? unitTestRunTask;
+	bool unitTestRunInProgress;
+	Image? testRunAllIcon;
+	Image? testRunIcon;
+	Image? testStopIcon;
+	StackPanel? testDetailsPane;
+	TextBlock? testDetailsName;
+	TextBlock? testDetailsLocation;
+	TextBlock? testDetailsMessage;
+	Button? testRunAllButton;
+	Button? testRunButton;
+	Button? testStopButton;
+
 	// Legacy DebuggingService equivalent: one DAP session over the vendored
 	// netcoredbg; Locals/Watch/Call Stack pads fill on every stop, the current
 	// execution line is highlighted in the editor (yellow like the legacy arrow).
@@ -2791,11 +2817,65 @@ public partial class MainWindow : Window
 		};
 		RightPads.AddTab (new PadHost.PadTab { Id = "documentoutline", Label = "Document Outline", Icon = "md-pad-document-outline", Content = outlineTree, Visible = false });
 
-		// Unit Tests pad (legacy TestPad, right group, auto-hidden).
-		var testList = new ListBox { Background = Brushes.Transparent };
-		testList.Bind (ListBox.ForegroundProperty, Application.Current.GetResourceObservable ("IdeFgBrush"));
-		testList.Items.Add ("(unit tests of loaded solutions)");
-		RightPads.AddTab (new PadHost.PadTab { Id = "unittests", Label = "Unit Tests", Icon = "nunit-pad-icon", Content = testList, Visible = false });
+		// Unit Tests pad (legacy TestPad, right group, auto-hidden): a
+		// Solution ▸ Project ▸ Namespace ▸ Class ▸ Test tree over the loaded
+		// solution's test projects (UnitTestDiscoveryService), run through
+		// `dotnet test` with a FullyQualifiedName filter. Legacy toolbar
+		// (Run All / Run / Stop) plus the details pane (legacy detailsPad
+		// without the TestChart / regressions pages — documented deviation).
+		unitTestTree = new TreeView { Background = Brushes.Transparent };
+		unitTestTree.Bind (TreeView.ForegroundProperty, Application.Current.GetResourceObservable ("IdeFgBrush"));
+		unitTestTree.DoubleTapped += (_, _) => RunSelectedUnitTests ();
+		unitTestTree.SelectionChanged += (_, _) => {
+			unitTestSelection = unitTestTree.SelectedItem is TreeViewItem { Tag: UnitTestNode n } ? n : null;
+			FillTestDetails ();
+		};
+		var ctxRunTest = new MenuItem { Header = "Run Test" };
+		ctxRunTest.Click += (_, _) => RunSelectedUnitTests ();
+		var ctxShowCode = new MenuItem { Header = "Show test source code" };
+		ctxShowCode.Click += (_, _) => ShowUnitTestCode ();
+		var ctxGoToFailure = new MenuItem { Header = "Go to failure" };
+		ctxGoToFailure.Click += (_, _) => GoToTestFailure ();
+		var ctxShowDetails = new MenuItem { Header = "Show results pad" };
+		ctxShowDetails.Click += (_, _) => ToggleTestDetails (!TestDetailsVisible);
+		unitTestTree.ContextMenu = new ContextMenu { Items = { ctxRunTest, ctxShowCode, ctxGoToFailure, ctxShowDetails } };
+		var testToolbar = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 2, Margin = new Thickness (2) };
+		(testRunAllButton, testRunAllIcon) = MakeIconButton ("md-execute-all", "Run all tests");
+		testRunAllButton.Click += (_, _) => RunAllUnitTests ();
+		(testRunButton, testRunIcon) = MakeIconButton ("gtk-execute", "Run selected tests");
+		testRunButton.Click += (_, _) => RunSelectedUnitTests ();
+		(testStopButton, testStopIcon) = MakeIconButton ("gtk-stop", "Cancel running test");
+		testStopButton.IsEnabled = false;
+		testStopButton.Click += (_, _) => StopTestRun ();
+		testToolbar.Children.Add (testRunAllButton);
+		testToolbar.Children.Add (testRunButton);
+		testToolbar.Children.Add (testStopButton);
+		var detailsContent = new StackPanel { Spacing = 2, Margin = new Thickness (8, 4) };
+		testDetailsName = new TextBlock { FontSize = 12, FontWeight = FontWeight.Bold };
+		testDetailsLocation = new TextBlock { FontSize = 11, Opacity = 0.8 };
+		testDetailsMessage = new TextBlock { FontSize = 11, TextWrapping = TextWrapping.Wrap, Opacity = 0.9 };
+		detailsContent.Children.Add (testDetailsName);
+		detailsContent.Children.Add (testDetailsLocation);
+		detailsContent.Children.Add (testDetailsMessage);
+		var detailsHeader = new DockPanel { LastChildFill = true, Margin = new Thickness (6, 2) };
+		var detailsClose = new Button { Content = "✕", Padding = new Thickness (4), VerticalAlignment = VerticalAlignment.Center };
+		ToolTip.SetTip (detailsClose, "Close details");
+		DockPanel.SetDock (detailsClose, Dock.Right);
+		detailsClose.Click += (_, _) => ToggleTestDetails (false);
+		detailsHeader.Children.Add (new TextBlock { Text = "Details", FontSize = 11, Opacity = 0.7, VerticalAlignment = VerticalAlignment.Center });
+		detailsHeader.Children.Add (detailsClose);
+		testDetailsPane = new StackPanel { Spacing = 0 };
+		testDetailsPane.Children.Add (detailsHeader);
+		testDetailsPane.Children.Add (new ScrollViewer { Content = detailsContent, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled });
+		testDetailsPane.IsVisible = false;
+		var testPadRoot = new DockPanel { LastChildFill = true };
+		DockPanel.SetDock (testToolbar, Dock.Top);
+		DockPanel.SetDock (testDetailsPane, Dock.Bottom);
+		testPadRoot.Children.Add (testToolbar);
+		testPadRoot.Children.Add (testDetailsPane);
+		testPadRoot.Children.Add (unitTestTree);
+		FillUnitTestTreeEmpty ();
+		RightPads.AddTab (new PadHost.PadTab { Id = "unittests", Label = "Unit Tests", Icon = "nunit-pad-icon", Content = testPadRoot, Visible = false });
 
 		// Output pad (bottom, legacy OutputPad) — same TextBlock instance backs the
 		// Output method and the pad tab, so log lines appear in both places.
@@ -2951,22 +3031,35 @@ public partial class MainWindow : Window
 	{
 		var (host, _) = FindPad (padId);
 		if (host is null)
-			return;			if (visible) {
-				host.IsVisible = true;
-				if (host.IsCollapsed)
-					host.ToggleCollapse ("menu-show"); // reopening a rail-collapsed pad restores its size
-				host.SetTabVisible (padId, true);
-				host.Select (padId);
-			} else {
-				host.SetTabVisible (padId, false);
-				// Hide the whole host when no visible tabs remain (legacy empty dock hides).
-				if (host.Tabs.All (t => !t.Visible))
-					host.IsVisible = false;
-			}
-			UpdateRestoreStrip ();
-			BuildMenu ();
-			DumpPadsMenuChecks ($"SetPadVisible {padId}={visible}");
+			return;
+		// Idempotent for the menu/restore-strip: a show when already visible
+		// (and not rail-collapsed, which we still restore) or a hide when
+		// already hidden changes nothing — skip UpdateRestoreStrip/BuildMenu/
+		// dump so a repeated no-op call (e.g. the persisted layout restore
+		// racing a flow that already showed the pad) doesn't log a spurious
+		// SetPadVisible/BuildMenu block.
+		bool visibleNow = host.IsVisible && host.IsTabVisible (padId);
+		if (visible == visibleNow && (!visible || !host.IsCollapsed)) {
+			if (visible)
+				host.Select (padId); // still bring the tab to front
+			return;
 		}
+		if (visible) {
+			host.IsVisible = true;
+			if (host.IsCollapsed)
+				host.ToggleCollapse ("menu-show"); // reopening a rail-collapsed pad restores its size
+			host.SetTabVisible (padId, true);
+			host.Select (padId);
+		} else {
+			host.SetTabVisible (padId, false);
+			// Hide the whole host when no visible tabs remain (legacy empty dock hides).
+			if (host.Tabs.All (t => !t.Visible))
+				host.IsVisible = false;
+		}
+		UpdateRestoreStrip ();
+		BuildMenu ();
+		DumpPadsMenuChecks ($"SetPadVisible {padId}={visible}");
+	}
 
 	public bool IsPadVisible (string padId)
 	{
@@ -3912,6 +4005,10 @@ public partial class MainWindow : Window
 	public void OpenSolutionInWindow (string path)
 	{
 		Console.WriteLine ("[solution] opening: " + path);
+		// Startup and the QA flows both open Program.SolutionArg: skip the
+		// reload when it is already the loaded solution.
+		if (solutionLoaded && loadedSolutionPath == path)
+			return;
 		try {
 			var loaded = MonoDevelop.Ide.Services.SolutionLoader.Load (path);
 			if (loaded is null) {
@@ -3999,6 +4096,7 @@ public partial class MainWindow : Window
 			RefreshConfigurationSelectors (); // toolbar combo + Project > Active Configuration
 			BuildMenu (); // refresh File > Recent Solutions
 			RefreshClassesPad ();
+			RefreshUnitTestsPad ();
 			Output ("Loaded " + Path.GetFileName (path));
 		} catch (Exception ex) {
 			Output ("Error loading solution: " + ex.Message);
@@ -5146,6 +5244,9 @@ public partial class MainWindow : Window
 		SetIfAvailable (StepIntoIcon, "md-step-into-debug");
 		SetIfAvailable (StepOutIcon, "md-step-out-debug");
 		SetIfAvailable (SearchIcon, "md-find");
+		SetIfAvailable (testRunAllIcon, "md-execute-all");
+		SetIfAvailable (testRunIcon, "gtk-execute");
+		SetIfAvailable (testStopIcon, "gtk-stop");
 		if (ToolbarSearch is not null) {
 			ToolbarSearch.TextChanged += (_, _) => OnToolbarSearchTextChanged (ToolbarSearch.Text);
 			ToolbarSearch.LostFocus += (_, _) => {
@@ -6404,6 +6505,61 @@ public partial class MainWindow : Window
 		case "MonoDevelop.Ide.Commands.ToolCommands.ReplaySession":
 			_ = ReplaySessionAsync ();
 			return;
+
+		// ----- UnitTestingCommands (legacy MonoDevelop.UnitTesting TestCommands) -----
+		case "MonoDevelop.UnitTesting.Commands.TestCommands.RunAllTests":
+			RunAllUnitTests ();
+			return;
+		case "MonoDevelop.UnitTesting.Commands.TestCommands.RunTest":
+		case "MonoDevelop.UnitTesting.Commands.TestCommands.RerunTest":
+			if (unitTestSelection is not null)
+				RunSelectedUnitTests ();
+			else
+				Output ("[unittests] select a test in the Unit Tests pad first");
+			return;
+		case "MonoDevelop.UnitTesting.Commands.TestCommands.ShowTestCode":
+			ShowUnitTestCode ();
+			return;
+		case "MonoDevelop.UnitTesting.Commands.TestCommands.GoToFailure":
+			GoToTestFailure ();
+			return;
+		case "MonoDevelop.UnitTesting.Commands.TestCommands.SelectTestInTree":
+			// Legacy: invoked from the editor with the test under the caret.
+			if (CaretUnitTestNode () is { } caretNode)
+				SelectTestInTree (caretNode);
+			else
+				Output ("[unittests] no test at the caret position");
+			return;
+		case "MonoDevelop.UnitTesting.Commands.TestCommands.ShowTestDetails":
+			ToggleTestDetails (!TestDetailsVisible);
+			return;
+		case "MonoDevelop.UnitTesting.Commands.TestCommands.RunTestWith":
+			// Legacy RunTestWith: the execution-mode selector picks the
+			// configuration; the run itself is the same dotnet test with -c.
+			if (unitTestSelection is null) {
+				Output ("[unittests] select a test in the Unit Tests pad first");
+				return;
+			}
+			ShowExecutionModeSelector ();
+			RunSelectedUnitTests ();
+			return;
+		case "MonoDevelop.UnitTesting.Commands.TextEditorCommands.RunTestAtCaret":
+			if (CaretUnitTestNode () is { } caretRun) {
+				SetPadVisible ("unittests", true);
+				_ = RunUnitTestsAsync (new[] { caretRun });
+			} else {
+				Output ("[unittests] no test at the caret position");
+			}
+			return;
+		case "MonoDevelop.UnitTesting.Commands.TextEditorCommands.SelectTestAtCaret":
+			if (CaretUnitTestNode () is { } caretSel)
+				SelectTestInTree (caretSel);
+			else
+				Output ("[unittests] no test at the caret position");
+			return;
+		// DebugTest / DebugAllTests and the TestChartCommands.* items are not
+		// ported (no test debug, no results chart): they fall through to the
+		// unported-report below, like the other pending ports.
 		}
 		var message = $"'{commandId}' is not wired in the new UI yet — its GTK implementation remains available through --old-gui until the cutover.";
 		Output ("[menu] " + message);
@@ -6904,6 +7060,546 @@ public partial class MainWindow : Window
 			dir = Path.GetDirectoryName (dir);
 		}
 		return Path.GetFileName (solutionDir.TrimEnd (Path.DirectorySeparatorChar));
+	}
+
+	// ---------- Unit Tests pad (legacy TestPad) ----------
+
+	// Solution ▸ Project ▸ Namespace ▸ Class ▸ Test over the loaded solution's
+	// test projects. Discovery is a text scan (UnitTestDiscoveryService, the
+	// shell has no Roslyn / VS test SDK); execution is `dotnet test` with a
+	// FullyQualifiedName filter, whose console output drives the live states.
+	public void RefreshUnitTestsPad ()
+	{
+		if (unitTestTree is null)
+			return;
+		if (string.IsNullOrEmpty (loadedSolutionPath) || !File.Exists (loadedSolutionPath)) {
+			unitTestRoot = null;
+			unitTestItems.Clear ();
+			FillUnitTestTreeEmpty ();
+			Output ("[unittests] no solution loaded");
+			return;
+		}
+		var sln = loadedSolutionPath;
+		var projects = SolutionProjects (sln)
+			.Select (p => (Name: Path.GetFileNameWithoutExtension (p), ProjectPath: p))
+			.ToList ();
+		unitTestRoot = UnitTestDiscoveryService.DiscoverSolution (Path.GetFileName (sln), projects);
+		unitTestItems.Clear ();
+		unitTestTree.Items.Clear ();
+		if (unitTestRoot is null) {
+			FillUnitTestTreeEmpty ();
+			Output ($"[unittests] no test projects in {Path.GetFileName (sln)}");
+			return;
+		}
+		unitTestTree.Items.Add (MakeTestItem (unitTestRoot));
+		int total = 0;
+		foreach (var t in unitTestRoot.Descendants ().Where (d => d.Kind == "test"))
+			total++;
+		Output ($"[unittests] {unitTestRoot.Children.Count} test project(s), {total} test(s) discovered");
+	}
+
+	void FillUnitTestTreeEmpty ()
+	{
+		unitTestTree!.ItemsSource = null;
+		unitTestTree.Items.Clear ();
+		unitTestTree.Items.Add (new TextBlock {
+			Text = "(unit tests of loaded solutions)",
+			FontSize = 11.5,
+			Opacity = 0.6,
+			Margin = new Thickness (8, 6),
+		});
+	}
+
+	static (Button Button, Image Icon) MakeIconButton (string stockId, string tooltip)
+	{
+		var img = new Image { Width = 16, Height = 16 };
+		SetIfAvailable (img, stockId);
+		var b = new Button { Content = img, Padding = new Thickness (4) };
+		ToolTip.SetTip (b, tooltip);
+		return (b, img);
+	}
+
+	TreeViewItem MakeTestItem (UnitTestNode node)
+	{
+		var item = new TreeViewItem { Header = TestNodeHeader (node), Tag = node };
+		unitTestItems [node] = item;
+		foreach (var c in node.Children)
+			item.Items.Add (MakeTestItem (c));
+		return item;
+	}
+
+	Control TestNodeHeader (UnitTestNode node)
+	{
+		var sp = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4 };
+		var img = new Image { Width = 16, Height = 16 };
+		SetIfAvailable (img, TestStateStockId (TestStateForIcon (node)));
+		sp.Children.Add (img);
+		var tb = new TextBlock { Text = TestNodeLabel (node), FontSize = 12, VerticalAlignment = VerticalAlignment.Center };
+		tb.Bind (TextBlock.ForegroundProperty, Application.Current!.GetResourceObservable ("IdeFgBrush"));
+		sp.Children.Add (tb);
+		return sp;
+	}
+
+	static UnitTestState TestStateForIcon (UnitTestNode node)
+		=> node.Kind == "test" ? node.State : node.AggregatedState ();
+
+	// Legacy TestStatusIcon mapping onto the shell's stock ids (IconService).
+	static string TestStateStockId (UnitTestState state) => state switch {
+		UnitTestState.Success => "md-unit-test-success",
+		UnitTestState.Failure => "md-unit-test-failure",
+		UnitTestState.Skipped => "md-unit-test-skipped",
+		UnitTestState.Running => "md-unit-test-running",
+		UnitTestState.Mixed => "md-unit-test-mixed",
+		_ => "md-unit-test-not-run",
+	};
+
+	// Legacy TestNodeBuilder label: the name, plus the ShowTestCounters-style
+	// "(N passed, M failed, K not run)" suffix on groups after a run.
+	string TestNodeLabel (UnitTestNode node)
+	{
+		if (node.Kind == "test")
+			return node.Name;
+		if (node.AggregatedState () is UnitTestState.NotRun or UnitTestState.Running)
+			return node.Name;
+		node.CountStates (out var passed, out var failed, out var notRun);
+		return $"{node.Name} ({passed} passed, {failed} failed, {notRun} not run)";
+	}
+
+	// Propagates a leaf state change up to the root and repaints the affected
+	// rows in place (legacy TestStatusChanged → ITreeBuilder.Update).
+	void UpdateTestNodeState (UnitTestNode node)
+	{
+		var forUpdate = new List<UnitTestNode> { node };
+		for (var p = node.Parent; p is not null; p = p.Parent)
+			forUpdate.Add (p);
+		foreach (var n in forUpdate) {
+			if (unitTestItems.TryGetValue (n, out var item)
+				&& item.Header is StackPanel sp
+				&& sp.Children.Count == 2
+				&& sp.Children [0] is Image img
+				&& sp.Children [1] is TextBlock tb) {
+				SetIfAvailable (img, TestStateStockId (TestStateForIcon (n)));
+				tb.Text = TestNodeLabel (n);
+			}
+		}
+	}
+
+	void SetTestRunButtons (bool running)
+	{
+		unitTestRunInProgress = running;
+		if (testRunAllButton is not null)
+			testRunAllButton.IsEnabled = !running;
+		if (testRunButton is not null)
+			testRunButton.IsEnabled = !running;
+		if (testStopButton is not null)
+			testStopButton.IsEnabled = running;
+	}
+
+	public void RunAllUnitTests ()
+	{
+		if (unitTestRoot is null) {
+			Output ("[unittests] nothing to run — no test projects in the loaded solution");
+			return;
+		}
+		SetPadVisible ("unittests", true);
+		// Kept for waiters (the QA flow): the process may exit before its
+		// output streams are drained, so awaiting the task, not the process,
+		// is the deterministic end of the run.
+		unitTestRunTask = RunUnitTestsAsync (new[] { unitTestRoot });
+	}
+
+	public void RunSelectedUnitTests ()
+	{
+		if (unitTestSelection is null) {
+			Output ("[unittests] select a test (double-click also runs it)");
+			return;
+		}
+		SetPadVisible ("unittests", true);
+		_ = RunUnitTestsAsync (new[] { unitTestSelection });
+	}
+
+	async System.Threading.Tasks.Task RunUnitTestsAsync (IEnumerable<UnitTestNode> nodes)
+	{
+		if (testRunProc is { HasExited: false })
+			StopTestRun ();
+		var config = !string.IsNullOrEmpty (loadedSolutionPath) && File.Exists (loadedSolutionPath)
+			? MonoDevelop.Ide.Services.ConfigurationService.GetActiveConfiguration (loadedSolutionPath)
+			: activeConfiguration;
+		// Legacy TestPad.RunTests resets the whole suite (UnitTestService.
+		// ResetResult on each test's RootTest) before a new run.
+		unitTestRoot?.ResetState ();
+		RefreshTestDetails ();
+		// Legacy UnitTestGroup.OnRun skips explicit tests when a GROUP runs;
+		// an explicit test only runs when it is the (single) selected node.
+		bool singleExplicitTest = nodes is UnitTestNode[] sel && sel.Length == 1 && sel[0].Kind == "test" && sel[0].Explicit;
+		var groups = nodes
+			.SelectMany (n => n.Descendants ())
+			.Where (d => d.Kind == "test" && d.ProjectPath is not null)
+			.Where (d => singleExplicitTest || !d.Explicit)
+			.GroupBy (d => d.ProjectPath!)
+			.ToList ();
+		if (groups.Count == 0) {
+			Output ("[unittests] no runnable tests in the selection");
+			return;
+		}
+		SetTestRunButtons (true);
+		int totalRun = 0;
+		var runState = new TestRunLineState ();
+		foreach (var group in groups) {
+			var projPath = group.Key;
+			var leaves = group.ToList ();
+			foreach (var l in leaves)
+				l.State = UnitTestState.Running;
+			UpdateTestNodeState (leaves [0]);
+			for (int i = 1; i < leaves.Count; i++)
+				UpdateTestNodeState (leaves [i]);
+			// FilterKey: data-case nodes filter by the base-method FQN (the
+			// adapters' case FQNs are not portable, so a case run runs the
+			// whole method; Distinct collapses the per-case duplicates).
+			var filter = UnitTestDiscoveryService.BuildFilter (leaves.Select (l => l.FilterKey ?? l.FullName ?? ""));
+			var args = $"test -c \"{config}\" \"{projPath}\" --nologo -v minimal";
+			if (filter.Length > 0)
+				args += $" --filter \"{filter}\"";
+			Output ($"[unittests] dotnet test {Path.GetFileName (projPath)} ({leaves.Count} test(s), config {config})");
+			await RunTestProcessAsync (args, projPath, leaves, runState);
+			totalRun += leaves.Count;
+		}
+		SetTestRunButtons (false);
+		RefreshTestDetails ();
+		Output ($"[unittests] run finished: {totalRun} test(s)");
+		if (runState.SummaryCount > 0)
+			Output ($"[unittests] totals: {runState.Passed} passed, {runState.Failed} failed, {runState.Skipped} skipped, {runState.Total} total");
+	}
+
+	// Per-run line-parsing state (the OnLine lambda cannot take ref locals, so
+	// the mutable state lives in a holder). Summary counters accumulate across
+	// the per-project processes of one run.
+	sealed class TestRunLineState
+	{
+		public int SummaryCount, Passed, Failed, Skipped, Total;
+		public string? CapturingFor;
+		public readonly System.Text.StringBuilder Captured = new ();
+	}
+
+	// One `dotnet test` process per project: lines are mirrored to the Output
+	// pad (like RunProcessAsync) and parsed into the node states on the UI
+	// thread. Each stream is drained to EOF with ReadLinesAsync BEFORE the
+	// process is awaited: with BeginOutputReadLine, WaitForExitAsync resolved
+	// while buffered lines (even the summary) were still being delivered and
+	// the next project's run interleaved with the previous project's output.
+	async System.Threading.Tasks.Task RunTestProcessAsync (string args, string projPath, List<UnitTestNode> scope, TestRunLineState runState)
+	{
+		try {
+			var psi = new System.Diagnostics.ProcessStartInfo ("dotnet", args) {
+				RedirectStandardOutput = true,
+				RedirectStandardError = true,
+				UseShellExecute = false,
+				CreateNoWindow = true,
+				WorkingDirectory = Path.GetDirectoryName (projPath),
+			};
+			var proc = System.Diagnostics.Process.Start (psi);
+			testRunProc = proc;
+			if (proc is null) {
+				Output ("[unittests] failed to start dotnet test");
+				return;
+			}
+			int summariesBefore = runState.SummaryCount;
+			async System.Threading.Tasks.Task Drain (System.IO.StreamReader reader) {
+				// The loop variable is declared INSIDE the body: the posted
+				// lambda must capture this iteration's value, not the mutable
+				// variable (which advances — or becomes null at EOF — before
+				// the UI thread runs the queued work).
+				while (true) {
+					string? l = await reader.ReadLineAsync ();
+					if (l is null)
+						break;
+					Avalonia.Threading.Dispatcher.UIThread.Post (() => {
+						Output (l);
+						HandleTestRunLine (l, scope, runState);
+					});
+				}
+			}
+			await System.Threading.Tasks.Task.WhenAll (Drain (proc.StandardOutput), Drain (proc.StandardError));
+			await proc.WaitForExitAsync ();
+			var code = proc.ExitCode;
+			// Remarshal to the UI thread (await, not Post): the continuations
+			// after ReadLineAsync/WaitForExitAsync otherwise resume on the
+			// thread pool and race with the queued line-posts (HandleTestRunLine
+			// mutates runState/node state on the UI thread) — the pool thread
+			// would emit "exited"/"run finished"/"totals" ahead of the still
+			// queued lines and read runState mid-accumulation. InvokeAsync is
+			// enqueued BEHIND this project's already-posted line handlers, so
+			// when it runs every line of the process has been processed; the
+			// awaited task also completes on the UI thread, so the caller's
+			// ("run finished"/"totals") continuation resumes there too.
+			await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync (() => {
+				Output ($"[unittests] dotnet test exited with {code}");
+				// No summary line from THIS process: the build before the test
+				// failed (or no test matched) — mark the scope like the legacy
+				// LoadError state.
+				if (runState.SummaryCount == summariesBefore)
+					MarkTestScopeError (scope, $"dotnet test exited with code {code} (no test summary)");
+			});
+		} catch (Exception ex) {
+			Output ("[unittests] " + ex.Message);
+		}
+	}
+
+	void HandleTestRunLine (string line, List<UnitTestNode> scope, TestRunLineState runState)
+	{
+		if (TestRunParser.TryParseSummaryLine (line, out var passed, out var failed, out var skipped, out var total)) {
+			runState.SummaryCount++;
+			runState.Passed += passed;
+			runState.Failed += failed;
+			runState.Skipped += skipped;
+			runState.Total += total;
+			runState.CapturingFor = null;
+			runState.Captured.Clear ();
+			if (total > 0) {
+				// `-v minimal` only prints Failed/Skipped lines; every scope
+				// node still Running ran and passed (vstest ran our filter).
+				foreach (var t in scope.Where (t => t.State == UnitTestState.Running))
+					t.State = UnitTestState.Success;
+			} else {
+				// The filter matched nothing in this project: the selection
+				// did not run.
+				foreach (var t in scope.Where (t => t.State is UnitTestState.Running or UnitTestState.NotRun)) {
+					t.State = UnitTestState.Error;
+					t.Message = "no tests matched the filter";
+				}
+			}
+			// One grep-able line per scope test with its settled state.
+			foreach (var t in scope) {
+				Output ($"[unittests] {t.State} {t.FullName}");
+				UpdateTestNodeState (t);
+			}
+			Output ($"[unittests] summary: {passed} passed, {failed} failed, {skipped} skipped, {total} total");
+			return;
+		}
+		if (TestRunParser.TryParseTestLine (line, out var testName, out var state, out var ms)) {
+			runState.CapturingFor = null;
+			runState.Captured.Clear ();
+			// FQN or adapter short name, with or without the data-case suffix
+			// (NUnit under `-v minimal` prints short names).
+			foreach (var node in UnitTestDiscoveryService.ResolveNodes (scope, testName)) {
+				node.State = state;
+				node.DurationMs = ms;
+				if (state == UnitTestState.Failure && runState.CapturingFor is null)
+					runState.CapturingFor = node.FullName;
+				UpdateTestNodeState (node);
+			}
+			return;
+		}
+		// Failure block: "  Error Message:" / "  Stack Trace:" bodies are
+		// indented continuations of the last Failed test line.
+		if (runState.CapturingFor is not null) {
+			if (line.TrimStart ().StartsWith ("Error Message:", StringComparison.Ordinal)
+				|| line.TrimStart ().StartsWith ("Stack Trace:", StringComparison.Ordinal)
+				|| line.TrimStart ().StartsWith ("Error Output:", StringComparison.Ordinal)) {
+				runState.Captured.AppendLine (line.TrimStart ());
+			} else if (runState.Captured.Length > 0 && line.Length > 0 && (line[0] == ' ' || line[0] == '\t')) {
+				runState.Captured.AppendLine (line);
+			} else if (runState.Captured.Length > 0) {
+				foreach (var t in scope.Where (t => t.FullName == runState.CapturingFor))
+					t.Message = runState.Captured.ToString ().Trim ();
+				runState.CapturingFor = null;
+				runState.Captured.Clear ();
+			}
+		}
+	}
+
+	void MarkTestScopeError (List<UnitTestNode> scope, string message)
+	{
+		foreach (var t in scope.Where (t => t.State is UnitTestState.Running or UnitTestState.NotRun)) {
+			t.State = UnitTestState.Error;
+			t.Message = message;
+		}
+		foreach (var t in scope)
+			UpdateTestNodeState (t);
+	}
+
+	void StopTestRun ()
+	{
+		if (testRunProc is { HasExited: false } p) {
+			try {
+				p.Kill (true);
+			} catch {
+			}
+			Output ("[unittests] stopped");
+		}
+		// A killed run leaves leaves Running: settle them as Error (legacy
+		// cancel leaves the suite in its partial state, but a killed process
+		// never reports them — the row must not spin forever).
+		if (unitTestRoot is not null) {
+			foreach (var t in unitTestRoot.Descendants ().Where (d => d.Kind == "test" && d.State == UnitTestState.Running)) {
+				t.State = UnitTestState.Error;
+				t.Message ??= "run cancelled";
+			}
+			foreach (var t in unitTestRoot.Descendants ().Where (d => d.Kind == "test"))
+				UpdateTestNodeState (t);
+			SetTestRunButtons (false);
+		}
+	}
+
+	// ----- Details pane (legacy detailsPad, without the chart pages) -----
+
+	bool TestDetailsVisible => testDetailsPane is { IsVisible: true };
+
+	void ToggleTestDetails (bool visible)
+	{
+		if (testDetailsPane is null)
+			return;
+		testDetailsPane.IsVisible = visible;
+		if (visible)
+			FillTestDetails ();
+		Output ($"[unittests] details {(visible ? "shown" : "hidden")}");
+	}
+
+	// Legacy OnSelectionChanged → FillDetails: the pane shows the selected node
+	// (name, source location, last failure message) once it is open.
+	void FillTestDetails ()
+	{
+		if (!TestDetailsVisible || unitTestSelection is null)
+			return;
+		RefreshTestDetails ();
+	}
+
+	void RefreshTestDetails ()
+	{
+		if (testDetailsName is null || unitTestSelection is null)
+			return;
+		var node = unitTestSelection;
+		testDetailsName.Text = node.Kind == "test" ? node.Name : $"{node.Name} ({node.Kind})";
+		var location = node.File is not null
+			? $"{Path.GetFileName (node.File)}:{node.Line}"
+			: (node.Kind == "test" ? "" : "");
+		if (node.Kind != "test") {
+			node.CountStates (out var passed, out var failed, out var notRun);
+			location += location.Length > 0 ? "  —  " : "";
+			location += $"{passed} passed, {failed} failed, {notRun} not run";
+		}
+		testDetailsLocation.Text = location;
+		var message = node.Kind == "test" ? node.Message : null;
+		if (message is null && node.Kind != "test") {
+			// Groups: surface the first failing descendant's message (legacy
+			// results page did the same through the group's failed tests).
+			message = node.Descendants ()
+				.FirstOrDefault (d => d.Kind == "test" && d.Message is { Length: > 0 })?.Message;
+		}
+		testDetailsMessage.Text = message ?? "";
+		testDetailsMessage.IsVisible = message is { Length: > 0 };
+	}
+
+	// ----- TestCommands (legacy MonoDevelop.UnitTesting command surface) -----
+
+	// Legacy TextEditorCommands (Run/Select Test at Caret): the test enclosing
+	// the caret of the active document (nearest test at or above the caret line
+	// in the same file).
+	UnitTestNode? CaretUnitTestNode ()
+	{
+		if (unitTestRoot is null)
+			return null;
+		if (!docs.TryGetValue ((DocTabs.SelectedItem as TabItem)?.Tag as string ?? "", out var ed)
+			|| ed.FilePath is not { Length: > 0 } fp)
+			return null;
+		var line = ed.CurrentLine + 1;
+		UnitTestNode? best = null;
+		int bestDistance = int.MaxValue;
+		foreach (var t in unitTestRoot.Descendants ().Where (d => d.Kind == "test")) {
+			if (t.File is null || !string.Equals (Path.GetFullPath (t.File), Path.GetFullPath (fp), StringComparison.OrdinalIgnoreCase))
+				continue;
+			if (t.Line <= line) {
+				int distance = line - t.Line;
+				if (distance < bestDistance) {
+					best = t;
+					bestDistance = distance;
+				}
+			}
+		}
+		return best;
+	}
+
+	void ShowUnitTestCode ()
+	{
+		var node = unitTestSelection ?? unitTestRoot;
+		if (node is null || node.File is null) {
+			Output ("[unittests] no source location for the selection");
+			return;
+		}
+		OpenFileDocumentAtLine (node.File, node.Line);
+		Output ($"[unittests] showing {node.Kind} {node.Name} @{Path.GetFileName (node.File)}:{node.Line}");
+	}
+
+	void GoToTestFailure ()
+	{
+		var node = unitTestSelection;
+		if (node is null) {
+			Output ("[unittests] select a test first");
+			return;
+		}
+		// Legacy GoToFailure: the failure location from the last result (the
+		// stack trace's "in File.cs:line N"), falling back to the test itself.
+		var target = node.Kind == "test" ? node : node.Descendants ().FirstOrDefault (d => d.Kind == "test" && d.Message is { Length: > 0 });
+		if (target is not null && TestRunParser.TryParseFailureLocation (target.Message ?? "", out var file, out var line) && File.Exists (file)) {
+			OpenFileDocumentAtLine (file, line);
+			Output ($"[unittests] failure at {Path.GetFileName (file)}:{line}");
+			return;
+		}
+		if (target?.File is not null)
+			OpenFileDocumentAtLine (target.File, target.Line);
+	}
+
+	void SelectTestInTree (UnitTestNode node)
+	{
+		if (!unitTestItems.TryGetValue (node, out var item))
+			return;
+		for (var p = item.Parent as TreeViewItem; p is not null; p = p.Parent as TreeViewItem)
+			p.IsExpanded = true;
+		unitTestTree?.SelectedItem = item;
+	}
+
+	// ----- QA dumps (the pad is a TreeView over items with node tags) -----
+
+	void DumpUnitTestsTree ()
+	{
+		if (unitTestRoot is null) {
+			Output ("[unittests] (empty state)");
+			return;
+		}
+		foreach (var line in FlattenUnitTests (unitTestRoot, 0))
+			Output ("[unittests] " + line);
+	}
+
+	IEnumerable<string> FlattenUnitTests (UnitTestNode node, int depth)
+	{
+		yield return new string (' ', depth * 2)
+			+ $"{node.Kind} {node.Name}"
+			+ (node.Kind == "test" ? $" [{node.State}]" : $" [{node.AggregatedState ()}]")
+			+ (node.File is null ? "" : $" ({Path.GetFileName (node.File)}:{node.Line})");
+		foreach (var child in node.Children)
+			foreach (var line in FlattenUnitTests (child, depth + 1))
+				yield return line;
+	}
+
+	// QA (Fila A): the --unittests flow exercises the real pad end to end —
+	// discovery over the loaded solution, the tree, and (with --unittests-run)
+	// a real `dotnet test` round trip when the solution has a test project.
+	async System.Threading.Tasks.Task UnitTestsQaAsync (string qa)
+	{
+		if (!string.IsNullOrEmpty (Program.SolutionArg))
+			OpenSolutionInWindow (Program.SolutionArg);
+		RefreshUnitTestsPad ();
+		SetPadVisible ("unittests", true);
+		DumpUnitTestsTree ();
+		if (qa.StartsWith ("--unittests-run", StringComparison.Ordinal)) {
+			RunAllUnitTests ();
+			// Wait for the run task (not the process: the process can exit
+			// before its output streams are drained and the states settled).
+			var sw = System.Diagnostics.Stopwatch.StartNew ();
+			while (unitTestRunTask is { IsCompleted: false } && sw.Elapsed < System.TimeSpan.FromSeconds (240))
+				await System.Threading.Tasks.Task.Delay (500);
+			DumpUnitTestsTree ();
+		}
 	}
 
 	// ---------- Code Issues pad (legacy CodeIssuePad) ----------

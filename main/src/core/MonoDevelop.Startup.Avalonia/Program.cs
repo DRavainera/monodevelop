@@ -165,7 +165,8 @@ internal static class Program
 				|| a.StartsWith ("--newproject=", StringComparison.Ordinal)
 				|| a.StartsWith ("--gotoline", StringComparison.Ordinal)
 				|| a.StartsWith ("--sessionrec=", StringComparison.Ordinal)
-				|| a.StartsWith ("--sessionreplay=", StringComparison.Ordinal)) ?? "";
+				|| a.StartsWith ("--sessionreplay=", StringComparison.Ordinal)
+				|| a.StartsWith ("--unittests", StringComparison.Ordinal)) ?? "";
 
 	// Optional path of a solution to open at startup (--sln=<path>); the Solution
 	// pad is then populated with the real projects of that solution.

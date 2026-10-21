@@ -292,7 +292,10 @@ public static class MenuService
 			}),
 			Sub ("Go To", new List<MenuEntry> {
 				Item ("_File...", shortcut: "Alt Shift O", click: Command ("MonoDevelop.Ide.Commands.SearchCommands.GotoFile")),
-				Item ("_Type...", shortcut: "Ctrl T", click: Command ("MonoDevelop.Ide.Commands.SearchCommands.GotoType")),
+				// Legacy VS scheme binds GotoType to the Ctrl+K, Ctrl+V chord,
+				// which the single-gesture KeyGesture model cannot express;
+				// Ctrl T belongs to Run Unit Tests (TestCommands.RunAllTests).
+				Item ("_Type...", click: Command ("MonoDevelop.Ide.Commands.SearchCommands.GotoType")),
 				Item ("_Line...", icon: "md-go-to-line", shortcut: "Ctrl I", click: Command ("MonoDevelop.Ide.Commands.SearchCommands.GotoLineNumber")),
 				Sep (),
 				Item ("_Cursor Position", click: Command ("MonoDevelop.Ide.Commands.ViewCommands.CenterAndFocusCurrentDocument")),
@@ -382,6 +385,12 @@ public static class MenuService
 			Item ("Start Without Debugging", icon: "gtk-execute", shortcut: "Ctrl F5", click: Command ("MonoDevelop.Ide.Commands.ProjectCommands.Run")),
 			new MenuEntry { Label = "Run With", Tag = "RunWith", Children = { Item ("(Default)", disabled: true) }, AutoHide = true },
 			Sep (),
+			// Legacy MonoDevelop.UnitTesting.addin.xml: RunAllTests is a CommandItem
+			// of /MonoDevelop/Ide/MainMenu/Run (shortcut Ctrl|T) and the "Unit
+			// Testing" category mirrors the 21-node addin manifest.
+			Item ("Run _Unit Tests", icon: "md-run-unit-tests", shortcut: "Ctrl T", click: Command ("MonoDevelop.UnitTesting.Commands.TestCommands.RunAllTests")),
+			Sub ("Unit _Testing", UnitTestingCategory ()),
+			Sep (),
 			Item ("_Debug", icon: "md-debug-all", shortcut: "F5", click: Command ("MonoDevelop.Debugger.DebugCommands.Debug")),
 			Item ("Ste_p Over", icon: "md-step-over-debug", shortcut: "F10", click: Command ("MonoDevelop.Debugger.DebugCommands.StepOver")),
 			Item ("Step _Into", icon: "md-step-into-debug", shortcut: "F11", click: Command ("MonoDevelop.Debugger.DebugCommands.StepInto")),
@@ -395,6 +404,35 @@ public static class MenuService
 			Sep (),
 			Item ("_Stop", icon: "gtk-stop", shortcut: "Ctrl Shift F5", click: Command ("MonoDevelop.Ide.Commands.ProjectCommands.Stop")),
 		}
+	};
+
+	// "Unit Testing" category (MonoDevelop.UnitTesting.addin.xml, 21 nodes):
+	// the shell wires the pad-driven commands; Debug/TestChart/TextEditor-caret
+	// items are kept for menu parity and report as unported until the cutover
+	// (the standard dispatch fallback), like the other pending ports.
+	static List<MenuEntry> UnitTestingCategory () => new () {
+		Item ("Run Unit Tests", icon: "md-run-unit-tests", shortcut: "Ctrl T", click: Command ("MonoDevelop.UnitTesting.Commands.TestCommands.RunAllTests")),
+		Item ("Run With", click: Command ("MonoDevelop.UnitTesting.Commands.TestCommands.RunTestWith")),
+		Item ("Debug Test", click: Command ("MonoDevelop.UnitTesting.Commands.TestCommands.DebugTest")),
+		Item ("Debug All Tests", click: Command ("MonoDevelop.UnitTesting.Commands.TestCommands.DebugAllTests")),
+		Item ("Run Test", click: Command ("MonoDevelop.UnitTesting.Commands.TestCommands.RunTest")),
+		Item ("Show test source code", click: Command ("MonoDevelop.UnitTesting.Commands.TestCommands.ShowTestCode")),
+		Item ("Go to failure", click: Command ("MonoDevelop.UnitTesting.Commands.TestCommands.GoToFailure")),
+		Item ("Select test in tree", click: Command ("MonoDevelop.UnitTesting.Commands.TestCommands.SelectTestInTree")),
+		Item ("Show results pad", click: Command ("MonoDevelop.UnitTesting.Commands.TestCommands.ShowTestDetails")),
+		Item ("Rerun test", click: Command ("MonoDevelop.UnitTesting.Commands.TestCommands.RerunTest")),
+		Sep (),
+		Item ("Proportional time scale", click: Command ("MonoDevelop.UnitTesting.Commands.TestChartCommands.UseTimeScale")),
+		Item ("Show one result per day", click: Command ("MonoDevelop.UnitTesting.Commands.TestChartCommands.SingleDayResult")),
+		Item ("Results chart", click: Command ("MonoDevelop.UnitTesting.Commands.TestChartCommands.ShowResults")),
+		Item ("Time chart", click: Command ("MonoDevelop.UnitTesting.Commands.TestChartCommands.ShowTime")),
+		Item ("Show successful tests", click: Command ("MonoDevelop.UnitTesting.Commands.TestChartCommands.ShowSuccessfulTests")),
+		Item ("Show failed tests", click: Command ("MonoDevelop.UnitTesting.Commands.TestChartCommands.ShowFailedTests")),
+		Item ("Show ignored tests", click: Command ("MonoDevelop.UnitTesting.Commands.TestChartCommands.ShowIgnoredTests")),
+		Sep (),
+		Item ("Run Test at Caret", click: Command ("MonoDevelop.UnitTesting.Commands.TextEditorCommands.RunTestAtCaret")),
+		Item ("Debug Test at Caret", click: Command ("MonoDevelop.UnitTesting.Commands.TextEditorCommands.DebugTestAtCaret")),
+		Item ("Select Test at Caret", click: Command ("MonoDevelop.UnitTesting.Commands.TextEditorCommands.SelectTestAtCaret")),
 	};
 
 	// ---------- Version Control (inserted after Run, like VersionControl.addin.xml) ----------
