@@ -166,13 +166,27 @@ internal static class Program
 				|| a.StartsWith ("--gotoline", StringComparison.Ordinal)
 				|| a.StartsWith ("--sessionrec=", StringComparison.Ordinal)
 				|| a.StartsWith ("--sessionreplay=", StringComparison.Ordinal)
-				|| a.StartsWith ("--unittests", StringComparison.Ordinal)) ?? "";
+				|| a.StartsWith ("--unittests", StringComparison.Ordinal)
+				|| a is "--helptree" or "--toolbox") ?? "";
 
 	// Optional path of a solution to open at startup (--sln=<path>); the Solution
 	// pad is then populated with the real projects of that solution.
 	public static string SolutionArg =>
 		Environment.GetCommandLineArgs ().FirstOrDefault (a => a.StartsWith ("--sln=", StringComparison.Ordinal)) is { } arg
 			? arg.Substring ("--sln=".Length) : "";
+
+	// Optional extra monodoc source directory for the Help pad (--helpsrc=
+	// <dir> holding a monodoc.xml); QA runs point it at an isolated fixture.
+	public static string HelpSourceArg =>
+		Environment.GetCommandLineArgs ().FirstOrDefault (a => a.StartsWith ("--helpsrc=", StringComparison.Ordinal)) is { } arg
+			? arg.Substring ("--helpsrc=".Length) : "";
+
+	// Optional user-templates directory for the Toolbox pad (--toolboxsnippets=
+	// <dir> with the legacy CodeTemplates v3.0 files); QA runs point it at an
+	// isolated fixture so the real profile stays untouched.
+	public static string SnippetsDirArg =>
+		Environment.GetCommandLineArgs ().FirstOrDefault (a => a.StartsWith ("--toolboxsnippets=", StringComparison.Ordinal)) is { } arg
+			? arg.Substring ("--toolboxsnippets=".Length) : "";
 
 	// Avalonia configuration, don't remove; also used by visual designer.
 	// WithInterFont was dropped: it embeds a bundled font that Skia must

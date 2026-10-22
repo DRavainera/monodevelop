@@ -2320,6 +2320,16 @@ public partial class MainWindow : Window
 				// QA (Fila A): Unit Tests pad — real discovery over the loaded
 				// solution; --unittests-run additionally does a real `dotnet test`.
 				await UnitTestsQaAsync (qa);
+			} else if (qa == "--helptree") {
+				// QA (Fila A): Help pad — monodoc.xml discovery + tree dump.
+				RefreshHelpPad ();
+				SetPadVisible ("help", true);
+				DumpHelpTree ();
+			} else if (qa == "--toolbox") {
+				// QA (Fila A): Toolbox pad — items + categories dump.
+				RefreshToolboxPad ();
+				SetPadVisible ("toolbox", true);
+				DumpToolbox ();
 			} else if (qa == "--codeissues") {
 				// QA: Code Issues pad fed with synthetic diagnostics (the shell has no
 				// Roslyn analyzer host, so the pad mirrors the build output).
@@ -2555,7 +2565,7 @@ public partial class MainWindow : Window
 			if (qaArg is "--collapse" or "--collapsebottom"
 				|| qaArg.StartsWith ("--outline", StringComparison.Ordinal)
 				|| qaArg.StartsWith ("--unittests", StringComparison.Ordinal)
-				|| qaArg is "--classes" or "--codeissues")
+				|| qaArg is "--classes" or "--codeissues" or "--helptree" or "--toolbox")
 				return;
 			var raw = SettingsStore.GetString ("Monodevelop.PadsLayout");
 			if (string.IsNullOrWhiteSpace (raw))
@@ -2677,6 +2687,19 @@ public partial class MainWindow : Window
 	TreeView? outlineTree;
 	TreeView? classesTree;
 
+	// Help pad (legacy HelpTree): the Monodoc documentation tree
+	// (HelpTreeService), the empty state (no monodoc.xml in any source dir)
+	// and the current root.
+	TreeView? helpTree;
+	TextBlock? helpEmpty;
+	HelpNode? helpRoot;
+
+	// Toolbox pad (legacy DesignerSupport Toolbox): search filter, category
+	// toggle and the items tree over ToolboxService (code templates).
+	TreeView? toolboxTree;
+	TextBox? toolboxSearch;
+	bool toolboxShowCategories = true;
+
 	// Unit Tests pad (legacy TestPad): the tree over the loaded solution's test
 	// projects, the node→TreeViewItem map for live state updates, the selection,
 	// the test-run process and the details pane (legacy detailsPad, no chart).
@@ -2782,11 +2805,29 @@ public partial class MainWindow : Window
 		};
 		LeftPads.AddTab (new PadHost.PadTab { Id = "classes", Label = "Classes", Icon = "md-classes-pad", Content = classesTree, Visible = false });
 
-		// Help pad (legacy HelpTree, left group, auto-hidden).
-		var helpList = new ListBox { Background = Brushes.Transparent };
-		helpList.Bind (ListBox.ForegroundProperty, Application.Current.GetResourceObservable ("IdeFgBrush"));
-		helpList.Items.Add ("(documentation index)");
-		LeftPads.AddTab (new PadHost.PadTab { Id = "help", Label = "Help", Icon = "md-help-pad", Content = helpList, Visible = false });
+		// Help pad (legacy HelpTree, left group, auto-hidden): the Monodoc
+		// documentation tree (HelpTreeService) with lazy per-node loading
+		// (legacy RowExpanded) and leaf activation opening the node URL.
+		helpTree = new TreeView { Background = Brushes.Transparent };
+		helpTree.Bind (TreeView.ForegroundProperty, Application.Current.GetResourceObservable ("IdeFgBrush"));
+		helpTree.DoubleTapped += (_, _) => {
+			if (helpTree.SelectedItem is TreeViewItem { Tag: HelpNode n })
+				OpenHelpNode (n);
+		};
+		helpEmpty = new TextBlock {
+			Opacity = 0.55,
+			IsVisible = false,
+			HorizontalAlignment = HorizontalAlignment.Center,
+			VerticalAlignment = VerticalAlignment.Top,
+			Margin = new Thickness (12),
+			TextWrapping = TextWrapping.Wrap,
+		};
+		// Overlap (the empty state shows only when the tree is hidden).
+		var helpHost = new Panel ();
+		helpHost.Children.Add (helpTree);
+		helpHost.Children.Add (helpEmpty);
+		LeftPads.AddTab (new PadHost.PadTab { Id = "help", Label = "Help", Icon = "md-help-pad", Content = helpHost, Visible = false });
+		RefreshHelpPad ();
 
 		// Properties pad (right, legacy PropertyPad): a header with the object name
 		// and a two-column name/value grid built from per-node descriptors
@@ -2801,11 +2842,43 @@ public partial class MainWindow : Window
 		};
 		RightPads.AddTab (new PadHost.PadTab { Id = "properties", Label = "Properties", Icon = "md-properties-pad", Content = propertiesHost });
 
-		// Toolbox pad (legacy ToolboxPad, right group, auto-hidden).
-		var toolboxList = new ListBox { Background = Brushes.Transparent };
-		toolboxList.Bind (ListBox.ForegroundProperty, Application.Current.GetResourceObservable ("IdeFgBrush"));
-		toolboxList.Items.Add ("(toolbox items)");
-		RightPads.AddTab (new PadHost.PadTab { Id = "toolbox", Label = "Toolbox", Icon = "md-toolbox-pad", Content = toolboxList, Visible = false });
+		// Toolbox pad (legacy DesignerSupport ToolboxPad/Toolbox, right group,
+		// auto-hidden): search filter + categories/items over the code
+		// templates available in the shell (ToolboxService); activation
+		// expands the item at the caret (legacy ConsumeItem/InsertAtCaret).
+		toolboxSearch = new TextBox { Watermark = "Search Toolbox", Margin = new Thickness (4, 4, 4, 0) };
+		toolboxSearch.TextChanged += (_, _) => RefreshToolboxPad ();
+		var toolboxCatToggle = new CheckBox {
+			Content = "Show categories",
+			IsChecked = true,
+			Margin = new Thickness (4, 0, 4, 4),
+		};
+		toolboxCatToggle.PropertyChanged += (_, e) => {
+			if (e.Property == CheckBox.IsCheckedProperty) {
+				toolboxShowCategories = toolboxCatToggle.IsChecked == true;
+				RefreshToolboxPad ();
+			}
+		};
+		toolboxTree = new TreeView { Background = Brushes.Transparent };
+		toolboxTree.Bind (TreeView.ForegroundProperty, Application.Current.GetResourceObservable ("IdeFgBrush"));
+		toolboxTree.DoubleTapped += (_, _) => {
+			if (toolboxTree.SelectedItem is TreeViewItem { Tag: ToolboxItem t })
+				UseToolboxItem (t);
+		};
+		toolboxTree.KeyDown += (_, e) => {
+			if (e.Key == Key.Enter && toolboxTree.SelectedItem is TreeViewItem { Tag: ToolboxItem t }) {
+				UseToolboxItem (t);
+				e.Handled = true;
+			}
+		};
+		var toolboxHost = new DockPanel ();
+		DockPanel.SetDock (toolboxSearch, Dock.Top);
+		DockPanel.SetDock (toolboxCatToggle, Dock.Top);
+		toolboxHost.Children.Add (toolboxSearch);
+		toolboxHost.Children.Add (toolboxCatToggle);
+		toolboxHost.Children.Add (toolboxTree);
+		RightPads.AddTab (new PadHost.PadTab { Id = "toolbox", Label = "Toolbox", Icon = "md-toolbox-pad", Content = toolboxHost, Visible = false });
+		RefreshToolboxPad ();
 
 		// Document Outline pad (legacy DocumentOutlinePad, right group, auto-hidden):
 		// the declaration tree of the ACTIVE document, from the live editor buffer.
@@ -5857,7 +5930,10 @@ public partial class MainWindow : Window
 
 		// ----- HelpCommands (legacy HelpHandler/OpenLogDirectoryHandler/MarkLog) -----
 		case "MonoDevelop.Ide.Commands.HelpCommands.Help":
-			Output ("[help] API documentation root (HelpOperations.ShowHelp('root:'))");
+			// Legacy F1 → HelpOperations.ShowHelp ("root:"): the documentation
+			// root. The shell equivalent is the Help pad (Monodoc tree).
+			SetPadVisible ("help", true);
+			Output ("[help] API documentation root (Help pad)");
 			return;
 		case "MonoDevelop.Ide.Commands.HelpCommands.OpenLogDirectory": {
 			// Legacy UserProfile.Current.LogDir → open in the platform file manager.
@@ -7600,6 +7676,195 @@ public partial class MainWindow : Window
 				await System.Threading.Tasks.Task.Delay (500);
 			DumpUnitTestsTree ();
 		}
+	}
+
+	// ---------- Help pad (legacy HelpTree) ----------
+
+	// Builds the documentation tree from the monodoc.xml indexes of the
+	// source directories (app dir + user drop-in dir + --helpsrc=). With no
+	// index anywhere the pad shows the searched paths (the legacy pad is
+	// likewise empty here: Monodoc data is absent and Monodoc.RootTree is a
+	// compat stub in the net10 build).
+	void RefreshHelpPad ()
+	{
+		var dirs = HelpTreeService.DefaultSourceDirs ();
+		if (!string.IsNullOrEmpty (Program.HelpSourceArg))
+			dirs.Add (Program.HelpSourceArg);
+		var result = HelpTreeService.LoadTree (dirs);
+		helpRoot = result.Root;
+		helpTree?.Items.Clear ();
+		foreach (var err in result.Errors)
+			Output ("[help] " + err);
+		if (result.Root is null) {
+			helpEmpty!.Text = "No Monodoc documentation found\n\nsearched:\n  " + string.Join ("\n  ", result.Searched);
+			helpEmpty.IsVisible = true;
+			helpTree!.IsVisible = false;
+			Output ("[help] no monodoc.xml in: " + string.Join (", ", result.Searched));
+			return;
+		}
+		helpEmpty.IsVisible = false;
+		helpTree.IsVisible = true;
+		var rootItem = new TreeViewItem {
+			Header = TreeHeader ("md-help-pad", HelpTreeService.RootCaption),
+			Tag = result.Root,
+			IsExpanded = true,
+		};
+		PopulateHelpItem (rootItem);
+		helpTree.Items.Add (rootItem);
+		Output ($"[help] documentation tree loaded ({CountHelpNodes (result.Root)} nodes)");
+	}
+
+	int CountHelpNodes (HelpNode node) =>
+		1 + node.Children.Sum (CountHelpNodes);
+
+	// One level at a time, like the legacy pad: a <c>file=</c> node's children
+	// file is parsed when the row expands (legacy RowExpanded → PopulateNode).
+	// Avalonia hides the expander of :empty rows, so an unpopulated lazy row
+	// carries one placeholder item until its first expansion replaces it.
+	TreeViewItem MakeHelpItem (HelpNode node)
+	{
+		var item = new TreeViewItem {
+			Header = TreeHeader (node.HasChildData ? "md-open-folder" : "gtk-help", node.Caption),
+			Tag = node,
+		};
+		if (node.Summary is { Length: > 0 })
+			ToolTip.SetTip (item, node.Summary);
+		if (node.ChildrenFile is null) {
+			// The index parsed this node's children inline: materialize them now
+			// so the row shows its expander.
+			PopulateHelpItem (item);
+		} else {
+			item.Items.Add (new TreeViewItem { Tag = HelpLazyPlaceholder });
+			item.Expanded += (_, _) => {
+				if (item.Items.Count != 1 || item.Items [0] is not TreeViewItem { Tag: string tag } || tag != HelpLazyPlaceholder)
+					return;
+				item.Items.Clear ();
+				if (!HelpTreeService.LoadChildren (node))
+					return;
+				PopulateHelpItem (item);
+			};
+		}
+		return item;
+	}
+
+	const string HelpLazyPlaceholder = "help-lazy-placeholder";
+
+	void PopulateHelpItem (TreeViewItem item)
+	{
+		var node = (HelpNode)item.Tag;
+		foreach (var child in node.Children)
+			item.Items.Add (MakeHelpItem (child));
+	}
+
+	// Legacy RowActivated → HelpOperations.ShowHelp (PublicUrl). The legacy
+	// opens the internal Monodoc viewer (not ported); local pages open in a
+	// shell document, absolute URLs in the default browser.
+	void OpenHelpNode (HelpNode node)
+	{
+		var url = HelpTreeService.ResolveUrl (node);
+		if (url is null) {
+			Output ("[help] the selected node has no URL");
+			return;
+		}
+		if (url.StartsWith ("http://", StringComparison.Ordinal) || url.StartsWith ("https://", StringComparison.Ordinal)) {
+			try {
+				System.Diagnostics.Process.Start (new System.Diagnostics.ProcessStartInfo { FileName = url, UseShellExecute = true });
+				Output ("[help] opened " + url);
+			} catch (Exception ex) {
+				Output ("[help] could not open browser: " + ex.Message);
+			}
+			return;
+		}
+		if (File.Exists (url)) {
+			OpenFileDocumentAtLine (url, 1);
+			Output ("[help] opened " + Path.GetFileName (url));
+		} else
+			Output ("[help] no page for " + url);
+	}
+
+	void DumpHelpTree ()
+	{
+		if (helpRoot is null) {
+			Output ("[help] (no documentation)");
+			return;
+		}
+		foreach (var line in FlattenHelp (helpRoot, 0))
+			Output ("[help] " + line);
+	}
+
+	IEnumerable<string> FlattenHelp (HelpNode node, int depth)
+	{
+		yield return new string (' ', depth * 2)
+			+ $"{node.Caption}"
+			+ (node.Url is null ? "" : $" -> {node.Url}")
+			+ (node.ChildrenFile is null ? "" : $" (lazy {node.ChildrenFile})");
+		foreach (var child in node.Children)
+			foreach (var line in FlattenHelp (child, depth + 1))
+				yield return line;
+	}
+
+	// ---------- Toolbox pad (legacy DesignerSupport Toolbox) ----------
+
+	// Rebuilds the items tree: categories ▸ items (or flat) filtered by the
+	// search box (legacy filterTextChanged).
+	void RefreshToolboxPad ()
+	{
+		var items = ToolboxService.GetItems (
+			string.IsNullOrEmpty (Program.SnippetsDirArg) ? null : Program.SnippetsDirArg);
+		var shown = ToolboxService.Filter (items, toolboxSearch?.Text ?? "")
+			.OrderBy (t => t.Name, StringComparer.Ordinal)
+			.ToList ();
+		toolboxTree!.Items.Clear ();
+		if (toolboxShowCategories) {
+			foreach (var (cat, catItems) in ToolboxService.GetCategories (shown)) {
+				var catItem = new TreeViewItem {
+					Header = TreeHeader ("md-open-folder", cat),
+					IsExpanded = true,
+				};
+				foreach (var item in catItems)
+					catItem.Items.Add (MakeToolboxItem (item));
+				toolboxTree.Items.Add (catItem);
+			}
+		} else {
+			foreach (var item in shown)
+				toolboxTree.Items.Add (MakeToolboxItem (item));
+		}
+		if (shown.Count == 0)
+			toolboxTree.Items.Add (new TreeViewItem { Header = TreeHeader ("md-prefs-code-templates", "(no items match)") });
+	}
+
+	TreeViewItem MakeToolboxItem (ToolboxItem item)
+	{
+		var vi = new TreeViewItem {
+			Header = TreeHeader ("md-prefs-code-templates", item.Name),
+			Tag = item,
+		};
+		if (item.Summary is { Length: > 0 })
+			ToolTip.SetTip (vi, item.Summary);
+		return vi;
+	}
+
+	// Legacy UseSelectedItem → consumer ConsumeItem → InsertAtCaret: the
+	// template expands in the active editor at the caret (selection replaced).
+	void UseToolboxItem (ToolboxItem item)
+	{
+		var key = (DocTabs.SelectedItem as TabItem)?.Tag as string ?? "";
+		if (!docs.TryGetValue (key, out var ed)) {
+			Output ("[toolbox] open a text document first");
+			return;
+		}
+		ed.ExpandTemplateAtCaret (item.Code);
+		Output ($"[toolbox] used {item.Name} at caret (line {ed.CurrentLine + 1})");
+	}
+
+	void DumpToolbox ()
+	{
+		var items = ToolboxService.GetItems (
+			string.IsNullOrEmpty (Program.SnippetsDirArg) ? null : Program.SnippetsDirArg);
+		Output ($"[toolbox] {items.Count} item(s)");
+		foreach (var (cat, catItems) in ToolboxService.GetCategories (items))
+			foreach (var item in catItems)
+				Output ($"[toolbox] {cat}: {item.Name}");
 	}
 
 	// ---------- Code Issues pad (legacy CodeIssuePad) ----------

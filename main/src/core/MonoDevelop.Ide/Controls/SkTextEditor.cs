@@ -1891,6 +1891,12 @@ public class SkTextEditor : Control
 		["if"] = new [] { "if (condition) {", "", "}" },
 	};
 
+	/// <summary>The built-in template set as (name, code lines) pairs; the
+	/// single source of truth shared by the Snippet command and the Toolbox
+	/// pad ("Text Snippets" category, legacy CodeTemplateToolboxProvider).</summary>
+	public static IReadOnlyList<(string Name, string[] Code)> EditorTemplates =>
+		CodeTemplates.Select (kv => (kv.Key, kv.Value)).ToArray ();
+
 	/// <summary>Expands the code template named by the word before the caret.
 	/// Returns the template name or null when there is no match.</summary>
 	public string? ExpandCodeTemplate ()
@@ -1898,22 +1904,62 @@ public class SkTextEditor : Control
 		var prefix = WordPrefixBeforeCaret ();
 		if (prefix.Length == 0 || !CodeTemplates.TryGetValue (prefix, out var template))
 			return null;
-		// Remove the trigger word.
-		var line = lines [caretLine];
-		int end = Math.Min (caretCol, line.Length);
-		int start = end - prefix.Length;
-		var indent = new string (' ', start - (line.Length - line.TrimStart ().Length) > 0
-			? 0 : 0); // templates carry their own formatting
-		var expanded = template.ToList ();
-		expanded [0] = line.Substring (0, start) + expanded [0];
-		for (int i = 1; i < expanded.Count; i++)
-			expanded [i] = new string (' ', Math.Max (0, start)) + expanded [i];
-		lines [caretLine] = expanded [0];
-		for (int i = expanded.Count - 1; i >= 1; i--)
-			lines.Insert (caretLine + 1, expanded [i]);
-		Commit ();
+		if (!hasSelection) {
+			// Remove the trigger word (legacy InsertTemplateContents deletes
+			// the shortcut word before the caret; with a selection the legacy
+			// replaces the selection and leaves the text alone).
+			var line = lines [caretLine];
+			int end = Math.Min (caretCol, line.Length);
+			int start = end - prefix.Length;
+			lines [caretLine] = line.Remove (start, prefix.Length);
+			caretCol = start;
+			selAnchorCol = Math.Min (selAnchorCol, start);
+		}
+		// One ExpandTemplateAtCaret → one Commit → one undo step (legacy
+		// OpenUndoGroup around delete-word + insert).
+		ExpandTemplateAtCaret (template);
 		return prefix;
 	}
+
+	/// <summary>Expands the given template lines at the caret (legacy
+	/// <c>CodeTemplate.Insert</c> via the text consumer's
+	/// <c>ConsumeItem</c>): with a selection it replaces it (indent follows
+	/// the selection's first line, <c>$selected$</c> is filled with the
+	/// trimmed selection), without one it inserts at the caret (indent
+	/// follows the line's leading whitespace). <c>$end$</c> is removed and
+	/// the caret placed at its position. Other <c>$var$</c> markers are kept
+	/// as-is (the built-in set has none).</summary>
+	public void ExpandTemplateAtCaret (string[] codeLines)
+	{
+		if (codeLines.Length == 0)
+			return;
+		string selected = hasSelection ? SelectedText.Trim () : "";
+		var (sl, sc, el, ec) = SelectionRange ();
+		string indent = new string (' ', Math.Min (
+			lines [hasSelection ? sl : caretLine].Length,
+			lines [hasSelection ? sl : caretLine].TakeWhile (c => char.IsWhiteSpace (c)).Count ()));
+		var body = new System.Text.StringBuilder (codeLines [0]);
+		for (int i = 1; i < codeLines.Length; i++)
+			body.Append ('\n').Append (indent).Append (codeLines [i]);
+		int endPos = body.ToString ().IndexOf ("$end$", StringComparison.Ordinal);
+		if (endPos >= 0)
+			body.Remove (endPos, "$end$".Length);
+		body.Replace ("$selected$", selected);
+		int insertOffset = hasSelection ? SelectionOrder ().Start : CaretOffset;
+		ReplaceSelection (body.ToString ());
+		if (endPos >= 0 && secondaryCarets.Count == 0) {
+			var (cl, cc) = OffsetToPosition (insertOffset + endPos);
+			caretLine = cl;
+			caretCol = cc;
+			selAnchorLine = cl;
+			selAnchorCol = cc;
+			EnsureCaretVisible ();
+		}
+		Commit ();
+	}
+
+	int CaretOffset =>
+		lines.Take (caretLine).Sum (l => l.Length + 1) + Math.Min (caretCol, lines [caretLine].Length);
 
 	public static readonly string[] SurroundTemplates = { "if", "while", "for", "foreach", "try" };
 
