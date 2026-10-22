@@ -2321,10 +2321,13 @@ public partial class MainWindow : Window
 				// solution; --unittests-run additionally does a real `dotnet test`.
 				await UnitTestsQaAsync (qa);
 			} else if (qa == "--helptree") {
-				// QA (Fila A): Help pad — monodoc.xml discovery + tree dump.
+				// QA (Fila A): Help pad — monodoc.xml discovery + tree dump + the
+				// first page as a web tab (exercises the NativeWebView path).
 				RefreshHelpPad ();
 				SetPadVisible ("help", true);
 				DumpHelpTree ();
+				if (FirstUrlHelpNode (helpRoot) is { } page)
+					OpenHelpNode (page);
 			} else if (qa == "--toolbox") {
 				// QA (Fila A): Toolbox pad — items + categories dump.
 				RefreshToolboxPad ();
@@ -7757,8 +7760,9 @@ public partial class MainWindow : Window
 	}
 
 	// Legacy RowActivated → HelpOperations.ShowHelp (PublicUrl). The legacy
-	// opens the internal Monodoc viewer (not ported); local pages open in a
-	// shell document, absolute URLs in the default browser.
+	// opened the internal Monodoc viewer (not ported); the page opens as a web
+	// tab in the editor pad (NativeWebView — file:// or http(s)), like the
+	// legacy viewer rendering the help HTML inside the IDE.
 	void OpenHelpNode (HelpNode node)
 	{
 		var url = HelpTreeService.ResolveUrl (node);
@@ -7766,20 +7770,53 @@ public partial class MainWindow : Window
 			Output ("[help] the selected node has no URL");
 			return;
 		}
-		if (url.StartsWith ("http://", StringComparison.Ordinal) || url.StartsWith ("https://", StringComparison.Ordinal)) {
-			try {
-				System.Diagnostics.Process.Start (new System.Diagnostics.ProcessStartInfo { FileName = url, UseShellExecute = true });
-				Output ("[help] opened " + url);
-			} catch (Exception ex) {
-				Output ("[help] could not open browser: " + ex.Message);
-			}
+		OpenHelpWebTab (url);
+	}
+
+	// A help page is a document tab like any file, keyed "help:<url>" (a
+	// distinct key space from file docs) so re-activating the same node
+	// reuses the tab instead of duplicating it.
+	void OpenHelpWebTab (string url)
+	{
+		var tag = "help:" + url;
+		if (documents.Any (d => d.Tag == tag)) {
+			SelectDocument (tag);
 			return;
 		}
-		if (File.Exists (url)) {
-			OpenFileDocumentAtLine (url, 1);
-			Output ("[help] opened " + Path.GetFileName (url));
-		} else
-			Output ("[help] no page for " + url);
+		try {
+			var web = new NativeWebView { Source = new Uri (url) };
+			// Re-attaching the tab re-fires NavigationCompleted; keep the log
+			// meaningful (first load vs. a re-attach reload).
+			bool firstNav = true;
+			web.NavigationCompleted += (_, e) => {
+				Output ("[help] web tab " + (e.IsSuccess ? (firstNav ? "loaded" : "reloaded") : "FAILED") + " " + web.Source);
+				firstNav = !firstNav;
+			};
+			AddDocument (tag, web);
+			Output ("[help] opened " + (url.Contains ("://", StringComparison.Ordinal) ? url : Path.GetFileName (url)) + " (web tab)");
+		} catch (Exception ex) {
+			// No web view adapter available (missing WebKit/WebView2 runtime):
+			// fall back to the code view for local pages.
+			Output ("[help] web view unavailable (" + ex.Message + ")");
+			if (!url.Contains ("://", StringComparison.Ordinal) && File.Exists (url))
+				OpenFileDocumentAtLine (url, 1);
+		}
+	}
+
+	// First node (depth-first) whose URL resolves: the --helptree QA hook opens
+	// it to exercise the web tab path headlessly.
+	HelpNode? FirstUrlHelpNode (HelpNode? node)
+	{
+		if (node is null)
+			return null;
+		if (HelpTreeService.ResolveUrl (node) is not null)
+			return node;
+		foreach (var child in node.Children) {
+			var hit = FirstUrlHelpNode (child);
+			if (hit is not null)
+				return hit;
+		}
+		return null;
 	}
 
 	void DumpHelpTree ()

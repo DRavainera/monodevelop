@@ -1930,3 +1930,20 @@ Directrices del operador: (1) ningún cambio de `MonoDevelop.Ide.*`/`MonoDevelop
 - Paridad diferida de `help`: viewer interno Monodoc (las páginas locales abren como documento del shell).
 - Paridad diferida de Unit Testing: TestChart, regresiones, debug de tests.
 - Resto del inventario In3 sin cerrar: F (iconos), H (NRefactory/Cecil), decisiones D/E y EP `DeployDirectoryResolvers`.
+
+### Fila A — Help: páginas Monodoc como web tab (WebView) (2026-10-22)
+
+**Contexto**: mejora solicitada por el operador sobre el pad Help: al abrir una página Monodoc el HTML se veía en el editor de código (markup); debe abrirse **renderizada como página web** en una pestaña del área de edición (como el viewer interno del legacy, no portado).
+
+**Cambios** (2 ficheros):
+
+1. `MonoDevelop.Startup.Avalonia.csproj`: `Avalonia.Controls.WebView 12.1.1` (paquete oficial AvaloniaUI — en Avalonia 12 el control WebView salió de `Avalonia.Browser` 11.x, que en 12.x es el kit "Avalonia en el navegador" JS-based). Runtime: WebKitGTK 4.1 (2.54.1, verificado instalado con sus procesos en `/usr/libexec/webkit2gtk-4.1/`).
+2. `MainWindow.axaml.cs`: `OpenHelpNode` → `OpenHelpWebTab(url)` — pestaña de documento tag `help:<url>` (reabrir el mismo nodo reactiva sin duplicar) con `NativeWebView { Source = … }` vía `AddDocument`; `NavigationCompleted` loguea `[help] web tab loaded|reloaded|FAILED <url>` (el re-attach al conmutar pestañas re-emite el evento: 1.ª carga `loaded`, siguientes `reloaded`); fallback al editor de código si no hay adapter (páginas locales, log `web view unavailable`). URLs http(s) pasan del navegador externo a la pestaña web interna. Hook QA `--helptree` abre el primer nodo con URL (depth-first) para ejercitar la ruta sin UI.
+
+**Desviaciones**: el render lo hace el adapter del sistema (WebKitGTK), no un viewer propio; sin adapter, locales → editor de código con log.
+
+**Cómo validar** (artefactos `~/opencode/qa_help_toolbox/`, prefijo `webtab_`): `SHELL_LOG=<log> ~/opencode/launch_shell.sh --helptree --helpsrc=/home/daniel/opencode/qa_help/MonodocDocs` → `[help] opened getting-started.html (web tab)` + `[help] web tab loaded file:///…`; pestaña con el HTML renderizado (marcador `QA-HELP-GETTING-STARTED` como texto, sin markup — verificado por OCR); doble clic `Overview` → 2.ª pestaña; re-doble clic → sin duplicar; ✕ → cierre sin crash; sin fixture → estado vacío, sin web tabs; arranque default → 0 excepciones.
+
+**QA (§18.5)**: 1 round del Tester QA Senior — **PASS, 0 hallazgos funcionales** (103/103; web tab completo con OCR; dedupe; cierre; sin fixture; arranque). 1 observación menor (re-emisión de `NavigationCompleted` en reactivación → línea extra de log) corregida por el dev como cambio de log (`loaded`/`reloaded`), re-verificada en smoke.
+
+**Cierre**: las páginas de ayuda Monodoc se abren como web tabs renderizadas en el área de edición (paridad de experiencia con el viewer legacy), sin tocar el mecanismo de documentos.

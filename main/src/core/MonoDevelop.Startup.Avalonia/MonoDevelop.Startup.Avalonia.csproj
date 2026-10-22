@@ -25,6 +25,12 @@
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Avalonia" Version="12.1.2" />
+    <!-- WebView for the Help pad: renders Monodoc help pages (file:// or
+         http(s)) as web tabs in the editor pad. Avalonia 12 renamed the
+         Avalonia.Browser WebView control to the official Avalonia.Controls.WebView
+         package (AvaloniaUI OÜ); the 12.x Avalonia.Browser package is the
+         "run Avalonia in a browser" kit, not a web view control. -->
+    <PackageReference Include="Avalonia.Controls.WebView" Version="12.1.1" />
     <PackageReference Include="Avalonia.Desktop" Version="12.1.2" />
     <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.2" />
     <PackageReference Include="Avalonia.Skia" Version="12.1.2" />
