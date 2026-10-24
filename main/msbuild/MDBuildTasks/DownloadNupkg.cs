@@ -81,6 +81,27 @@ namespace MDBuildTasks
 
 		public override bool Execute ()
 		{
+			// Si los paquetes ya estan extraidos en PackagesDirectory (stageados
+			// desde el cache global de NuGet, por ejemplo), se omite nuget.exe:
+			// el binario es .NET Framework y necesita mono para ejecutarse, que
+			// no esta presente en todos los hosts de compilacion.
+			var allPresent = true;
+			foreach (var package in Packages) {
+				var version = package.GetMetadata ("Version");
+				var dir = Path.Combine (PackagesDirectory, package.ItemSpec + "." + version);
+				if (!Directory.Exists (dir)) {
+					allPresent = false;
+					break;
+				}
+			}
+			if (allPresent) {
+				if (!string.IsNullOrEmpty (StampFile)) {
+					Directory.CreateDirectory (Path.GetDirectoryName (StampFile));
+					File.WriteAllText (StampFile, "");
+				}
+				return true;
+			}
+
 			Directory.CreateDirectory (Path.GetDirectoryName (PackagesConfigFile));
 
 			using (var f = File.CreateText (PackagesConfigFile)) {

@@ -3067,7 +3067,14 @@ namespace MonoDevelop.Ide.Editor.Highlighting.RegexEngine {
                 assemblyAttributes.Add(securityRulesAttribute);
 #endif
 	
+#if NET
+                // .NET (Core) no tiene AppDomain.DefineDynamicAssembly ni
+                // AssemblyBuilderAccess.RunAndSave; el ensamblado es in-memoria
+                // (Run). Guardarlo en disco no esta soportado (ver Save()).
+                _assembly = System.Reflection.Emit.AssemblyBuilder.DefineDynamicAssembly(an, AssemblyBuilderAccess.Run, assemblyAttributes);
+#else
                 _assembly = AppDomain.CurrentDomain.DefineDynamicAssembly(an, AssemblyBuilderAccess.RunAndSave, assemblyAttributes);
+#endif
                 _module = _assembly.DefineDynamicModule(an.Name + ".dll");
 
                 if (attribs != null) {
@@ -3077,7 +3084,7 @@ namespace MonoDevelop.Ide.Editor.Highlighting.RegexEngine {
                 }
 
                 if (resourceFile != null) {
-#if FEATURE_PAL
+#if FEATURE_PAL || NET
                     // unmanaged resources are not supported
                     throw new ArgumentOutOfRangeException("resourceFile");
 #else
@@ -3324,7 +3331,16 @@ namespace MonoDevelop.Ide.Editor.Highlighting.RegexEngine {
         [ResourceExposure(ResourceScope.None)]
         [ResourceConsumption(ResourceScope.Machine, ResourceScope.Machine)]
         internal void Save() {
+#if NET
+            // .NET (Core) no portó AssemblyBuilder.Save: no se pueden escribir
+            // ensamblados dinamicos a disco. Compile() (in-memoria) sigue
+            // funcionando; solo la exportacion a disco del tool queda fuera.
+            throw new NotSupportedException(
+                "RegexCompiler.Save no esta soportado en .NET (Core); " +
+                "use Regex.Compile (ensamblado in-memoria).");
+#else
             _assembly.Save(_assembly.GetName().Name + ".dll");
+#endif
         }
 
         /*

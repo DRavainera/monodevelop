@@ -13,6 +13,32 @@
     <AllowedReferenceRelatedFileExtensions>.pdb;.xml;.dll.config;.exe.config</AllowedReferenceRelatedFileExtensions>
   </PropertyGroup>
 
+  <Import Project="$(MSBuildThisFileDirectory)msbuild\LegacyReferenceAssemblies.targets" />
+
+  <!--
+  EnsureLegacyReferenceStaging:
+
+  Este sistema no trae el perfil .NET Framework 4.5 (/usr/lib/mono/4.5 vacio,
+  GAC vacio), asi que MonoFrameworkNet45Directory cae a main/build. El pack de
+  reference assemblies net472 (NuGet, ya restaurado para otros proyectos del
+  arbol) tiene las facades legacy que los proyectos old-style referencian por
+  HintPath $(MonoFrameworkNet45Directory)/... (System.Design, System.Web,
+  System.Web.Services, System.Windows.Forms, System.Xaml). Se copian a
+  main/build (gitignored) para que esas HintPaths resuelvan. Compile-only: los
+  proyectos las declaran con Private=false; en tiempo de ejecucion el host
+  .NET 10 aporta lo que existe en su BCL.
+  -->
+  <Target Name="EnsureLegacyReferenceStaging"
+          BeforeTargets="ResolveAssemblyReferences"
+          Condition="'$(OS)' != 'Windows_NT' AND $([System.IO.Directory]::Exists('$(MSBuildThisFileDirectory)build')) AND $([System.IO.File]::Exists('$(LegacyReferenceAssembliesDir)\System.Design.dll'))">
+    <ItemGroup>
+      <_LegacyRefName Include="System.Design;System.Web;System.Web.Services;System.Windows.Forms;System.Xaml" />
+      <_LegacyRefSrc Include="@(_LegacyRefName->'$(LegacyReferenceAssembliesDir)\%(Identity).dll')" />
+      <_LegacyRefDst Include="@(_LegacyRefName->'$(MSBuildThisFileDirectory)build\%(Identity).dll')" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_LegacyRefSrc)" DestinationFiles="@(_LegacyRefDst)" SkipUnchangedFiles="true" />
+  </Target>
+
   <Target Name="FixWindowsAccessibilityReference"
     AfterTargets="ResolveAssemblyReference"
     BeforeTargets="CoreCompile;FindReferenceAssembliesForReferences"

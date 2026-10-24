@@ -62,13 +62,10 @@ namespace MonoDevelop.TextTemplating
 			if (warningLogged)
 				return;
 
-			//FIXME: CallContext.LogicalSetData not implemented in Mono
-			try {
-				System.Runtime.Remoting.Messaging.CallContext.LogicalSetData (name, value);
-			} catch (NotImplementedException) {
-				LoggingService.LogWarning ("T4: CallContext.LogicalSetData not implemented in this Mono version");
-				warningLogged = true;
-			}
+			// CallContext no existe en net10.0; en Mono el LogicalSetData tiraba
+			// NotImplementedException, así que el comportamiento real era warning + no-op
+			LoggingService.LogWarning ("T4: CallContext.LogicalSetData not implemented in this runtime");
+			warningLogged = true;
 		}
 	}
 }

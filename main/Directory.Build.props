@@ -33,8 +33,40 @@
   </PropertyGroup>
   <PropertyGroup Condition="'$(OS)' != 'Windows_NT' AND Exists('/usr/lib/mono')">
     <MonoFrameworkDirectory Condition="'$(MonoFrameworkDirectory)' == ''">/usr/lib/mono</MonoFrameworkDirectory>
-    <MonoFrameworkNet45Directory Condition="'$(MonoFrameworkNet45Directory)' == ''">$(MonoFrameworkDirectory)/4.5</MonoFrameworkNet45Directory>
-    <MonoGtkSharpDirectory Condition="'$(MonoGtkSharpDirectory)' == ''">$(MonoFrameworkDirectory)/gtk-sharp-2.0</MonoGtkSharpDirectory>
+    <MonoFrameworkNet45Directory Condition="'$(MonoFrameworkNet45Directory)' == '' AND Exists('/usr/lib/mono/4.5/Mono.Posix.dll')">$(MonoFrameworkDirectory)/4.5</MonoFrameworkNet45Directory>
+    <MonoGtkSharpDirectory Condition="'$(MonoGtkSharpDirectory)' == '' AND Exists('/usr/lib/mono/gtk-sharp-2.0')">$(MonoFrameworkDirectory)/gtk-sharp-2.0</MonoGtkSharpDirectory>
+  </PropertyGroup>
+  <!--
+  Fallback de referencias legacy (Mono.Posix, Mono.Cairo, System.Xaml, ...): si el
+  directorio 4.5 de Mono no está completo, se usan las assemblies stageadas en
+  main/build (staging unificado que mantiene after.Main.sln.targets).
+  -->
+  <PropertyGroup Condition="'$(OS)' != 'Windows_NT' AND '$(MonoFrameworkNet45Directory)' == '' AND Exists('$(MSBuildThisFileDirectory)build/Mono.Posix.dll')">
+    <MonoFrameworkNet45Directory>$(MSBuildThisFileDirectory)build</MonoFrameworkNet45Directory>
+  </PropertyGroup>
+  <!--
+  Assemblies de referencia del .NET Framework 4.7.2 (Microsoft.NETFramework.ReferenceAssemblies):
+  se usan SOLO para compilar código legacy que usa tipos fuera del BCL de net10.0
+  (System.Web, System.Design, System.Windows.Forms, System.Xaml, System.ServiceModel, ...).
+  Opt-in por proyecto: <UseLegacyReferenceAssemblies>true</UseLegacyReferenceAssemblies>.
+  -->
+  <!-- Dir se define siempre (no solo con el opt-in): EnsureLegacyReferenceStaging
+       lo usa para stagear las facades legacy en main/build. -->
+  <PropertyGroup Condition="'$(LegacyReferenceAssembliesDir)' == ''">
+    <LegacyReferenceAssembliesDir>$(NuGetPackageRoot)microsoft.netframework.referenceassemblies.net472/1.0.3/build/.NETFramework/v4.7.2</LegacyReferenceAssembliesDir>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(UseLegacyReferenceAssemblies)' == 'true' AND '$(MSBuildProjectExtension)' == '.csproj'">
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+  </ItemGroup>
+  <!--
+  Fallback de GTK# 2.12: en esta máquina /usr/lib/mono/gtk-sharp-2.0 no existe; las
+  assemblies gtk-sharp/gdk-sharp/glib-sharp/pango-sharp/atk-sharp/glade-sharp
+  (v2.12.0.0, PKT 35E10195DAB3C99F) y Mono.Cairo se reconstruyeron desde el clon
+  mono/gtk-sharp 2.12 (ver docs/session_summary.md) y se stagean en main/build,
+  el staging unificado que mantiene after.Main.sln.targets.
+  -->
+  <PropertyGroup Condition="'$(OS)' != 'Windows_NT' AND '$(MonoGtkSharpDirectory)' == '' AND Exists('$(MSBuildThisFileDirectory)build')">
+    <MonoGtkSharpDirectory>$(MSBuildThisFileDirectory)build</MonoGtkSharpDirectory>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(OS)' != 'Windows_NT' AND Exists('/usr/lib/mono') AND ('$(TargetFrameworkIdentifier)' == '.NETFramework' OR '$(TargetFramework)' == 'net40' OR '$(TargetFramework)' == 'net45' OR '$(TargetFramework)' == 'net451' OR '$(TargetFramework)' == 'net452' OR '$(TargetFrameworkVersion)' == 'v4.0' OR '$(TargetFrameworkVersion)' == '4.0' OR '$(TargetFrameworkVersion)' == 'v4.5' OR '$(TargetFrameworkVersion)' == '4.5' OR '$(TargetFrameworkVersion)' == 'v4.5.1' OR '$(TargetFrameworkVersion)' == '4.5.1' OR '$(TargetFrameworkVersion)' == 'v4.5.2' OR '$(TargetFrameworkVersion)' == '4.5.2')">

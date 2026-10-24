@@ -56,7 +56,10 @@
       <HintPath>/usr/lib/mono/4.5/System.Design.dll</HintPath>
     </Reference>
     <Reference Include="System.Xml" />
-    <Reference Include="System.Web" />
+    <Reference Include="System.Web">
+      <HintPath>$(MonoFrameworkNet45Directory)/System.Web.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
     <Reference Include="System.Drawing">
       <HintPath>/usr/lib/mono/4.5/System.Drawing.dll</HintPath>
     </Reference>

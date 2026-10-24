@@ -1,0 +1,82 @@
+<Project>
+  <!--
+  PreferLegacyReferenceAssemblies:
+
+  El pack de referencia net10.0 (Microsoft.NETCore.App.Ref) incluye facades
+  con identidad 4.0.0.0 pero version de archivo 10.x (WindowsBase vacio de
+  16KB, System.Web reducido a HttpUtility, ...). Cuando un proyecto referencia
+  la facade completa del .NET Framework 4.7.2 (pack
+  Microsoft.NETFramework.ReferenceAssemblies, stageada en main/build), RAR
+  unifica por nombre simple eligiendo la version de archivo mayor (10.x >
+  4.7.x) → gana el stub net10.0 y el código legacy no encuentra los tipos
+  (CS0234).
+
+  Los items del pack net10.0 entran en @(ReferencePath) durante
+  ResolveReferences (no antes: en ResolveTargetingPackAssets aún no están en
+  @(Reference)), así que la corrección se hace después de ResolveReferences
+  y antes de FindReferenceAssembliesForReferences: ese target genera
+  @(ReferencePathWithRefAssemblies), la copia que Csc consume realmente, y si
+  la corrección corre después ya no tiene efecto. Se eliminan del set los
+  facades del pack dotnet/packs/Microsoft.NETCore.App.Ref de la lista y, si
+  al hacerlo queda el facade sin ninguna versión en el set, se reañade la
+  reference net472 completa (compile-only; en tiempo de ejecución el host
+  .NET 10 aporta el assembly que existe en su BCL).
+
+  Solo se tocan los nombres de la lista: facades legacy que el pack net10.0
+  trae reducidas. Ningún ensamblamiento real del BCL net10.0 (System.Data,
+  System.Xml, System.Collections, ...) sale de esta lista, así que el target
+  es inerte para proyectos que no pisen esos nombres.
+
+  Se importa desde cada Directory.Build.targets del árbol (main y
+  submódulos), porque la búsqueda de Directory.Build.targets se detiene en
+  el primero más cercano y los submódulos no heredan el de main/.
+  -->
+  <PropertyGroup>
+    <!-- System.Web.HttpUtility va con System.Web: si entra la reference
+         net472 completa (que incluye HttpUtility), la asamblea standalone
+         net10 duplica el tipo (CS0433). -->
+    <_LegacyFacadeStubRegex>Microsoft\.NETCore\.App\.Ref.*(WindowsBase|PresentationCore|PresentationFramework|System\.Xaml|System\.Web|System\.Web\.HttpUtility|System\.Web\.Services|System\.Design|System\.Windows\.Forms)\.dll</_LegacyFacadeStubRegex>
+  </PropertyGroup>
+  <Target Name="PreferLegacyReferenceAssemblies"
+          AfterTargets="ResolveReferences"
+          BeforeTargets="FindReferenceAssembliesForReferences">
+    <ItemGroup>
+      <_NetCoreFacadeStub Include="@(ReferencePath)"
+                          Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('%(ReferencePath.Identity)', '$(_LegacyFacadeStubRegex)'))" />
+      <_NetCoreFacadeStubRef Include="@(Reference)"
+                             Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('%(Reference.Identity)', '$(_LegacyFacadeStubRegex)'))" />
+    </ItemGroup>
+    <ItemGroup Condition="'@(_NetCoreFacadeStub)' != ''">
+      <ReferencePath Remove="@(_NetCoreFacadeStub)" />
+      <Reference Remove="@(_NetCoreFacadeStubRef)" />
+    </ItemGroup>
+    <!-- Reañadir la reference net472 completa solo si al quitar el stub queda
+         el facade sin ninguna versión en el set (evita dobles referencias). -->
+    <ItemGroup>
+      <_LeftWB Include="@(ReferencePath)" Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('%(ReferencePath.Identity)', 'WindowsBase\.dll'))" />
+      <_LeftSXaml Include="@(ReferencePath)" Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('%(ReferencePath.Identity)', 'System\.Xaml\.dll'))" />
+      <_LeftSW Include="@(ReferencePath)" Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('%(ReferencePath.Identity)', 'System\.Web\.dll'))" />
+      <_LeftSWS Include="@(ReferencePath)" Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('%(ReferencePath.Identity)', 'System\.Web\.Services\.dll'))" />
+      <_LeftSD Include="@(ReferencePath)" Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('%(ReferencePath.Identity)', 'System\.Design\.dll'))" />
+      <_LeftSWF Include="@(ReferencePath)" Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('%(ReferencePath.Identity)', 'System\.Windows\.Forms\.dll'))" />
+    </ItemGroup>
+    <ItemGroup Condition="'@(_LeftWB)' == '' and Exists('$(LegacyReferenceAssembliesDir)\WindowsBase.dll')">
+      <ReferencePath Include="$(LegacyReferenceAssembliesDir)\WindowsBase.dll"><Private>false</Private></ReferencePath>
+    </ItemGroup>
+    <ItemGroup Condition="'@(_LeftSXaml)' == '' and Exists('$(LegacyReferenceAssembliesDir)\System.Xaml.dll')">
+      <ReferencePath Include="$(LegacyReferenceAssembliesDir)\System.Xaml.dll"><Private>false</Private></ReferencePath>
+    </ItemGroup>
+    <ItemGroup Condition="'@(_LeftSW)' == '' and Exists('$(LegacyReferenceAssembliesDir)\System.Web.dll')">
+      <ReferencePath Include="$(LegacyReferenceAssembliesDir)\System.Web.dll"><Private>false</Private></ReferencePath>
+    </ItemGroup>
+    <ItemGroup Condition="'@(_LeftSWS)' == '' and Exists('$(LegacyReferenceAssembliesDir)\System.Web.Services.dll')">
+      <ReferencePath Include="$(LegacyReferenceAssembliesDir)\System.Web.Services.dll"><Private>false</Private></ReferencePath>
+    </ItemGroup>
+    <ItemGroup Condition="'@(_LeftSD)' == '' and Exists('$(LegacyReferenceAssembliesDir)\System.Design.dll')">
+      <ReferencePath Include="$(LegacyReferenceAssembliesDir)\System.Design.dll"><Private>false</Private></ReferencePath>
+    </ItemGroup>
+    <ItemGroup Condition="'@(_LeftSWF)' == '' and Exists('$(LegacyReferenceAssembliesDir)\System.Windows.Forms.dll')">
+      <ReferencePath Include="$(LegacyReferenceAssembliesDir)\System.Windows.Forms.dll"><Private>false</Private></ReferencePath>
+    </ItemGroup>
+  </Target>
+</Project>
