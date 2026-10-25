@@ -37,7 +37,6 @@ using System.Threading.Tasks;
 using System.Linq;
 using System.Threading;
 using Microsoft.CodeAnalysis.Host;
-using Microsoft.CodeAnalysis.IncrementalCaches;
 using Microsoft.CodeAnalysis.Internal.Log;
 using Microsoft.CodeAnalysis.SolutionCrawler;
 using Microsoft.CodeAnalysis.SolutionSize;
@@ -339,6 +338,7 @@ namespace MonoDevelop.Ide
 					CreatedCount++;
 			}
 		}
+#endif
 
 		[Test]
 		public async Task TestWorkspaceImmediatelyAvailable ()

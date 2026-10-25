@@ -69,8 +69,8 @@ namespace MonoDevelop.AspNet.WebForms
 
 		ICompletionWidget defaultCompletionWidget;
 		DocumentContext defaultDocumentContext;
-		TextEditor defaultEditor;
-		TextEditor projectedEditor;
+		Ide.Editor.TextEditor defaultEditor;
+		Ide.Editor.TextEditor projectedEditor;
 		
 		bool HasDoc { get { return aspDoc != null; } }
 

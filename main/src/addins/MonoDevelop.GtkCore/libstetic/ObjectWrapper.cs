@@ -141,7 +141,9 @@ namespace Stetic {
 			frontend = null;
 			if (wrapped != null)
 				wrappers.Remove (GetIndentityObject (wrapped));
+			#if !NET
 			System.Runtime.Remoting.RemotingServices.Disconnect (this);
+			#endif
 		}
 		
 		public bool IsDisposed {

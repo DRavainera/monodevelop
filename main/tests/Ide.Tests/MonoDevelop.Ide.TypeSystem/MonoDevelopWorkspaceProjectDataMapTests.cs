@@ -82,7 +82,7 @@ namespace MonoDevelop.Ide.TypeSystem
 				// Returns first project for first framework
 				var defaultPid = map.GetId (project);
 				Assert.IsNotNull (defaultPid);
-				Assert.AreEqual ("multi-target (netcoreapp1.1)", defaultPid.DebugName);
+				Assert.AreEqual ("multi-target (netcoreapp1.1)", defaultPid.ToString ());
 				Assert.AreEqual (defaultPid, pid);
 
 				var pids = map.GetIds (project);

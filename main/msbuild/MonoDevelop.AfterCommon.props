@@ -43,8 +43,11 @@
 	<!-- set a bunch of default value the project can override -->
 	<PropertyGroup>
 		<OutputType>Library</OutputType>
-		<AssemblyName>$(MSBuildProjectName)</AssemblyName>
-		<RootNamespace>$(MSBuildProjectName)</RootNamespace>
+		<!-- conditional: el proyecto temporario de compilacion de markup WPF (wpftmp)
+		     fija AssemblyName/RootNamespace al nombre real del ensamblado antes de este
+		     import; pisarlo con el nombre del archivo temporario rompia el IVT firmado -->
+		<AssemblyName Condition="'$(AssemblyName)' == ''">$(MSBuildProjectName)</AssemblyName>
+		<RootNamespace Condition="'$(RootNamespace)' == ''">$(MSBuildProjectName)</RootNamespace>
 	</PropertyGroup>
 
 	<ItemDefinitionGroup Condition="'$(ShortEmbeddedResourceIDs)'!='False'">

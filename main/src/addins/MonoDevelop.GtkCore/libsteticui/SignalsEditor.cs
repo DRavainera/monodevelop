@@ -51,7 +51,9 @@ namespace Stetic
 			if (session != null)
 				session.Dispose ();
 			frontend.disposed = true;
+			#if !NET
 			System.Runtime.Remoting.RemotingServices.Disconnect (frontend);
+			#endif
 			base.Dispose ();
 		}
 		

@@ -300,5 +300,7 @@ Thumbs.db
 /main/build/MonoRoslynCompat.dll
 **/bin/Debug/
 **/obj/Debug/
+# artefacto temporal del compilador XAML de WPF (regenerado en cada build de un proyecto WPF)
+*.wpftmp.csproj
 
 /.freebuff/project-id

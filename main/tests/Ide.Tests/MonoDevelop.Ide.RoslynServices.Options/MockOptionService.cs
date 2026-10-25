@@ -7,9 +7,9 @@
 // Copyright (c) 2018 Microsoft Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
+// of this software and associated terms, to deal
 // in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// to use, copy, modify, merge, publish, distribute, and/or sell
 // copies of the Software, and to permit persons to whom the Software is
 // furnished to do so, subject to the following conditions:
 //
@@ -26,6 +26,8 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
+using System.Linq;
+using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.CodeAnalysis;
@@ -33,8 +35,38 @@ using Microsoft.CodeAnalysis.Options;
 
 namespace MonoDevelop.Ide.RoslynServices.Options
 {
-	class MockOptionService : IGlobalOptionService, IOptionService
+	// Sustituto local de Microsoft.CodeAnalysis.Options.OptionChangedEventArgs,
+	// que es internal en Roslyn 4.8 (el test solo usa Option/Value).
+	class MockOptionChangedEventArgs : EventArgs
 	{
+		public MockOptionChangedEventArgs (OptionKey optionKey, object value)
+		{
+			Option = optionKey.Option;
+			Value = value;
+		}
+
+		public IOption Option { get; }
+		public object Value { get; }
+	}
+
+	class MockOptionService : IOptionService
+	{
+		// Roslyn 4.8: OptionSet tiene constructor y field changedOptions internos.
+		// El proyecto de tests no es friend de Microsoft.CodeAnalysis.Workspaces,
+		// así que se accede por reflection (mismo espíritu que MonoRoslynCompat).
+		static readonly ConstructorInfo s_optionSetCtor = typeof (OptionSet).GetConstructor (BindingFlags.Instance | BindingFlags.NonPublic, null, Type.EmptyTypes, null);
+		static readonly FieldInfo s_optionSetChangedOptionsField = typeof (OptionSet).GetField ("changedOptions", BindingFlags.Instance | BindingFlags.NonPublic);
+
+		static OptionSet CreateOptionSet () => (OptionSet)s_optionSetCtor.Invoke (null);
+
+		static IEnumerable<OptionKey> GetChangedOptionKeys (OptionSet optionSet)
+		{
+			if (s_optionSetChangedOptionsField.GetValue (optionSet) is ImmutableDictionary<OptionKey, object> changedOptions)
+				return changedOptions.Keys;
+
+			return Enumerable.Empty<OptionKey> ();
+		}
+
 		IOptionPersister persister;
 		object _gate = new object ();
 		HashSet<IOption> _options = new HashSet<IOption> ();
@@ -77,12 +109,10 @@ namespace MonoDevelop.Ide.RoslynServices.Options
 
 		public void SetOptions (OptionSet optionSet)
 		{
-			var workspaceOptionSet = (WorkspaceOptionSet)optionSet;
-
-			var changedOptions = new List<OptionChangedEventArgs> ();
+			var changedOptions = new List<MockOptionChangedEventArgs> ();
 
 			lock (_gate) {
-				foreach (var optionKey in workspaceOptionSet.GetAccessedOptions ()) {
+				foreach (var optionKey in GetChangedOptionKeys (optionSet)) {
 					var setValue = optionSet.GetOption (optionKey);
 					var currentValue = GetOption (optionKey);
 
@@ -92,7 +122,7 @@ namespace MonoDevelop.Ide.RoslynServices.Options
 					}
 
 					// The value is actually changing, so update
-					changedOptions.Add (new OptionChangedEventArgs (optionKey, setValue));
+					changedOptions.Add (new MockOptionChangedEventArgs (optionKey, setValue));
 
 					_currentValues = _currentValues.SetItem (optionKey, setValue);
 
@@ -117,10 +147,10 @@ namespace MonoDevelop.Ide.RoslynServices.Options
 				_currentValues = _currentValues.SetItem (optionKey, newValue);
 			}
 
-			RaiseEvents (new List<OptionChangedEventArgs> { new OptionChangedEventArgs (optionKey, newValue) });
+			RaiseEvents (new List<MockOptionChangedEventArgs> { new MockOptionChangedEventArgs (optionKey, newValue) });
 		}
 
-		void RaiseEvents (List<OptionChangedEventArgs> changedOptions)
+		void RaiseEvents (List<MockOptionChangedEventArgs> changedOptions)
 		{
 			var optionChanged = OptionChanged;
 			if (optionChanged != null) {
@@ -130,12 +160,12 @@ namespace MonoDevelop.Ide.RoslynServices.Options
 			}
 		}
 
-		public OptionSet GetOptions () =>  new WorkspaceOptionSet (this);
+		public OptionSet GetOptions () => CreateOptionSet ();
 
 		public void RegisterDocumentOptionsProvider (IDocumentOptionsProvider documentOptionsProvider) => throw new NotImplementedException ();
 
 		public Task<OptionSet> GetUpdatedOptionSetForDocumentAsync (Document document, OptionSet optionSet, CancellationToken cancellationToken) => throw new NotImplementedException ();
 
-		public event EventHandler<OptionChangedEventArgs> OptionChanged;
+		public event EventHandler<MockOptionChangedEventArgs> OptionChanged;
 	}
 }

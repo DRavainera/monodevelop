@@ -6818,7 +6818,7 @@
   </ItemGroup>
   <ItemGroup>
     <Reference Include="Microsoft.VisualStudio.Text.Internal">
-      <HintPath>$(VSEditorApiDirectory)bin\Editor\Text\Impl\Commanding\$(Configuration)\net472\Microsoft.VisualStudio.Text.Internal.dll</HintPath>
+      <HintPath>$(VSEditorApiDirectory)bin\Editor\Text\Impl\Commanding\$(Configuration)\net10.0\Microsoft.VisualStudio.Text.Internal.dll</HintPath>
     </Reference>
   </ItemGroup>
   <Target Name="AfterBuild">

@@ -53,7 +53,7 @@ namespace MonoDevelop.Ide.RoslynServices.Options
 			using (var testCase = await SetupTestCase ("class MyClass {}")) {
 				var doc = testCase.Document;
 
-				AssertWorkspaceService<INotificationService, MonoDevelopNotificationServiceFactory.MonoDevelopNotificationService> ();
+				AssertWorkspaceService<INotificationService, MonoDevelopNotificationServiceFactory> ();
 
 				void AssertWorkspaceService<TExport, TActual> () where TExport : IWorkspaceService
 				{

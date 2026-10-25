@@ -292,7 +292,7 @@ namespace MonoDevelop.AspNet.WebForms
 			return p != null? p.Value as string : null;
 		}
 		
-		public void AddRegisterDirective (WebFormsPageInfo.RegisterDirective directive, TextEditor editor, bool preserveCaretPosition)
+		public void AddRegisterDirective (WebFormsPageInfo.RegisterDirective directive, Ide.Editor.TextEditor editor, bool preserveCaretPosition)
 		{
 			if (doc == null)
 				return;

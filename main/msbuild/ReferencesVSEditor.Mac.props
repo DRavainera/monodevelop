@@ -58,7 +58,7 @@
     <PropertyGroup>
       <FPFConfiguration>Release</FPFConfiguration>
       <FPFConfiguration Condition="$(Configuration.Contains('Debug'))">Debug</FPFConfiguration>
-      <FPFOutputPath>$(VSEditorApiDirectory)bin\FPF\$(FPFConfiguration)\net472\</FPFOutputPath>
+      <FPFOutputPath>$(VSEditorApiDirectory)bin\FPF\$(FPFConfiguration)\net10.0\</FPFOutputPath>
     </PropertyGroup>
     <ItemGroup>
       <FPFOutputFiles Include="$(FPFOutputPath)PresentationCore.*" />

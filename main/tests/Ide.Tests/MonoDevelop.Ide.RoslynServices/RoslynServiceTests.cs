@@ -40,6 +40,8 @@ namespace MonoDevelop.Ide.RoslynServices
 	[RequireService (typeof (CompositionManager))]
 	public class RoslynServiceTests : IdeTestBase
 	{
+#if !NET
+		// Roslyn 4.8: ForegroundThreadAffinitizedObject (ctor, ThreadingContext, IsForeground, InvokeBelowInputPriorityAsync) cambió a API internal.
 		[TestCase (true)]
 		[TestCase (false)]
 		public async Task TestForegroundThread (bool inBg)
@@ -70,5 +72,6 @@ namespace MonoDevelop.Ide.RoslynServices
 
 			Assert.AreEqual (2, x);
 		}
+#endif
 	}
 }

@@ -37,7 +37,7 @@ namespace MonoDevelop.AspNet.Razor
 		public override bool SupportsCorrectingIndent { get { return true; } }
 		public override bool SupportsPartialDocumentFormatting { get { return true; } }
 
-		protected override void CorrectIndentingImplementation (PolicyContainer policyParent, TextEditor editor, int line)
+		protected override void CorrectIndentingImplementation (PolicyContainer policyParent, Ide.Editor.TextEditor editor, int line)
 		{
 		}
 
@@ -46,7 +46,7 @@ namespace MonoDevelop.AspNet.Razor
 			return input.CreateSnapshot (startOffset, length);
         }
 
-		protected override void OnTheFlyFormatImplementation (TextEditor editor, DocumentContext context, int startOffset, int length)
+		protected override void OnTheFlyFormatImplementation (Ide.Editor.TextEditor editor, DocumentContext context, int startOffset, int length)
 		{
 		}
 

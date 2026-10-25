@@ -103,7 +103,7 @@ namespace MonoDevelop.AspNet.Tests.Razor
 
 	public class RazorTestingParser : RazorCSharpParser
 	{
-		public TextEditor Editor { get; set; }
+		public Ide.Editor.TextEditor Editor { get; set; }
 
 		public override System.Threading.Tasks.Task<ParsedDocument> Parse (ParseOptions parseOptions, System.Threading.CancellationToken cancellationToken)
 		{

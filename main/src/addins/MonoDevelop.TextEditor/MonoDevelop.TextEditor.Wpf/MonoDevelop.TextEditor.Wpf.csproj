@@ -7,6 +7,10 @@
     <AssemblyDescription>Integrates the WPF version of the Visual Studio Editor into MonoDevelop</AssemblyDescription>
     <AddinBuildDir>DisplayBindings\TextEditor.Wpf</AddinBuildDir>
     <AddMonoDevelopCoreReferences>true</AddMonoDevelopCoreReferences>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <!-- Page Find/FindUI.xaml + tipos Microsoft.VisualStudio.Text.* sobre WPF -->
+    <UseWPF>true</UseWPF>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="DiagnosticMargin" Version="1.0.1" PrivateAssets="all" />
@@ -20,11 +24,6 @@
     <PackageReference Include="Microsoft.VisualStudio.Language.Intellisense" Version="$(NuGetVersionVSEditor)" PrivateAssets="all" ExcludeAssets="runtime" />
     <ProjectReference Include="..\MonoDevelop.TextEditor\MonoDevelop.TextEditor.csproj" Private="False" />
     <ProjectReference Include="..\..\..\..\external\xwt\Xwt\Xwt.csproj" Private="False" />
-    <Reference Include="PresentationCore" />
-    <Reference Include="PresentationFramework" />
-    <Reference Include="WindowsBase" />
-    <Reference Include="WindowsFormsIntegration" />
-    <Reference Include="System.Xaml" />
   </ItemGroup>
   <ItemGroup>
     <IncludeCopyLocal Include="DiagnosticMargin.dll" />

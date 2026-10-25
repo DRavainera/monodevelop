@@ -31,10 +31,10 @@
       <HintPath>$(NuGetPackageRoot)system.memory/4.5.5/lib/netstandard2.0/System.Memory.dll</HintPath>
     </Reference>
     <Reference Include="Microsoft.VisualStudio.Text.Data">
-      <HintPath>$(VSEditorApiDirectory)bin/Editor/Text/Def/TextData/$(Configuration)/net472/Microsoft.VisualStudio.Text.Data.dll</HintPath>
+      <HintPath>$(VSEditorApiDirectory)bin/Editor/Text/Def/TextData/$(Configuration)/net10.0/Microsoft.VisualStudio.Text.Data.dll</HintPath>
     </Reference>
     <Reference Include="Microsoft.VisualStudio.CoreUtility">
-      <HintPath>$(VSEditorApiDirectory)bin/Editor/Core/Def/$(Configuration)/net472/Microsoft.VisualStudio.CoreUtility.dll</HintPath>
+      <HintPath>$(VSEditorApiDirectory)bin/Editor/Core/Def/$(Configuration)/net10.0/Microsoft.VisualStudio.CoreUtility.dll</HintPath>
     </Reference>
   </ItemGroup>
 </Project>

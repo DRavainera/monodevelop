@@ -102,8 +102,10 @@ namespace MonoDevelop.GtkCore
 
 		public void Dispose ()
 		{
+			#if !NET
 			if (resourceProvider != null)
 				System.Runtime.Remoting.RemotingServices.Disconnect (resourceProvider);
+			#endif
 			resourceProvider = null;
 			if (builderProject != null)
 				builderProject.Dispose ();
@@ -148,7 +150,9 @@ namespace MonoDevelop.GtkCore
 			get {
 				if (resourceProvider == null) {
 					resourceProvider = new ProjectResourceProvider (project);
+					#if !NET
 					System.Runtime.Remoting.RemotingServices.Marshal (resourceProvider, null, typeof(Stetic.IResourceProvider));
+					#endif
 				}
 				return resourceProvider;
 			}

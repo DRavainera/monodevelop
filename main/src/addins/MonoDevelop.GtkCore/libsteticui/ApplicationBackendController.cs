@@ -9,6 +9,7 @@ using System.Runtime.Remoting.Channels.Tcp;
 
 namespace Stetic
 {
+#if !NET
 	internal class ApplicationBackendController: MarshalByRefObject
 	{
 		bool stopping;
@@ -103,7 +104,9 @@ namespace Stetic
 		{
 			if (!stopping && Stopped != null)
 				Stopped (this, EventArgs.Empty);
+			#if !NET
 			System.Runtime.Remoting.RemotingServices.Disconnect (this);
+			#endif
 		}
 		
 		internal void Connect (ApplicationBackend backend)
@@ -124,4 +127,5 @@ namespace Stetic
 			return null;
 		}
 	}
+#endif
 }

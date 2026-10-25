@@ -19,10 +19,12 @@ namespace Stetic
 			Add (book);
 			
 			this.app = app;
+			#if !NET
 			if (app is IsolatedApplication) {
 				(app as IsolatedApplication).BackendChanged += OnBackendChanged;
 				(app as IsolatedApplication).BackendChanging += OnBackendChanging;
 			}
+			#endif
 		}
 		
 		protected void AddCustomWidget (Gtk.Widget w)
@@ -49,22 +51,28 @@ namespace Stetic
 			base.OnRealized ();
 			if (!initialized) {
 				initialized = true;
+#if !NET
 				if (app is IsolatedApplication)
 					ConnectPlug ();
 				else {
+#endif
 					Gtk.Widget w = OnCreateWidget ();
 					w.Show ();
 					book.AppendPage (w, null);
+#if !NET
 				}
+#endif
 			}
 		}
 		
 		protected override void OnUnrealized ()
 		{
+			#if !NET
 			if (app is IsolatedApplication && initialized) {
 				OnDestroyPlug (socket.Id);
 				initialized = false;
 			}
+			#endif
 			base.OnUnrealized ();
 		}
 		
@@ -116,11 +124,13 @@ namespace Stetic
 		
 		public override void Dispose ()
 		{
+			#if !NET
 			if (app is IsolatedApplication) {
 				IsolatedApplication iapp = app as IsolatedApplication;
 				iapp.BackendChanged -= OnBackendChanged;
 				iapp.BackendChanging -= OnBackendChanging;
 			}
+			#endif
 			base.Dispose ();
 		}
 		

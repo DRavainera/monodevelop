@@ -1,3 +1,4 @@
+#if !NET
 
 using System;
 using System.Runtime.Remoting;
@@ -28,3 +29,4 @@ namespace Stetic
 		}
 	}
 }
+#endif

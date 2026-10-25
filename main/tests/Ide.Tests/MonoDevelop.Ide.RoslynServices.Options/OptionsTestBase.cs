@@ -136,7 +136,7 @@ namespace MonoDevelop.Ide.RoslynServices.Options
 		{
 			var preferences = new RoslynPreferences ();
 			var optionsService = new MockOptionService ();
-			var persister = new MonoDevelopGlobalOptionPersister (optionsService, preferences);
+			var persister = new MonoDevelopGlobalOptionPersister (preferences);
 			optionsService.RegisterPersister (persister);
 
 			return (preferences, persister, optionsService);

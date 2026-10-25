@@ -100,7 +100,10 @@ namespace MonoDevelop.Ide.RoslynServices.Options
 			new CodeStyleOption<string> ("testString", NotificationOption.Error);
 		static CodeStyleOption<MyCustomClass> classOption =
 			new CodeStyleOption<MyCustomClass> (new MyCustomClass { X = 1 }, NotificationOption.Error);
+#if !NET
+		// Roslyn 4.8: NamingStylePreferences.Default eliminado.
 		static NamingStylePreferences namingOption = NamingStylePreferences.Default;
+#endif
 
 		SerializationTestCase [] SerializationTestCases = {
 			// Passing test cases
@@ -109,7 +112,9 @@ namespace MonoDevelop.Ide.RoslynServices.Options
 			SerializationTestCase.Ok (boolOption, boolOption.ToXElement ().ToString ()),
 			SerializationTestCase.Ok (enumOption, enumOption.ToXElement ().ToString ()),
 			SerializationTestCase.Ok (stringOption, stringOption.ToXElement ().ToString ()),
+#if !NET
 			SerializationTestCase.Ok (namingOption, namingOption.CreateXElement ().ToString ()),
+#endif
 			SerializationTestCase.Ok ("string"),
 			SerializationTestCase.Fail (classOption, stringOption.ToXElement ().ToString ()),
 		};
@@ -158,7 +163,9 @@ namespace MonoDevelop.Ide.RoslynServices.Options
 			SerializationTestCase.Fail<bool>(0L),
 			SerializationTestCase.Fail<ExpressionBodyPreference> (1.0),
 			SerializationTestCase.Fail<ExpressionBodyPreference> (ulong.MaxValue),
+#if !NET
 			SerializationTestCase.Ok(namingOption, namingOption.CreateXElement ().ToString()),
+#endif
 			SerializationTestCase.Ok(boolOption, boolOption.ToXElement ().ToString()),
 			SerializationTestCase.Ok(enumOption, enumOption.ToXElement ().ToString()),
 			SerializationTestCase.Fail<CodeStyleOption<MyCustomClass>>(stringOption.ToXElement ().ToString()),
@@ -195,6 +202,8 @@ namespace MonoDevelop.Ide.RoslynServices.Options
 			TestFetchPersist (kind, value1, value2, CodeStyleOption<bool>.Default);
 		}
 
+#if !NET
+		// Roslyn 4.8: NamingStylePreferences.Default y el constructor 3-args fueron eliminados.
 		[TestCaseSource (nameof (allKinds))]
 		public void TestFetchPersistNamingStyle (StorageLocationKind kind)
 		{
@@ -212,6 +221,7 @@ namespace MonoDevelop.Ide.RoslynServices.Options
 
 			TestFetchPersist (kind, value1, value2, defaultValue);
 		}
+#endif
 
 		void TestFetchPersist<T> (StorageLocationKind kind, T value1, T value2, T defaultValue = default(T))
 		{

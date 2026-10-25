@@ -39,7 +39,7 @@ namespace MonoDevelop.AspNet.Tests.Razor.Dom
 	public class RazorDocumentTrackerTests : TestBase
 	{
 		Func<ITextDocument> originalGetActiveDocument;
-		TextEditor editor;
+		Ide.Editor.TextEditor editor;
 
 		[SetUp]
 		public void SetUp ()

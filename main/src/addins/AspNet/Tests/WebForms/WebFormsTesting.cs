@@ -118,7 +118,7 @@ namespace MonoDevelop.AspNet.Tests.WebForms
 
 		public class WebFormsTestingEditorExtension : WebFormsEditorExtension
 		{
-			public WebFormsTestingEditorExtension (TextEditor editor, DocumentContext documentContext)
+			public WebFormsTestingEditorExtension (Ide.Editor.TextEditor editor, DocumentContext documentContext)
 			{
 				Initialize (editor, documentContext);
 			}

@@ -253,7 +253,9 @@ namespace Stetic
 				if (!autoCommitChanges)
 					editedProject.Dispose ();
 					
+				#if !NET
 				System.Runtime.Remoting.RemotingServices.Disconnect (frontend);
+				#endif
 				frontend = null;
 				rootWidget = null;
 				selection = null;

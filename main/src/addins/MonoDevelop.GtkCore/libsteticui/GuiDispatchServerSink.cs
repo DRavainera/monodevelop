@@ -1,3 +1,4 @@
+#if !NET
 
 using System;
 using System.Threading;
@@ -6,9 +7,11 @@ using System.Runtime.Remoting;
 using System.Runtime.Remoting.Channels;
 using System.Runtime.Remoting.Messaging;
 using System.Collections;
+#endif
 
 namespace Stetic
 {
+#if !NET
 	public class GuiDispatchServerSink: IServerChannelSink, IChannelSinkBase
 	{
 		IServerChannelSink nextSink;
@@ -114,10 +117,11 @@ namespace Stetic
 			}
 		}
 	}
+#endif
 	
 	class GuiDispatch
 	{
-		public static void InvokeSync (EventHandler h)
+		public static void InvokeSync (System.EventHandler h)
 		{
 			if (GLib.MainContext.Depth > 0)
 				h (null, null);

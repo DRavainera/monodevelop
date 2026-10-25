@@ -36,6 +36,8 @@ using UnitTests;
 
 namespace MonoDevelop.Ide.RoslynServices
 {
+#if !NET
+	// Roslyn 4.8: ProjectCacheService (IProjectCacheHostService, CacheObjectIfCachingEnabledForKey, ImplicitCacheSize), Workspace.OnProjectRemoved y WorkspaceTaskSchedulerFactory son internal/eliminadas; el fixture solo aplica al Roslyn legacy.
 	[TestFixture]
 	public class MonoDevelopProjectCacheHostServiceTests
 	{
@@ -260,18 +262,21 @@ namespace MonoDevelop.Ide.RoslynServices
 			GC.KeepAlive (cache);
 		}
 
+		// El stub ICachedObjectOwner de MonoRoslynCompat es una interfaz vacía
+		// (Roslyn 4.8 eliminó la propiedad CachedObject del contrato original).
 		class Owner : ICachedObjectOwner
 		{
-			object ICachedObjectOwner.CachedObject { get; set; }
 		}
 
+		// En Roslyn 4.8 CreateWorkspaceServices es protected internal abstract;
+		// el override se declara protected (patrón de VisualStudioMefHostServices).
 		class MockHostServices : HostServices
 		{
 			public static readonly MockHostServices Instance = new MockHostServices ();
 
 			MockHostServices () { }
 
-			protected internal override HostWorkspaceServices CreateWorkspaceServices (Workspace workspace)
+			protected override HostWorkspaceServices CreateWorkspaceServices (Workspace workspace)
 			{
 				return new MockHostWorkspaceServices (this, workspace);
 			}
@@ -298,14 +303,15 @@ namespace MonoDevelop.Ide.RoslynServices
 				return ImmutableArray<TLanguageService>.Empty;
 			}
 
-			public override TWorkspaceService GetService<TWorkspaceService> ()
-			{
-				if (s_taskSchedulerFactory is TWorkspaceService) {
-					return (TWorkspaceService)s_taskSchedulerFactory;
-				}
-
-				return default (TWorkspaceService);
+		public override TWorkspaceService GetService<TWorkspaceService> ()
+		{
+			if (s_taskSchedulerFactory is TWorkspaceService) {
+				return (TWorkspaceService)s_taskSchedulerFactory;
 			}
+
+			return default (TWorkspaceService);
 		}
 	}
+#endif
+}
 }

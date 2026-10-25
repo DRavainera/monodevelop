@@ -175,7 +175,9 @@ namespace Stetic
 		protected override void OnDestroyed ()
 		{
 			frontend.disposed = true;
+			#if !NET
 			System.Runtime.Remoting.RemotingServices.Disconnect (frontend);
+			#endif
 			if (editSession != null)
 				editSession.Dispose ();
 			editSession = null;

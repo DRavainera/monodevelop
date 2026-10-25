@@ -235,4 +235,57 @@ old-style restantes de `src/addins` + `src/tools` + tests, el cluster
 `vs-editor-api` (TFM net472 en `build/Project.props`), la cadena WPF
 `WindowsPlatform` → `net10.0-windows`, exclusion de proyectos Mac-only de
 `Main.sln`, build completo de `Main.sln` a 0 errores y validaciones (suite
-unitaria + smoke `--old-gui` + smoke Avalonia).
+  unitaria + smoke `--old-gui` + smoke Avalonia).
+
+## Cierre de ondas 2-3 (2026-10-24, agente principal) — `Main.sln` a 0 errores
+
+### Estado final del gate
+`dotnet build main/Main.sln -c DebugLinux` → **`Compilación correcta.`, 0 Errores**. Verificado en
+incremental y en `--no-incremental` (clean-room): 97 proyectos compilan para `DebugLinux`; el resto
+son proyectos Windows/Mac-only excluidos vía ausencia de `Build.0`.
+
+### Hallazgo clave: `WindowsPlatform` no bloquea el gate
+Los 4 proyectos Windows-only (`WindowsPlatform`, `WindowsAPICodePack/Core`, `WindowsAPICodePack/Shell`,
+`WindowsPlatform.Tests`) llevan `ActiveCfg` para `DebugLinux` pero **sin línea `Build.0`** en
+`Main.sln` (solo `DebugWin32`/`ReleaseWin32` la tienen). Por eso el gate `DebugLinux` NO los compila.
+Los "9 errores" de `WindowsPlatform.csproj` al compilarlo en aislado venían de una config no-Win32
+(`WIN32` no definido → `GtkWPFWidget`, que vive tras `#if WIN32` en `MonoDevelop.Ide`, queda excluido
+→ CS0246/CS0234; + CS0122 IVT + CS0115 override de Xwt). Irrelevantes para el gate Linux.
+Igual para los 5 Mac-only (`Xwt.Gtk.Mac`, `Xwt.XamMac`, `MacPlatform.Tests`, `TextUICocoa`,
+`TextUICocoaUtil`): 0 líneas `Build.0` para `DebugLinux` → excluidos, no requieren touch en el `.sln`.
+
+### Fixes del gate en esta sesión
+- `main/src/addins/MonoDevelop.GtkCore/MonoDevelop.GtkCore.GuiBuilder/CombinedDesignView.cs:194` —
+  `TextEditor` (CS0118): el namespace `MonoDevelop.TextEditor` (visible por lookup de namespace
+  externo, `MonoDevelop` → sub-namespace `TextEditor`) sombreaba al tipo `MonoDevelop.Ide.Editor.TextEditor`
+  importado por using → se cualificó `MonoDevelop.Ide.Editor.TextEditor`.
+- `main/src/addins/MonoDevelop.GtkCore/MonoDevelop.GtkCore/GtkDesignInfo.cs` (~líneas 106 y 151) —
+  `System.Runtime.Remoting.RemotingServices.Disconnect/Marshal` (CS0234; `MonoDevelop.GtkCore` no
+  referencia la facade net472 de `System.Runtime.Remoting`, a diferencia de `libstetic`/`libsteticui`
+  que la llevan) → `#if !NET` (no-op en net10.0; patrón receta §4).
+- `MonoDevelop.Startup.Avalonia` — el `MSB4018` ("file being used by another process" en
+  `obj/DebugLinux/Avalonia/resources`) era un flake por nodos MSBuild huérfanos reteniendo el handle;
+  al limpiar los nodos y recompilar → 0 errores (no es código).
+
+### Validación
+- Gate: `dotnet build main/Main.sln -c DebugLinux` = `Compilación correcta.`, `0 Errores`
+  (incremental + `--no-incremental`).
+- Logs: `~/opencode/migrate/gate_debuglinux_full2_*.log` (incremental),
+  `~/opencode/migrate/gate_cleanroom_*.log` (clean-room, 17955 líneas, 97 proyectos, 0 errores CS/MSB).
+
+### Validación — Tester QA Senior (subagente, AGENTS.md §18.5)
+El subagente QA Senior validó **antes** de documentar/commit/push (ciclo §18.5). Headless con
+`xvfb-run -a` (sin ventanas en la sesión del operador); logs en `~/opencode/migrate/qa-senior/`.
+El subagente re-ejecutó el gate de forma independiente:
+`dotnet build main/Main.sln -c DebugLinux` → `Compilación correcta.`, `0 Errores` (exit 0).
+- **Gate** : OK — exit=0, 0 errores.
+- **Avalonia (por defecto, `--menudump`)**: OK — proceso vivo, add-ins `loaded=True` (30:
+  `HexEditor`/`SourceEditor`/`TextEditor`/`XmlEditor`/...), extension points poblados (FileTemplates=52),
+  pads bottom/right renderizados, `0` FATAL/Unhandled.
+- **Gtk legacy (`--old-gui`)**: OK — el relay `MonoDevelop.AvaloniaShell.dll --old-gui` lanza el hijo
+  `dotnet main/build/MonoDevelop.dll` (con `MONODEVELOP_LEGACY_UI=1`); el proceso Gtk IDE quedó vivo
+  sobre `Xvfb`, `0` FATAL/Exception/Gtk-error.
+- **Limpieza**: OK — 0 procesos residuales (smokes + Xvfb).
+
+**Veredicto del subagente: APROBADO, 0 hallazgos de código** (única nota informativa: `kill` en bucle
+`pgrep` es interceptado por el sandbox → usar `kill -9 <PID>` directo).

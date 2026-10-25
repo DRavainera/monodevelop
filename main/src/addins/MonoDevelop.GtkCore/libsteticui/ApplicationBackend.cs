@@ -7,7 +7,9 @@ using System.CodeDom;
 using System.Runtime.Remoting;
 using System.Runtime.Remoting.Channels;
 using System.Runtime.Remoting.Channels.Tcp;
+#if !NET
 using Mono.Remoting.Channels.Unix;
+#endif
 
 namespace Stetic
 {
@@ -26,7 +28,9 @@ namespace Stetic
 		
 		ProjectBackend activeProject;
 		WidgetEditSession activeDesignSession;
+#if !NET
 		static ApplicationBackendController controller;
+#endif
 		
 		public ApplicationBackend (Application app)
 		{
@@ -38,6 +42,9 @@ namespace Stetic
 		
 		public static void Main ()
 		{
+#if NET
+			throw new NotSupportedException ("Isolated design-time backends are not supported on .NET");
+#else
 			Gdk.Threads.Init ();
 			Gtk.Application.Init ();
 			
@@ -89,14 +96,19 @@ namespace Stetic
 			Gdk.Threads.Leave ();
 			
 			controller.Disconnect (backend);
+#endif
 		}
 		
 		public virtual void Dispose ()
 		{
+#if !NET
 			if (controller != null) {
 				Gtk.Application.Quit ();
 			}
+#endif
+			#if !NET
 			System.Runtime.Remoting.RemotingServices.Disconnect (this);
+			#endif
 		}
 
 		public override object InitializeLifetimeService ()

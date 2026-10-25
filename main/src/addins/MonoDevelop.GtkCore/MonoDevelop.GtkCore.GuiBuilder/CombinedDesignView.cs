@@ -191,7 +191,7 @@ namespace MonoDevelop.GtkCore.GuiBuilder
 		
 		public void JumpTo (int line, int column)
 		{
-			var ip = (TextEditor) content.GetContent (typeof(TextEditor));
+			var ip = (MonoDevelop.Ide.Editor.TextEditor) content.GetContent (typeof(MonoDevelop.Ide.Editor.TextEditor));
 			if (ip != null) {
 				ShowPage (0);
 				ip.SetCaretLocation (line, column);

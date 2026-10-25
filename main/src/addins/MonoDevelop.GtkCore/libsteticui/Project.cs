@@ -54,11 +54,13 @@ namespace Stetic
 				backend.SetFrontend (this);
 			}
 
+			#if !NET
 			if (app is IsolatedApplication) {
 				IsolatedApplication iapp = app as IsolatedApplication;
 				iapp.BackendChanging += OnBackendChanging;
 				iapp.BackendChanged += OnBackendChanged;
 			}
+			#endif
 		}
 		
 		internal ProjectBackend ProjectBackend {
@@ -87,11 +89,13 @@ namespace Stetic
 
 		public void Dispose ()
 		{
+			#if !NET
 			if (app is IsolatedApplication) {
 				IsolatedApplication iapp = app as IsolatedApplication;
 				iapp.BackendChanging -= OnBackendChanging;
 				iapp.BackendChanged -= OnBackendChanged;
 			}
+			#endif
 			
 			if (tmpProjectFile != null && File.Exists (tmpProjectFile)) {
 				File.Delete (tmpProjectFile);
@@ -101,7 +105,9 @@ namespace Stetic
 				backend.Dispose ();
 			if (Disposed != null)
 				Disposed (this, EventArgs.Empty);
+			#if !NET
 			System.Runtime.Remoting.RemotingServices.Disconnect (this);
+			#endif
 		}
 
 		public override object InitializeLifetimeService ()

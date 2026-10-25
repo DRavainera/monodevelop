@@ -467,7 +467,9 @@ namespace Stetic
 		
 		public void Dispose ()
 		{
+			#if !NET
 			System.Runtime.Remoting.RemotingServices.Disconnect (this);
+			#endif
 		}
 
 		public override object InitializeLifetimeService ()

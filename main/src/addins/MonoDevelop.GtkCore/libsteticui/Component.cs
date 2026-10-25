@@ -24,7 +24,9 @@ namespace Stetic
 		
 		public virtual void Dispose ()
 		{
+			#if !NET
 			System.Runtime.Remoting.RemotingServices.Disconnect (this);
+			#endif
 			if (app != null)
 				app.DisposeComponent (this);
 		}
@@ -84,13 +86,21 @@ namespace Stetic
 			// Make sure we don't leak the wrapper type to the frontend process
 			
 			if (ob is Wrapper.Window) {
+				#if !NET
 				System.Runtime.Remoting.RemotingServices.Marshal (ob, null, typeof(Wrapper.Window));
+				#endif
 			} else if (ob is Wrapper.Container) {
+				#if !NET
 				System.Runtime.Remoting.RemotingServices.Marshal (ob, null, typeof(Wrapper.Container));
+				#endif
 			} else if (ob is Wrapper.Widget) {
+				#if !NET
 				System.Runtime.Remoting.RemotingServices.Marshal (ob, null, typeof(Wrapper.Widget));
+				#endif
 			} else if (ob is ObjectWrapper) {
+				#if !NET
 				System.Runtime.Remoting.RemotingServices.Marshal (ob, null, typeof(ObjectWrapper));
+				#endif
 			}
 			return ob;
 		}

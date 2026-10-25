@@ -11,7 +11,9 @@ using System.Runtime.Remoting;
 using System.Runtime.Remoting.Channels;
 using System.Runtime.Remoting.Channels.Tcp;
 using System.Diagnostics;
+#if !NET
 using Mono.Remoting.Channels.Unix;
+#endif
 using Mono.Cecil;
 
 namespace Stetic
@@ -34,13 +36,18 @@ namespace Stetic
 				return new LocalApplication ();
 			case IsolationMode.ProcessTcp:
 			case IsolationMode.ProcessUnix:
+#if !NET
 				return new IsolatedApplication (mode);
+#else
+				throw new NotSupportedException ("Process-isolated design-time backends are not supported on .NET");
+#endif
 			default:
 				throw new ArgumentException ("mode");
 			}
 		}
 	}
 
+#if !NET
 	internal class IsolatedApplication : Application {
 
 		string channelId;
@@ -172,6 +179,7 @@ namespace Stetic
 			return new ComponentType (this, typeName, desc, className, category, targetGtkVersion, library, px);
 		}
 	}
+#endif
 
 	internal class LocalApplication : Application {
 
@@ -299,7 +307,9 @@ namespace Stetic
 			if (signalsWidget != null)
 				 signalsWidget.Destroy ();
 			widgetLibraries.Clear ();
+			#if !NET
 			System.Runtime.Remoting.RemotingServices.Disconnect (this);
+			#endif
 		}
 		
 		public override object InitializeLifetimeService ()
@@ -547,7 +557,9 @@ namespace Stetic
 		
 		internal Component GetComponent (object cbackend, string name, string type)
 		{
+#if !NET
 			try {
+#endif
 				lock (components) {
 					Component c = (Component) components [cbackend];
 					if (c != null)
@@ -575,6 +587,7 @@ namespace Stetic
 					components [cbackend] = c;
 					return c;
 				}
+#if !NET
 			}
 			catch (System.Runtime.Remoting.RemotingException)
 			{
@@ -584,6 +597,7 @@ namespace Stetic
 				// dispatched in the GUI thread, so they may be delayed.
 				return null;
 			}
+#endif
 		}
 		
 		internal void DisposeComponent (Component c)

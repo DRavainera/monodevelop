@@ -210,7 +210,9 @@ namespace Stetic {
 			gproject = null;
 			rootWidget = null;
 			frontend = null;
+			#if !NET
 			System.Runtime.Remoting.RemotingServices.Disconnect (this);
+			#endif
 			disposed = true;
 		}
 		

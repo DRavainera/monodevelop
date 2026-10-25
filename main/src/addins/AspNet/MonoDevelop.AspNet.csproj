@@ -142,6 +142,7 @@
       <Private>False</Private>
     </Reference>
     <PackageReference Include="Microsoft.AspNet.Mvc" version="5.2.7" PrivateAssets="runtime" />
+    <PackageReference Include="System.Configuration.ConfigurationManager" Version="7.0.0" />
     <IncludeCopyLocal Include="System.Web.Mvc.dll" />
     <IncludeCopyLocal Include="System.Web.Razor.dll" />
     <IncludeCopyLocal Include="System.Web.Helpers.dll" />
