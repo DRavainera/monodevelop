@@ -25,6 +25,10 @@
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' " />
   <ItemGroup>
     <PackageReference Include="System.CodeDom" Version="5.0.0" PrivateAssets="runtime" />
+    <ProjectReference Include="..\..\..\..\src\compat\MonoUnixCompat\MonoUnixCompat.csproj">
+      <Project>{29A8AC1A-5ECB-4928-8BF9-2E6F0512BB17}</Project>
+      <Name>MonoUnixCompat</Name>
+    </ProjectReference>
   </ItemGroup>
   <ItemGroup>
     <Reference Include="System" />
@@ -34,10 +38,6 @@
     </Reference>
     <Reference Include="System.Xml" />
     <Reference Include="System.Core" />
-    <Reference Include="Mono.Posix">
-      <HintPath>$(MonoFrameworkNet45Directory)\Mono.Posix.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
     <Reference Include="Mono.Cecil">
       <HintPath>$(NuGetPackageRoot)mono.cecil/0.10.1/lib/net40/Mono.Cecil.dll</HintPath>
     </Reference>

@@ -53,7 +53,6 @@ namespace MonoDevelop.PackageManagement.Tests
 				Assert.AreEqual ("netstandard1.0", spec.RestoreMetadata.OriginalTargetFrameworks.Single ());
 				Assert.AreEqual (".NETStandard,Version=v1.0", targetFramework.FrameworkName.ToString ());
 				Assert.AreEqual ("Xamarin.Forms", dependency.Name);
-				Assert.AreEqual (LibraryDependencyType.Default, dependency.Type);
 				Assert.AreEqual (LibraryIncludeFlags.All, dependency.IncludeType);
 				Assert.AreEqual (LibraryIncludeFlagUtils.DefaultSuppressParent, dependency.SuppressParent);
 				Assert.AreEqual ("[2.4.0.280, )", dependency.LibraryRange.VersionRange.ToString ());
@@ -81,7 +80,6 @@ namespace MonoDevelop.PackageManagement.Tests
 				Assert.AreEqual (".NETCoreApp,Version=v1.1", netcoreapp.FrameworkName.ToString ());
 				Assert.AreEqual (".NETStandard,Version=v1.0", netstandard.FrameworkName.ToString ());
 				Assert.AreEqual ("Newtonsoft.Json", dependency.Name);
-				Assert.AreEqual (LibraryDependencyType.Default, dependency.Type);
 				Assert.AreEqual (LibraryIncludeFlags.All, dependency.IncludeType);
 				Assert.AreEqual (LibraryIncludeFlagUtils.DefaultSuppressParent, dependency.SuppressParent);
 				Assert.AreEqual ("[10.0.1, )", dependency.LibraryRange.VersionRange.ToString ());

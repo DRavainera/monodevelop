@@ -52,11 +52,6 @@
   <ItemGroup>
     <Reference Include="System" />
     <Reference Include="System.Xml" />
-    <Reference Include="Mono.Posix">
-      <HintPath>$(MonoFrameworkNet45Directory)\Mono.Posix.dll</HintPath>
-      <Aliases>MonoPosix</Aliases>
-      <Private>False</Private>
-    </Reference>
   </ItemGroup>
   <ItemGroup>
     <Compile Include="AssemblyInfo.cs" />
@@ -140,7 +135,7 @@
   </ItemGroup>
   <ItemGroup>
     <Reference Include="System.Collections.Immutable">
-      <HintPath>$(NuGetPackageRoot)system.collections.immutable/7.0.0/lib/netstandard2.0/System.Collections.Immutable.dll</HintPath>
+      <HintPath>$(NuGetPackageRoot)system.collections.immutable/10.0.1/lib/netstandard2.0/System.Collections.Immutable.dll</HintPath>
     </Reference>
     <Reference Include="Microsoft.CodeAnalysis">
       <HintPath>$(NuGetPackageRoot)microsoft.codeanalysis.common/$(NuGetVersionRoslyn)/lib/netstandard2.0/Microsoft.CodeAnalysis.dll</HintPath>

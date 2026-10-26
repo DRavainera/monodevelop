@@ -25,10 +25,10 @@
       <HintPath>$(NuGetPackageRoot)microsoft.codeanalysis.csharp/$(NuGetVersionRoslyn)/lib/netstandard2.0/Microsoft.CodeAnalysis.CSharp.dll</HintPath>
     </Reference>
     <Reference Include="System.Collections.Immutable">
-      <HintPath>$(NuGetPackageRoot)system.collections.immutable/7.0.0/lib/netstandard2.0/System.Collections.Immutable.dll</HintPath>
+      <HintPath>$(NuGetPackageRoot)system.collections.immutable/10.0.1/lib/netstandard2.0/System.Collections.Immutable.dll</HintPath>
     </Reference>
     <Reference Include="System.Memory">
-      <HintPath>$(NuGetPackageRoot)system.memory/4.5.5/lib/netstandard2.0/System.Memory.dll</HintPath>
+      <HintPath>$(NuGetPackageRoot)system.memory/4.6.3/lib/netstandard2.0/System.Memory.dll</HintPath>
     </Reference>
     <Reference Include="Microsoft.VisualStudio.Text.Data">
       <HintPath>$(VSEditorApiDirectory)bin/Editor/Text/Def/TextData/$(Configuration)/net10.0/Microsoft.VisualStudio.Text.Data.dll</HintPath>

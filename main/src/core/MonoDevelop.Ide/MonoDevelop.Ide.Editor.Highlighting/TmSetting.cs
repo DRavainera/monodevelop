@@ -30,7 +30,6 @@ using Xwt.Drawing;
 using System.Collections.Generic;
 using MonoDevelop.Core;
 using System.Linq;
-using Cairo;
 using System.Collections.Immutable;
 
 namespace MonoDevelop.Ide.Editor.Highlighting

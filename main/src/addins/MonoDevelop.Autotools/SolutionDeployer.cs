@@ -18,7 +18,6 @@
    Boston, MA 02111-1307, USA.
    */
 
-extern alias MonoPosix;
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -34,8 +33,8 @@ using MonoDevelop.Core.Serialization;
 using MonoDevelop.Deployment;
 using MonoDevelop.Core.Assemblies;
 
-using Syscall = MonoPosix::Mono.Unix.Native.Syscall;
-using FilePermissions = MonoPosix::Mono.Unix.Native.FilePermissions;
+using Syscall = Mono.Unix.Native.Syscall;
+using FilePermissions = Mono.Unix.Native.FilePermissions;
 
 namespace MonoDevelop.Autotools
 {

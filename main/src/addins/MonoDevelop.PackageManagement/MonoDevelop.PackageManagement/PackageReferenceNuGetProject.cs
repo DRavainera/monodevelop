@@ -177,7 +177,7 @@ namespace MonoDevelop.PackageManagement
 			return true;
 		}
 
-		public override async Task<bool> UninstallPackageAsync (
+		public async override Task<bool> UninstallPackageAsync (
 			PackageIdentity packageIdentity,
 			INuGetProjectContext nuGetProjectContext,
 			CancellationToken token)
@@ -191,6 +191,20 @@ namespace MonoDevelop.PackageManagement
 			}
 
 			return removed;
+		}
+
+		public override Task<bool> UninstallPackageAsync (
+			string packageId,
+			BuildIntegratedInstallationContext installationContext,
+			CancellationToken token)
+		{
+			return UninstallPackageAsync (new PackageIdentity (packageId, new NuGetVersion (0, 0, 0)), new EmptyNuGetProjectContext (), token);
+		}
+
+		public override async Task<(IReadOnlyList<PackageSpec>, IReadOnlyList<IAssetsLogMessage>)> GetPackageSpecsAndAdditionalMessagesAsync (DependencyGraphCacheContext context)
+		{
+			IReadOnlyList<PackageSpec> packageSpecs = await GetPackageSpecsAsync (context);
+			return (packageSpecs, Array.Empty<IAssetsLogMessage> ());
 		}
 
 		bool RemovePackageReference (PackageIdentity packageIdentity, INuGetProjectContext context)

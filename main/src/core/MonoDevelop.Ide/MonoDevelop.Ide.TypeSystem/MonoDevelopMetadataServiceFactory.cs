@@ -53,11 +53,6 @@ namespace MonoDevelop.Ide.TypeSystem.MetadataReferences
 	[ExportWorkspaceServiceFactory (typeof (MonoDevelopMetadataReferenceManager), ServiceLayer.Host), Shared]
 	class MonoDevelopMetadataReferenceManagerFactory : MonoDevelopMetadataReferenceManager, IWorkspaceServiceFactory
 	{
-		public MonoDevelopMetadataReferenceManagerFactory ()
-			: base (null)
-		{
-		}
-
 		public IWorkspaceService CreateService (HostWorkspaceServices workspaceServices)
 		{
 			return this;

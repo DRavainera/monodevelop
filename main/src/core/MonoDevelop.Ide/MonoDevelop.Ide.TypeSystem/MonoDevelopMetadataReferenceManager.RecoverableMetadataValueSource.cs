@@ -25,11 +25,11 @@
 // THE SOFTWARE.
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.CodeAnalysis;
-using Microsoft.CodeAnalysis.Host;
 using Microsoft.CodeAnalysis.PooledObjects;
 using Roslyn.Utilities;
 
@@ -40,21 +40,16 @@ namespace MonoDevelop.Ide.TypeSystem
 		class RecoverableMetadataValueSource : ValueSource<AssemblyMetadata>
 		{
 			readonly WeakReference<AssemblyMetadata> _weakValue;
-			readonly List<ITemporaryStreamStorage> _storages;
+			readonly List<Stream> _streams;
 			readonly ConditionalWeakTable<Metadata, object> _lifetimeMap;
 
-			public RecoverableMetadataValueSource (AssemblyMetadata value, List<ITemporaryStreamStorage> storages, ConditionalWeakTable<Metadata, object> lifetimeMap)
+			public RecoverableMetadataValueSource (AssemblyMetadata value, List<Stream> streams, ConditionalWeakTable<Metadata, object> lifetimeMap)
 			{
-				Contract.ThrowIfFalse (storages.Count > 0);
+				Contract.ThrowIfFalse (streams.Count > 0);
 
 				_weakValue = new WeakReference<AssemblyMetadata> (value);
-				_storages = storages;
+				_streams = streams;
 				_lifetimeMap = lifetimeMap;
-			}
-
-			public IEnumerable<ITemporaryStreamStorage> GetStorages ()
-			{
-				return _storages;
 			}
 
 			public override AssemblyMetadata GetValue (CancellationToken cancellationToken)
@@ -68,10 +63,10 @@ namespace MonoDevelop.Ide.TypeSystem
 
 			AssemblyMetadata RecoverMetadata ()
 			{
-				var moduleBuilder = ArrayBuilder<ModuleMetadata>.GetInstance (_storages.Count);
+				var moduleBuilder = ArrayBuilder<ModuleMetadata>.GetInstance (_streams.Count);
 
-				foreach (var storage in _storages) {
-					moduleBuilder.Add (GetModuleMetadata (storage));
+				foreach (var stream in _streams) {
+					moduleBuilder.Add (CreateModuleMetadata (stream));
 				}
 
 				var metadata = AssemblyMetadata.Create (moduleBuilder.ToImmutableAndFree ());
@@ -80,15 +75,9 @@ namespace MonoDevelop.Ide.TypeSystem
 				return metadata;
 			}
 
-			ModuleMetadata GetModuleMetadata (ITemporaryStreamStorage storage)
+			ModuleMetadata CreateModuleMetadata (Stream stream)
 			{
-				var stream = storage.ReadStream (CancellationToken.None);
-
-				// under VS host, direct access should be supported
-				var directAccess = (ISupportDirectMemoryAccess)stream;
-				var pImage = directAccess.GetPointer ();
-
-				var metadata = ModuleMetadata.CreateFromMetadata (pImage, (int)stream.Length);
+				var metadata = ModuleMetadata.CreateFromStream (stream);
 
 				// memory management.
 				_lifetimeMap.Add (metadata, stream);

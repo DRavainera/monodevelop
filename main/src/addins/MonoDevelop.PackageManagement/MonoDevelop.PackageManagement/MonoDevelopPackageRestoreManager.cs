@@ -52,7 +52,7 @@ namespace MonoDevelop.PackageManagement
 		[Obsolete]
 		public bool IsCurrentSolutionEnabledForRestore {
 			get {
-				return restoreManager.IsCurrentSolutionEnabledForRestore;
+				return true;
 			}
 		}
 
@@ -70,10 +70,14 @@ namespace MonoDevelop.PackageManagement
 			remove { restoreManager.PackagesMissingStatusChanged -= value; }
 		}
 
+		public event AssetsFileMissingStatusChanged AssetsFileMissingStatusChanged {
+			add { restoreManager.AssetsFileMissingStatusChanged += value; }
+			remove { restoreManager.AssetsFileMissingStatusChanged -= value; }
+		}
+
 		[Obsolete]
 		public void EnableCurrentSolutionForRestore (bool fromActivation)
 		{
-			restoreManager.EnableCurrentSolutionForRestore (fromActivation);
 		}
 
 		public Task<IEnumerable<PackageRestoreData>> GetPackagesInSolutionAsync (
@@ -86,6 +90,11 @@ namespace MonoDevelop.PackageManagement
 		public Task RaisePackagesMissingEventForSolutionAsync (string solutionDirectory, CancellationToken token)
 		{
 			return restoreManager.RaisePackagesMissingEventForSolutionAsync (solutionDirectory, token);
+		}
+
+		public void RaiseAssetsFileMissingEventForProjectAsync (bool isAssetsFileMissing)
+		{
+			restoreManager.RaiseAssetsFileMissingEventForProjectAsync (isAssetsFileMissing);
 		}
 
 		public Task<PackageRestoreResult> RestoreMissingPackagesAsync (

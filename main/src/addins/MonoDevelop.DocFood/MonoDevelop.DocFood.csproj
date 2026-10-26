@@ -31,7 +31,7 @@
     <Reference Include="System.Xml" />
     <Reference Include="System.Core" />
     <Reference Include="System.Collections.Immutable">
-      <HintPath>$(NuGetPackageRoot)system.collections.immutable/7.0.0/lib/netstandard2.0/System.Collections.Immutable.dll</HintPath>
+      <HintPath>$(NuGetPackageRoot)system.collections.immutable/10.0.1/lib/netstandard2.0/System.Collections.Immutable.dll</HintPath>
     </Reference>
     <Reference Include="Microsoft.CodeAnalysis">
       <HintPath>$(NuGetPackageRoot)microsoft.codeanalysis.common/$(NuGetVersionRoslyn)/lib/netstandard2.0/Microsoft.CodeAnalysis.dll</HintPath>

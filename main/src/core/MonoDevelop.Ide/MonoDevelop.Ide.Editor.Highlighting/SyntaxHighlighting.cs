@@ -10,7 +10,6 @@ using System.IO.Compression;
 using System.Threading.Tasks;
 using System.Threading;
 using MonoDevelop.Core.Text;
-using Microsoft.CodeAnalysis.Execution;
 
 namespace MonoDevelop.Ide.Editor.Highlighting
 {

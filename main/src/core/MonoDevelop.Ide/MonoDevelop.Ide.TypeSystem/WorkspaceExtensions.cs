@@ -34,13 +34,13 @@ namespace MonoDevelop.Ide.TypeSystem
 		internal static void RegisterSolutionCrawler (Workspace workspace)
 		{
 			var solutionCrawlerRegistrationService = workspace.Services.GetService<ISolutionCrawlerRegistrationService> ();
-			solutionCrawlerRegistrationService.Register (workspace);
+			solutionCrawlerRegistrationService?.Register (workspace);
 		}
 
 		internal static void UnregisterSolutionCrawler (Workspace workspace)
 		{
 			var solutionCrawlerRegistrationService = workspace.Services.GetService<ISolutionCrawlerRegistrationService> ();
-			solutionCrawlerRegistrationService.Unregister (workspace);
+			solutionCrawlerRegistrationService?.Unregister (workspace);
 		}
 	}
 }

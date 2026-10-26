@@ -1,6 +1,7 @@
 <Project>
   <PropertyGroup>
-    <NuGetVersionRoslyn>4.8.0</NuGetVersionRoslyn>
-    <NuGetVersionRoslynVB>4.8.0-7.25569.21</NuGetVersionRoslynVB>
+    <NuGetVersionRoslyn>5.9.0</NuGetVersionRoslyn>
+    <NuGetVersionRoslynVB>5.9.0</NuGetVersionRoslynVB>
+    <NuGetVersionRoslynInteractiveHost>5.0.0-1.25277.114</NuGetVersionRoslynInteractiveHost>
   </PropertyGroup>
 </Project>

@@ -104,7 +104,7 @@
   </ItemGroup>
   <ItemGroup>
     <Reference Include="System.Collections.Immutable">
-      <HintPath>$(NuGetPackageRoot)system.collections.immutable/7.0.0/lib/netstandard2.0/System.Collections.Immutable.dll</HintPath>
+      <HintPath>$(NuGetPackageRoot)system.collections.immutable/10.0.1/lib/netstandard2.0/System.Collections.Immutable.dll</HintPath>
     </Reference>
     <Reference Include="Microsoft.TemplateEngine.Abstractions">
       <HintPath>$(NuGetPackageRoot)microsoft.templateengine.abstractions/5.0.0-rc.1.20431.3/lib/netstandard2.0/Microsoft.TemplateEngine.Abstractions.dll</HintPath>
@@ -156,19 +156,19 @@
       <HintPath>$(NuGetPackageRoot)newtonsoft.json/13.0.3/lib/netstandard2.0/Newtonsoft.Json.dll</HintPath>
     </Reference>
     <Reference Include="System.Composition.AttributedModel">
-      <HintPath>$(NuGetPackageRoot)system.composition.attributedmodel/7.0.0/lib/netstandard2.0/System.Composition.AttributedModel.dll</HintPath>
+      <HintPath>$(NuGetPackageRoot)system.composition.attributedmodel/10.0.1/lib/netstandard2.0/System.Composition.AttributedModel.dll</HintPath>
     </Reference>
     <Reference Include="System.Composition.Convention">
-      <HintPath>$(NuGetPackageRoot)system.composition.convention/7.0.0/lib/netstandard2.0/System.Composition.Convention.dll</HintPath>
+      <HintPath>$(NuGetPackageRoot)system.composition.convention/10.0.1/lib/netstandard2.0/System.Composition.Convention.dll</HintPath>
     </Reference>
     <Reference Include="System.Composition.Hosting">
-      <HintPath>$(NuGetPackageRoot)system.composition.hosting/7.0.0/lib/netstandard2.0/System.Composition.Hosting.dll</HintPath>
+      <HintPath>$(NuGetPackageRoot)system.composition.hosting/10.0.1/lib/netstandard2.0/System.Composition.Hosting.dll</HintPath>
     </Reference>
     <Reference Include="System.Composition.Runtime">
-      <HintPath>$(NuGetPackageRoot)system.composition.runtime/7.0.0/lib/netstandard2.0/System.Composition.Runtime.dll</HintPath>
+      <HintPath>$(NuGetPackageRoot)system.composition.runtime/10.0.1/lib/netstandard2.0/System.Composition.Runtime.dll</HintPath>
     </Reference>
     <Reference Include="System.Composition.TypedParts">
-      <HintPath>$(NuGetPackageRoot)system.composition.typedparts/7.0.0/lib/netstandard2.0/System.Composition.TypedParts.dll</HintPath>
+      <HintPath>$(NuGetPackageRoot)system.composition.typedparts/10.0.1/lib/netstandard2.0/System.Composition.TypedParts.dll</HintPath>
     </Reference>
     <IncludeCopyLocal Include="ICSharpCode.NRefactory.Cecil.dll" />
     <IncludeCopyLocal Include="ICSharpCode.NRefactory.CSharp.dll" />

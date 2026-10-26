@@ -154,8 +154,10 @@ namespace MonoDevelop.Ide.TypeSystem
 			    .WithChangedOption (Microsoft.CodeAnalysis.Storage.StorageOptions.SolutionSizeThreshold, MonoDevelop.Core.Platform.IsLinux ? int.MaxValue : 0);
 
 			if (TypeSystemService.EnableSourceAnalysis) {
+				// Roslyn 5.x removed ISolutionCrawlerRegistrationService from the workspace
+				// services; when the host does not provide it, FSA registration is skipped.
 				var solutionCrawler = Services.GetService<ISolutionCrawlerRegistrationService> ();
-				solutionCrawler.Register (this);
+				solutionCrawler?.Register (this);
 			}
 
 			TypeSystemService.EnableSourceAnalysis.Changed += OnEnableSourceAnalysisChanged;
@@ -251,9 +253,9 @@ namespace MonoDevelop.Ide.TypeSystem
 		{
 			var solutionCrawler = Services.GetService<ISolutionCrawlerRegistrationService> ();
 			if (TypeSystemService.EnableSourceAnalysis)
-				solutionCrawler.Register (this);
+				solutionCrawler?.Register (this);
 			else
-				solutionCrawler.Unregister (this);
+				solutionCrawler?.Unregister (this);
 
 			var diagnosticAnalyzer = compositionManager.GetExportedValue<Microsoft.CodeAnalysis.Diagnostics.IDiagnosticAnalyzerService> ();
 			diagnosticAnalyzer.Reanalyze (this);
@@ -376,7 +378,7 @@ namespace MonoDevelop.Ide.TypeSystem
 			}
 
 			var solutionCrawler = Services.GetService<ISolutionCrawlerRegistrationService> ();
-			solutionCrawler.Unregister (this);
+			solutionCrawler?.Unregister (this);
 
 			if (backgroundCompiler != null) {
 				backgroundCompiler.Dispose ();

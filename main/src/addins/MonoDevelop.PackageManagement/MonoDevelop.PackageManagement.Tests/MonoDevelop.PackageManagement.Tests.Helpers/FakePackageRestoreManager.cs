@@ -52,6 +52,7 @@ namespace MonoDevelop.PackageManagement.Tests.Helpers
 		public event EventHandler<NuGet.PackageManagement.PackageRestoredEventArgs> PackageRestoredEvent;
 		public event EventHandler<PackageRestoreFailedEventArgs> PackageRestoreFailedEvent;
 		public event EventHandler<PackagesMissingStatusEventArgs> PackagesMissingStatusChanged;
+		public event AssetsFileMissingStatusChanged AssetsFileMissingStatusChanged;
 		#pragma warning restore 67
 
 		public void RaisePackageRestoreFailedEvent (Exception exception, string projectName)
@@ -116,6 +117,10 @@ namespace MonoDevelop.PackageManagement.Tests.Helpers
 		public Task RaisePackagesMissingEventForSolutionAsync (string solutionDirectory, CancellationToken token)
 		{
 			throw new NotImplementedException ();
+		}
+
+		public void RaiseAssetsFileMissingEventForProjectAsync (bool isAssetsFileMissing)
+		{
 		}
 
 		public Task<PackageRestoreResult> RestoreMissingPackagesAsync (

@@ -2830,3 +2830,66 @@ Diferidos (fuera de las oleadas): backends debugger (Gdb, Soft, VSCodeDebugProto
 
 - Extender el catálogo a policy panels por mime type: el extension point `/MonoDevelop/ProjectModel/Gui/MimeTypePolicyPanels` ya existe en el registro del host pero sin consumidores.
 - El campo `icon` de los nodos MimeTypes es un stock id (ej. `md-file-source`); si algún manifiesto quisiera un resource path directo haría falta convención.
+
+### Oleada 4 — cierre net10: P1 Mono.Posix, T1 WPF, T4 Roslyn 5.9.0, T5 NuGet 6.11.2, T6 Cairo-MIG (2026-10-26)
+Antecedente: los cierres de olas 1-3 (2026-10-23/24) quedaron documentados en
+`docs/handoff-sub-agent-senior-dev-role-report-lote2-net10.md` (este plan se retoma aquí).
+Detalle completo por tarea en la sección "Cierre de ola 4" de ese handoff.
+
+**Cambios** (resumen; 79 M + 2 D + 1 carpeta nueva en main + 3 submódulos):
+1. **P1 — Mono.Posix → MonoUnixCompat**: nuevo proyecto `main/src/compat/MonoUnixCompat/`
+   (facades `Catalog`/`UnixCompat` sobre `System.IO.Unix`/P-Invoke net10.0), integrado por
+   `ProjectReference` desde `MonoDevelop.Core.csproj` (patrón `MonoRoslynCompat`; no entra en
+   Main.sln). Eliminados `core/MonoDevelop.Core/MonoDevelop.Core/{Catalog,Unix.Catalog}.cs`.
+   Submódulos: `Mono.Debugging.Soft.csproj` (debugger-libs) y `Mono.Addins.Gui.csproj`
+   (mono-addins) → `ProjectReference` a MonoUnixCompat en vez de `<Reference Mono.Posix>`.
+2. **T1 — WPF net10.0-windows (opción A)**: 5 csprojs (WindowsAPICodePack Core/Shell,
+   MonoDevelop.TextEditor.Wpf, WindowsPlatform, Xwt.WPF); 3/5 build limpio en Linux + 2
+   latentes preexistentes documentados (NU1102 `DiagnosticMargin`; `_wpftmp` de
+   WindowsPlatform). `xwt` (submódulo): `AccessibleBackend.AccessibilityHelper.cs`
+   `#if NET47` → `#if NET47 || NET10_0` (accesibilidad reactivada).
+3. **T4 — Roslyn 4.8.0 → 5.9.0**: `msbuild/RoslynVersion.props`; `MonoRoslynCompat/src/CompatStubs.cs`
+   (stubs + adaptador MEF; fix stub `ValueSource<T>`); `MonoDevelopMetadataReferenceManager.cs`
+   reescrito stream-based; null-guards de `ISolutionCrawlerRegistrationService` (eliminada en
+   5.9.0); staging 5.9.0 md5-verificado en `main/build/`; `libgit2-71efcb3.so` compilado de
+   `external/libgit2` y stageado (bloqueador preexistente de document-open en Gtk).
+4. **T5 — NuGet 5.4.0 → 6.11.2**: `Directory.Build.props` `<NuGetVersionNuGet>` + 10 ficheros
+   adaptados a la API (bug Roslyn-10 CS0534/CS0114 documentado, no bloqueo).
+5. **T6 — Mono.Cairo (ámbito MIG)**: `HslColor.ToRgb` public; `RtfWriter` a `List<HslColor>`;
+   overload Cairo muerto de `SignatureMarkupCreator` (×2); `MonoDevelopHexEditorStyle` a
+   HslColor; 6 `using Cairo;` muertos; referencia `Mono.Cairo` retirada de HexEditor +
+   CSharpBinding (Gtk) + Avalonia.CSharpBinding. Bloqueador CS0012 resuelto quitando el
+   `using MonoDevelop.Components;` innecesario en 4 panel-files (forzaba cargar firmas de
+   extension methods Cairo de `HelperMethods`) y cualificando `MonoDevelop.Components.Control`
+   en `CreatePanelWidget()` (conversión implícita desde `Gtk.Widget`). Residual G1
+   (core + 14 addins Gtk) → T7.
+
+**Cómo validar**:
+- Gate `dotnet build main/Main.sln -c DebugLinux` = 0 Errores.
+- Smoke Gtk `--old-gui` (QaB4 sol+doc): ventana, fatals=0, errors=0; ruta semántica Roslyn
+  5.9.0 ejercitada (class outline → `GetSemanticModelAsync`, 167 refs in-process).
+- Smoke Avalonia `--sln=QaB4`: solución carga de verdad, proceso vivo, fatals=0.
+- Nota: en modo Avalonia la solución solo se abre con `--sln=<path>` (posicional no aplica;
+  `MonoDevelop.Startup.Avalonia/Program.cs:172-176`); en `--old-gui` el sln/doc son posicionales.
+
+**QA (§18.5)**: Tester QA Senior en 8 partes encadenadas con informe persistente
+(`~/opencode/qa_wave4/`, fuera del repo por §18.6): Q1 gate 0 Errores · Q2 smoke Gtk OK ·
+Q3 smoke Avalonia OK (r2) · Q4 WPF 5/5 en estado documentado · Q5 Mono.Posix OK · Q6 NuGet
+6.11.2 OK · Q7 Cairo OK (r2) · Q8 estado repos OK. **Veredicto: APROBADO, 0 hallazgos
+abiertos**. Hallazgos resueltos en el ciclo: (1) smoke Avalonia con argumento posicional en
+vez de `--sln=` (defecto del script de QA); (2) estado rancio de `vs-editor-api` (faltaba
+`bin/Editor/Text/Def/TextData/DebugLinux` → CS0234 en MonoRoslynCompat en rebuild forzado;
+el proyecto `TextData` está en Main.sln y un build limpio lo regenera — nota T9); (3) copia
+rancia de `MonoRoslynCompat.dll` en `main/build/` (normalizada al build DebugLinux).
+
+**Cierre**: olas 1-4 cerradas sobre `Main.sln` a 0 errores; submódulos debugger-libs,
+mono-addins y xwt commiteados/pushed en su rama `net10` (forks DRavainera) y punteros
+actualizados en el commit de ola 4 del repo principal.
+
+**Pendiente / follow-up**:
+- T7 (bloqueado): Gtk# 3.x — falta binding gtk-sharp 3.x; retira el residual G1 de
+  `Mono.Cairo` (core + 14 addins) y el pipeline Gtk legacy.
+- T8: reimplementar funcionalidades quitadas (auditoría T3, 68 items).
+- T9: higiene de build — regeneración de outputs de `vs-editor-api` desde cero; carrera
+  `runtimeconfig.json` entre TFMs net10.0/net10.0-windows sobre `main/build/` (lock MSB4018
+  transitorio; relanzar el gate si aparece).

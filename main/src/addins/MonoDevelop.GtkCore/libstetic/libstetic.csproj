@@ -25,6 +25,10 @@
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' " />
   <ItemGroup>
     <PackageReference Include="System.CodeDom" Version="5.0.0" PrivateAssets="runtime" />
+    <ProjectReference Include="..\..\..\..\src\compat\MonoUnixCompat\MonoUnixCompat.csproj">
+      <Project>{29A8AC1A-5ECB-4928-8BF9-2E6F0512BB17}</Project>
+      <Name>MonoUnixCompat</Name>
+    </ProjectReference>
   </ItemGroup>
   <ItemGroup>
     <Reference Include="System" />
@@ -32,10 +36,6 @@
     <Reference Include="System.Core" />
     <Reference Include="System.Runtime.Remoting">
       <HintPath>$(LegacyReferenceAssembliesDir)\System.Runtime.Remoting.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="Mono.Posix, Version=4.0.0.0, Culture=neutral, PublicKeyToken=0738eb9f132ed756">
-      <HintPath>$(MonoFrameworkNet45Directory)\Mono.Posix.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="Mono.Cairo, Version=4.0.0.0, Culture=neutral, PublicKeyToken=0738eb9f132ed756">

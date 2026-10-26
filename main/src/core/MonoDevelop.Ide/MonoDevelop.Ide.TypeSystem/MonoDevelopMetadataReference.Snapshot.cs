@@ -24,15 +24,12 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 using System;
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.Diagnostics.Contracts;
 using System.Globalization;
 using System.IO;
 using System.Threading;
 using Microsoft.CodeAnalysis;
-using Microsoft.CodeAnalysis.Execution;
-using Microsoft.CodeAnalysis.Host;
 using MonoDevelop.Core;
 
 namespace MonoDevelop.Ide.TypeSystem
@@ -53,7 +50,7 @@ namespace MonoDevelop.Ide.TypeSystem
 		/// <see cref="Snapshot"/> is created for the corresponding reference.
 		/// </remarks>
 		[DebuggerDisplay ("{GetDebuggerDisplay(),nq}")]
-		internal sealed class Snapshot : PortableExecutableReference, ISupportTemporaryStorage
+		internal sealed class Snapshot : PortableExecutableReference
 		{
 			readonly MonoDevelopMetadataReferenceManager _provider;
 			readonly Lazy<DateTime> _timestamp;
@@ -132,11 +129,6 @@ namespace MonoDevelop.Ide.TypeSystem
 			string GetDebuggerDisplay ()
 			{
 				return "Metadata File: " + FilePath;
-			}
-
-			IEnumerable<ITemporaryStreamStorage> ISupportTemporaryStorage.GetStorages ()
-			{
-				return _provider.GetStorages (FilePath, _timestamp.Value);
 			}
 
 			class RoslynDocumentationProvider : DocumentationProvider

@@ -27,6 +27,7 @@
 using System;
 using Mono.MHex.Rendering;
 using Xwt;
+using MonoDevelop.Components;
 using MonoDevelop.Core;
 using MonoDevelop.Ide;
 using Xwt.Drawing;
@@ -60,9 +61,10 @@ namespace MonoDevelop.HexEditor
 			colorStyle = SyntaxHighlightingService.GetEditorTheme (IdeApp.Preferences.ColorScheme);
 		}
 
-		Color ConvertColor (Cairo.Color foreground)
+		Color ConvertColor (HslColor foreground)
 		{
-			return new Color (foreground.R, foreground.G, foreground.B, foreground.A);
+			foreground.ToRgb (out double r, out double g, out double b);
+			return new Color (r, g, b, foreground.Alpha);
 		}
 
 		public void Dispose ()

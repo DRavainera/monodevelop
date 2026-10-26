@@ -1947,3 +1947,50 @@ Directrices del operador: (1) ningún cambio de `MonoDevelop.Ide.*`/`MonoDevelop
 **QA (§18.5)**: 1 round del Tester QA Senior — **PASS, 0 hallazgos funcionales** (103/103; web tab completo con OCR; dedupe; cierre; sin fixture; arranque). 1 observación menor (re-emisión de `NavigationCompleted` en reactivación → línea extra de log) corregida por el dev como cambio de log (`loaded`/`reloaded`), re-verificada en smoke.
 
 **Cierre**: las páginas de ayuda Monodoc se abren como web tabs renderizadas en el área de edición (paridad de experiencia con el viewer legacy), sin tocar el mecanismo de documentos.
+
+### Oleada 4 — cierre: P1 Mono.Posix, T1 WPF, T4 Roslyn 5.9.0, T5 NuGet 6.11.2, T6 Cairo-MIG (2026-10-26)
+(Los cierres de olas 1-3 — 2026-10-23/24 — quedaron en `docs/handoff-sub-agent-senior-dev-role-report-lote2-net10.md`; la ola 4 se documenta también en su sección "Cierre de ola 4".)
+
+**Qué se hizo** (79 M + 2 D + 1 carpeta nueva en main + 3 submódulos, rama `net10`):
+1. **P1 — Mono.Posix → MonoUnixCompat**: nuevo compat `main/src/compat/MonoUnixCompat/`
+   (facades sobre `System.IO.Unix`/P-Invoke), integrado por `ProjectReference` desde
+   `MonoDevelop.Core.csproj`; eliminados `core/MonoDevelop.Core/MonoDevelop.Core/{Catalog,Unix.Catalog}.cs`;
+   `Mono.Debugging.Soft.csproj` (debugger-libs) y `Mono.Addins.Gui.csproj` (mono-addins) cambian
+   `<Reference Mono.Posix>` → `ProjectReference` a MonoUnixCompat.
+2. **T1 — WPF net10.0-windows (opción A)**: 5 csprojs (WindowsAPICodePack Core/Shell,
+   MonoDevelop.TextEditor.Wpf, WindowsPlatform, Xwt.WPF); 3/5 build limpio en Linux + 2 latentes
+   preexistentes documentados (NU1102 `DiagnosticMargin`; `_wpftmp` de WindowsPlatform).
+   `xwt`: `AccessibleBackend.AccessibilityHelper.cs` `#if NET47` → `#if NET47 || NET10_0`.
+3. **T4 — Roslyn 4.8.0 → 5.9.0**: `RoslynVersion.props`; `CompatStubs.cs` (stubs + adaptador MEF;
+   fix stub `ValueSource<T>` que rompía document-open); `MonoDevelopMetadataReferenceManager.cs`
+   reescrito stream-based; null-guards de `ISolutionCrawlerRegistrationService` (eliminada en
+   5.9.0); staging 5.9.0 md5-verificado en `main/build/`; `libgit2-71efcb3.so` compilado de
+   `external/libgit2` (bloqueador preexistente de document-open en Gtk).
+4. **T5 — NuGet 5.4.0 → 6.11.2**: `Directory.Build.props` + 10 ficheros a la API 6.11.2.
+5. **T6 — Mono.Cairo (ámbito MIG)**: `HslColor.ToRgb` public, `RtfWriter` a `List<HslColor>`,
+   overload Cairo muerto ×2, `MonoDevelopHexEditorStyle` a HslColor, 6 `using Cairo;` muertos;
+   referencia `Mono.Cairo` retirada de HexEditor + CSharpBinding (Gtk) + Avalonia.CSharpBinding.
+   Bloqueador CS0012 (C1): `using MonoDevelop.Components;` innecesario en 4 panel-files forzaba
+   cargar firmas de extension methods Cairo (`HelperMethods`) → borrado del using + cualificación
+   de `MonoDevelop.Components.Control` en `CreatePanelWidget()`. Residual G1 → T7.
+
+**Cómo validar**: gate `dotnet build main/Main.sln -c DebugLinux` = 0 Errores; smoke Gtk
+`--old-gui` con QaB4 (sol+doc, fatals=0, errors=0, ruta semántica 5.9.0 vía class outline:
+167 refs in-process); smoke Avalonia `--sln=QaB4` (solución carga de verdad, fatals=0).
+Ojo: en modo Avalonia la solución solo se abre con `--sln=<path>` (posicional no aplica).
+
+**QA (§18.5)**: Tester QA Senior, 8 partes encadenadas con informe persistente
+(`~/opencode/qa_wave4/`): Q1 gate · Q2 Gtk · Q3 Avalonia (r2) · Q4 WPF · Q5 Mono.Posix ·
+Q6 NuGet · Q7 Cairo (r2) · Q8 estado repos — **APROBADO, 0 hallazgos abiertos**. Hallazgos
+resueltos en el ciclo: smoke Avalonia con argumento posicional (defecto del script de QA);
+estado rancio de `vs-editor-api` (`bin/Editor/Text/Def/TextData/DebugLinux` ausente → CS0234
+en MonoRoslynCompat en rebuild forzado; `TextData` está en Main.sln y un build limpio lo
+regenera — nota T9); copia rancia de `MonoRoslynCompat.dll` en `main/build/` (normalizada).
+
+**Cierre**: olas 1-4 sobre `Main.sln` a 0 errores; submódulos debugger-libs/mono-addins/xwt
+commiteados y pushed en su rama `net10` (forks DRavainera); punteros actualizados en el commit
+de ola 4 del repo principal.
+
+**Pendiente**: T7 (bloqueado, binding gtk-sharp 3.x; retira residual G1 de Mono.Cairo),
+T8 (reimplementar funcionalidades quitadas, auditoría T3), T9 (higiene de build: outputs de
+`vs-editor-api` desde cero; carrera runtimeconfig entre TFMs sobre `main/build/`).

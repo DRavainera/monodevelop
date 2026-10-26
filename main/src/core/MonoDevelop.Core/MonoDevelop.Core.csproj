@@ -66,7 +66,7 @@
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'DebugWin32|AnyCPU' " />
   <ItemGroup>
     <Reference Include="System.Collections.Immutable">
-      <HintPath>$(NuGetPackageRoot)system.collections.immutable/7.0.0/lib/netstandard2.0/System.Collections.Immutable.dll</HintPath>
+      <HintPath>$(NuGetPackageRoot)system.collections.immutable/10.0.1/lib/netstandard2.0/System.Collections.Immutable.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="Mono.Security">
@@ -143,8 +143,7 @@
     -->
     <PackageReference Include="Microsoft.Build.Locator" Version="1.1.2" PrivateAssets="runtime" />
     <PackageReference Include="Microsoft.VisualStudio.Composition" Version="$(NuGetVersionVSComposition)" ExcludeAssets="all" />
-    <!-- Need the net45 version, see https://github.com/mono/mono/issues/12461 -->
-    <Reference Include="$(NuGetPackageRoot)microsoft.visualstudio.composition/$(NuGetVersionVSComposition)/lib/net45/Microsoft.VisualStudio.Composition.dll">
+    <Reference Include="$(NuGetPackageRoot)microsoft.visualstudio.composition/$(NuGetVersionVSComposition)/lib/netstandard2.0/Microsoft.VisualStudio.Composition.dll">
       <NuGetPackageId>Microsoft.VisualStudio.Composition</NuGetPackageId>
       <Private>true</Private>
     </Reference>
@@ -315,9 +314,7 @@
     <Compile Include="MonoDevelop.Core.Serialization\XmlMapAttributeProvider.cs" />
     <Compile Include="MonoDevelop.Core.Collections\Set.cs" />
     <Compile Include="MonoDevelop.Core\Gettext.cs" />
-    <Compile Include="MonoDevelop.Core\Catalog.cs" />
     <Compile Include="MonoDevelop.Core\Posix.cs" />
-    <Compile Include="MonoDevelop.Core\Unix.Catalog.cs" />
     <Compile Include="MonoDevelop.Core.AddIns\PackageInstalledCondition.cs" />
     <Compile Include="MonoDevelop.Core\ComponentModelLocalization.cs" />
     <Compile Include="MonoDevelop.Core.AddIns\ITargetRuntimeFactory.cs" />
@@ -820,6 +817,10 @@
     <ProjectReference Include="..\..\..\external\mono-addins\Mono.Addins.Setup\Mono.Addins.Setup.csproj">
       <Project>{A85C9721-C054-4BD8-A1F3-0227615F0A36}</Project>
       <Name>Mono.Addins.Setup</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\..\..\src\compat\MonoUnixCompat\MonoUnixCompat.csproj">
+      <Project>{29A8AC1A-5ECB-4928-8BF9-2E6F0512BB17}</Project>
+      <Name>MonoUnixCompat</Name>
     </ProjectReference>
     <ProjectReference Include="..\..\..\src\compat\MonoRoslynCompat\MonoRoslynCompat.csproj">
       <Project>{0B1E5B4C-4D68-4D4E-9B6E-3A8D963CD75B}</Project>

@@ -28,7 +28,6 @@ using Gtk;
 using Gdk;
 using System.Collections.Generic;
 using MonoDevelop.Components;
-using Cairo;
 using System.Linq;
 using MonoDevelop.Components.Commands;
 using MonoDevelop.Ide;

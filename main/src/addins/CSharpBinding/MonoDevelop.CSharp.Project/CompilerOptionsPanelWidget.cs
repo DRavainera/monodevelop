@@ -33,7 +33,6 @@ using System.Collections.Generic;
 using System.Text.RegularExpressions;
 using Gtk;
 
-using MonoDevelop.Components;
 using MonoDevelop.Components.AtkCocoaHelper;
 using MonoDevelop.Core;
 using MonoDevelop.Projects;
@@ -289,7 +288,7 @@ namespace MonoDevelop.CSharp.Project
 	{
 		CompilerOptionsPanelWidget widget;
 		
-		public override Control CreatePanelWidget ()
+		public override MonoDevelop.Components.Control CreatePanelWidget ()
 		{
 			return (widget = new CompilerOptionsPanelWidget ((DotNetProject) ConfiguredProject));
 		}

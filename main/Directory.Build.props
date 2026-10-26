@@ -24,11 +24,11 @@
     <NuGetVersionMicrosoftTestPlatform>16.2.0</NuGetVersionMicrosoftTestPlatform>
     <NuGetVersionMonoDevelopAnalyzers>0.1.0.2</NuGetVersionMonoDevelopAnalyzers>
     <NuGetVersionNewtonsoftJson>13.0.3</NuGetVersionNewtonsoftJson>
-    <NuGetVersionNuGet>5.4.0</NuGetVersionNuGet>
+    <NuGetVersionNuGet>6.11.2</NuGetVersionNuGet>
     <NuGetVersionNUnit2>2.7.0</NuGetVersionNUnit2>
     <NuGetVersionNUnit3>3.9.0</NuGetVersionNUnit3>
     <NuGetVersionVSCodeDebugProtocol>15.8.20719.1</NuGetVersionVSCodeDebugProtocol>
-    <NuGetVersionVSComposition>15.8.112</NuGetVersionVSComposition>
+    <NuGetVersionVSComposition>17.7.18</NuGetVersionVSComposition>
     <NuGetVersionVSEditor>16.1.28-g2ad4df7366</NuGetVersionVSEditor>
   </PropertyGroup>
   <PropertyGroup Condition="'$(OS)' != 'Windows_NT' AND Exists('/usr/lib/mono')">

@@ -27,8 +27,6 @@
 //
 
 
-extern alias MonoPosix;
-
 using System;
 using System.Text;
 using System.IO;
@@ -50,8 +48,7 @@ using ICSharpCode.SharpZipLib.Zip;
 using System.Reflection;
 using Mono.Unix;
 using System.Threading.Tasks;
-using UnixFileInfo = MonoPosix::Mono.Unix.UnixFileInfo;
-using FilePermissions = MonoPosix::Mono.Unix.Native.FilePermissions;
+using FilePermissions = Mono.Unix.Native.FilePermissions;
 
 namespace MonoDevelop.Deployment
 {

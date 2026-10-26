@@ -1359,10 +1359,6 @@ namespace Roslyn.Utilities
         }
     }
 
-    public interface ISupportDirectMemoryAccess
-    {
-        IntPtr GetPointer();
-    }
 }
 
 namespace Microsoft.CodeAnalysis
@@ -3608,9 +3604,14 @@ namespace Microsoft.CodeAnalysis
 {
     public abstract class ValueSource<T>
     {
-        public virtual T GetValue() => default(T);
+        public T GetValue() => GetValue(System.Threading.CancellationToken.None);
 
-        public virtual bool HasValue => true;
+        public virtual T GetValue(System.Threading.CancellationToken cancellationToken) => default(T);
+
+        public virtual bool HasValue
+        {
+            get { T value; return TryGetValue(out value); }
+        }
 
         public virtual bool TryGetValue(out T value)
         {
@@ -3618,9 +3619,7 @@ namespace Microsoft.CodeAnalysis
             return false;
         }
 
-        public virtual T GetValue(System.Threading.CancellationToken cancellationToken) => GetValue();
-
-        public virtual System.Threading.Tasks.Task<T> GetValueAsync(System.Threading.CancellationToken cancellationToken) => System.Threading.Tasks.Task.FromResult(GetValue());
+        public virtual System.Threading.Tasks.Task<T> GetValueAsync(System.Threading.CancellationToken cancellationToken) => System.Threading.Tasks.Task.FromResult(GetValue(cancellationToken));
     }
 }
 
@@ -3677,14 +3676,6 @@ namespace Microsoft.CodeAnalysis.ErrorLogger
     public interface IErrorLoggerService : Microsoft.CodeAnalysis.Host.IWorkspaceService
     {
         void LogException(object source, Exception exception);
-    }
-}
-
-namespace Microsoft.CodeAnalysis.Execution
-{
-    public interface ISupportTemporaryStorage
-    {
-        System.Collections.Generic.IEnumerable<Microsoft.CodeAnalysis.Host.ITemporaryStreamStorage> GetStorages();
     }
 }
 

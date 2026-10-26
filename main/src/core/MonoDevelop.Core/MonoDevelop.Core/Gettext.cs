@@ -36,6 +36,8 @@ using Mono.Addins;
 using System.Collections.Generic;
 using System.Linq;
 
+using Catalog = Mono.Unix.Catalog;
+
 namespace MonoDevelop.Core
 {
 	public static class GettextCatalog
@@ -144,22 +146,8 @@ namespace MonoDevelop.Core
 				Console.WriteLine (ex);
 			}
 
-			// The Add-in Manager (Mono.Addins.Gui) is a legacy component that binds to the
-			// Mono.Posix Mono.Unix.Catalog (resolved from the mono GAC by the startup assembly
-			// resolver) and not to MonoDevelop.Core.Catalog. Unless that legacy catalog is
-			// initialized it has no domain, so every GetString() falls back to the English msgid.
-			// Initialize it with the same domain/locale so it issues gettext lookups on the
-			// very same .mo files the rest of the IDE uses.
-			if (!Platform.IsWindows) {
-				try {
-					var legacyCatalog = Type.GetType ("Mono.Unix.Catalog, Mono.Posix", false);
-					legacyCatalog?.GetMethod ("Init", new Type [] { typeof (string), typeof (string) })
-						?.Invoke (null, new object [] { "monodevelop", catalog });
-				}
-				catch (Exception ex) {
-					LoggingService.LogWarning ("Failed to initialize the legacy Mono.Unix.Catalog", ex);
-				}
-			}
+			// Mono.Addins.Gui, libstetic & co. resolve Mono.Unix.Catalog to the same MonoUnixCompat
+			// type initialized above, so a single Init covers every consumer.
 
 			Environment.SetEnvironmentVariable ("MONODEVELOP_LOCALE_PATH", null);
 			Environment.SetEnvironmentVariable ("MONODEVELOP_STUB_LANGUAGE", null);

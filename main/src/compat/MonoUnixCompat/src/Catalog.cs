@@ -1,11 +1,11 @@
-// 
+//
 // Catalog.cs
-// 
+//
 // Author:
 //   MonoDevelop contributors
-// 
+//
 // Copyright (C) 2026
-// 
+//
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
 // in the Software without restriction, including without limitation the rights
@@ -30,12 +30,14 @@ using System.Globalization;
 using System.IO;
 using System.Text;
 
-namespace MonoDevelop.Core
+namespace Mono.Unix
 {
 	// Internal replacement for Mono.Posix' Mono.Unix.Catalog. Reads GNU gettext .mo binary
 	// catalogs (little and big endian) so the localization subsystem no longer depends on the
-	// legacy Mono.Posix assembly. Exposes the same surface used by GettextCatalog: Init, GetString,
-	// GetPluralString.
+	// legacy Mono.Posix assembly. Lives in MonoUnixCompat (no IDE dependencies) so both the core
+	// (via MonoDevelop.Core) and the legacy add-in UIs (Mono.Addins.Gui, libstetic, ...) resolve
+	// the same Mono.Unix.Catalog type. Exposes the same surface as the legacy one: Init,
+	// GetString, GetPluralString.
 	public static class Catalog
 	{
 		const uint MagicLittleEndian = 0x950412de;

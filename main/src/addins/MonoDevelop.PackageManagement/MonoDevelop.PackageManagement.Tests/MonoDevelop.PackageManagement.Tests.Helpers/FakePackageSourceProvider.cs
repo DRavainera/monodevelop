@@ -60,6 +60,11 @@ namespace MonoDevelop.PackageManagement.Tests.Helpers
 			return PackageSources;
 		}
 
+		public IReadOnlyList<PackageSource> LoadAuditSources ()
+		{
+			return Array.Empty<PackageSource> ();
+		}
+
 		public void SaveActivePackageSource (PackageSource source)
 		{
 			ActivePackageSource = source;

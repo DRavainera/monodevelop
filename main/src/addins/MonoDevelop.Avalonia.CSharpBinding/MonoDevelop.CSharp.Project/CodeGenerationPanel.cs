@@ -27,7 +27,6 @@
 //
 
 using System;
-using MonoDevelop.Components;
 using MonoDevelop.Components.AtkCocoaHelper;
 using MonoDevelop.Projects;
 using MonoDevelop.Ide.Gui.Dialogs;
@@ -214,7 +213,7 @@ namespace MonoDevelop.CSharp.Project
 	{
 		CodeGenerationPanelWidget widget;
 		
-		public override Control CreatePanelWidget()
+		public override MonoDevelop.Components.Control CreatePanelWidget()
 		{
 			return widget = new  CodeGenerationPanelWidget ();
 		}

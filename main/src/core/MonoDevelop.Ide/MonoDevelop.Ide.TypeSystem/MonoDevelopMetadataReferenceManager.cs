@@ -41,8 +41,6 @@ using System.Runtime.InteropServices;
 using MonoDevelop.Core.Assemblies;
 using Microsoft.CodeAnalysis.Host;
 using Microsoft.CodeAnalysis.PooledObjects;
-using System.Reflection.PortableExecutable;
-using System.Diagnostics;
 
 namespace MonoDevelop.Ide.TypeSystem
 {
@@ -50,16 +48,12 @@ namespace MonoDevelop.Ide.TypeSystem
 	{
 		readonly MetadataCache _metadataCache;
 		readonly MetadataReferenceCache _metadataReferenceCache;
-		readonly ITemporaryStorageService _temporaryStorageService;
 		static readonly ConditionalWeakTable<Metadata, object> lifetimeMap = new ConditionalWeakTable<Metadata, object> ();
 
-		internal MonoDevelopMetadataReferenceManager (ITemporaryStorageService temporaryStorageService)
+		internal MonoDevelopMetadataReferenceManager ()
 		{
 			_metadataCache = new MetadataCache ();
 			_metadataReferenceCache = new MetadataReferenceCache ();
-
-			_temporaryStorageService = temporaryStorageService;
-			Debug.Assert (temporaryStorageService != null);
 		}
 
 		/// <exception cref="IOException"/>
@@ -72,115 +66,59 @@ namespace MonoDevelop.Ide.TypeSystem
 				return metadata;
 			}
 
-			// use temporary storage
-			var storages = new List<ITemporaryStreamStorage> ();
-			var newMetadata = CreateAssemblyMetadataFromTemporaryStorage (key, storages);
+			// load module bytes into in-memory streams so the files can be closed right away
+			var streams = new List<Stream> ();
+			var newMetadata = CreateAssemblyMetadata (key, streams);
 
 			// don't dispose assembly metadata since it shares module metadata
-			if (!_metadataCache.TryGetOrAddMetadata (key, new RecoverableMetadataValueSource (newMetadata, storages, lifetimeMap), out metadata)) {
+			if (!_metadataCache.TryGetOrAddMetadata (key, new RecoverableMetadataValueSource (newMetadata, streams, lifetimeMap), out metadata)) {
 				newMetadata.Dispose ();
 			}
 
 			return metadata;
 		}
 
-		internal IEnumerable<ITemporaryStreamStorage> GetStorages (string fullPath, DateTime snapshotTimestamp)
-		{
-			var key = new FileKey (fullPath, snapshotTimestamp);
-			// check existing metadata
-			if (_metadataCache.TryGetSource (key, out var source)) {
-				if (source is RecoverableMetadataValueSource metadata) {
-					return metadata.GetStorages ();
-				}
-			}
-
-			return null;
-		}
-
 		/// <exception cref="IOException"/>
 		/// <exception cref="BadImageFormatException" />
-		AssemblyMetadata CreateAssemblyMetadataFromTemporaryStorage (FileKey fileKey, List<ITemporaryStreamStorage> storages)
+		AssemblyMetadata CreateAssemblyMetadata (FileKey fileKey, List<Stream> streams)
 		{
-			var moduleMetadata = CreateModuleMetadataFromTemporaryStorage (fileKey, storages);
-			return CreateAssemblyMetadata (fileKey, moduleMetadata, storages, CreateModuleMetadataFromTemporaryStorage);
+			var moduleMetadata = CreateModuleMetadata (fileKey, streams);
+			return CreateAssemblyMetadata (fileKey, moduleMetadata, streams, CreateModuleMetadata);
 		}
 
-		ModuleMetadata CreateModuleMetadataFromTemporaryStorage (FileKey moduleFileKey, List<ITemporaryStreamStorage> storages)
+		ModuleMetadata CreateModuleMetadata (FileKey moduleFileKey, List<Stream> streams)
 		{
-			GetStorageInfoFromTemporaryStorage (moduleFileKey, out var storage, out var stream, out var pImage);
+			var stream = CreateModuleStream (moduleFileKey);
 
-			var metadata = ModuleMetadata.CreateFromMetadata (pImage, (int)stream.Length);
+			var metadata = ModuleMetadata.CreateFromStream (stream);
 
 			// first time, the metadata is created. tie lifetime.
 			lifetimeMap.Add (metadata, stream);
 
-			// hold onto storage if requested
-			if (storages != null) {
-				storages.Add (storage);
-			}
+			streams.Add (stream);
 
 			return metadata;
 		}
 
-		void GetStorageInfoFromTemporaryStorage (FileKey moduleFileKey, out ITemporaryStreamStorage storage, out Stream stream, out IntPtr pImage)
+		Stream CreateModuleStream (FileKey moduleFileKey)
 		{
-			int size;
-			using (var copyStream = SerializableBytes.CreateWritableStream ()) {
-				// open a file and let it go as soon as possible
-				using (var fileStream = FileUtilities.OpenRead (moduleFileKey.FullPath)) {
-					var headers = new PEHeaders (fileStream);
-
-					var offset = headers.MetadataStartOffset;
-					size = headers.MetadataSize;
-
-					// given metadata contains no metadata info.
-					// throw bad image format exception so that we can show right diagnostic to user.
-					if (size <= 0) {
-						throw new BadImageFormatException ();
-					}
-
-					StreamCopy (fileStream, copyStream, offset, size);
+			byte [] bytes;
+			// open a file and let it go as soon as possible
+			using (var fileStream = FileUtilities.OpenRead (moduleFileKey.FullPath)) {
+				using (var copyStream = new MemoryStream ()) {
+					fileStream.CopyTo (copyStream);
+					bytes = copyStream.ToArray ();
 				}
-
-				// copy over the data to temp storage and let pooled stream go
-				storage = _temporaryStorageService.CreateTemporaryStreamStorage (CancellationToken.None);
-
-				copyStream.Position = 0;
-				storage.WriteStream (copyStream);
 			}
 
-			// get stream that owns direct access memory
-			stream = storage.ReadStream (CancellationToken.None);
-
-			// stream size must be same as what metadata reader said the size should be.
-			Contract.ThrowIfFalse (stream.Length == size);
-
-			// under VS host, direct access should be supported
-			var directAccess = (ISupportDirectMemoryAccess)stream;
-			pImage = directAccess.GetPointer ();
-		}
-
-		void StreamCopy (Stream source, Stream destination, int start, int length)
-		{
-			source.Position = start;
-
-			var buffer = SharedPools.ByteArray.Allocate ();
-
-			var read = 0;
-			var left = length;
-			while ((read = source.Read (buffer, 0, Math.Min (left, buffer.Length))) != 0) {
-				destination.Write (buffer, 0, read);
-				left -= read;
-			}
-
-			SharedPools.ByteArray.Free (buffer);
+			return new MemoryStream (bytes, writable: false);
 		}
 
 		/// <exception cref="IOException"/>
 		/// <exception cref="BadImageFormatException" />
 		AssemblyMetadata CreateAssemblyMetadata (
-		   FileKey fileKey, ModuleMetadata manifestModule, List<ITemporaryStreamStorage> storages,
-		   Func<FileKey, List<ITemporaryStreamStorage>, ModuleMetadata> moduleMetadataFactory)
+		   FileKey fileKey, ModuleMetadata manifestModule, List<Stream> streams,
+		   Func<FileKey, List<Stream>, ModuleMetadata> moduleMetadataFactory)
 		{
 			var moduleBuilder = ArrayBuilder<ModuleMetadata>.GetInstance ();
 
@@ -192,7 +130,7 @@ namespace MonoDevelop.Ide.TypeSystem
 				}
 
 				var moduleFileKey = FileKey.Create (PathUtilities.CombineAbsoluteAndRelativePaths (assemblyDir, moduleName));
-				var metadata = moduleMetadataFactory (moduleFileKey, storages);
+				var metadata = moduleMetadataFactory (moduleFileKey, streams);
 
 				moduleBuilder.Add (metadata);
 			}

@@ -72,7 +72,7 @@ namespace MonoDevelop.Components
 			}
 		}
 
-		void ToRgb (out double r, out double g, out double b)
+		public void ToRgb (out double r, out double g, out double b)
 		{
 			if (L == 0) {
 				r = g = b = 0;

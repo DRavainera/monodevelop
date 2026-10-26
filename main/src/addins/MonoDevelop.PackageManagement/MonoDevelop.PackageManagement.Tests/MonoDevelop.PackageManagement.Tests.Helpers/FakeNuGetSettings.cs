@@ -64,16 +64,6 @@ namespace MonoDevelop.PackageManagement.Tests.Helpers
 
 #pragma warning disable CS0618
 
-		public Dictionary<string, List<SettingValue>> SettingValues = new Dictionary<string, List<SettingValue>> ();
-
-		public IList<SettingValue> GetSettingValues (string section, bool isPath = false)
-		{
-			List<SettingValue> settings = null;
-			if (SettingValues.TryGetValue (section, out settings))
-				return settings;
-			return new List<SettingValue> ();
-		}
-
 		public Dictionary<string, string> Values = new Dictionary<string, string> ();
 
 		public string GetValue (string section, string key, bool isPath = false)
@@ -94,43 +84,12 @@ namespace MonoDevelop.PackageManagement.Tests.Helpers
 			Values [GetKey (section, key)] = value;
 		}
 
-		public void SetValues (string section, List<SettingValue> values)
-		{
-			SettingValues [section] = values;
-		}
-
-		public void SetValues (string section, IReadOnlyList<SettingValue> values)
-		{
-			throw new NotImplementedException ();
-		}
-
-		public void UpdateSections (string section, IReadOnlyList<SettingValue> values)
-		{
-			throw new NotImplementedException ();
-		}
-
 		static string GetKey (string section, string key)
 		{
 			return $"{section}-{key}";
 		}
 
 		public IReadOnlyList<string> GetAllSubsections (string section)
-		{
-			throw new NotImplementedException ();
-		}
-
-		public IReadOnlyList<SettingValue> GetNestedSettingValues (string section, string subSection)
-		{
-			var values = new List<SettingValue> ();
-			return values.AsReadOnly ();
-		}
-
-		public void UpdateSubsections (string section, string subsection, IReadOnlyList<SettingValue> values)
-		{
-			throw new NotImplementedException ();
-		}
-
-		public void SetNestedSettingValues (string section, string subsection, IList<SettingValue> values)
 		{
 			throw new NotImplementedException ();
 		}

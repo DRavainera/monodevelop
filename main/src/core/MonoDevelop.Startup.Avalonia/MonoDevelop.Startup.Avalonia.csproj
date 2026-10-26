@@ -11,6 +11,12 @@
          for diagnostics; the linux build stays WinExe. -->
     <OutputPath>..\..\..\build\</OutputPath>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <!-- Per-TFM intermediate paths: both TFMs share OutputPath build/ by design,
+         but with a shared obj/DebugLinux/ the parallel inner builds race on the
+         Avalonia resources task and the generated AssemblyInfo (AVLN9999/MSB4018
+         and a corrupt obj/.../AssemblyInfo.cs). Separate intermediate dirs; the
+         output layout stays unified. -->
+    <AppendTargetFrameworkToIntermediateOutputPath>true</AppendTargetFrameworkToIntermediateOutputPath>
     <OutputType Condition="'$(TargetFramework)' == 'net10.0-windows'">Exe</OutputType>
     <!-- Symbols live inside the DLL (embedded): a stray handle on the loose
          obj/Debug/*.pdb was blocking every rebuild (AVLN9999) even with the
@@ -76,7 +82,7 @@
          per-language option keys (OptionKey.GetPropertyName) the GTK UI persists. -->
     <ProjectReference Include="..\..\compat\MonoRoslynCompat\MonoRoslynCompat.csproj" />
     <Reference Include="Microsoft.CodeAnalysis.Workspaces">
-      <HintPath>..\..\..\build\Microsoft.CodeAnalysis.Workspaces.dll</HintPath>
+      <HintPath>$(NuGetPackageRoot)microsoft.codeanalysis.workspaces.common/$(NuGetVersionRoslyn)/lib/netstandard2.0/Microsoft.CodeAnalysis.Workspaces.dll</HintPath>
       <Private>true</Private>
     </Reference>
     <!-- The Xwt Avalonia backend: dialogs/pads built on the Xwt frontend

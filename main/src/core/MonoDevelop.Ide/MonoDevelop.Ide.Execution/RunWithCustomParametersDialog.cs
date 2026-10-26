@@ -28,7 +28,6 @@ using System.Linq;
 using Xwt;
 using MonoDevelop.Projects;
 using MonoDevelop.Core;
-using Cairo;
 using MonoDevelop.Core.Execution;
 using System.Collections.Generic;
 using System.Data;

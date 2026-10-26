@@ -191,8 +191,6 @@ namespace NuGet.PackageManagement.UI
 		{
 			cancellationToken.ThrowIfCancellationRequested();
 
-			NuGetEventTrigger.Instance.TriggerEvent(NuGetEvent.PackageLoadBegin);
-
 			var nextToken = _state.Results?.NextToken;
 			var cleanState = SearchResult.Empty<IPackageSearchMetadata>();
 			cleanState.NextToken = nextToken;
@@ -203,15 +201,11 @@ namespace NuGet.PackageManagement.UI
 			cancellationToken.ThrowIfCancellationRequested();
 
 			await UpdateStateAndReportAsync(searchResult, progress);
-
-			NuGetEventTrigger.Instance.TriggerEvent(NuGetEvent.PackageLoadEnd);
 		}
 
 		public async Task UpdateStateAsync(IProgress<IItemLoaderState> progress, CancellationToken cancellationToken)
 		{
 			cancellationToken.ThrowIfCancellationRequested();
-
-			NuGetEventTrigger.Instance.TriggerEvent(NuGetEvent.PackageLoadBegin);
 
 			progress?.Report(_state);
 
@@ -224,8 +218,6 @@ namespace NuGet.PackageManagement.UI
 
 				await UpdateStateAndReportAsync(searchResult, progress);
 			}
-
-			NuGetEventTrigger.Instance.TriggerEvent(NuGetEvent.PackageLoadEnd);
 		}
 
 		private async Task<SearchResult<IPackageSearchMetadata>> SearchAsync(ContinuationToken continuationToken, CancellationToken cancellationToken)

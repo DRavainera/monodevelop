@@ -85,6 +85,11 @@ namespace MonoDevelop.PackageManagement
 			}
 		}
 
+		public IReadOnlyList<PackageSource> LoadAuditSources ()
+		{
+			return packageSourceProvider.LoadAuditSources ();
+		}
+
 		public void SaveActivePackageSource (PackageSource source)
 		{
 			packageSourceProvider.SaveActivePackageSource (source);

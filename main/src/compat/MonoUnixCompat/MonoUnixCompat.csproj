@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <AssemblyName>MonoUnixCompat</AssemblyName>
+    <RootNamespace>Mono.Unix</RootNamespace>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <PublicSign>true</PublicSign>
+    <SignAssembly>true</SignAssembly>
+    <AssemblyOriginatorKeyFile>../../../msbuild/MonoDevelop-Public.snk</AssemblyOriginatorKeyFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="src/Catalog.cs" />
+    <Compile Include="src/UnixCompat.cs" />
+  </ItemGroup>
+</Project>

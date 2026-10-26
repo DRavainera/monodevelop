@@ -56,11 +56,17 @@ namespace MonoDevelop.PackageManagement.Tests.Helpers
 
 		public string Owners { get; set; }
 
+		public IReadOnlyList<string> OwnersList { get; set; }
+
 		public Uri ProjectUrl { get; set; }
 
 		public DateTimeOffset? Published { get; set; }
 
+		public Uri ReadmeUrl { get; set; }
+
 		public Uri ReportAbuseUrl { get; set; }
+
+		public IEnumerable<PackageVulnerabilityMetadata> Vulnerabilities { get; set; }
 
 		public bool RequireLicenseAcceptance { get; set; }
 

@@ -25,7 +25,6 @@
 // THE SOFTWARE.
 using System;
 using Gtk;
-using Cairo;
 
 namespace MonoDevelop.Components.MainToolbar
 {

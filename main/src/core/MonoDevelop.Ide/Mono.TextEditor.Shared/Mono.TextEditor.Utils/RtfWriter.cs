@@ -27,6 +27,7 @@ using System;
 using System.Text;
 using System.Collections.Generic;
 using Mono.TextEditor.Highlighting;
+using MonoDevelop.Components;
 using MonoDevelop.Core.Text;
 using MonoDevelop.Ide;
 using MonoDevelop.Core;
@@ -35,23 +36,24 @@ namespace Mono.TextEditor.Utils
 {
 	static class RtfWriter
 	{
-		static string CreateColorTable (List<Cairo.Color> colorList)
-		{
-			var colorTable = StringBuilderCache.Allocate ();
-			colorTable.Append (@"{\colortbl ;");
-			for (int i = 0; i < colorList.Count; i++) {
-				var color = colorList [i];
-				colorTable.Append (@"\red");
-				colorTable.Append ((int)(255  * color.R));
-				colorTable.Append (@"\green");
-				colorTable.Append ((int)(255  * color.G));
-				colorTable.Append (@"\blue");
-				colorTable.Append ((int)(255  * color.B));
-				colorTable.Append (";");
-			}
-			colorTable.Append ("}");
-			return StringBuilderCache.ReturnAndFree (colorTable);
+	static string CreateColorTable (List<HslColor> colorList)
+	{
+		var colorTable = StringBuilderCache.Allocate ();
+		colorTable.Append (@"{\colortbl ;");
+		for (int i = 0; i < colorList.Count; i++) {
+			var color = colorList [i];
+			color.ToRgb (out double r, out double g, out double b);
+			colorTable.Append (@"\red");
+			colorTable.Append ((int)(255  * r));
+			colorTable.Append (@"\green");
+			colorTable.Append ((int)(255  * g));
+			colorTable.Append (@"\blue");
+			colorTable.Append ((int)(255  * b));
+			colorTable.Append (";");
 		}
+		colorTable.Append ("}");
+		return StringBuilderCache.ReturnAndFree (colorTable);
+	}
 
 		public static string GenerateRtf (TextEditorData data)
 		{
@@ -99,7 +101,7 @@ namespace Mono.TextEditor.Utils
 		internal static string GenerateRtf (List<List<ClipboardColoredText>> chunks, MonoDevelop.Ide.Editor.Highlighting.EditorTheme style, ITextEditorOptions options)
 		{
 			var rtfText = StringBuilderCache.Allocate ();
-			var colorList = new List<Cairo.Color> ();
+			var colorList = new List<HslColor> ();
 
 			bool isItalic = false;
 			bool isBold = false;
