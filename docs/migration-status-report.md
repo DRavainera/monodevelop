@@ -1038,8 +1038,10 @@ Nota de continuidad: los cierres de olas 1-3 (2026-10-23/24) quedaron documentad
 1. **P1 — Sustitución de Mono.Posix por compat propio (`MonoUnixCompat`)**:
    - Nuevo proyecto `main/src/compat/MonoUnixCompat/` (facades `Catalog`/`UnixCompat` sobre
      `System.IO.Unix`/P-Invoke para net10.0), integrado por `ProjectReference` desde
-     `MonoDevelop.Core.csproj` (mismo patrón que `MonoRoslynCompat`; no entra en Main.sln,
-     se compila transitoriamente).
+     `MonoDevelop.Core.csproj` (mismo patrón que `MonoRoslynCompat`); además el proyecto
+     **entra en Main.sln** (carpeta "Core", 8 mapeos de configuración) — añadido tras el
+     cierre de ola 4 a petición del operador y verificado en QA QS1 (gate 0 Errores +
+     smokes OK).
    - Eliminados `core/MonoDevelop.Core/MonoDevelop.Core/Catalog.cs` y `Unix.Catalog.cs`
      (glue de Mono.Posix) y sus entradas `<Compile>`.
    - Submódulos: `Mono.Debugging.Soft.csproj` (debugger-libs) y `Mono.Addins.Gui.csproj`

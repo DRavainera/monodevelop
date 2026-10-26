@@ -297,8 +297,10 @@ Estado: `Main.sln` a 0 errores; QA Senior 8/8 partes, 0 hallazgos abiertos. Deta
 ### P1 — Mono.Posix → MonoUnixCompat (compat propio)
 - Nuevo proyecto `main/src/compat/MonoUnixCompat/` (facades `Catalog`/`UnixCompat` sobre
   `System.IO.Unix`/P-Invoke net10.0), integrado por `ProjectReference` desde
-  `MonoDevelop.Core.csproj` (patrón igual que `MonoRoslynCompat`; NO entra en Main.sln, se
-  compila transitoriamente).
+  `MonoDevelop.Core.csproj` (patrón igual que `MonoRoslynCompat`); además el proyecto
+  **entra en Main.sln** (carpeta "Core", GUID `F6BD06D7-5C70-4D19-B5BA-A5397CC4FBDA`, 8
+  mapeos de configuración) — añadido tras el cierre de ola 4 a petición del operador y
+  verificado en QA QS1 (gate 0 Errores + smokes OK).
 - Eliminados `core/MonoDevelop.Core/MonoDevelop.Core/{Catalog.cs,Unix.Catalog.cs}` (era el
   glue Mono.Posix) y sus entradas `<Compile>`.
 - Submódulos: `Mono.Debugging.Soft.csproj` (debugger-libs) y `Mono.Addins.Gui.csproj`

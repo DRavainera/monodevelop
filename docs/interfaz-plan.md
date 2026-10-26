@@ -2839,8 +2839,10 @@ Detalle completo por tarea en la sección "Cierre de ola 4" de ese handoff.
 **Cambios** (resumen; 79 M + 2 D + 1 carpeta nueva en main + 3 submódulos):
 1. **P1 — Mono.Posix → MonoUnixCompat**: nuevo proyecto `main/src/compat/MonoUnixCompat/`
    (facades `Catalog`/`UnixCompat` sobre `System.IO.Unix`/P-Invoke net10.0), integrado por
-   `ProjectReference` desde `MonoDevelop.Core.csproj` (patrón `MonoRoslynCompat`; no entra en
-   Main.sln). Eliminados `core/MonoDevelop.Core/MonoDevelop.Core/{Catalog,Unix.Catalog}.cs`.
+   `ProjectReference` desde `MonoDevelop.Core.csproj`; además entra en `Main.sln` (carpeta
+   "Core", 8 mapeos de configuración; añadido tras el cierre de ola 4 a petición del
+   operador, verificado en QA QS1). Eliminados
+   `core/MonoDevelop.Core/MonoDevelop.Core/{Catalog,Unix.Catalog}.cs`.
    Submódulos: `Mono.Debugging.Soft.csproj` (debugger-libs) y `Mono.Addins.Gui.csproj`
    (mono-addins) → `ProjectReference` a MonoUnixCompat en vez de `<Reference Mono.Posix>`.
 2. **T1 — WPF net10.0-windows (opción A)**: 5 csprojs (WindowsAPICodePack Core/Shell,
