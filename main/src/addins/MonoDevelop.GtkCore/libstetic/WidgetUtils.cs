@@ -229,7 +229,7 @@ namespace Stetic
 
 		public static Stetic.Wrapper.Widget Paste (IProject project, Gtk.SelectionData seldata)
 		{
-			if (seldata == null || seldata.Type == null || seldata.Type.Name != ApplicationXSteticAtom.Name)
+			if (seldata == null || seldata.DataType == null || seldata.DataType.Name != ApplicationXSteticAtom.Name)
 				return null;
 				
 			string data = System.Text.Encoding.UTF8.GetString (seldata.Data);
@@ -280,8 +280,8 @@ namespace Stetic
 			get {
 				if (missingIcon == null) {
 					try {
-						if (Gtk.IconTheme.Default.HasIcon (Gtk.Stock.MissingImage))
-							missingIcon = Gtk.IconTheme.Default.LoadIcon (Gtk.Stock.MissingImage, 16, 0);
+						if (Gtk.IconTheme.GetForScreen (Gdk.Screen.Default).HasIcon (StockCompat.MissingImage))
+							missingIcon = Gtk.IconTheme.GetForScreen (Gdk.Screen.Default).LoadIcon (StockCompat.MissingImage, 16, 0);
 					} catch {}
 					if (missingIcon == null) {
 						try {
@@ -371,7 +371,7 @@ namespace Stetic
 			int w, h;
 			Gtk.Icon.SizeLookup (size, out w, out h);
 			try {
-				return Gtk.IconTheme.Default.LoadIcon (name, w, 0);
+				return Gtk.IconTheme.GetForScreen (Gdk.Screen.Default).LoadIcon (name, w, 0);
 			} catch {
 				// Icon not in theme
 				return MissingIcon;

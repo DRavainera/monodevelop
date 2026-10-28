@@ -49,11 +49,11 @@ namespace MonoDevelop.Ide.WelcomePage
 
 		public int MinWidth { get; set; }
 
-		protected override void OnSizeRequested (ref Requisition requisition)
+		protected override void OnGetPreferredWidth (out int minimum, out int natural)
 		{
-			base.OnSizeRequested (ref requisition);
+			base.OnGetPreferredWidth (out minimum, out natural);
 			if (MinWidth != -1)
-				requisition.Width = Math.Max (requisition.Width, MinWidth);
+				minimum = natural = Math.Max (natural, MinWidth);
 		}
 	}
 }

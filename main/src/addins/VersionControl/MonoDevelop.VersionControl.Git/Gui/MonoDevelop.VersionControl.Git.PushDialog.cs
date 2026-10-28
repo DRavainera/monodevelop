@@ -7,9 +7,9 @@ namespace MonoDevelop.VersionControl.Git
 		private global::Gtk.VBox vbox2;
 		private global::Gtk.HBox hbox1;
 		private global::Gtk.Label label1;
-		private global::Gtk.ComboBox remoteCombo;
+		private global::Gtk.ComboBoxText remoteCombo;
 		private global::Gtk.Label label2;
-		private global::Gtk.ComboBox branchCombo;
+		private global::Gtk.ComboBoxText branchCombo;
 		private global::MonoDevelop.VersionControl.Views.ChangeSetView changeList;
 		private global::Gtk.Button buttonCancel;
 		private global::Gtk.Button buttonOk;
@@ -22,7 +22,7 @@ namespace MonoDevelop.VersionControl.Git
 			this.Title = global::Mono.Unix.Catalog.GetString ("Push to Repository");
 			this.WindowPosition = ((global::Gtk.WindowPosition)(4));
 			// Internal child MonoDevelop.VersionControl.Git.PushDialog.VBox
-			global::Gtk.VBox w1 = this.VBox;
+			global::Gtk.Box w1 = this.ContentArea;
 			w1.Name = "dialog1_VBox";
 			w1.BorderWidth = ((uint)(2));
 			// Container child dialog1_VBox.Gtk.Box+BoxChild
@@ -44,7 +44,7 @@ namespace MonoDevelop.VersionControl.Git
 			w2.Expand = false;
 			w2.Fill = false;
 			// Container child hbox1.Gtk.Box+BoxChild
-			this.remoteCombo = global::Gtk.ComboBox.NewText ();
+			this.remoteCombo = new global::Gtk.ComboBoxText ();
 			this.remoteCombo.Name = "remoteCombo";
 			this.hbox1.Add (this.remoteCombo);
 			global::Gtk.Box.BoxChild w3 = ((global::Gtk.Box.BoxChild)(this.hbox1 [this.remoteCombo]));
@@ -59,7 +59,7 @@ namespace MonoDevelop.VersionControl.Git
 			w4.Expand = false;
 			w4.Fill = false;
 			// Container child hbox1.Gtk.Box+BoxChild
-			this.branchCombo = global::Gtk.ComboBox.NewText ();
+			this.branchCombo = new global::Gtk.ComboBoxText ();
 			this.branchCombo.Name = "branchCombo";
 			this.hbox1.Add (this.branchCombo);
 			global::Gtk.Box.BoxChild w5 = ((global::Gtk.Box.BoxChild)(this.hbox1 [this.branchCombo]));
@@ -81,7 +81,7 @@ namespace MonoDevelop.VersionControl.Git
 			global::Gtk.Box.BoxChild w8 = ((global::Gtk.Box.BoxChild)(w1 [this.vbox2]));
 			w8.Position = 0;
 			// Internal child MonoDevelop.VersionControl.Git.PushDialog.ActionArea
-			global::Gtk.HButtonBox w9 = this.ActionArea;
+			global::Gtk.ButtonBox w9 = this.ActionArea;
 			w9.Name = "dialog1_ActionArea";
 			w9.Spacing = 10;
 			w9.BorderWidth = ((uint)(5));

@@ -8,13 +8,14 @@ namespace Stetic.Editor {
 	[PropertyEditor ("Value", "Changed")]
 	public class Image : Gtk.HBox, IPropertyEditor {
 		Gtk.Image image;
-		Gtk.ComboBoxEntry combo;
+		Gtk.ComboBox combo;
 		Gtk.Entry entry;
 		Gtk.Button button;
 		Gtk.ListStore store;
 
 		const int IconColumn = 0;
 		const int LabelColumn = 1;
+		const string GnomeStockBlank = "gnome-stock-blank";
 
 		static string[] stockIds, stockLabels;
 		static int imgWidth, imgHeight;
@@ -23,20 +24,12 @@ namespace Stetic.Editor {
 		{
 			ArrayList tmpIds = new ArrayList ();
 
-			// We can't use Gtk.Stock.ListIds, because that returns different
-			// values depending on what version of libgtk you have installed...
-			foreach (PropertyInfo info in typeof (Gtk.Stock).GetProperties (BindingFlags.Public | BindingFlags.Static)) {
-				if (info.CanRead && info.PropertyType == typeof (string))
-					tmpIds.Add (info.GetValue (null, null));
-			}
-			foreach (PropertyInfo info in GnomeStock.Properties) {
-				if (info.CanRead && info.PropertyType == typeof (string))
-					tmpIds.Add (info.GetValue (null, null));
-			}
+			foreach (string id in StockCompat.ListIds ())
+				tmpIds.Add (id);
 
 			ArrayList items = new ArrayList (), nonItems = new ArrayList ();
 			foreach (string id in tmpIds) {
-				Gtk.StockItem item = Gtk.Stock.Lookup (id);
+				Gtk.StockItem item = StockCompat.Lookup (id);
 				if (item.StockId == null)
 					nonItems.Add (id);
 				else {
@@ -75,16 +68,20 @@ namespace Stetic.Editor {
 
 		public Image (bool allowStock, bool allowFile) : base (false, 6)
 		{
-			image = new Gtk.Image (GnomeStock.Blank, Gtk.IconSize.Button);
+			image = new Gtk.Image (GnomeStockBlank, Gtk.IconSize.Button);
 			PackStart (image, false, false, 0);
 
 			if (allowStock) {
 				store = new Gtk.ListStore (typeof (string), typeof (string));
-				store.AppendValues (GnomeStock.Blank, Catalog.GetString ("(None)"));
+				store.AppendValues (GnomeStockBlank, Catalog.GetString ("(None)"));
 				for (int i = 0; i < stockIds.Length; i++)
 					store.AppendValues (stockIds[i], stockLabels[i]);
 
-				combo = new Gtk.ComboBoxEntry (store, LabelColumn);
+				combo = Gtk.ComboBox.NewWithEntry ();
+				combo.Model = store;
+				Gtk.CellRendererText textRenderer = new Gtk.CellRendererText ();
+				combo.PackStart (textRenderer, true);
+				combo.AddAttribute (textRenderer, "text", LabelColumn);
 				Gtk.CellRendererPixbuf iconRenderer = new Gtk.CellRendererPixbuf ();
 				iconRenderer.StockSize = (uint)Gtk.IconSize.Menu;
 				combo.PackStart (iconRenderer, false);
@@ -98,8 +95,9 @@ namespace Stetic.Editor {
 				vbox.PackStart (combo, true, false, 0);
 				PackStart (vbox, true, true, 0);
 
-				entry = (Gtk.Entry)combo.Child;
-				entry.Changed += entry_Changed;
+				entry = combo.Child as Gtk.Entry;
+				if (entry != null)
+					entry.Changed += entry_Changed;
 
 				useStock = true;
 			}
@@ -112,7 +110,7 @@ namespace Stetic.Editor {
 				}
 
 				button = new Gtk.Button ();
-				Gtk.Image icon = new Gtk.Image (Gtk.Stock.Open, Gtk.IconSize.Button);
+				Gtk.Image icon = new Gtk.Image (StockCompat.Open, Gtk.IconSize.Button);
 				button.Add (icon);
 				PackStart (button, false, false, 0);
 				button.Clicked += button_Clicked;
@@ -167,8 +165,8 @@ namespace Stetic.Editor {
 		{
 			Gtk.FileChooserDialog dialog =
 				new Gtk.FileChooserDialog (Catalog.GetString ("Image"), null, Gtk.FileChooserAction.Open,
-							   Gtk.Stock.Cancel, Gtk.ResponseType.Cancel,
-							   Gtk.Stock.Open, Gtk.ResponseType.Ok);
+							   StockCompat.Cancel, Gtk.ResponseType.Cancel,
+							   StockCompat.Open, Gtk.ResponseType.Ok);
 			dialog.TransientFor = this.Toplevel as Gtk.Window;
 			int response = dialog.Run ();
 			string file = dialog.Filename;
@@ -226,7 +224,7 @@ namespace Stetic.Editor {
 				try {
 					image.Pixbuf = new Gdk.Pixbuf (value, imgWidth, imgHeight);
 				} catch {
-					image.SetFromStock (GnomeStock.Blank, Gtk.IconSize.Button);
+					image.SetFromStock (GnomeStockBlank, Gtk.IconSize.Button);
 				}
 
 				if (!syncing) {

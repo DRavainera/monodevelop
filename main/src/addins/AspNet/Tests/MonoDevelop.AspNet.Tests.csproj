@@ -17,9 +17,10 @@
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
     <ProjectGuid>{BEFADF93-EE92-4806-9C0B-937B25311C95}</ProjectGuid>
     <TargetFrameworkVersion>$(MDFrameworkVersion)</TargetFrameworkVersion>
-    <TestRunnerCommand>..\..\..\..\build\bin\mdtool.exe</TestRunnerCommand>
+    <TestRunnerCommand>..\..\..\..\build\mdtool.exe</TestRunnerCommand>
     <TestRunnerArgs>run-md-tests</TestRunnerArgs>
     <OutputPath>..\..\..\..\build\tests</OutputPath>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <!--
     This needs to be ported to the new editor, and currently makes use of many, many deprecated APIs.
     -->

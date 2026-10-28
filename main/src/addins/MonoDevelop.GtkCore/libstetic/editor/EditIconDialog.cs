@@ -221,7 +221,7 @@ namespace Stetic.Editor
 		protected void OnRemoveSource (object s, EventArgs args)
 		{
 			Gtk.TreeIter iter;
-			Gtk.TreeModel model;
+			Gtk.ITreeModel model;
 			if (sourceList.Selection.GetSelected (out model, out iter)) {
 				sourceListStore.Remove (ref iter);
 				UpdateButtons ();

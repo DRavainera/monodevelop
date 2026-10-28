@@ -226,7 +226,7 @@ namespace MonoDevelop.Ide.BuildOutputView
 			cellView.ExpandWarnings += (s, e) => ExpandErrorOrWarningsNodes (treeView, true);
 			cellView.ExpandErrors += (s, e) => ExpandErrorOrWarningsNodes (treeView, false);
 
-			PackStart (treeView, expand: true, fill: true);
+			PackStart (treeView, true, true);
 
 			loadingSpinner = new MDSpinner (Gtk.IconSize.Button) {
 				Visible = false
@@ -595,7 +595,7 @@ namespace MonoDevelop.Ide.BuildOutputView
 				FocusRow (node);
 
 				resultInformLabel.Text = GettextCatalog.GetString ("{0} of {1}", currentSearch.CurrentAbsoluteMatchIndex, currentSearch.MatchesCount);
-				resultInformLabel.TextColor = searchEntry.Style.Foreground (Gtk.StateType.Insensitive).ToXwtColor();
+				resultInformLabel.TextColor = searchEntry.GetStyleColor (Gtk.StateType.Insensitive).ToGdkColor ().ToXwtColor ();
 			} else if (string.IsNullOrEmpty (searchEntry.Entry.Text)) {
 				resultInformLabel.Text = string.Empty;
 				IdeApp.Workbench.StatusBar.ShowReady ();

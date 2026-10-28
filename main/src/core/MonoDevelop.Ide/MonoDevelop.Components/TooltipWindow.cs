@@ -28,6 +28,7 @@
 
 
 using MonoDevelop.Ide;
+using Cairo;
 using Gtk;
 using Gdk;
 
@@ -39,7 +40,7 @@ namespace MonoDevelop.Components
 		
 		public string LinkColor {
 			get {
-				var color = HslColor.GenerateHighlightColors (Style.Background (State), Style.Text (State), 3)[2];
+				var color = HslColor.GenerateHighlightColors (this.GetStyleBackgroundColor (State).ToGdkColor (), this.GetStyleColor (State).ToGdkColor (), 3)[2];
 				return color.ToPangoString ();
 			}
 		}
@@ -51,8 +52,6 @@ namespace MonoDevelop.Components
 			this.Decorated = false;
 			this.BorderWidth = 2;
 			this.TypeHint = WindowTypeHint.Tooltip;
-			this.AllowShrink = false;
-			this.AllowGrow = false;
 			this.Title = "tooltip"; // fixes the annoying '** Message: ATK_ROLE_TOOLTIP object found, but doesn't look like a tooltip.** Message: ATK_ROLE_TOOLTIP object found, but doesn't look like a tooltip.'
 			
 			//fake widget name for stupid theme engines
@@ -77,13 +76,12 @@ namespace MonoDevelop.Components
 			}
 		}
 		
-		protected override bool OnExposeEvent (Gdk.EventExpose evnt)
+		protected override bool OnDrawn (Cairo.Context cr)
 		{
 			int winWidth, winHeight;
-			this.GetSize (out winWidth, out winHeight);
-			Gtk.Style.PaintFlatBox (Style, this.GdkWindow, StateType.Normal, ShadowType.Out, evnt.Area, this, "tooltip", 0, 0, winWidth, winHeight);
-			foreach (var child in this.Children)
-				this.PropagateExpose (child, evnt);
+			this.GetSizeRequest (out winWidth, out winHeight);
+			StyleContext.RenderBackground (cr, 0, 0, winWidth, winHeight);
+			StyleContext.RenderFrame (cr, 0, 0, winWidth, winHeight);
 			return false;
 		}
 		

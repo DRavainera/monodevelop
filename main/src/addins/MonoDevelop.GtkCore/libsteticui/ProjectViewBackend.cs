@@ -88,7 +88,7 @@ namespace Stetic {
 			LoadProject ();
 		}
 		
-		public override void Dispose ()
+		protected override void Dispose (bool disposing)
 		{
 			if (editSession != null) {
 				editSession.SelectionChanged -= WidgetSelected;

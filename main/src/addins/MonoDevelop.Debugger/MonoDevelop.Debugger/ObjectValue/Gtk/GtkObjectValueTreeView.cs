@@ -33,6 +33,7 @@ using System.Collections.Generic;
 
 using Gdk;
 using Gtk;
+using Cairo;
 
 using Mono.Debugging.Client;
 
@@ -304,7 +305,8 @@ namespace MonoDevelop.Debugger
 			createMsg = GettextCatalog.GetString ("Add item to watch");
 			CompletionWindowManager.WindowClosed += HandleCompletionWindowClosed;
 			PreviewWindowManager.WindowClosed += HandlePreviewWindowClosed;
-			ScrollAdjustmentsSet += HandleScrollAdjustmentsSet;
+			AddNotification ("hadjustment", HandleScrollAdjustmentsSet);
+			AddNotification ("vadjustment", HandleScrollAdjustmentsSet);
 
 			expanderSize = (int)StyleGetProperty ("expander-size") + 4; //+4 is hardcoded in gtk.c code
 			horizontal_separator = (int)StyleGetProperty ("horizontal-separator");
@@ -455,7 +457,8 @@ namespace MonoDevelop.Debugger
 			valueCol.RemoveNotification ("width", OnColumnWidthChanged);
 			expCol.RemoveNotification ("width", OnColumnWidthChanged);
 
-			ScrollAdjustmentsSet -= HandleScrollAdjustmentsSet;
+			RemoveNotification ("hadjustment", HandleScrollAdjustmentsSet);
+			RemoveNotification ("vadjustment", HandleScrollAdjustmentsSet);
 			if (oldHadjustment != null) {
 				oldHadjustment.ValueChanged -= UpdatePreviewPosition;
 				oldVadjustment.ValueChanged -= UpdatePreviewPosition;
@@ -1482,7 +1485,7 @@ namespace MonoDevelop.Debugger
 				return;
 
 			if (selected.Length == 1) {
-				var editable = IdeApp.Workbench.RootWindow.Focus as Editable;
+				var editable = IdeApp.Workbench.RootWindow.Focus as Gtk.Entry;
 
 				if (editable != null) {
 					editable.CopyClipboard ();
@@ -1631,7 +1634,7 @@ namespace MonoDevelop.Debugger
 			if (GetPathAtPos (x, y, out path, out col)) {
 				var cellArea = GetCellArea (path, col);
 				x -= cellArea.X;
-				foreach (var cr in col.CellRenderers) {
+				foreach (var cr in col.Cells) {
 					int xo, w;
 					col.CellGetPosition (cr, out xo, out w);
 					var visible = cr.Visible;
@@ -1799,7 +1802,7 @@ namespace MonoDevelop.Debugger
 
 		#region UI support
 
-		static void ValueDataFunc (Gtk.TreeViewColumn tree_column, Gtk.CellRenderer cell, Gtk.TreeModel model, Gtk.TreeIter iter)
+		static void ValueDataFunc (Gtk.TreeViewColumn tree_column, Gtk.CellRenderer cell, Gtk.ITreeModel model, Gtk.TreeIter iter)
 		{
 			Xwt.Drawing.Color? color;
 			ObjectValue val = null;
@@ -1831,6 +1834,20 @@ namespace MonoDevelop.Debugger
 			}
 		}
 
+	static readonly System.Reflection.MethodInfo OnGetSizeMethodInfo = typeof (CellRenderer).GetMethod ("OnGetSize", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+
+	static void GetCellSize (Widget widget, CellRenderer cellRenderer, ref Gdk.Rectangle area, out int x_offset, out int y_offset, out int width, out int height)
+	{
+		var args = new object[] { widget, area, 0, 0, 0, 0 };
+		OnGetSizeMethodInfo.Invoke (cellRenderer, args);
+		area = (Gdk.Rectangle)args [1];
+		x_offset = (int)args [2];
+		y_offset = (int)args [3];
+		width = (int)args [4];
+		height = (int)args [5];
+	}
+
+
 		int GetMaxWidth (TreeViewColumn column, TreeIter iter)
 		{
 			var path = Model.GetPath (iter);
@@ -1839,12 +1856,12 @@ namespace MonoDevelop.Debugger
 			column.CellSetCellData (Model, iter, false, false);
 			var area = new Gdk.Rectangle (0, 0, 1000, 1000);
 			bool firstCell = true;
-			foreach (var cellRenderer in column.CellRenderers) {
+			foreach (var cellRenderer in column.Cells) {
 				if (!cellRenderer.Visible)
 					continue;
 				if (!firstCell && columnWidth > 0)
 					columnWidth += column.Spacing;
-				cellRenderer.GetSize (this, ref area, out x, out y, out w, out h);
+				GetCellSize (this, cellRenderer, ref area, out x, out y, out w, out h);
 				columnWidth += w + focus_line_width;
 				firstCell = false;
 			}
@@ -1945,7 +1962,7 @@ namespace MonoDevelop.Debugger
 		}
 
 		//Don't convert this event handler to override OnSetScrollAdjustments as it causes problems
-		void HandleScrollAdjustmentsSet (object o, ScrollAdjustmentsSetArgs args)
+		void HandleScrollAdjustmentsSet (object o, GLib.NotifyArgs args)
 		{
 			if (oldHadjustment != null) {
 				oldHadjustment.ValueChanged -= UpdatePreviewPosition;
@@ -2076,28 +2093,26 @@ namespace MonoDevelop.Debugger
 				}
 			}
 
-			public override void GetSize (Widget widget, ref Gdk.Rectangle cell_area, out int x_offset, out int y_offset, out int width, out int height)
+			protected override void OnGetSize (Widget widget, ref Gdk.Rectangle cell_area, out int x_offset, out int y_offset, out int width, out int height)
 			{
-				base.GetSize (widget, ref cell_area, out x_offset, out y_offset, out width, out height);
+				base.OnGetSize (widget, ref cell_area, out x_offset, out y_offset, out width, out height);
 				if (!icon.IsNull)
 					width += (int)(Xpad * 2 + img.Width);
 			}
 
-			protected override void Render (Gdk.Drawable window, Widget widget, Gdk.Rectangle background_area, Gdk.Rectangle cell_area, Gdk.Rectangle expose_area, CellRendererState flags)
+			protected override void OnRender (Cairo.Context cr, Widget widget, Gdk.Rectangle background_area, Gdk.Rectangle cell_area, CellRendererState flags)
 			{
-				base.Render (window, widget, background_area, cell_area, expose_area, flags);
+				base.OnRender (cr, widget, background_area, cell_area, flags);
 				if (!icon.IsNull) {
-					using (var ctx = Gdk.CairoHelper.Create (window)) {
-						using (var layout = new Pango.Layout (widget.PangoContext)) {
-							layout.FontDescription = IdeServices.FontService.SansFont.CopyModified (Ide.Gui.Styles.FontScale11);
-							layout.FontDescription.Family = Family;
-							layout.SetText (Text);
-							int w, h;
-							layout.GetPixelSize (out w, out h);
-							var x = cell_area.X + w + 3 * Xpad;
-							var y = cell_area.Y + cell_area.Height / 2 - (int)(img.Height / 2);
-							ctx.DrawImage (widget, img, x, y);
-						}
+					using (var layout = new Pango.Layout (widget.PangoContext)) {
+						layout.FontDescription = IdeServices.FontService.SansFont.CopyModified (Ide.Gui.Styles.FontScale11);
+						layout.FontDescription.Family = Family;
+						layout.SetText (Text);
+						int w, h;
+						layout.GetPixelSize (out w, out h);
+						var x = cell_area.X + w + 3 * Xpad;
+						var y = cell_area.Y + cell_area.Height / 2 - (int)(img.Height / 2);
+						cr.DrawImage (widget, img, x, y);
 					}
 				}
 			}
@@ -2131,11 +2146,11 @@ namespace MonoDevelop.Debugger
 				}
 			}
 
-			public override void GetSize (Widget widget, ref Gdk.Rectangle cell_area, out int x_offset, out int y_offset, out int width, out int height)
+			protected override void OnGetSize (Widget widget, ref Gdk.Rectangle cell_area, out int x_offset, out int y_offset, out int width, out int height)
 			{
 				if (Compact)
 					this.Ellipsize = Pango.EllipsizeMode.None;
-				base.GetSize (widget, ref cell_area, out x_offset, out y_offset, out width, out height);
+				base.OnGetSize (widget, ref cell_area, out x_offset, out y_offset, out width, out height);
 				if (Compact)
 					this.Ellipsize = Pango.EllipsizeMode.End;
 			}
@@ -2143,28 +2158,26 @@ namespace MonoDevelop.Debugger
 
 		class CellRendererColorPreview : CellRenderer
 		{
-			protected override void Render (Gdk.Drawable window, Widget widget, Gdk.Rectangle background_area, Gdk.Rectangle cell_area, Gdk.Rectangle expose_area, CellRendererState flags)
+			protected override void OnRender (Cairo.Context cr, Widget widget, Gdk.Rectangle background_area, Gdk.Rectangle cell_area, CellRendererState flags)
 			{
 				var darkColor = Color.WithIncreasedLight (-0.15);
 
-				using (Cairo.Context cr = Gdk.CairoHelper.Create (window)) {
-					double center_x = cell_area.X + Math.Round ((double)(cell_area.Width / 2d));
-					double center_y = cell_area.Y + Math.Round ((double)(cell_area.Height / 2d));
+				double center_x = cell_area.X + Math.Round ((double)(cell_area.Width / 2d));
+				double center_y = cell_area.Y + Math.Round ((double)(cell_area.Height / 2d));
 
-					// TODO: VV: On retina this should be LineWidth = 0.5 and Arc size needs to match
+				// TODO: VV: On retina this should be LineWidth = 0.5 and Arc size needs to match
 
-					// @1x:
-					cr.LineWidth = 1;
-					cr.Arc (center_x, center_y, 5.5f, 0, 2 * Math.PI);
+				// @1x:
+				cr.LineWidth = 1;
+				cr.Arc (center_x, center_y, 5.5f, 0, 2 * Math.PI);
 
-					cr.SetSourceRGBA (Color.Red, Color.Green, Color.Blue, 1);
-					cr.FillPreserve ();
-					cr.SetSourceRGBA (darkColor.Red, darkColor.Green, darkColor.Blue, 1);
-					cr.Stroke ();
-				}
+				cr.SetSourceRGBA (Color.Red, Color.Green, Color.Blue, 1);
+				cr.FillPreserve ();
+				cr.SetSourceRGBA (darkColor.Red, darkColor.Green, darkColor.Blue, 1);
+				cr.Stroke ();
 			}
 
-			public override void GetSize (Widget widget, ref Gdk.Rectangle cell_area, out int x_offset, out int y_offset, out int width, out int height)
+			protected override void OnGetSize (Widget widget, ref Gdk.Rectangle cell_area, out int x_offset, out int y_offset, out int width, out int height)
 			{
 				x_offset = y_offset = 0;
 				height = width = 16;
@@ -2177,45 +2190,43 @@ namespace MonoDevelop.Debugger
 		{
 			const int TopBottomPadding = 1;
 
-			protected override void Render (Gdk.Drawable window, Widget widget, Gdk.Rectangle background_area, Gdk.Rectangle cell_area, Gdk.Rectangle expose_area, CellRendererState flags)
+			protected override void OnRender (Cairo.Context cr, Widget widget, Gdk.Rectangle background_area, Gdk.Rectangle cell_area, CellRendererState flags)
 			{
 				if (string.IsNullOrEmpty (Text)) {
 					return;
 				}
-				using (var cr = Gdk.CairoHelper.Create (window)) {
-					using (var layout = new Pango.Layout (widget.PangoContext)) {
-						layout.SetText (Text);
-						layout.FontDescription = FontDesc;
-						layout.FontDescription.Family = Family;
-						int w, h;
-						layout.GetPixelSize (out w, out h);
-						int xpad = (int)Xpad;
-						cr.RoundedRectangle (
-							cell_area.X + xpad + 0.5,
-							cell_area.Y + TopBottomPadding + 0.5,
-							w + (cell_area.Height - 2 * TopBottomPadding) - 1,
-							cell_area.Height - TopBottomPadding * 2 - 1,
-							(cell_area.Height - (TopBottomPadding * 2)) / 2);
-						cr.LineWidth = 1;
-						cr.SetSourceColor (Styles.ObjectValueTreeValuesButtonBackground.ToCairoColor ());
-						cr.FillPreserve ();
-						cr.SetSourceColor (Styles.ObjectValueTreeValuesButtonBorder.ToCairoColor ());
-						cr.Stroke ();
+				using (var layout = new Pango.Layout (widget.PangoContext)) {
+					layout.SetText (Text);
+					layout.FontDescription = FontDesc;
+					layout.FontDescription.Family = Family;
+					int w, h;
+					layout.GetPixelSize (out w, out h);
+					int xpad = (int)Xpad;
+					cr.RoundedRectangle (
+						cell_area.X + xpad + 0.5,
+						cell_area.Y + TopBottomPadding + 0.5,
+						w + (cell_area.Height - 2 * TopBottomPadding) - 1,
+						cell_area.Height - TopBottomPadding * 2 - 1,
+						(cell_area.Height - (TopBottomPadding * 2)) / 2);
+					cr.LineWidth = 1;
+					cr.SetSourceColor (Styles.ObjectValueTreeValuesButtonBackground.ToCairoColor ());
+					cr.FillPreserve ();
+					cr.SetSourceColor (Styles.ObjectValueTreeValuesButtonBorder.ToCairoColor ());
+					cr.Stroke ();
 
-						int YOffset = (cell_area.Height - h) / 2;
-						if (((GtkObjectValueTreeView)widget).compactView && !Platform.IsWindows)
-							YOffset += 1;
-						cr.SetSourceColor (Styles.ObjectValueTreeValuesButtonText.ToCairoColor ());
-						cr.MoveTo (cell_area.X + (cell_area.Height - TopBottomPadding * 2 + 1) / 2 + xpad,
-								   cell_area.Y + YOffset);
-						cr.ShowLayout (layout);
-					}
+					int YOffset = (cell_area.Height - h) / 2;
+					if (((GtkObjectValueTreeView)widget).compactView && !Platform.IsWindows)
+						YOffset += 1;
+					cr.SetSourceColor (Styles.ObjectValueTreeValuesButtonText.ToCairoColor ());
+					cr.MoveTo (cell_area.X + (cell_area.Height - TopBottomPadding * 2 + 1) / 2 + xpad,
+							   cell_area.Y + YOffset);
+					cr.ShowLayout (layout);
 				}
 			}
 
-			public override void GetSize (Widget widget, ref Gdk.Rectangle cell_area, out int x_offset, out int y_offset, out int width, out int height)
+			protected override void OnGetSize (Widget widget, ref Gdk.Rectangle cell_area, out int x_offset, out int y_offset, out int width, out int height)
 			{
-				base.GetSize (widget, ref cell_area, out x_offset, out y_offset, out width, out height);
+				base.OnGetSize (widget, ref cell_area, out x_offset, out y_offset, out width, out height);
 				x_offset = y_offset = 0;
 				if (string.IsNullOrEmpty (Text)) {
 					width = 0;
@@ -2238,13 +2249,13 @@ namespace MonoDevelop.Debugger
 		//==================================================================================================================
 
 		#region Locator methods
-		static ObjectValueNode GetNodeAtIter (TreeIter iter, TreeModel model)
+		static ObjectValueNode GetNodeAtIter (TreeIter iter, ITreeModel model)
 		{
 			return (ObjectValueNode) model.GetValue (iter, ObjectNodeColumn);
 		}
 
 		// TODO: clean up, maybe even remove this method
-		static ObjectValue GetDebuggerObjectValueAtIter (TreeIter iter, TreeModel model)
+		static ObjectValue GetDebuggerObjectValueAtIter (TreeIter iter, ITreeModel model)
 		{
 			var node = GetNodeAtIter (iter, model);
 

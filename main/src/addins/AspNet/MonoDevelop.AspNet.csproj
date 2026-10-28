@@ -1,4 +1,4 @@
-<Project DefaultTargets="Build" Sdk="Microsoft.NET.Sdk" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+﻿<Project DefaultTargets="Build" Sdk="Microsoft.NET.Sdk" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <Import Project="..\..\..\MonoDevelop.props" />
   <Import Project="$(ReferencesGtk)" />
   <PropertyGroup>
@@ -19,6 +19,7 @@
     <ProjectGuid>{1CF94D07-5480-4D10-A3CD-2EBD5E87B02E}</ProjectGuid>
     <TargetFrameworkVersion>$(MDFrameworkVersion)</TargetFrameworkVersion>
     <OutputPath>..\..\..\build\AddIns\AspNet</OutputPath>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <RARResolveFromCandidateAssemblyFiles>true</RARResolveFromCandidateAssemblyFiles>
     <!--
@@ -103,10 +104,6 @@
     <Reference Include="System.Runtime.Serialization" />
     <Reference Include="System.Collections.Immutable">
       <HintPath>$(NuGetPackageRoot)system.collections.immutable/10.0.1/lib/netstandard2.0/System.Collections.Immutable.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="Mono.Cairo">
-      <HintPath>$(MonoFrameworkNet45Directory)\Mono.Cairo.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="Mono.TextTemplating">

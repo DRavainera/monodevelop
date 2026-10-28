@@ -93,13 +93,13 @@ namespace MonoDevelop.Components.MainToolbar
 			}
 		}
 
-		static bool RuntimeIsSeparator (TreeModel model, TreeIter iter)
+		static bool RuntimeIsSeparator (ITreeModel model, TreeIter iter)
 		{
 			var runtime = (IRuntimeModel)model.GetValue (iter, 0);
 			return runtime == null || runtime.IsSeparator;
 		}
 
-		void RuntimeRenderCell (CellLayout layout, CellRenderer cell, TreeModel model, TreeIter iter)
+		void RuntimeRenderCell (ICellLayout layout, CellRenderer cell, ITreeModel model, TreeIter iter)
 		{
 			var runtime = (IRuntimeModel)model.GetValue (iter, 0);
 			var renderer = (CellRendererText) cell;
@@ -131,7 +131,7 @@ namespace MonoDevelop.Components.MainToolbar
 		TreeIter lastSelection = TreeIter.Zero;
 		public MainToolbar ()
 		{
-			WidgetFlags |= Gtk.WidgetFlags.AppPaintable;
+			AppPaintable = true;
 
 			AddWidget (button);
 			AddSpace (8);
@@ -271,7 +271,8 @@ namespace MonoDevelop.Components.MainToolbar
 			button.Clicked += HandleStartButtonClicked;
 
 			this.ShowAll ();
-			this.statusArea.statusIconBox.HideAll ();
+			foreach (var iconWidget in this.statusArea.statusIconBox.Children)
+				iconWidget.Hide ();
 		}
 
 		protected override bool OnButtonPressEvent (Gdk.EventButton evnt)
@@ -375,37 +376,37 @@ namespace MonoDevelop.Components.MainToolbar
 			contentBox.PackStart (widget, false, false, 0);
 		}
 
-		protected override bool OnExposeEvent (Gdk.EventExpose evnt)
+		protected override bool OnDrawn (Cairo.Context cr)
 		{
-			using (var context = Gdk.CairoHelper.Create (evnt.Window)) {
-				context.Rectangle (
-					evnt.Area.X,
-					evnt.Area.Y,
-					evnt.Area.Width,
-					evnt.Area.Height
-				);
-				context.Clip ();
-				context.LineWidth = 1;
-				if (Background != null && Background.Width > 0) {
-					for (int x=0; x < Allocation.Width; x += Background.Width) {
-						Background.Show (context, x, -TitleBarHeight);
-					}
-				} else {
-					context.Rectangle (0, 0, Allocation.Width, Allocation.Height);
-					using (var lg = new LinearGradient (0, 0, 0, Allocation.Height)) {
-						lg.AddColorStop (0, Style.Light (StateType.Normal).ToCairoColor ());
-						lg.AddColorStop (1, Style.Mid (StateType.Normal).ToCairoColor ());
-						context.SetSource (lg);
-					}
-					context.Fill ();
-
+			cr.Rectangle (
+				0,
+				0,
+				Allocation.Width,
+				Allocation.Height
+			);
+			cr.Clip ();
+			cr.LineWidth = 1;
+			if (Background != null && Background.Width > 0) {
+				for (int x=0; x < Allocation.Width; x += Background.Width) {
+					Background.Show (cr, x, -TitleBarHeight);
 				}
-				context.MoveTo (0, Allocation.Height - 0.5);
-				context.RelLineTo (Allocation.Width, 0);
-				context.SetSourceColor (Styles.ToolbarBottomBorderColor.ToCairoColor ());
-				context.Stroke ();
+			} else {
+				cr.Rectangle (0, 0, Allocation.Width, Allocation.Height);
+				var topColor = this.GetStyleBackgroundColor (StateType.Normal).ToCairoColor ();
+				var bottomColor = topColor.AddLight (-0.1);
+				using (var lg = new LinearGradient (0, 0, 0, Allocation.Height)) {
+					lg.AddColorStop (0, topColor);
+					lg.AddColorStop (1, bottomColor);
+					cr.SetSource (lg);
+				}
+				cr.Fill ();
+
 			}
-			return base.OnExposeEvent (evnt);
+			cr.MoveTo (0, Allocation.Height - 0.5);
+			cr.RelLineTo (Allocation.Width, 0);
+			cr.SetSourceColor (Styles.ToolbarBottomBorderColor.ToCairoColor ());
+			cr.Stroke ();
+			return base.OnDrawn (cr);
 		}
 
 		void HandleStartButtonClicked (object sender, EventArgs e)

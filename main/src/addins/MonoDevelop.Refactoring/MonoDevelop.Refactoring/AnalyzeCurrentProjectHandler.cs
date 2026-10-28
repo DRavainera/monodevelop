@@ -77,7 +77,7 @@ namespace MonoDevelop.Refactoring
 			try {
 				using (var monitor = IdeApp.Workbench.ProgressMonitors.GetStatusProgressMonitor (GettextCatalog.GetString ("Analyzing project"), null, false, true, false, null, true)) {
 					CancellationToken token = monitor.CancellationToken;
-					var allDiagnostics = await Task.Run (async delegate {
+					var allDiagnostics = await System.Threading.Tasks.Task.Run (async delegate {
 						var diagnosticList = new List<Diagnostic> ();
 						monitor.BeginTask (GettextCatalog.GetString ("Analyzing {0}", project.Name), 1);
 						var providers = await AnalyzeWholeSolutionHandler.GetProviders (analysisProject);

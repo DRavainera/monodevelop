@@ -9,33 +9,6 @@ namespace Stetic
 
 		public Custom (IntPtr raw) : base (raw) {}
 
-		// from glade
-		static private string[] custom_bg_xpm = {
-			"8 8 4 1",
-			" 	c None",
-			".	c #BBBBBB",
-			"+	c #D6D6D6",
-			"@	c #6B5EFF",
-			".+..+...",
-			"+..@@@..",
-			"..@...++",
-			"..@...++",
-			"+.@..+..",
-			".++@@@..",
-			"..++....",
-			"..++...."
-		};
-
-		Gdk.Pixmap pixmap;
-		
-		protected override void OnRealized ()
-		{
-			base.OnRealized ();
-
-			Gdk.Pixmap mask;
-			pixmap = Gdk.Pixmap.CreateFromXpmD (GdkWindow, out mask, new Gdk.Color (99, 99, 99), custom_bg_xpm);
-		}
-
 		string creationFunction, string1, string2;
 		int int1, int2;
 
@@ -93,31 +66,40 @@ namespace Stetic
 			}
 		}
 
-		protected override bool OnExposeEvent (Gdk.EventExpose evt)
+		protected override bool OnDrawn (Cairo.Context cr)
 		{
 			if (!IsDrawable)
 				return false;
 
-			int width, height;
-			GdkWindow.GetSize (out width, out height);
+			int width = GdkWindow.Width;
+			int height = GdkWindow.Height;
 
-			Gdk.GC light, dark;
-			light = Style.LightGC (StateType.Normal);
-			dark = Style.DarkGC (StateType.Normal);
+			// Fondo gris (equivalente visual al XPM de Gtk2)
+			cr.SetSourceColor (new Cairo.Color (0.73f, 0.73f, 0.73f));
+			cr.Rectangle (0, 0, width, height);
+			cr.Fill ();
 
-			// Looks like GdkWindow.SetBackPixmap doesn't work very well,
-			// so draw the pixmap manually.
-			light.Fill = Gdk.Fill.Tiled;
-			light.Tile = pixmap;
-			GdkWindow.DrawRectangle (light, true, 0, 0, width, height);
-			light.Fill = Gdk.Fill.Solid;
+			cr.SetSourceColor (new Cairo.Color (0.42f, 0.37f, 1.0f));
+			cr.Rectangle (width / 2 - 4, height / 2 - 4, 8, 8);
+			cr.Fill ();
 
-			GdkWindow.DrawLine (light, 0, 0, width - 1, 0);
-			GdkWindow.DrawLine (light, 0, 0, 0, height - 1);
-			GdkWindow.DrawLine (dark, 0, height - 1, width - 1, height - 1);
-			GdkWindow.DrawLine (dark, width - 1, 0, width - 1, height - 1);
+			// Borde biselado
+			cr.LineWidth = 1;
+			cr.SetSourceColor (new Cairo.Color (1.0f, 1.0f, 1.0f));
+			cr.MoveTo (0.5, 0);
+			cr.LineTo (width, 0);
+			cr.MoveTo (0, 0.5);
+			cr.LineTo (0, height);
+			cr.Stroke ();
 
-			return base.OnExposeEvent (evt);
+			cr.SetSourceColor (new Cairo.Color (0.42f, 0.37f, 1.0f));
+			cr.MoveTo (0, height - 0.5);
+			cr.LineTo (width, height - 0.5);
+			cr.MoveTo (width - 0.5, 0);
+			cr.LineTo (width - 0.5, height);
+			cr.Stroke ();
+
+			return base.OnDrawn (cr);
 		}
 	}
 }

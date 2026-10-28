@@ -55,7 +55,7 @@ namespace MonoDevelop.DesignerSupport.Toolbox
 		
 		ToggleButton catToggleButton;
 		ToggleButton compactModeToggleButton;
-		SearchEntry filterEntry;
+		MonoDevelop.Components.SearchEntry filterEntry;
 		MonoDevelop.Ide.Gui.PadFontChanger fontChanger;
 		IPadWindow container;
 		Dictionary<string,int> categoryPriorities = new Dictionary<string, int> ();
@@ -69,7 +69,7 @@ namespace MonoDevelop.DesignerSupport.Toolbox
 			#region Toolbar
 			DockItemToolbar toolbar = container.GetToolbar (DockPositionType.Top);
 		
-			filterEntry = new SearchEntry();
+			filterEntry = new MonoDevelop.Components.SearchEntry ();
 			filterEntry.Ready = true;
 			filterEntry.HasFrame = true;
 			filterEntry.WidthRequest = 150;
@@ -144,6 +144,7 @@ namespace MonoDevelop.DesignerSupport.Toolbox
 			scrolledWindow.HscrollbarPolicy = PolicyType.Never;
 			scrolledWindow.WidthRequest = 150;
 			scrolledWindow.Add (this.toolboxWidget);
+			this.toolboxWidget.OnSetScrollAdjustments (scrolledWindow.Hadjustment, scrolledWindow.Vadjustment);
 			
 			//update view when toolbox service updated
 			toolboxService.ToolboxContentsChanged += delegate { Refresh (); };

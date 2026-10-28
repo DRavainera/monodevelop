@@ -13,7 +13,7 @@ namespace Stetic.Wrapper {
 			if (!initialized) {
 				frame.Label = "<b>" + frame.Name + "</b>";
 				((Gtk.Label)frame.LabelWidget).UseMarkup = true;
-				frame.Shadow = Gtk.ShadowType.None;
+				frame.ShadowType = Gtk.ShadowType.None;
 				if (AllowPlaceholders) {
 					Gtk.Alignment align = new Gtk.Alignment (0, 0, 1, 1);
 					align.LeftPadding = 12;

@@ -158,7 +158,7 @@ namespace MonoDevelop.Ide.WelcomePage
 			void UpdateTeme (object sender, EventArgs e)
 			{
 				if (!Gdk.Color.Parse (Owner.BackgroundColor, ref backgroundColor) || !Gdk.Color.Parse (Styles.WelcomeScreen.BackgroundColor, ref backgroundColor))
-					backgroundColor = Style.White;
+					backgroundColor = new Gdk.Color (255, 255, 255);
 				ModifyBg (StateType.Normal, backgroundColor);
 			}
 
@@ -173,7 +173,7 @@ namespace MonoDevelop.Ide.WelcomePage
 				if (Owner.BackgroundImage == null)
 					return;
 
-				context.RenderTiled (this, Owner.BackgroundImage, Allocation, new Gdk.Rectangle (Allocation.X, Allocation.Y + OverdrawOffset, Allocation.Width, Allocation.Height - OverdrawOffset), opacity);
+				context.RenderTiled (this, Owner.BackgroundImage, Allocation, new Gdk.Rectangle (0, OverdrawOffset, Allocation.Width, Allocation.Height - OverdrawOffset), opacity);
 			}
 
 			void DrawBackground (Cairo.Context context, Gdk.Rectangle area)
@@ -181,39 +181,31 @@ namespace MonoDevelop.Ide.WelcomePage
 				if (Owner.BackgroundImage == null)
 					return;
 
-				context.RenderTiled (this, Owner.BackgroundImage, Allocation, Allocation, 1);
+				context.RenderTiled (this, Owner.BackgroundImage, Allocation, new Gdk.Rectangle (0, 0, Allocation.Width, Allocation.Height), 1);
 			}
 
-			protected override bool OnExposeEvent (EventExpose evnt)
+			protected override bool OnDrawn (Cairo.Context context)
 			{
-				using (var context = CairoHelper.Create (evnt.Window)) {
-					context.SetSourceRGB (backgroundColor.Red, backgroundColor.Green, backgroundColor.Blue);
-					context.Operator = Cairo.Operator.Source;
-					context.Paint ();
-					context.Operator = Cairo.Operator.Over;
-					DrawBackground (context, evnt.Area);
+				context.SetSourceColor (backgroundColor.ToCairoColor ());
+				context.Operator = Cairo.Operator.Source;
+				context.Paint ();
+				context.Operator = Cairo.Operator.Over;
+				DrawBackground (context, new Gdk.Rectangle (0, 0, Allocation.Width, Allocation.Height));
 
-					if (Owner.LogoImage != null) {
-						var lRect = new Rectangle (Allocation.X, Allocation.Y, (int)Owner.LogoImage.Width, (int)Owner.LogoImage.Height);
-						if (evnt.Region.RectIn (lRect) != OverlapType.Out)
-							context.DrawImage (this, Owner.LogoImage, Allocation.X, Allocation.Y);
-					
-						var bgRect = new Rectangle (Allocation.X + (int)Owner.LogoImage.Width, Allocation.Y, Allocation.Width - (int)Owner.LogoImage.Width, (int)Owner.TopBorderImage.Height);
-						if (evnt.Region.RectIn (bgRect) != OverlapType.Out)
-							for (int x = bgRect.X; x < bgRect.Right; x += (int)Owner.TopBorderImage.Width)
-								context.DrawImage (this, Owner.TopBorderImage.WithSize (Owner.TopBorderImage.Width, bgRect.Height), x, Allocation.Y);
-					}
+				if (Owner.LogoImage != null) {
+					context.DrawImage (this, Owner.LogoImage, 0, 0);
+
+					var bgRect = new Rectangle ((int)Owner.LogoImage.Width, 0, Allocation.Width - (int)Owner.LogoImage.Width, (int)Owner.TopBorderImage.Height);
+					for (int x = bgRect.X; x < bgRect.Right; x += (int)Owner.TopBorderImage.Width)
+						context.DrawImage (this, Owner.TopBorderImage.WithSize (Owner.TopBorderImage.Width, bgRect.Height), x, 0);
 				}
-				
-				foreach (Widget widget in Children)
-					PropagateExpose (widget, evnt);
+
+				base.OnDrawn (context);
 
 				if (OverdrawOpacity > 0) {
-					using (var context = Gdk.CairoHelper.Create (evnt.Window)) {
-						DrawOverdraw (context, OverdrawOpacity);
-					}
+					DrawOverdraw (context, OverdrawOpacity);
 				}
-				
+
 				return true;
 			}
 

@@ -198,7 +198,7 @@ namespace MonoDevelop.Components.Docking
 				var font = IdeServices.FontService.SansFont.CopyModified (null, Pango.Weight.Bold);
 				font.AbsoluteSize = Pango.Units.FromPixels (11);
 				labelWidget.ModifyFont (font);
-				labelWidget.ModifyText (StateType.Normal, (active ? visualStyle.PadTitleLabelColor.Value : visualStyle.InactivePadTitleLabelColor.Value).ToGdkColor ());
+				labelWidget.OverrideColor (StateFlags.Normal, (active ? visualStyle.PadTitleLabelColor.Value : visualStyle.InactivePadTitleLabelColor.Value).ToGdkColor ().ToRgba ());
 			}
 
 			var r = WidthRequest;
@@ -692,15 +692,22 @@ namespace MonoDevelop.Components.Docking
 			UpdateVisualStyle ();
 		}
 		
-		protected override void OnSizeRequested (ref Gtk.Requisition req)
+		protected override void OnGetPreferredWidth (out int minimum, out int natural)
 		{
+			minimum = natural = 0;
 			if (Child != null) {
-				req = Child.SizeRequest ();
-				req.Width += (int)(TabPadding.Left + TabPadding.Right);
-				if (active)
-					req.Height += (int)(TabActivePadding.Top + TabActivePadding.Bottom);
-				else
-					req.Height += (int)(TabPadding.Top + TabPadding.Bottom);
+				var r = Child.SizeRequest ();
+				minimum = natural = r.Width + (int)(TabPadding.Left + TabPadding.Right);
+			}
+		}
+
+		protected override void OnGetPreferredHeight (out int minimum, out int natural)
+		{
+			minimum = natural = 0;
+			if (Child != null) {
+				var r = Child.SizeRequest ();
+				int pad = active ? (int)(TabActivePadding.Top + TabActivePadding.Bottom) : (int)(TabPadding.Top + TabPadding.Bottom);
+				minimum = natural = r.Height + pad;
 			}
 		}
 					
@@ -728,22 +735,21 @@ namespace MonoDevelop.Components.Docking
 			}
 		}
 
-		protected override bool OnExposeEvent (Gdk.EventExpose evnt)
+		protected override bool OnDrawn (Cairo.Context cr)
 		{
 			if (VisualStyle.TabStyle == DockTabStyle.Normal)
-				DrawAsBrowser (evnt);
+				DrawAsBrowser (cr);
 			else
-				DrawNormal (evnt);
+				DrawNormal (cr);
 
 			if (HasFocus) {
 				var alloc = labelWidget.Allocation;
-				Gtk.Style.PaintFocus (Style, GdkWindow, State, alloc, this, "label",
-				                      alloc.X, alloc.Y, alloc.Width, alloc.Height);
+				StyleContext.RenderFocus (cr, alloc.X, alloc.Y, alloc.Width, alloc.Height);
 			}
-			return base.OnExposeEvent (evnt);
+			return base.OnDrawn (cr);
 		}
 
-		void DrawAsBrowser (Gdk.EventExpose evnt)
+		void DrawAsBrowser (Cairo.Context cr)
 		{
 			bool first = true;
 			bool last = true;
@@ -755,29 +761,23 @@ namespace MonoDevelop.Components.Docking
 				last = cts[cts.Length - 1] == this;
 			}
 
-			using (var ctx = Gdk.CairoHelper.Create (GdkWindow)) {
-				if (first && last) {
-					ctx.Rectangle (Allocation.X, Allocation.Y, Allocation.Width, Allocation.Height);
-					ctx.SetSourceColor (VisualStyle.PadBackgroundColor.Value.ToCairoColor ());
-					ctx.Fill ();
-				} else {
-					var image = Active ? dockTabActiveBackImage : dockTabBackImage;
-					image = image.WithSize (Allocation.Width, Allocation.Height);
+			if (first && last) {
+				cr.Rectangle (0, 0, Allocation.Width, Allocation.Height);
+				cr.SetSourceColor (VisualStyle.PadBackgroundColor.Value.ToCairoColor ());
+				cr.Fill ();
+			} else {
+				var image = Active ? dockTabActiveBackImage : dockTabBackImage;
+				image = image.WithSize (Allocation.Width, Allocation.Height);
 
-					ctx.DrawImage (this, image, Allocation.X, Allocation.Y);
-				}
+				cr.DrawImage (this, image, 0, 0);
 			}
 		}
 
-		void DrawNormal (Gdk.EventExpose evnt)
+		void DrawNormal (Cairo.Context cr)
 		{
-			using (var ctx = Gdk.CairoHelper.Create (GdkWindow)) {
-				var x = Allocation.X;
-				var y = Allocation.Y;
-
-				ctx.Rectangle (x, y + 1, Allocation.Width, Allocation.Height - 1);
-				ctx.SetSourceColor (Styles.DockBarBackground.ToCairoColor ());
-				ctx.Fill ();
+			cr.Rectangle (0, 1, Allocation.Width, Allocation.Height - 1);
+			cr.SetSourceColor (Styles.DockBarBackground.ToCairoColor ());
+			cr.Fill ();
 
 				/*
 				if (active) {
@@ -799,7 +799,6 @@ namespace MonoDevelop.Components.Docking
 					ctx.Fill ();
 				}
 				*/
-			}
 		}
 	}
 }

@@ -35,7 +35,7 @@ using MonoDevelop.Components.Theming;
 
 namespace MonoDevelop.Components
 {
-	public class RoundedFrame : Bin
+	public class RoundedFrame : Bin, Gtk.IScrollable
 	{
 		private Theme theme;
 
@@ -56,14 +56,13 @@ namespace MonoDevelop.Components
 		public RoundedFrame ()
 		{
 			this.Events =  Gdk.EventMask.AllEventsMask;
-			this.WidgetFlags |= WidgetFlags.NoWindow;
 			DoubleBuffered = true;
 			AppPaintable = false;
 		}
 
 		public void SetFillColor (Cairo.Color color)
 		{
-			this.ModifyBase (Gtk.StateType.Normal, CairoExtensions.CairoColorToGdkColor (color));
+			this.OverrideBackgroundColor (StateFlags.Normal, CairoExtensions.CairoColorToGdkColor (color).ToRgba ());
 			this.ModifyBg (Gtk.StateType.Normal, CairoExtensions.CairoColorToGdkColor (color));
 			fill_color = color;
 			fill_color_set = true;
@@ -100,21 +99,26 @@ namespace MonoDevelop.Components
 			theme = MonoDevelop.Components.Theming.ThemeEngine.CreateTheme (this);
 		}
 
-		protected override void OnSizeRequested (ref Requisition requisition)
+		protected override void OnGetPreferredWidth (out int minimum, out int natural)
 		{
-			if (child != null && child.Visible) {
-				// Add the child's width/height
-				Requisition child_requisition = child.SizeRequest ();
-				requisition.Width = Math.Max (0, child_requisition.Width);
-				requisition.Height = child_requisition.Height;
-			} else {
-				requisition.Width = 0;
-				requisition.Height = 0;
-			}
-			
+			base.OnGetPreferredWidth (out minimum, out natural);
+			int w = 0;
+			if (child != null && child.Visible)
+				w = Math.Max (0, child.SizeRequest ().Width);
 			// Add the frame border
-			requisition.Width += ((int)BorderWidth + frame_width) * 2;
-			requisition.Height += ((int)BorderWidth + frame_width) * 2;
+			w += ((int)BorderWidth + frame_width) * 2;
+			minimum = natural = w;
+		}
+
+		protected override void OnGetPreferredHeight (out int minimum, out int natural)
+		{
+			base.OnGetPreferredHeight (out minimum, out natural);
+			int h = 0;
+			if (child != null && child.Visible)
+				h = child.SizeRequest ().Height;
+			// Add the frame border
+			h += ((int)BorderWidth + frame_width) * 2;
+			minimum = natural = h;
 		}
 
 		protected override void OnSizeAllocated (Gdk.Rectangle allocation)
@@ -134,25 +138,26 @@ namespace MonoDevelop.Components
 			child.SizeAllocate (child_allocation);
 		}
 
-		protected override void OnSetScrollAdjustments (Adjustment hadj, Adjustment vadj)
+		// Implementación no-op: evita que el GtkScrolledWindow añada un Viewport
+		// al considerar este widget no scrollable.
+		Gtk.Adjustment Gtk.IScrollable.Hadjustment { get; set; }
+		Gtk.Adjustment Gtk.IScrollable.Vadjustment { get; set; }
+		Gtk.ScrollablePolicy Gtk.IScrollable.HscrollPolicy { get; set; }
+		Gtk.ScrollablePolicy Gtk.IScrollable.VscrollPolicy { get; set; }
+		bool Gtk.IScrollable.GetBorder (out Gtk.Border border)
 		{
-			// This is to satisfy the gtk_widget_set_scroll_adjustments
-			// inside of GtkScrolledWindow so it doesn't complain about
-			// its child not being scrollable.
+			border = default;
+			return false;
 		}
 
-		protected override bool OnExposeEvent (Gdk.EventExpose evnt)
+		protected override bool OnDrawn (Cairo.Context cr)
 		{
 			if (!IsDrawable) {
 				return false;
 			}
 			
-			using (Context cr = Gdk.CairoHelper.Create (evnt.Window)) {
-				DrawFrame (cr, evnt.Area);
-				if (child != null) 
-					PropagateExpose (child, evnt);
-				return false;
-			}
+			DrawFrame (cr, Allocation);
+			return false;
 		}
 
 		private void DrawFrame (Cairo.Context cr, Gdk.Rectangle clip)

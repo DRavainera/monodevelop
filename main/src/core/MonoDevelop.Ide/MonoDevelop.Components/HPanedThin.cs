@@ -23,6 +23,7 @@
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
+using Cairo;
 using MonoDevelop.Ide.Gui;
 using System.Collections.Generic;
 using System;
@@ -51,6 +52,18 @@ namespace MonoDevelop.Components
 				handle = new CustomGtkPanedHandle (this);
 		}
 
+		protected override void OnGetPreferredWidth (out int minimum, out int natural)
+		{
+			handle?.OnParentSizeRequested ();
+			base.OnGetPreferredWidth (out minimum, out natural);
+		}
+		
+		protected override void OnGetPreferredHeight (out int minimum, out int natural)
+		{
+			handle?.OnParentSizeRequested ();
+			base.OnGetPreferredHeight (out minimum, out natural);
+		}
+		
 		public int GrabAreaSize {
 			get { return handle.GrabAreaSize; }
 			set {
@@ -81,16 +94,17 @@ namespace MonoDevelop.Components
 				callback (handle);
 		}
 
-		protected override bool OnExposeEvent (Gdk.EventExpose evnt)
+		protected override bool OnDrawn (Cairo.Context cr)
 		{
-			base.OnExposeEvent (evnt);
+			base.OnDrawn (cr);
 
-			if (Child1 != null && Child1.Visible && Child2 != null && Child2.Visible) {
-				var gc = new Gdk.GC (evnt.Window);
-				gc.RgbFgColor = Styles.ThinSplitterColor.ToGdkColor ();
+			if (Child1 != null && Child2 != null && Child1.Visible && Child2.Visible) {
+				cr.SetSourceColor (Styles.ThinSplitterColor.ToCairoColor ());
+				cr.LineWidth = 1;
 				var x = Child1.Allocation.X + Child1.Allocation.Width;
-				evnt.Window.DrawLine (gc, x, Allocation.Y, x, Allocation.Y + Allocation.Height);
-				gc.Dispose ();
+				cr.MoveTo (x, 0);
+				cr.LineTo (x, Allocation.Height);
+				cr.Stroke ();
 			}
 
 			return true;
@@ -110,23 +124,17 @@ namespace MonoDevelop.Components
 		protected CustomPanedHandle (Gtk.Paned parent)
 		{
 			ParentPaned = parent;
-			ParentPaned.SizeRequested += HandleSizeRequested;
 			ParentPaned.SizeAllocated += HandleSizeAllocated;
 			Parent = parent;
 		}
 
-		protected virtual void OnParentSizeRequested (Gtk.SizeRequestedArgs args)
+		internal virtual void OnParentSizeRequested ()
 		{
 			SizeRequest ();
 		}
 
 		protected virtual void OnParentSizeAllocated (Gtk.SizeAllocatedArgs args)
 		{
-		}
-
-		void HandleSizeRequested (object o, Gtk.SizeRequestedArgs args)
-		{
-			OnParentSizeRequested (args);
 		}
 
 		void HandleSizeAllocated (object o, Gtk.SizeAllocatedArgs args)
@@ -137,7 +145,6 @@ namespace MonoDevelop.Components
 		protected override void OnDestroyed ()
 		{
             if (ParentPaned != null) {
-				ParentPaned.SizeRequested -= HandleSizeRequested;
 				ParentPaned.SizeAllocated -= HandleSizeAllocated;
 				ParentPaned = null;
 			}
@@ -290,11 +297,6 @@ namespace MonoDevelop.Components
 			Events |= Gdk.EventMask.EnterNotifyMask | Gdk.EventMask.LeaveNotifyMask | Gdk.EventMask.PointerMotionMask | Gdk.EventMask.ButtonPressMask | Gdk.EventMask.ButtonReleaseMask;
 
 			HandleWidget = null;
-		}
-
-		void HandleSizeRequested (object o, Gtk.SizeRequestedArgs args)
-		{
-			SizeRequest ();
 		}
 
 		protected override void OnParentSizeAllocated (Gtk.SizeAllocatedArgs args)

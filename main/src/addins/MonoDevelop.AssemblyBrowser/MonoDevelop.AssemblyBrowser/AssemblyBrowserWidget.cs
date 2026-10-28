@@ -69,9 +69,9 @@ namespace MonoDevelop.AssemblyBrowser
 	[System.ComponentModel.ToolboxItem(true)]
 	partial class AssemblyBrowserWidget : Gtk.Bin
 	{
-		Gtk.ComboBox comboboxVisibilty;
+		Gtk.ComboBoxText comboboxVisibilty;
 		MonoDevelop.Components.SearchEntry searchentry1;
-		Gtk.ComboBox languageCombobox;
+		Gtk.ComboBoxText languageCombobox;
 
 		public AssemblyBrowserTreeView? TreeView {
 			get;
@@ -112,7 +112,7 @@ namespace MonoDevelop.AssemblyBrowser
 		{
 			this.Build ();
 
-			comboboxVisibilty = ComboBox.NewText ();
+			comboboxVisibilty = new ComboBoxText ();
 			comboboxVisibilty.InsertText (0, GettextCatalog.GetString ("Only public members"));
 			comboboxVisibilty.InsertText (1, GettextCatalog.GetString ("All members"));
 			comboboxVisibilty.Active = Math.Min (1, Math.Max (0, PropertyService.Get ("AssemblyBrowser.MemberSelection", 0)));
@@ -171,7 +171,7 @@ namespace MonoDevelop.AssemblyBrowser
 
 			};
 
-			languageCombobox = Gtk.ComboBox.NewText ();
+			languageCombobox = new Gtk.ComboBoxText ();
 			languageCombobox.AppendText (GettextCatalog.GetString ("Summary"));
 			languageCombobox.AppendText (GettextCatalog.GetString ("IL"));
 			languageCombobox.AppendText (GettextCatalog.GetString ("C#"));
@@ -224,7 +224,7 @@ namespace MonoDevelop.AssemblyBrowser
 
 			documentationScrolledWindow.PackStart (inspectEditor, true, true, 0);
 
-			this.ExposeEvent += HPaneExpose;
+			this.SizeAllocated += HPaneSizeAllocated;
 			hpaned1 = hpaned1.ReplaceWithWidget (new HPanedThin (), true);
 			hpaned1.Position = 271;
 
@@ -518,7 +518,7 @@ namespace MonoDevelop.AssemblyBrowser
 			}
 		}
 
-		void RenderDeclaringTypeOrNamespace (TreeViewColumn tree_column, CellRenderer cell, TreeModel tree_model, TreeIter iter)
+		void RenderDeclaringTypeOrNamespace (TreeViewColumn tree_column, CellRenderer cell, ITreeModel tree_model, TreeIter iter)
 		{
 			var ct = (Gtk.CellRendererText)cell;
 			var entity = tree_model.GetValue (iter, 0) as IEntity;
@@ -535,7 +535,7 @@ namespace MonoDevelop.AssemblyBrowser
 			}
 		}
 
-		void RenderText (TreeViewColumn tree_column, CellRenderer cell, TreeModel tree_model, TreeIter iter)
+		void RenderText (TreeViewColumn tree_column, CellRenderer cell, ITreeModel tree_model, TreeIter iter)
 		{
 			var ct = (Gtk.CellRendererText)cell;
 			var entity = tree_model.GetValue (iter, 0) as INamedElement;
@@ -543,7 +543,7 @@ namespace MonoDevelop.AssemblyBrowser
 				ct.Text = entity.Name;
 		}
 
-		void RenderImage (TreeViewColumn tree_column, CellRenderer cell, TreeModel tree_model, TreeIter iter)
+		void RenderImage (TreeViewColumn tree_column, CellRenderer cell, ITreeModel tree_model, TreeIter iter)
 		{
 			var ct = (CellRendererImage)cell;
 			var entity = tree_model.GetValue (iter, 0) as IEntity;
@@ -912,7 +912,7 @@ namespace MonoDevelop.AssemblyBrowser
 		}
 
 		int oldSize2 = -1;
-		void HPaneExpose (object sender, Gtk.ExposeEventArgs args)
+		void HPaneSizeAllocated (object sender, Gtk.SizeAllocatedArgs args)
 		{
 			int size = this.Allocation.Width;
 			if (size == oldSize2)
@@ -1132,7 +1132,7 @@ namespace MonoDevelop.AssemblyBrowser
 //			this.searchInCombobox.Changed -= SearchInComboboxhandleChanged;
 //			this.searchEntry.Changed -= SearchEntryhandleChanged;
 			this.searchTreeview.RowActivated -= SearchTreeviewhandleRowActivated;
-			hpaned1.ExposeEvent -= HPaneExpose;
+			hpaned1.SizeAllocated -= HPaneSizeAllocated;
 			base.OnDestroyed ();
 		}
 

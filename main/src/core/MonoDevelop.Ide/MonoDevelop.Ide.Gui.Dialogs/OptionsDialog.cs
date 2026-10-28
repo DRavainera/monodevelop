@@ -95,7 +95,7 @@ namespace MonoDevelop.Ide.Gui.Dialogs
 			buttonOk = new Gtk.Button (Gtk.Stock.Ok);
 			buttonOk.Accessible.Name = "Dialogs.Options.Ok";
 			buttonOk.Accessible.Description = GettextCatalog.GetString ("Close the options dialog and keep the changes");
-			this.ActionArea.PackStart (buttonOk);
+			this.ActionArea.PackStart (buttonOk, false, false, 0);
 			buttonOk.Clicked += OnButtonOkClicked;
 
 			mainHBox = new HBox ();
@@ -121,7 +121,7 @@ namespace MonoDevelop.Ide.Gui.Dialogs
 			mainHBox.PackStart (fboxTree, false, false, 0);
 
 			Realized += delegate {
-				fboxTree.BackgroundColor = tree.Style.Base (Gtk.StateType.Normal);
+				fboxTree.BackgroundColor = tree.GetStyleBackgroundColor (StateType.Normal).ToGdkColor ();
 			};
 
 			var vbox = new VBox ();
@@ -143,7 +143,7 @@ namespace MonoDevelop.Ide.Gui.Dialogs
 			imageHeader.Hide ();
 			var imageHeaderWidget = imageHeader.ToGtkWidget ();
 			imageHeaderWidget.Accessible.SetShouldIgnore (true);
-			headerBox.PackStart (imageHeaderWidget);
+			headerBox.PackStart (imageHeaderWidget, false, false, 0);
 
 			var fboxHeader = new HeaderBox ();
 			fboxHeader.Accessible.SetShouldIgnore (true);
@@ -152,13 +152,15 @@ namespace MonoDevelop.Ide.Gui.Dialogs
 //			fbox.GradientBackround = true;
 //			fbox.BackgroundColor = new Gdk.Color (255, 255, 255);
 			Realized += delegate {
-				var c = Style.Background (Gtk.StateType.Normal).ToXwtColor ();
+				var bg = this.GetStyleBackgroundColor (StateType.Normal);
+				var c = new Xwt.Drawing.Color (bg.Red, bg.Green, bg.Blue);
 				c.Light += 0.09;
 				fboxHeader.BackgroundColor = c.ToGdkColor ();
 			};
 			StyleSet += delegate {
 				if (IsRealized) {
-					var c = Style.Background (Gtk.StateType.Normal).ToXwtColor ();
+					var bg = this.GetStyleBackgroundColor (StateType.Normal);
+					var c = new Xwt.Drawing.Color (bg.Red, bg.Green, bg.Blue);
 					c.Light += 0.09;
 					fboxHeader.BackgroundColor = c.ToGdkColor ();
 				}
@@ -174,7 +176,7 @@ namespace MonoDevelop.Ide.Gui.Dialogs
 			fbox.Add (pageFrame);
 			vbox.PackStart (fbox, true, true, 0);
 
-			this.VBox.PackStart (mainHBox, true, true, 0);
+			this.ContentArea.PackStart (mainHBox, true, true, 0);
 
 			this.removeEmptySections = removeEmptySections;
 			extensionContext = AddinManager.CreateExtensionContext ();
@@ -222,7 +224,7 @@ namespace MonoDevelop.Ide.Gui.Dialogs
 			DefaultHeight = 680;
 		}
 
-		static void PixbufCellDataFunc (TreeViewColumn col, CellRenderer cell, TreeModel model, TreeIter iter)
+		static void PixbufCellDataFunc (TreeViewColumn col, CellRenderer cell, ITreeModel model, TreeIter iter)
 		{
 			TreeIter parent;
 			bool toplevel = !model.IterParent (out parent, iter);
@@ -252,7 +254,7 @@ namespace MonoDevelop.Ide.Gui.Dialogs
 			}
 		}
 		
-		static void TextCellDataFunc (TreeViewColumn col, CellRenderer cell, TreeModel model, TreeIter iter)
+		static void TextCellDataFunc (TreeViewColumn col, CellRenderer cell, ITreeModel model, TreeIter iter)
 		{
 			TreeIter parent;
 			bool toplevel = !model.IterParent (out parent, iter);

@@ -1,4 +1,5 @@
 using Gtk;
+using Cairo;
 using Gdk;
 using System;
 using System.Collections;
@@ -51,22 +52,35 @@ namespace Stetic {
 		
 		protected override bool OnEnterNotifyEvent (Gdk.EventCrossing ev)
 		{
-			this.State = Gtk.StateType.Prelight;
+			this.StyleContext.State = Gtk.StateFlags.Prelight;
 			return base.OnEnterNotifyEvent (ev);
 		}
 		
 		protected override bool OnLeaveNotifyEvent (Gdk.EventCrossing ev)
 		{
-			this.State = Gtk.StateType.Normal;
+			this.StyleContext.State = Gtk.StateFlags.Normal;
 			return base.OnLeaveNotifyEvent (ev);
 		}
 		
-		protected override bool OnExposeEvent (Gdk.EventExpose e)
+		protected override bool OnDrawn (Cairo.Context cr)
 		{
-			base.OnExposeEvent (e);
-			if (State == Gtk.StateType.Prelight)
-				Gtk.Style.PaintShadow (this.Style, this.GdkWindow, State, Gtk.ShadowType.Out, e.Area, this, "", e.Area.X, e.Area.Y, e.Area.Width, e.Area.Height);
-			return false;
+			bool r = base.OnDrawn (cr);
+			if (State == Gtk.StateType.Prelight) {
+				int w = Allocation.Width;
+				int h = Allocation.Height;
+				cr.LineWidth = 1;
+				cr.SetSourceColor (new Cairo.Color (1, 1, 1));
+				cr.MoveTo (0.5, 0.5);
+				cr.LineTo (w - 1, 0.5);
+				cr.LineTo (w - 1, h - 1);
+				cr.Stroke ();
+				cr.SetSourceColor (new Cairo.Color (0, 0, 0));
+				cr.MoveTo (0.5, h - 1);
+				cr.LineTo (w - 1, h - 1);
+				cr.LineTo (0.5, 0.5);
+				cr.Stroke ();
+			}
+			return r;
 		}
 	}
 
@@ -128,9 +142,9 @@ namespace Stetic {
 			return instance;
 		}
 		
-		public override void Dispose ()
+		protected override void Dispose (bool disposing)
 		{
-			base.Dispose ();
+			base.Dispose (disposing);
 		}
 	}
 }

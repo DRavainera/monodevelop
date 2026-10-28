@@ -58,6 +58,9 @@ namespace MonoDevelop.CSharp.Formatting
 				model.AppendValues (p.Name);
 			}
 			comboboxInitFrom.Model = model;
+			var initCr = new Gtk.CellRendererText ();
+			comboboxInitFrom.PackStart (initCr, true);
+			comboboxInitFrom.AddAttribute (initCr, "text", 0);
 			comboboxInitFrom.Active = 0;
 		}
 	}

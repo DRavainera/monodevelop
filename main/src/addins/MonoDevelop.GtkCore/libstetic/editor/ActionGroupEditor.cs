@@ -34,7 +34,8 @@ namespace Stetic.Editor
 			table.BorderWidth = 12;
 			
 			Gtk.EventBox ebox = new Gtk.EventBox ();
-			ebox.ModifyBg (Gtk.StateType.Normal, this.Style.Backgrounds [0]);
+			Gdk.RGBA normalBg = this.StyleContext.GetBackgroundColor (Gtk.StateFlags.Normal);
+			ebox.ModifyBg (Gtk.StateType.Normal, new Gdk.Color ((byte) (normalBg.Red * 255), (byte) (normalBg.Green * 255), (byte) (normalBg.Blue * 255)));
 			headerLabel = new EditableLabel ();
 			headerLabel.MarkupTemplate = "<b>$TEXT</b>";
 			headerLabel.Changed += OnGroupNameChanged;
@@ -57,9 +58,9 @@ namespace Stetic.Editor
 			ShowAll ();
 		}
 		
-		public override void Dispose ()
+		protected override void Dispose (bool disposing)
 		{
-			if (disposed)
+			if (!disposing || disposed)
 				return;
 			disposed = true;
 			headerLabel.Changed -= OnGroupNameChanged;
@@ -82,7 +83,7 @@ namespace Stetic.Editor
 				darea = null;
 			}
 
-			base.Dispose ();
+			base.Dispose (disposing);
 		}
 		
 		public ActionGroup ActionGroup {
@@ -208,7 +209,7 @@ namespace Stetic.Editor
 			aitem.Attach (table, row, col);
 			
 			Gtk.Frame fr = new Gtk.Frame ();
-			fr.Shadow = Gtk.ShadowType.Out;
+			fr.ShadowType = Gtk.ShadowType.Out;
 			aitem.Add (fr);
 			
 			items.Add (aitem);
@@ -403,25 +404,25 @@ namespace Stetic.Editor
 			ActionMenuItem menuItem = aitem as ActionMenuItem;
 			
 			Gtk.Menu m = new Gtk.Menu ();
-			Gtk.MenuItem item = new Gtk.ImageMenuItem (Gtk.Stock.Cut, null);
+			Gtk.MenuItem item = new Gtk.ImageMenuItem (StockCompat.Cut, null);
 			m.Add (item);
 			item.Activated += delegate (object s, EventArgs a) {
 				Cut (menuItem);
 			};
 			item.Visible = false;	// No copy & paste for now
-			item = new Gtk.ImageMenuItem (Gtk.Stock.Copy, null);
+			item = new Gtk.ImageMenuItem (StockCompat.Copy, null);
 			m.Add (item);
 			item.Activated += delegate (object s, EventArgs a) {
 				Copy (menuItem);
 			};
 			item.Visible = false;	// No copy & paste for now
-			item = new Gtk.ImageMenuItem (Gtk.Stock.Paste, null);
+			item = new Gtk.ImageMenuItem (StockCompat.Paste, null);
 			m.Add (item);
 			item.Activated += delegate (object s, EventArgs a) {
 				Paste (menuItem);
 			};
 			item.Visible = false;	// No copy & paste for now
-			item = new Gtk.ImageMenuItem (Gtk.Stock.Delete, null);
+			item = new Gtk.ImageMenuItem (StockCompat.Delete, null);
 			m.Add (item);
 			item.Activated += delegate (object s, EventArgs a) {
 				Delete (menuItem);

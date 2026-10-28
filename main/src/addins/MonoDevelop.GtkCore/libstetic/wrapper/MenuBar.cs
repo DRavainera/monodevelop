@@ -250,11 +250,11 @@ namespace Stetic.Wrapper
 			get { return node; }
 		}
 		
-		public override void Dispose ()
+		protected override void Dispose (bool disposing)
 		{
-			if (disposeNode)
+			if (disposing && disposeNode)
 				node.Dispose ();
-			base.Dispose ();
+			base.Dispose (disposing);
 		}
 
 	}

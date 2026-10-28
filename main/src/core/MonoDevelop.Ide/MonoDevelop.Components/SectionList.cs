@@ -92,7 +92,6 @@ namespace MonoDevelop.Components
 		{
 			GtkWorkarounds.FixContainerLeak (this);
 			
-			this.WidgetFlags |= WidgetFlags.NoWindow;
 			WidthRequest = 100;
 			EnsureLayout ();
 		}
@@ -106,7 +105,6 @@ namespace MonoDevelop.Components
 			
 			var attributes = new Gdk.WindowAttr () {
 				WindowType = Gdk.WindowType.Child,
-				Wclass = Gdk.WindowClass.InputOnly,
 				EventMask = (int) (
 					EventMask.EnterNotifyMask |
 					EventMask.LeaveNotifyMask |
@@ -214,27 +212,39 @@ namespace MonoDevelop.Components
 			base.OnShown ();
 		}
 
-		protected override void OnSizeRequested (ref Requisition requisition)
+		protected override void OnGetPreferredWidth (out int minimum, out int natural)
 		{
-			int wr = 0, hr = 0;
+			base.OnGetPreferredWidth (out minimum, out natural);
+			GetSectionSizeRequest (out int wr, out int hr);
+			minimum = natural = wr;
+		}
+
+		protected override void OnGetPreferredHeight (out int minimum, out int natural)
+		{
+			base.OnGetPreferredHeight (out minimum, out natural);
+			GetSectionSizeRequest (out int wr, out int hr);
+			minimum = natural = hr;
+		}
+
+		void GetSectionSizeRequest (out int wr, out int hr)
+		{
+			wr = 0;
+			hr = 0;
 			foreach (var section in sections) {
 				var req = section.Child.SizeRequest ();
 				wr = Math.Max (wr, req.Width);
 				hr = Math.Max (hr, req.Height);
 			}
-			
+
 			hr += sections.Count * headerHeight + borderLineWidth;
-			
+
 			int bw2 = ((int)BorderWidth + borderLineWidth) * 2;
-			
+
 			hr += bw2;
 			wr += bw2;
-			
+
 			hr = Math.Max (hr, HeightRequest);
 			wr = Math.Max (wr, WidthRequest);
-			
-			requisition.Height = hr;
-			requisition.Width = wr;
 		}
 
 		protected override void OnSizeAllocated (Gdk.Rectangle allocation)
@@ -281,7 +291,7 @@ namespace MonoDevelop.Components
 		}
 		
 		//FIXME: respect damage regions not just the whole areas, and skip more work when possible
-		protected override bool OnExposeEvent (Gdk.EventExpose evnt)
+		protected override bool OnDrawn (Cairo.Context cr)
 		{
 			if (sections.Count == 0)
 				return false;
@@ -294,77 +304,72 @@ namespace MonoDevelop.Components
 			int w = alloc.Width - bw2;
 			int h = alloc.Height - bw2;
 			
-			using (var cr = CairoHelper.Create (evnt.Window)) {
-				CairoHelper.Region (cr, evnt.Region);
-				cr.Clip ();
-				
-				cr.Translate (alloc.X + bw, alloc.Y + bw);
-				
-				var borderCol = Convert (Style.Dark (StateType.Normal));
-				cr.SetSourceColor (borderCol);
-				cr.Rectangle (halfLineWidth, halfLineWidth, w - borderLineWidth, h - borderLineWidth);
-				cr.LineWidth = borderLineWidth;
-				cr.Stroke ();
-				
-				cr.Translate (borderLineWidth, borderLineWidth);
-				w = w - (2 * borderLineWidth);
-				
-				using (LinearGradient unselectedGrad = new LinearGradient (0, 0, 0, headerHeight),
-				       hoverGrad = new LinearGradient (0, 0, 0, headerHeight),
-				       selectedGrad = new LinearGradient (0, 0, 0, headerHeight)
-				       )
-				{
-					var unselectedCol = Convert (Style.Mid (StateType.Normal));
-					var unselectedTextCol = Convert (Style.Text (StateType.Normal));
-					unselectedCol.A = 0.6;
-					unselectedGrad.AddColorStop (0, unselectedCol);
-					unselectedCol.A = 1;
-					unselectedGrad.AddColorStop (1, unselectedCol);
+			cr.Translate (bw, bw);
+			
+			var borderCol = Convert (this.GetStyleBackgroundColor (StateType.Normal).ToGdkColor ().AddLight (-0.15));
+			cr.SetSourceColor (borderCol);
+			cr.Rectangle (halfLineWidth, halfLineWidth, w - borderLineWidth, h - borderLineWidth);
+			cr.LineWidth = borderLineWidth;
+			cr.Stroke ();
+			
+			cr.Translate (borderLineWidth, borderLineWidth);
+			w = w - (2 * borderLineWidth);
+			
+			using (LinearGradient unselectedGrad = new LinearGradient (0, 0, 0, headerHeight),
+			       hoverGrad = new LinearGradient (0, 0, 0, headerHeight),
+			       selectedGrad = new LinearGradient (0, 0, 0, headerHeight)
+			       )
+			{
+				var unselectedCol = Convert (this.GetStyleBackgroundColor (StateType.Normal).ToGdkColor ().AddLight (0.05));
+				var unselectedTextCol = Convert (this.GetStyleColor (StateType.Normal).ToGdkColor ());
+				unselectedCol.A = 0.6;
+				unselectedGrad.AddColorStop (0, unselectedCol);
+				unselectedCol.A = 1;
+				unselectedGrad.AddColorStop (1, unselectedCol);
 
-					var hoverCol = Convert (Style.Mid (StateType.Prelight));
-					var hoverTextCol = Convert (Style.Text (StateType.Prelight));
-					hoverCol.A = 0.6;
-					hoverGrad.AddColorStop (0, unselectedCol);
-					hoverCol.A = 1;
-					hoverGrad.AddColorStop (1, unselectedCol);
+				var hoverCol = Convert (this.GetStyleBackgroundColor (StateType.Prelight).ToGdkColor ().AddLight (0.05));
+				var hoverTextCol = Convert (this.GetStyleColor (StateType.Prelight).ToGdkColor ());
+				hoverCol.A = 0.6;
+				hoverGrad.AddColorStop (0, unselectedCol);
+				hoverCol.A = 1;
+				hoverGrad.AddColorStop (1, unselectedCol);
 
-					var selectedCol = Convert (Style.Mid (StateType.Normal));
-					var selectedTextCol = Convert (Style.Text (StateType.Normal));
-					selectedCol.A = 0.6;
-					selectedGrad.AddColorStop (0, selectedCol);
-					selectedCol.A = 1;
-					selectedGrad.AddColorStop (1, selectedCol);
+				var selectedCol = Convert (this.GetStyleBackgroundColor (StateType.Normal).ToGdkColor ().AddLight (0.05));
+				var selectedTextCol = Convert (this.GetStyleColor (StateType.Normal).ToGdkColor ());
+				selectedCol.A = 0.6;
+				selectedGrad.AddColorStop (0, selectedCol);
+				selectedCol.A = 1;
+				selectedGrad.AddColorStop (1, selectedCol);
+				
+				for (int i = 0; i < sections.Count; i++) {
+					var section = sections[i];
+					bool isActive = activeIndex == i;
+					bool isHover = hoverIndex == i;
 					
-					for (int i = 0; i < sections.Count; i++) {
-						var section = sections[i];
-						bool isActive = activeIndex == i;
-						bool isHover = hoverIndex == i;
-						
-						cr.Rectangle (0, 0, w, headerHeight);
-						cr.SetSource (isActive? selectedGrad : (isHover? hoverGrad : unselectedGrad));
-						cr.Fill ();
-						
-						cr.SetSourceColor (isActive? selectedTextCol : (isHover? hoverTextCol : unselectedTextCol));
-						layout.SetText (section.Title);
-						layout.Ellipsize = Pango.EllipsizeMode.End;
-						layout.Width = (int) ((w - headerPadding - headerPadding) * Pango.Scale.PangoScale);
-						cr.MoveTo (headerPadding, headerPadding);
-						Pango.CairoHelper.ShowLayout (cr, layout);
-						
-						cr.MoveTo (-halfLineWidth, i > activeIndex? -halfLineWidth : headerHeight + halfLineWidth);
-						cr.RelLineTo (w + borderLineWidth, 0.0);
-						cr.SetSourceColor (borderCol);
-						cr.Stroke ();
-						
-						cr.Translate (0, headerHeight + borderLineWidth);
-						if (isActive)
-							cr.Translate (0, section.Child.Allocation.Height + borderLineWidth);
-					}
+					cr.Rectangle (0, 0, w, headerHeight);
+					cr.SetSource (isActive? selectedGrad : (isHover? hoverGrad : unselectedGrad));
+					cr.Fill ();
+					
+					cr.SetSourceColor (isActive? selectedTextCol : (isHover? hoverTextCol : unselectedTextCol));
+					layout.SetText (section.Title);
+					layout.Ellipsize = Pango.EllipsizeMode.End;
+					layout.Width = (int) ((w - headerPadding - headerPadding) * Pango.Scale.PangoScale);
+					cr.MoveTo (headerPadding, headerPadding);
+					Pango.CairoHelper.ShowLayout (cr, layout);
+					
+					cr.MoveTo (-halfLineWidth, i > activeIndex? -halfLineWidth : headerHeight + halfLineWidth);
+					cr.RelLineTo (w + borderLineWidth, 0.0);
+					cr.SetSourceColor (borderCol);
+					cr.Stroke ();
+					
+					cr.Translate (0, headerHeight + borderLineWidth);
+					if (isActive)
+						cr.Translate (0, section.Child.Allocation.Height + borderLineWidth);
 				}
 			}
 			
-			PropagateExpose (sections[activeIndex].Child, evnt);
-			return true;// base.OnExposeEvent (evnt);
+			base.OnDrawn (cr);
+			return true;
 		}
 
 		protected override void ForAll (bool include_internals, Callback callback)

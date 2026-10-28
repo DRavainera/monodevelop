@@ -48,9 +48,10 @@ namespace MonoDevelop.Ide.Gui.Dialogs
 		int firstEncIndex;
 		
 		Gtk.Label encodingLabel;
-		Gtk.OptionMenu encodingMenu;
+		Gtk.MenuButton encodingMenu;
 		Gtk.Label viewerLabel;
-		Gtk.ComboBox viewerSelector;
+		Gtk.ComboBoxText viewerSelector;
+		int encodingHistory;
 		Gtk.CheckButton closeWorkspaceCheck;
 		List<FileViewer> currentViewers = new List<FileViewer> ();
 		
@@ -71,12 +72,12 @@ namespace MonoDevelop.Ide.Gui.Dialogs
 			encodingLabel.Xalign = 0;
 			table.Attach (encodingLabel, 0, 1, 0, 1, AttachOptions.Fill, AttachOptions.Fill, 0, 0);
 			
-			encodingMenu = new Gtk.OptionMenu ();
+			encodingMenu = new Gtk.MenuButton ();
 			FillEncodings ();
-			encodingMenu.SetHistory (0);
+			encodingHistory = 0;
 			table.Attach (encodingMenu, 1, 2, 0, 1, AttachOptions.Expand|AttachOptions.Fill, AttachOptions.Expand|AttachOptions.Fill, 0, 0);
 
-			encodingMenu.Changed += EncodingChanged;
+			encodingMenu.Toggled += delegate { EncodingChanged ();};
 			
 			// Add the viewer selector
 			viewerLabel = new Label (GettextCatalog.GetString ("Open With:"));
@@ -84,7 +85,7 @@ namespace MonoDevelop.Ide.Gui.Dialogs
 			table.Attach (viewerLabel, 0, 1, 1, 2, AttachOptions.Fill, AttachOptions.Fill, 0, 0);
 			
 			Gtk.HBox box = new HBox (false, 6);
-			viewerSelector = Gtk.ComboBox.NewText ();
+			viewerSelector = new Gtk.ComboBoxText ();
 			box.PackStart (viewerSelector, true, true, 0);
 			closeWorkspaceCheck = new CheckButton (GettextCatalog.GetString ("Close current workspace"));
 			closeWorkspaceCheck.Active = true;
@@ -98,7 +99,7 @@ namespace MonoDevelop.Ide.Gui.Dialogs
 			
 			// Give back the height that the extra widgets take
 			int w, h;
-			GetSize (out w, out h);
+			GetSizeRequest (out w, out h);
 			Resize (w, h + table.SizeRequest ().Height);
 			
 			if (action == Gtk.FileChooserAction.SelectFolder)
@@ -112,21 +113,21 @@ namespace MonoDevelop.Ide.Gui.Dialogs
 			get {
 				if (!ShowEncodingSelector)
 					return null;
-				else if (encodingMenu.History < firstEncIndex || encodingMenu.History == selectOption)
+				else if (encodingHistory < firstEncIndex || encodingHistory == selectOption)
 					return null;
-				return TextEncoding.ConversionEncodings [encodingMenu.History - firstEncIndex];
+				return TextEncoding.ConversionEncodings [encodingHistory - firstEncIndex];
 			}
 			set {
 				for (uint n=0; n < TextEncoding.ConversionEncodings.Length; n++) {
 					if (TextEncoding.ConversionEncodings [n] == value) {
-						encodingMenu.SetHistory (n + (uint)firstEncIndex);
-						Menu menu = (Menu)encodingMenu.Menu;
+						encodingHistory = (int) n + firstEncIndex;
+						Menu menu = (Menu) encodingMenu.Popup;
 						RadioMenuItem rm = (RadioMenuItem) menu.Children [n + firstEncIndex];
 						rm.Active = true;
 						return;
 					}
 				}
-				encodingMenu.SetHistory (0);
+				encodingHistory = 0;
 			}
 		}
 		
@@ -155,26 +156,30 @@ namespace MonoDevelop.Ide.Gui.Dialogs
 			
 			if (Action != Gtk.FileChooserAction.Save) {
 				RadioMenuItem autodetect = new RadioMenuItem (GettextCatalog.GetString ("Auto Detected"));
-				autodetect.Group = new GLib.SList (typeof(object));
+				autodetect.Group = new Gtk.RadioMenuItem[0];
 				menu.Append (autodetect);
 				menu.Append (new Gtk.SeparatorMenuItem ());
 				autodetect.Active = true;
+				autodetect.Activated += delegate { encodingHistory = 0; };
 				defaultActivated = autodetect;
 				firstEncIndex = 2;
 			} else
 				firstEncIndex = 0;
 			
+			int encIndex = firstEncIndex;
 			foreach (var textEncoding in TextEncoding.ConversionEncodings) {
 				var enc = textEncoding.Encoding;
 				RadioMenuItem mitem = new RadioMenuItem (enc.EncodingName + " (" + enc.WebName + ")");
 				menu.Append (mitem);
 				if (defaultActivated == null) {
 					defaultActivated = mitem;
-					defaultActivated.Group = new GLib.SList (typeof(object));
+					defaultActivated.Group = new Gtk.RadioMenuItem[0];
 				} else {
 					mitem.Group = defaultActivated.Group;
 				}
 				mitem.Active = false;
+				int captured = encIndex++;
+				mitem.Activated += delegate { encodingHistory = captured; };
 			}
 			
 			if (defaultActivated != null)
@@ -184,21 +189,23 @@ namespace MonoDevelop.Ide.Gui.Dialogs
 			
 			MenuItem select = new MenuItem (GettextCatalog.GetString ("Add or _Remove..."));
 			menu.Append (select);
+			select.Activated += delegate { encodingHistory = selectOption; EncodingChanged (); };
 			
 			menu.ShowAll ();
-			encodingMenu.Menu = menu;
+			encodingMenu.Popup = menu;
 			
-			encodingMenu.SetHistory (0);
+			encodingHistory = 0;
 					
 			selectOption = firstEncIndex + TextEncoding.ConversionEncodings.Length + 1;
 		}
 		
-		void EncodingChanged (object s, EventArgs args)
+		void EncodingChanged ()
 		{
-			if (encodingMenu.History == selectOption) {
+			if (encodingHistory == selectOption) {
 				using (var dlg = new SelectEncodingsDialog ())
 					MessageService.ShowCustomDialog (dlg, this);
 				FillEncodings ();
+				encodingHistory = 0;
 			}
 		}
 		

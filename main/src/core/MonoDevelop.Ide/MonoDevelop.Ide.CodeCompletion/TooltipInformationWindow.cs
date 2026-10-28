@@ -150,7 +150,7 @@ namespace MonoDevelop.Ide.CodeCompletion
 					contentLabel.BreakOnPunctuation = false;
 					contentLabel.MaxWidth = LabelMaxWidth - 80;
 					contentLabel.Markup = o.FooterMarkup.Trim ();
-					contentLabel.ModifyFg (StateType.Normal, foreColor.ToGdkColor ());
+					contentLabel.OverrideColor (StateFlags.Normal, foreColor.ToGdkColor ().ToRgba ());
 					contentLabel.FontDescription = Theme.Font.ToPangoFont ();
 
 					descriptionBox.PackEnd (contentLabel, true, true, 4);
@@ -233,7 +233,7 @@ namespace MonoDevelop.Ide.CodeCompletion
 			if (categoryName != null) {
 				var catLabel = new FixedWidthWrapLabel ();
 				catLabel.Markup = categoryName;
-				catLabel.ModifyFg (StateType.Normal, foreColor.ToGdkColor ());
+				catLabel.OverrideColor (StateFlags.Normal, foreColor.ToGdkColor ().ToRgba ());
 				catLabel.FontDescription = font.Copy ();
 				catLabel.FontDescription.Weight = Pango.Weight.Bold;
 				catLabel.FontDescription.Size = catLabel.FontDescription.Size + (int)(1 * Pango.Scale.PangoScale);
@@ -252,7 +252,7 @@ namespace MonoDevelop.Ide.CodeCompletion
 			contentLabel.BreakOnPunctuation = false;
 			contentLabel.MaxWidth = labelMaxWidth;
 			contentLabel.Markup = categoryContentMarkup.Trim ();
-			contentLabel.ModifyFg (StateType.Normal, foreColor.ToGdkColor ());
+			contentLabel.OverrideColor (StateFlags.Normal, foreColor.ToGdkColor ().ToRgba ());
 			contentLabel.FontDescription = font;
 
 			hbox.PackStart (contentLabel, true, true, 0);
@@ -262,8 +262,24 @@ namespace MonoDevelop.Ide.CodeCompletion
 		}
 
 		readonly VBox descriptionBox = new VBox (false, 0);
-		readonly VBox vb2 = new VBox (false, 0);
+		readonly MinWidthBox vb2 = new MinWidthBox (false, 0);
 		Cairo.Color foreColor;
+		
+		class MinWidthBox: VBox
+		{
+			public MinWidthBox (bool homogeneous, int spacing) : base (homogeneous, spacing)
+			{
+			}
+			public Func<int> MinWidthProvider;
+			
+			protected override void OnGetPreferredWidth (out int minimum, out int natural)
+			{
+				base.OnGetPreferredWidth (out minimum, out natural);
+				int mw = MinWidthProvider != null ? MinWidthProvider () : 0;
+				if (minimum < mw) minimum = mw;
+				if (natural < mw) natural = mw;
+			}
+		}
 
 		internal void SetDefaultScheme ()
 		{
@@ -273,7 +289,7 @@ namespace MonoDevelop.Ide.CodeCompletion
 
 			Theme.SetSchemeColors (scheme);
 			foreColor = Styles.PopoverWindow.DefaultTextColor.ToCairoColor ();
-			headLabel.ModifyFg (StateType.Normal, foreColor.ToGdkColor ());
+			headLabel.OverrideColor (StateFlags.Normal, foreColor.ToGdkColor ().ToRgba ());
 			headLabel.FontDescription = IdeServices.FontService.GetFontDescription ("Editor").CopyModified (Styles.FontScale11);
 			Theme.Font = IdeServices.FontService.SansFont.CopyModified (Styles.FontScale11).ToXwtFont ();
 			Theme.ShadowColor = Styles.PopoverWindow.ShadowColor;
@@ -305,13 +321,7 @@ namespace MonoDevelop.Ide.CodeCompletion
 			vb2.Spacing = 4;
 			vb2.PackStart (hb, true, true, 0);
 
-			vb2.SizeRequested += (o, args) => {
-				var w = Math.Max (headLabel.WidthRequest, headLabel.RealWidth);
-				var req = new Gtk.Requisition ();
-				req.Height = args.Requisition.Height;
-				req.Width = (int)Math.Max (w + PaddingLeft + PaddingTop, args.Requisition.Width);
-				args.Args[0] = req;
-			};
+			vb2.MinWidthProvider = () => (int)(Math.Max (headLabel.WidthRequest, headLabel.RealWidth) + PaddingLeft + PaddingTop);
 
 			Content = BackendHost.ToolkitEngine.WrapWidget (vb2, Xwt.NativeWidgetSizing.DefaultPreferredSize);
 

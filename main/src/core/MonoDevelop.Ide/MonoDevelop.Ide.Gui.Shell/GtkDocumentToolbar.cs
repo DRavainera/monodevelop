@@ -112,11 +112,11 @@ namespace MonoDevelop.Ide.Gui.Shell
 				if (Core.Platform.IsMac && w is CheckButton) {
 					// the Gtk.CheckButton Text color is the color of the check mark
 					// and the Fg color is used for the label.
-					w.ModifyFg (StateType.Prelight, textColor);
-					w.ModifyFg (StateType.Active, textColor);
+					w.OverrideColor (StateFlags.Prelight, textColor.ToRgba ());
+					w.OverrideColor (StateFlags.Active, textColor.ToRgba ());
 				} else
-					w.ModifyText (StateType.Normal, textColor);
-				w.ModifyFg (StateType.Normal, textColor);
+					w.OverrideColor (StateFlags.Normal, textColor.ToRgba ());
+				w.OverrideColor (StateFlags.Normal, textColor.ToRgba ());
 			};
 			if (w is Gtk.Container) {
 				foreach (var c in ((Gtk.Container)w).Children)
@@ -158,20 +158,18 @@ namespace MonoDevelop.Ide.Gui.Shell
 			{
 			}
 
-			protected override bool OnExposeEvent (Gdk.EventExpose evnt)
+			protected override bool OnDrawn (Cairo.Context cr)
 			{
-				using (var ctx = Gdk.CairoHelper.Create (GdkWindow)) {
-					ctx.Rectangle (0, 0, Allocation.Width, Allocation.Height);
-					ctx.SetSourceColor (Styles.BreadcrumbBackgroundColor.ToCairoColor ());
-					ctx.Fill ();
+				cr.Rectangle (0, 0, Allocation.Width, Allocation.Height);
+				cr.SetSourceColor (Styles.BreadcrumbBackgroundColor.ToCairoColor ());
+				cr.Fill ();
 
-					ctx.MoveTo (0.5, Allocation.Height - 0.5);
-					ctx.RelLineTo (Allocation.Width, 0);
-					ctx.SetSourceColor (Styles.BreadcrumbBottomBorderColor.ToCairoColor ());
-					ctx.LineWidth = 1;
-					ctx.Stroke ();
-				}
-				return base.OnExposeEvent (evnt);
+				cr.MoveTo (0.5, Allocation.Height - 0.5);
+				cr.RelLineTo (Allocation.Width, 0);
+				cr.SetSourceColor (Styles.BreadcrumbBottomBorderColor.ToCairoColor ());
+				cr.LineWidth = 1;
+				cr.Stroke ();
+				return base.OnDrawn (cr);
 			}
 		}
 	}

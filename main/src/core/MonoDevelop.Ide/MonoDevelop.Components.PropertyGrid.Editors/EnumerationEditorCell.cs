@@ -65,7 +65,7 @@ namespace MonoDevelop.Components.PropertyGrid.PropertyEditors
 	public class EnumerationEditor : Gtk.HBox, IPropertyEditor {
 
 		Gtk.EventBox ebox;
-		Gtk.ComboBoxEntry combo;
+		Gtk.ComboBoxText combo;
 		Array values;
 
 		public EnumerationEditor () : base (false, 0)
@@ -94,12 +94,13 @@ namespace MonoDevelop.Components.PropertyGrid.PropertyEditors
 			ebox.Show ();
 			PackStart (ebox, true, true, 0);
 
-			combo = Gtk.ComboBoxEntry.NewText ();
+			combo = Gtk.ComboBoxText.NewWithEntry ();
 			combo.Changed += combo_Changed;
-			combo.Entry.IsEditable = false;
-			combo.Entry.CanFocus = false;
-			combo.Entry.HasFrame = false;
-			combo.Entry.HeightRequest = combo.SizeRequest ().Height;
+			var comboEntry = (Gtk.Entry)((Gtk.Bin)combo).Child;
+			comboEntry.IsEditable = false;
+			comboEntry.CanFocus = false;
+			comboEntry.HasFrame = false;
+			comboEntry.HeightRequest = combo.SizeRequest ().Height;
 			combo.Show ();
 			ebox.Add (combo);
 

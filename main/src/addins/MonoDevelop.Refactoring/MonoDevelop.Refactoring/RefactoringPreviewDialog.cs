@@ -97,7 +97,7 @@ namespace MonoDevelop.Refactoring
 			FillChanges ();
 		}
 		
-		void SetLocationTextData (Gtk.TreeViewColumn tree_column, Gtk.CellRenderer cell, Gtk.TreeModel model, Gtk.TreeIter iter)
+		void SetLocationTextData (Gtk.TreeViewColumn tree_column, Gtk.CellRenderer cell, Gtk.ITreeModel model, Gtk.TreeIter iter)
 		{
 			CellRendererText cellRendererText = (CellRendererText)cell;
 			Change change = store.GetValue (iter, objColumn) as Change;
@@ -116,13 +116,13 @@ namespace MonoDevelop.Refactoring
 			if (treeviewPreview.Selection.IterIsSelected (iter)) {
 				cellRendererText.Text = text;
 			} else {
-				var color = Style.Text (StateType.Insensitive);
+				var color = this.GetStyleColor (StateType.Insensitive).ToGdkColor ();
 				var c = string.Format ("#{0:X02}{1:X02}{2:X02}", color.Red / 256, color.Green / 256, color.Blue / 256);
 				cellRendererText.Markup = "<span foreground=\"" + c + "\">" + text + "</span>";
 			}
 		}
 		
-		void SetDiffCellData (Gtk.TreeViewColumn tree_column, Gtk.CellRenderer cell, Gtk.TreeModel model, Gtk.TreeIter iter)
+		void SetDiffCellData (Gtk.TreeViewColumn tree_column, Gtk.CellRenderer cell, Gtk.ITreeModel model, Gtk.TreeIter iter)
 		{
 			try {
 				CellRendererDiff cellRendererDiff = (CellRendererDiff)cell;
@@ -214,11 +214,13 @@ namespace MonoDevelop.Refactoring
 			}
 
 			bool isDisposed = false;
-			protected override void OnDestroyed ()
+			protected override void Dispose (bool disposing)
 			{
-				isDisposed = true;
-				DisposeLayout ();
-				base.OnDestroyed ();
+				if (disposing && !isDisposed) {
+					isDisposed = true;
+					DisposeLayout ();
+				}
+				base.Dispose (disposing);
 			}
 
 			public void Reset ()
@@ -267,14 +269,15 @@ namespace MonoDevelop.Refactoring
 				}
 			}
 
-			protected override void Render (Drawable window, Widget widget, Gdk.Rectangle background_area, Gdk.Rectangle cell_area, Gdk.Rectangle expose_area, CellRendererState flags)
+			protected override void OnRender (Cairo.Context cr, Widget widget, Gdk.Rectangle background_area, Gdk.Rectangle cell_area, CellRendererState flags)
 			{
 				if (isDisposed)
 					return;
 				try {
 					if (diffMode) {
 						int w, maxy;
-						window.GetSize (out w, out maxy);
+						w = widget.Allocation.Width;
+						maxy = widget.Allocation.Height;
 
 						int recty = cell_area.Y;
 						int recth = cell_area.Height - 1;
@@ -285,18 +288,14 @@ namespace MonoDevelop.Refactoring
 						if (recth > maxy + 2)
 							recth = maxy + 2;
 
-						window.DrawRectangle (widget.Style.BaseGC (Gtk.StateType.Normal), true, cell_area.X, recty, cell_area.Width - 1, recth);
+						cr.Rectangle (cell_area.X, recty, cell_area.Width - 1, recth);
+						cr.SetSourceColor (widget.GetStyleBackgroundColor (Gtk.StateType.Normal).ToCairoColor ());
+						cr.Fill ();
 
-						Gdk.GC normalGC = widget.Style.TextGC (StateType.Normal);
-						Gdk.GC removedGC = new Gdk.GC (window);
-						removedGC.Copy (normalGC);
-						removedGC.RgbFgColor = new Color (255, 0, 0);
-						Gdk.GC addedGC = new Gdk.GC (window);
-						addedGC.Copy (normalGC);
-						addedGC.RgbFgColor = new Color (0, 0, 255);
-						Gdk.GC infoGC = new Gdk.GC (window);
-						infoGC.Copy (normalGC);
-						infoGC.RgbFgColor = new Color (0xa5, 0x2a, 0x2a);
+						var normalColor = widget.GetStyleColor (StateType.Normal).ToCairoColor ();
+						var removedColor = new Cairo.Color (1, 0, 0);
+						var addedColor = new Cairo.Color (0, 0, 1);
+						var infoColor = new Cairo.Color (0xa5 / 255.0, 0x2a / 255.0, 0x2a / 255.0);
 
 						int y = cell_area.Y + 2;
 
@@ -309,39 +308,48 @@ namespace MonoDevelop.Refactoring
 							if (line.Length == 0)
 								continue;
 
-							Gdk.GC gc;
+							Cairo.Color textcolor;
 							switch (line[0]) {
 							case '-':
-								gc = removedGC;
+								textcolor = removedColor;
 								break;
 							case '+':
-								gc = addedGC;
+								textcolor = addedColor;
 								break;
 							case '@':
-								gc = infoGC;
+								textcolor = infoColor;
 								break;
 							default:
-								gc = normalGC;
+								textcolor = normalColor;
 								break;
 							}
 
 							layout.SetText (line);
-							window.DrawLayout (gc, cell_area.X + 2, y, layout);
+							cr.Save ();
+							cr.Translate (cell_area.X + 2, y);
+							cr.SetSourceColor (textcolor);
+							Pango.CairoHelper.ShowLayout (cr, layout);
+							cr.Restore ();
 						}
-						window.DrawRectangle (widget.Style.DarkGC (Gtk.StateType.Prelight), false, cell_area.X, recty, cell_area.Width - 1, recth);
-						removedGC.Dispose ();
-						addedGC.Dispose ();
-						infoGC.Dispose ();
+						cr.Rectangle (cell_area.X, recty, cell_area.Width - 1, recth);
+						var borderColor = new HslColor (widget.GetStyleColor (StateType.Prelight).ToCairoColor ());
+						borderColor.L *= 0.6;
+						cr.SetSourceColor (borderColor);
+						cr.Stroke ();
 					} else {
 						int y = cell_area.Y + (cell_area.Height - height) / 2;
-						window.DrawLayout (widget.Style.TextGC (GetState (flags)), cell_area.X, y, layout);
+						cr.Save ();
+						cr.Translate (cell_area.X, y);
+						cr.SetSourceColor (widget.GetStyleColor (GetState (flags)).ToCairoColor ());
+						Pango.CairoHelper.ShowLayout (cr, layout);
+						cr.Restore ();
 					}
 				} catch (Exception e) {
 					Console.WriteLine (e);
 				}
 			}
 
-			public override void GetSize (Widget widget, ref Rectangle cell_area, out int x_offset, out int y_offset, out int c_width, out int c_height)
+			protected override void OnGetSize (Widget widget, ref Gdk.Rectangle cell_area, out int x_offset, out int y_offset, out int c_width, out int c_height)
 			{
 				x_offset = y_offset = 0;
 				c_width = width;

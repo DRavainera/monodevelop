@@ -254,8 +254,8 @@ namespace MonoDevelop.Ide.Projects
 		{
 			StringBuilder result = new StringBuilder ();
 			int lastPos = 0;
-			var color = HslColor.GenerateHighlightColors (widget.Style.Base (StateType.Normal), 
-				widget.Style.Text (StateType.Normal), 3)[2];
+			var color = HslColor.GenerateHighlightColors (widget.GetStyleBackgroundColor (StateType.Normal).ToGdkColor (), 
+				widget.GetStyleColor (StateType.Normal).ToGdkColor (), 3)[2];
 			for (int n=0; n < matches.Length; n++) {
 				int pos = matches[n] - startIndex;
 				if (pos < 0 || pos >= text.Length)
@@ -324,7 +324,7 @@ namespace MonoDevelop.Ide.Projects
 			return selection.Contains (type + " " + name + " " + pkg);
 		}
 
-        private int Sort (TreeModel model, TreeIter left, TreeIter right)
+        private int Sort (ITreeModel model, TreeIter left, TreeIter right)
         {
 			int result = 0;
 			

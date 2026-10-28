@@ -2,31 +2,44 @@
 
   <PropertyGroup>
     <ReferencesGtkCopyToOutput Condition="$(ReferencesGtkCopyToOutput) == ''">false</ReferencesGtkCopyToOutput>
+    <GtkSharpVersion Condition="'$(GtkSharpVersion)' == ''">3.24.24.95</GtkSharpVersion>
+    <GtkSharpLibDir>$(NuGetPackageRoot)gtksharp/$(GtkSharpVersion)/lib/net6.0</GtkSharpLibDir>
+    <GtkSharpDepsDir>$(NuGetPackageRoot)</GtkSharpDepsDir>
   </PropertyGroup>
 
-  <ItemGroup>
-    <Reference Include="atk-sharp, Version=2.12.0.0, Culture=neutral, PublicKeyToken=35e10195dab3c99f">
-      <HintPath>$(MonoGtkSharpDirectory)/atk-sharp.dll</HintPath>
+  <!-- SDK-style projects: PackageReference (transitive deps: Atk/Cairo/GLib/Gdk/Gio/Pango) -->
+  <ItemGroup Condition=" '$(UsingMicrosoftNETSdk)' == 'true' ">
+    <PackageReference Include="GtkSharp" Version="$(GtkSharpVersion)" Private="$(ReferencesGtkCopyToOutput)" />
+  </ItemGroup>
+
+  <!-- Legacy (non-SDK) projects: direct references from the NuGet cache -->
+  <ItemGroup Condition=" '$(UsingMicrosoftNETSdk)' != 'true' ">
+    <Reference Include="GtkSharp, Version=$(GtkSharpVersion), Culture=neutral">
+      <HintPath>$(GtkSharpLibDir)/GtkSharp.dll</HintPath>
       <Private>$(ReferencesGtkCopyToOutput)</Private>
     </Reference>
-    <Reference Include="gdk-sharp, Version=2.12.0.0, Culture=neutral, PublicKeyToken=35e10195dab3c99f">
-      <HintPath>$(MonoGtkSharpDirectory)/gdk-sharp.dll</HintPath>
+    <Reference Include="AtkSharp, Version=$(GtkSharpVersion), Culture=neutral">
+      <HintPath>$(GtkSharpDepsDir)atksharp/$(GtkSharpVersion)/lib/net6.0/AtkSharp.dll</HintPath>
       <Private>$(ReferencesGtkCopyToOutput)</Private>
     </Reference>
-    <Reference Include="glade-sharp, Version=2.12.0.0, Culture=neutral, PublicKeyToken=35e10195dab3c99f">
-      <HintPath>$(MonoGtkSharpDirectory)/glade-sharp.dll</HintPath>
+    <Reference Include="CairoSharp, Version=$(GtkSharpVersion), Culture=neutral">
+      <HintPath>$(GtkSharpDepsDir)cairosharp/$(GtkSharpVersion)/lib/net6.0/CairoSharp.dll</HintPath>
       <Private>$(ReferencesGtkCopyToOutput)</Private>
     </Reference>
-    <Reference Include="glib-sharp, Version=2.12.0.0, Culture=neutral, PublicKeyToken=35e10195dab3c99f">
-      <HintPath>$(MonoGtkSharpDirectory)/glib-sharp.dll</HintPath>
+    <Reference Include="GLibSharp, Version=$(GtkSharpVersion), Culture=neutral">
+      <HintPath>$(GtkSharpDepsDir)glibsharp/$(GtkSharpVersion)/lib/net6.0/GLibSharp.dll</HintPath>
       <Private>$(ReferencesGtkCopyToOutput)</Private>
     </Reference>
-    <Reference Include="gtk-sharp, Version=2.12.0.0, Culture=neutral, PublicKeyToken=35e10195dab3c99f">
-      <HintPath>$(MonoGtkSharpDirectory)/gtk-sharp.dll</HintPath>
+    <Reference Include="GdkSharp, Version=$(GtkSharpVersion), Culture=neutral">
+      <HintPath>$(GtkSharpDepsDir)gdksharp/$(GtkSharpVersion)/lib/net6.0/GdkSharp.dll</HintPath>
       <Private>$(ReferencesGtkCopyToOutput)</Private>
     </Reference>
-    <Reference Include="pango-sharp, Version=2.12.0.0, Culture=neutral, PublicKeyToken=35e10195dab3c99f">
-      <HintPath>$(MonoGtkSharpDirectory)/pango-sharp.dll</HintPath>
+    <Reference Include="GioSharp, Version=$(GtkSharpVersion), Culture=neutral">
+      <HintPath>$(GtkSharpDepsDir)giosharp/$(GtkSharpVersion)/lib/net6.0/GioSharp.dll</HintPath>
+      <Private>$(ReferencesGtkCopyToOutput)</Private>
+    </Reference>
+    <Reference Include="PangoSharp, Version=$(GtkSharpVersion), Culture=neutral">
+      <HintPath>$(GtkSharpDepsDir)pangosharp/$(GtkSharpVersion)/lib/net6.0/PangoSharp.dll</HintPath>
       <Private>$(ReferencesGtkCopyToOutput)</Private>
     </Reference>
   </ItemGroup>

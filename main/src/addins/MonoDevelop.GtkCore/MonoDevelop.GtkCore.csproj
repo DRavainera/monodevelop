@@ -19,6 +19,7 @@
     <ProjectGuid>{7FCDB0D9-AA7D-44E4-BE74-55312B432389}</ProjectGuid>
     <TargetFrameworkVersion>$(MDFrameworkVersion)</TargetFrameworkVersion>
     <OutputPath>..\..\..\build\AddIns\MonoDevelop.GtkCore</OutputPath>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <!--
     This needs to be ported to Roslyn, and currently makes use of many, many deprecated APIs.
     -->

@@ -1,4 +1,4 @@
-<Project DefaultTargets="Build" Sdk="Microsoft.NET.Sdk" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+﻿<Project DefaultTargets="Build" Sdk="Microsoft.NET.Sdk" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <Import Project="..\..\..\MonoDevelop.props" />
   <Import Project="$(ReferencesVSEditor)" />
   <Import Project="$(ReferencesGtk)" />
@@ -20,6 +20,7 @@
     <ProjectGuid>{2357AABD-08C7-4808-A495-8FF2D3CDFDB0}</ProjectGuid>
     <TargetFrameworkVersion>$(MDFrameworkVersion)</TargetFrameworkVersion>
     <OutputPath>..\..\..\build\AddIns\MonoDevelop.Debugger</OutputPath>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <DefineConstants Condition="$(OS) == 'Windows_NT'">$(DefineConstants);WINDOWS</DefineConstants>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' " />
@@ -28,7 +29,7 @@
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'ReleaseMac|AnyCPU' " />
   <PropertyGroup Condition=" '$(RunConfiguration)' == 'Default' ">
     <StartAction>Program</StartAction>
-    <StartProgram>..\..\..\build\bin\MonoDevelop.exe</StartProgram>
+    <StartProgram>..\..\..\build\MonoDevelop.exe</StartProgram>
     <StartArguments>--no-redirect</StartArguments>
   </PropertyGroup>
   <ItemGroup>
@@ -52,10 +53,6 @@
       <HintPath>$(NuGetPackageRoot)microsoft.codeanalysis.csharp/$(NuGetVersionRoslyn)/lib/netstandard2.0/Microsoft.CodeAnalysis.CSharp.dll</HintPath>
     </Reference>
     <Reference Include="System.Net.Http" />
-    <Reference Include="Mono.Cairo">
-      <HintPath>$(MonoFrameworkNet45Directory)\Mono.Cairo.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
     <Reference Include="Xamarin.Mac" Condition="$(HaveXamarinMac) == 'true'">
       <HintPath>..\..\..\external\Xamarin.Mac.dll</HintPath>
       <Private>False</Private>

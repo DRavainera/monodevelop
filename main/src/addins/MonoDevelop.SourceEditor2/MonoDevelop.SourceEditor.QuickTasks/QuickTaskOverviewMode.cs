@@ -96,14 +96,9 @@ namespace MonoDevelop.SourceEditor.QuickTasks
 		{
 			base.OnStyleSet (previous_style);
 			if (Core.Platform.IsWindows) {
-				using (var scrollstyle = Rc.GetStyleByPaths (Settings, null, null, VScrollbar.GType)) {
-					var scrl = new VScrollbar (null);
-					scrl.Style = scrollstyle;
-					win81Slider = scrollstyle.Background (StateType.Normal).ToCairoColor ();
-					win81SliderPrelight = scrollstyle.Background (StateType.Prelight).ToCairoColor ();
-					win81ScrollbarWidth = (int)scrl.StyleGetProperty ("slider-width");
-					scrl.Destroy ();
-				}
+				win81Slider = new Cairo.Color (0.8, 0.8, 0.8, 1);
+				win81SliderPrelight = new Cairo.Color (0.7, 0.7, 0.7, 1);
+				win81ScrollbarWidth = 16;
 			}
 		}
 
@@ -440,7 +435,6 @@ namespace MonoDevelop.SourceEditor.QuickTasks
 		void UpdateState (StateType state)
 		{
 			if (State != state) {
-				State = state;
 				QueueDraw ();
 			}
 		}
@@ -685,10 +679,15 @@ namespace MonoDevelop.SourceEditor.QuickTasks
 			cr.DrawImage (this, img, Math.Round ((Allocation.Width - img.Width) / 2), -1);
 		}
 
-		protected override void OnSizeRequested (ref Requisition requisition)
+		protected override void OnGetPreferredWidth (out int minimumSize, out int naturalSize)
 		{
-			base.OnSizeRequested (ref requisition);
-			requisition.Width = MonoDevelop.Core.Platform.IsWindows ? win81ScrollbarWidth : 15;
+			base.OnGetPreferredWidth (out minimumSize, out naturalSize);
+			minimumSize = naturalSize = MonoDevelop.Core.Platform.IsWindows ? win81ScrollbarWidth : 15;
+		}
+
+		protected override void OnGetPreferredHeight (out int minimumSize, out int naturalSize)
+		{
+			base.OnGetPreferredHeight (out minimumSize, out naturalSize);
 		}
 
 		double LineToY (int logicalLine)
@@ -937,52 +936,51 @@ namespace MonoDevelop.SourceEditor.QuickTasks
 		}
 		IndicatorDrawingState currentDrawingState = IndicatorDrawingState.Create ();
 		SurfaceWrapper backgroundSurface, indicatorSurface, swapIndicatorSurface;
-		protected override bool OnExposeEvent (Gdk.EventExpose e)
+		protected override bool OnDrawn (Cairo.Context cr)
 		{
 			if (TextEditor == null)
 				return true;
 
-			using (Cairo.Context cr = Gdk.CairoHelper.Create (e.Window)) {
-
-				cr.Save ();
-				var allocation = Allocation;
-				var displayScale = Core.Platform.IsMac ? GtkWorkarounds.GetScaleFactor (this) : 1.0;
-				cr.Scale (1 / displayScale, 1 / displayScale);
-				if (indicatorSurface != null) {
-					cr.SetSourceSurface (indicatorSurface.Surface, 0, 0);
-					cr.Paint ();
-				} else {
-					CachedDraw (cr,
-					            ref backgroundSurface,
-					            e.Area,
-					            draw: (c, o) => DrawBackground (c, allocation), forceScale: displayScale);
-				}
-				if (TextEditor == null)
-					return true;
-
-				DrawCaret (cr, displayScale);
-				if (QuickTaskStrip.MergeScrollBarAndQuickTasks)
-					DrawBar (cr);
-
+			cr.Save ();
+			var allocation = Allocation;
+			var displayScale = Core.Platform.IsMac ? GtkWorkarounds.GetScaleFactor (this) : 1.0;
+			cr.Scale (1 / displayScale, 1 / displayScale);
+			if (indicatorSurface != null) {
+				cr.SetSourceSurface (indicatorSurface.Surface, 0, 0);
+				cr.Paint ();
+			} else {
+				CachedDraw (cr,
+				ref backgroundSurface,
+				allocation,
+				draw: (c, o) => DrawBackground (c, allocation), forceScale: displayScale);
+			}
+			if (TextEditor == null) {
 				cr.Restore ();
+				return true;
+			}
 
-				if (HasFocus) {
-					switch (currentFocus) {
-					case FocusWidget.Indicator:
-						cr.LineWidth = 1.0;
+			DrawCaret (cr, displayScale);
+			if (QuickTaskStrip.MergeScrollBarAndQuickTasks)
+				DrawBar (cr);
 
-						cr.SetSourceColor (Styles.FocusColor.ToCairoColor ());
-						cr.Rectangle (1, 1, Allocation.Width - 2, Allocation.Width - 2);
-						cr.SetDash (new double [] { 1, 1 }, 0.5);
-						cr.Stroke ();
-						break;
+			cr.Restore ();
 
-					case FocusWidget.Tasks:
-						break;
+			if (HasFocus) {
+				switch (currentFocus) {
+				case FocusWidget.Indicator:
+					cr.LineWidth = 1.0;
 
-					case FocusWidget.Usages:
-						break;
-					}
+					cr.SetSourceColor (Styles.FocusColor.ToCairoColor ());
+					cr.Rectangle (1, 1, Allocation.Width - 2, Allocation.Width - 2);
+					cr.SetDash (new double [] { 1, 1 }, 0.5);
+					cr.Stroke ();
+					break;
+
+				case FocusWidget.Tasks:
+					break;
+
+				case FocusWidget.Usages:
+					break;
 				}
 			}
 

@@ -44,11 +44,11 @@ namespace MonoDevelop.Ide.WelcomePage
 
 		public int MinHeight { get; set; }
 
-		protected override void OnSizeRequested (ref Requisition requisition)
+		protected override void OnGetPreferredHeight (out int minimum, out int natural)
 		{
-			base.OnSizeRequested (ref requisition);
+			base.OnGetPreferredHeight (out minimum, out natural);
 			if (MinHeight != -1)
-				requisition.Height = Math.Max (requisition.Height, MinHeight);
+				minimum = natural = Math.Max (natural, MinHeight);
 		}
 	}
 }

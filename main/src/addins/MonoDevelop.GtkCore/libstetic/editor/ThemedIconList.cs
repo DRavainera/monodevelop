@@ -9,7 +9,7 @@ namespace Stetic.Editor
 	{
 		public ThemedIconList ()
 		{
-			Gtk.IconTheme theme = Gtk.IconTheme.Default;
+			Gtk.IconTheme theme = Gtk.IconTheme.GetForScreen (Gdk.Screen.Default);
 			foreach (string icon in ThemeIconNames)
 				AddIcon (icon, GetPixbuf (theme, icon), icon);
 		}

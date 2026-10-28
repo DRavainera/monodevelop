@@ -64,8 +64,9 @@ namespace MonoDevelop.Components.PropertyGrid.PropertyEditors
 					combo.PackStart (crt, true);
 					combo.AddAttribute (crt, "text", 0);
 				} else {
-					combo = new ComboBoxEntry (store, 0);
-					entry = ((ComboBoxEntry)combo).Entry;
+					combo = ComboBoxText.NewWithEntry ();
+					((ComboBox)combo).Model = store;
+					entry = (Entry)((Bin)combo).Child;
 					entry.HeightRequest = combo.SizeRequest ().Height;
 				}
 
@@ -100,7 +101,7 @@ namespace MonoDevelop.Components.PropertyGrid.PropertyEditors
 				entry.Changed += TextChanged;
 				entry.FocusOutEvent += FirePendingChangeEvent;
 				if (!entry.IsEditable)
-					entry.ModifyText (StateType.Normal, entry.Style.Text (Gtk.StateType.Insensitive));
+					entry.OverrideColor (StateFlags.Normal, entry.GetStyleColor (Gtk.StateType.Insensitive));
 			}
 
 			if (entry != null && ShouldShowDialogButton () && entry.IsEditable) {
@@ -198,9 +199,9 @@ namespace MonoDevelop.Components.PropertyGrid.PropertyEditors
 			if (GetValue (out val, out isStandard)) {
 				currentValue = val;
 				if (entry != null)
-					entry.ModifyFg (StateType.Normal);
+					entry.OverrideColor (StateFlags.Normal, entry.GetStyleColor (StateType.Normal));
 			} else {
-				entry.ModifyFg (StateType.Normal, new Color (255, 0, 0));
+				entry.OverrideColor (StateFlags.Normal, new Color (255, 0, 0).ToRgba ());
 			}
 
 			//if it's a standard value, fire the event immediately
@@ -232,7 +233,9 @@ namespace MonoDevelop.Components.PropertyGrid.PropertyEditors
 					int index;
 					if (FindComboValue (value, out index)) {
 						combo.Active = index;
-						initialText = combo.ActiveText;
+						var iter = new Gtk.TreeIter ();
+						store.GetIter (out iter, new TreePath (index.ToString ()));
+						initialText = (string)store.GetValue (iter, 0);
 						return;
 					}
 				}

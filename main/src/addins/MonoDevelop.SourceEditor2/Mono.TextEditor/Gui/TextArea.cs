@@ -126,15 +126,15 @@ namespace Mono.TextEditor
 			get { return imContext; }
 		}
 
-		public MenuItem CreateInputMethodMenuItem (string label)
+		public Gtk.MenuItem CreateInputMethodMenuItem (string label)
 		{
 			if (GtkWorkarounds.GtkMinorVersion >= 16) {
-				bool showMenu = (bool) GtkWorkarounds.GetProperty (Settings, "gtk-show-input-method-menu").Val;
+				bool showMenu = (bool) GtkWorkarounds.GetProperty (Gtk.Settings.Default, "gtk-show-input-method-menu").Val;
 				if (!showMenu)
 					return null;
 			}
-			MenuItem imContextMenuItem = new MenuItem (label);
-			Menu imContextMenu = new Menu ();
+			Gtk.MenuItem imContextMenuItem = new Gtk.MenuItem (label);
+			Gtk.Menu imContextMenu = new Gtk.Menu ();
 			imContextMenuItem.Submenu = imContextMenu;
 			IMContext.AppendMenuitems (imContextMenu);
 			return imContextMenuItem;
@@ -329,7 +329,7 @@ namespace Mono.TextEditor
 					nextTipX = tipX;
 					nextTipY = tipY;
 					nextTipOffset = tipOffset;
-					nextTipScheduledTime = DateTime.FromBinary (0);
+					nextTipScheduledTime = System.DateTime.FromBinary (0);
 					tipItem = null;
 					TooltipTimer ();
 				}
@@ -451,9 +451,7 @@ namespace Mono.TextEditor
 				args.RetVal = true;
 			};
 			
-			using (Pixmap inv = new Pixmap (null, 1, 1, 1)) {
-				invisibleCursor = new Cursor (inv, inv, Gdk.Color.Zero, Gdk.Color.Zero, 0, 0);
-			}
+			invisibleCursor = new Cursor (Gdk.Display.Default, new Cairo.ImageSurface (Cairo.Format.Argb32, 1, 1), 0, 0);
 			
 			InitAnimations ();
 			this.Document.HeightChanged += HandleDocumentHeightChanged;
@@ -908,26 +906,6 @@ namespace Mono.TextEditor
 
 		protected override void OnRealized ()
 		{
-			WidgetFlags |= WidgetFlags.Realized;
-			WindowAttr attributes = new WindowAttr () {
-				WindowType = Gdk.WindowType.Child,
-				X = Allocation.X,
-				Y = Allocation.Y,
-				Width = Allocation.Width,
-				Height = Allocation.Height,
-				Wclass = WindowClass.InputOutput,
-				Visual = this.Visual,
-				Colormap = this.Colormap,
-				EventMask = (int)(this.Events | Gdk.EventMask.ExposureMask),
-				Mask = this.Events | Gdk.EventMask.ExposureMask,
-			};
-			
-			WindowAttributesType mask = WindowAttributesType.X | WindowAttributesType.Y | WindowAttributesType.Colormap | WindowAttributesType.Visual;
-			GdkWindow = new Gdk.Window (ParentWindow, attributes, mask);
-			GdkWindow.UserData = Raw;
-			GdkWindow.Background = Style.Background (StateType.Normal);
-			Style = Style.Attach (GdkWindow);
-
 			imContext.ClientWindow = this.GdkWindow;
 			Caret.PositionChanged += CaretPositionChanged;
 
@@ -1361,11 +1339,11 @@ namespace Mono.TextEditor
 			GtkWorkarounds.MapKeys (evnt, out key, out mod, out accels);
 
 			if (key == Gdk.Key.space) {
-				cm.HandleItemCommand (Margin.ItemCommand.ActivateCurrentItem);
+				cm.HandleItemCommand (global::Mono.TextEditor.Margin.ItemCommand.ActivateCurrentItem);
 			} else if (key == Gdk.Key.Up) {
-				cm.HandleItemCommand (Margin.ItemCommand.FocusPreviousItem);
+				cm.HandleItemCommand (global::Mono.TextEditor.Margin.ItemCommand.FocusPreviousItem);
 			} else if (key == Gdk.Key.Down) {
-				cm.HandleItemCommand (Margin.ItemCommand.FocusNextItem);
+				cm.HandleItemCommand (global::Mono.TextEditor.Margin.ItemCommand.FocusNextItem);
 			} else if (key == Gdk.Key.Tab || key == Gdk.Key.Right) {
 				return FocusNextMargin (Gtk.DirectionType.TabForward);
 			} else if (key == Gdk.Key.ISO_Left_Tab || key == Gdk.Key.Left) {
@@ -1559,7 +1537,7 @@ namespace Mono.TextEditor
 		{
 			var undo = OpenUndoGroup ();
 			int dragOffset = Document.LocationToOffset (dragCaretPos);
-			if (context.Action == DragAction.Move) {
+			if (context.SelectedAction == DragAction.Move) {
 				if (CanEdit (Caret.Line) && !selection.IsEmpty) {
 					var selectionRange = selection.GetSelectionRange (textEditorData);
 					if (selectionRange.Offset < dragOffset)
@@ -2328,29 +2306,28 @@ namespace Mono.TextEditor
 		DateTime started = DateTime.Now;
 #endif
 		Stopwatch timingsWatch = new Stopwatch ();
-		protected override bool OnExposeEvent (Gdk.EventExpose e)
+		protected override bool OnDrawn (Cairo.Context cr)
 		{
 			if (this.isDisposed)
 				return false;
 
 			try {
-				ExposeEventInternal (e);
+				ExposeEventInternal (cr);
 			} catch (Exception ex) {
 				GLib.ExceptionManager.RaiseUnhandledException (ex, false);
 			}
 
 			keyPressTimings.EndTimer (true);
-			return base.OnExposeEvent (e);
+			return base.OnDrawn (cr);
 		}
 
-		void ExposeEventInternal (Gdk.EventExpose e)
+		void ExposeEventInternal (Cairo.Context cr)
 		{
 			UpdateAdjustments ();
 
-			var area = e.Region.Clipbox;
+			var area = Allocation;
 			var cairoArea = new Cairo.Rectangle (area.X, area.Y, area.Width, area.Height);
-			using (Cairo.Context cr = Gdk.CairoHelper.Create (e.Window))
-			using (Cairo.Context textViewCr = Gdk.CairoHelper.Create (e.Window)) {
+			using (Cairo.Context textViewCr = new Cairo.Context (cr.Target)) {
 				UpdateMarginXOffsets ();
 				
 				cr.LineWidth = Options.Zoom;
@@ -2362,7 +2339,7 @@ namespace Mono.TextEditor
 							
 #if DEBUG_EXPOSE
 				Console.WriteLine ("{0} expose {1},{2} {3}x{4}", (long)(DateTime.Now - started).TotalMilliseconds,
-					e.Area.X, e.Area.Y, e.Area.Width, e.Area.Height);
+					area.X, area.Y, area.Width, area.Height);
 #endif
 				if (requestResetCaretBlink && HasFocus) {
 					textViewMargin.ResetCaretBlink (200);
@@ -2381,7 +2358,7 @@ namespace Mono.TextEditor
 
 			if (Caret.IsVisible) {
 				timingsWatch.Restart ();
-				textViewMargin.DrawCaret (e.Window, Allocation);
+				textViewMargin.DrawCaret (cr, Allocation);
 				keyPressTimings.AddCaretDrawingTime (timingsWatch.Elapsed);
 			}
 		}
@@ -3186,7 +3163,7 @@ namespace Mono.TextEditor
 		int nextTipOffset = 0;
 		int nextTipX=0; int nextTipY=0;
 		Gdk.ModifierType nextTipModifierState = ModifierType.None;
-		DateTime nextTipScheduledTime; // Time at which we want the tooltip to show
+		System.DateTime nextTipScheduledTime; // Time at which we want the tooltip to show
 		
 		void ShowTooltip (Gdk.ModifierType modifierState, DocumentLocation location)
 		{
@@ -3247,7 +3224,7 @@ namespace Mono.TextEditor
 			nextTipY = yloc;
 			nextTipOffset = offset;
 			nextTipModifierState = modifierState;
-			nextTipScheduledTime = DateTime.Now + TimeSpan.FromMilliseconds (TooltipTimeout);
+			nextTipScheduledTime = System.DateTime.Now + TimeSpan.FromMilliseconds (TooltipTimeout);
 			// If a tooltip is already scheduled, there is no need to create a new timer.
 			if (tipShowTimeoutId == 0)
 				tipShowTimeoutId = GLib.Timeout.Add (timeOut, () => { TooltipTimer (); return false; });
@@ -3261,7 +3238,7 @@ namespace Mono.TextEditor
 			if (nextTipOffset == -1)
 				return;
 			
-			int remainingMs = (int) (nextTipScheduledTime - DateTime.Now).TotalMilliseconds;
+			int remainingMs = (int) (nextTipScheduledTime - System.DateTime.Now).TotalMilliseconds;
 			if (remainingMs > 50) {
 				// Still some significant time left. Re-schedule the timer
 				tipShowTimeoutId = GLib.Timeout.Add ((uint) remainingMs, () => { TooltipTimer (); return false; });
@@ -3758,7 +3735,6 @@ namespace Mono.TextEditor
 		
 		protected override void OnMapped ()
 		{
-			WidgetFlags |= WidgetFlags.Mapped;
 			// Note: SourceEditorWidget.ShowAutoSaveWarning() might have set TextEditor.Visible to false,
 			// in which case we want to not map it (would cause a gtk+ critical error).
 			containerChildren.ForEach (child => { if (child.Child.Visible) child.Child.Map (); });
@@ -3767,7 +3743,6 @@ namespace Mono.TextEditor
 		
 		protected override void OnUnmapped ()
 		{
-			WidgetFlags &= ~WidgetFlags.Mapped;
 			
 			// We hide the window first so that the user doesn't see widgets disappearing one by one.
 			GdkWindow.Hide ();

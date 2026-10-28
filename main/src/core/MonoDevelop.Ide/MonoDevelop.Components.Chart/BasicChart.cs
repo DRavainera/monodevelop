@@ -450,14 +450,9 @@ namespace MonoDevelop.Components.Chart
 			return (((double) minTickStep) * (GetEnd (ad) - GetStart (ad))) / (double) GetAreaSize (ad);
 		}
 		
-		protected override bool OnExposeEvent (Gdk.EventExpose args)
+		protected override bool OnDrawn (Cairo.Context ctx)
 		{
-			Gdk.Window win = GdkWindow;
-			int rwidth, rheight;
-			
-			Cairo.Context ctx = CairoHelper.Create (win);
-			
-			win.GetSize (out rwidth, out rheight);
+			int rwidth = Allocation.Width, rheight = Allocation.Height;
 			
 			if (autoStartY || autoEndY) {
 				double nstartY = double.MaxValue;
@@ -546,8 +541,10 @@ namespace MonoDevelop.Components.Chart
 				ctx.SetSourceColor (backroundColor);
 				ctx.Fill ();
 			}
-//			win.DrawRectangle (Style.WhiteGC, true, left - 1, top - 1, width + 2, height + 2);
-			win.DrawRectangle (Style.BlackGC, false, left - AreaBorderWidth, top - AreaBorderWidth, width + AreaBorderWidth*2, height + AreaBorderWidth*2);
+			ctx.Rectangle (left - AreaBorderWidth + 0.5, top - AreaBorderWidth + 0.5, width + AreaBorderWidth * 2 - 1, height + AreaBorderWidth * 2 - 1);
+			ctx.LineWidth = 1;
+			ctx.SetSourceColor (new Cairo.Color (0, 0, 0));
+			ctx.Stroke ();
 			
 			// Draw selected area
 			
@@ -558,18 +555,15 @@ namespace MonoDevelop.Components.Chart
 				if (sx > ex) {
 					int tmp = sx; sx = ex; ex = tmp;
 				}
-				using (Gdk.GC sgc = new Gdk.GC (GdkWindow)) {
-					sgc.RgbFgColor = new Color (225, 225, 225);
-					win.DrawRectangle (sgc, true, sx, top, ex - sx, height + 1);
-				}
+				ctx.Rectangle (sx, top, ex - sx, height + 1);
+				ctx.SetSourceColor (new Cairo.Color (225 / 255.0, 225 / 255.0, 225 / 255.0));
+				ctx.Fill ();
 			}
 			
 			// Draw axes
 			
-			Gdk.GC gc = Style.BlackGC;
-			
 			foreach (Axis ax in axis)
-				DrawAxis (win, gc, ax);
+				DrawAxis (ctx, ax);
 			
 			// Draw values
 			foreach (Serie serie in series)
@@ -578,14 +572,13 @@ namespace MonoDevelop.Components.Chart
 
 			// Draw cursors
 			foreach (ChartCursor cursor in cursors)
-				DrawCursor (cursor);
+				DrawCursor (ctx, cursor);
 			
 			// Draw cursor labels
 			foreach (ChartCursor cursor in cursors)
 				if (cursor.ShowValueLabel)
-					DrawCursorLabel (cursor);
+					DrawCursorLabel (ctx, cursor);
 			
-			((IDisposable)ctx).Dispose ();
 			return true;
 		}
 		
@@ -605,7 +598,7 @@ namespace MonoDevelop.Components.Chart
 			}
 		}
 		
-		void DrawAxis (Gdk.Window win, Gdk.GC gc, Axis ax)
+		void DrawAxis (Cairo.Context cr, Axis ax)
 		{
 			double minStep = GetMinTickStep (ax.Dimension);
 			
@@ -616,17 +609,16 @@ namespace MonoDevelop.Components.Chart
 			TickEnumerator enumBig = ax.GetTickEnumerator (minStep * 2);
 			
 			if (enumBig == null) {
-				DrawTicks (win, gc, enumSmall, ax.Position, ax.Dimension, ax.TickSize, ax.ShowLabels);
+				DrawTicks (cr, enumSmall, ax.Position, ax.Dimension, ax.TickSize, ax.ShowLabels);
 			} else {
-				DrawTicks (win, gc, enumSmall, ax.Position, ax.Dimension, ax.TickSize / 2, false);
-				DrawTicks (win, gc, enumBig, ax.Position, ax.Dimension, ax.TickSize, ax.ShowLabels);
+				DrawTicks (cr, enumSmall, ax.Position, ax.Dimension, ax.TickSize / 2, false);
+				DrawTicks (cr, enumBig, ax.Position, ax.Dimension, ax.TickSize, ax.ShowLabels);
 			}
 		}
 		
-		void DrawTicks (Gdk.Window win, Gdk.GC gc, TickEnumerator e, AxisPosition pos, AxisDimension ad, int tickSize, bool showLabels)
+		void DrawTicks (Cairo.Context cr, TickEnumerator e, AxisPosition pos, AxisDimension ad, int tickSize, bool showLabels)
 		{
-			int rwidth, rheight;
-			win.GetSize (out rwidth, out rheight);
+			int rwidth = Allocation.Width, rheight = Allocation.Height;
 			
 			Pango.Layout layout = null;
 			
@@ -687,20 +679,20 @@ namespace MonoDevelop.Components.Chart
 					if (isTop) {
 						if (showLabels) {
 							if (labelFits)
-								win.DrawLayout (gc, px - (tw/2), top - AreaBorderWidth - th, layout);
+								DrawChartLabel (cr, px - (tw / 2), top - AreaBorderWidth - th, layout);
 							else
 								tick = tick / 2;
 						}
-						win.DrawLine (gc, px, top, px, top + tick);
+						DrawChartLine (cr, px, top, px, top + tick);
 					}
 					else {
 						if (showLabels) {
 							if (labelFits)
-								win.DrawLayout (gc, px - (tw/2), top + height + AreaBorderWidth, layout);
+								DrawChartLabel (cr, px - (tw / 2), top + height + AreaBorderWidth, layout);
 							else
 								tick = tick / 2;
 						}
-						win.DrawLine (gc, px, top + height, px, top + height - tick);
+						DrawChartLine (cr, px, top + height, px, top + height - tick);
 					}
 				}
 				else {
@@ -718,20 +710,20 @@ namespace MonoDevelop.Components.Chart
 					if (isTop) {
 						if (showLabels) {
 							if (labelFits)
-								win.DrawLayout (gc, left + width + AreaBorderWidth + 1, py - (th/2), layout);
+								DrawChartLabel (cr, left + width + AreaBorderWidth + 1, py - (th / 2), layout);
 							else
 								tick = tick / 2;
 						}
-						win.DrawLine (gc, left + width, py, left + width - tick, py);
+						DrawChartLine (cr, left + width, py, left + width - tick, py);
 					}
 					else {
 						if (showLabels) {
 							if (labelFits)
-								win.DrawLayout (gc, left - AreaBorderWidth - tw - 1, py - (th/2), layout);
+								DrawChartLabel (cr, left - AreaBorderWidth - tw - 1, py - (th / 2), layout);
 							else
 								tick = tick / 2;
 						}
-						win.DrawLine (gc, left, py, left + tick, py);
+						DrawChartLine (cr, left, py, left + tick, py);
 					}
 				}
 			}
@@ -834,72 +826,91 @@ namespace MonoDevelop.Components.Chart
 			ctx.Stroke ();
 		}
 		
-		void DrawCursor (ChartCursor cursor)
+		void DrawCursor (Cairo.Context cr, ChartCursor cursor)
 		{
-			using (Gdk.GC gc = new Gdk.GC (GdkWindow)) {
-				gc.RgbFgColor = cursor.Color;
+			cr.SetSourceColor (cursor.Color.ToCairoColor ());
+			cr.LineWidth = 1;
 
-				int x, y;
-				GetPoint (cursor.Value, cursor.Value, out x, out y);
+			int x, y;
+			GetPoint (cursor.Value, cursor.Value, out x, out y);
 
-				if (cursor.Dimension == AxisDimension.X) {
-					int cy = top - AreaBorderWidth - 1;
-					Point [] ps = new Point [4];
-					ps [0] = new Point (x, cy);
-					ps [1] = new Point (x + (cursor.HandleSize / 2), cy - cursor.HandleSize + 1);
-					ps [2] = new Point (x - (cursor.HandleSize / 2), cy - cursor.HandleSize + 1);
-					ps [3] = ps [0];
-					GdkWindow.DrawPolygon (gc, false, ps);
-					if (activeCursor == cursor)
-						GdkWindow.DrawPolygon (gc, true, ps);
-					GdkWindow.DrawLine (gc, x, top, x, top + height);
-				} else {
-					throw new NotSupportedException ();
-				}
+			if (cursor.Dimension == AxisDimension.X) {
+				int cy = top - AreaBorderWidth - 1;
+				cr.MoveTo (x, cy);
+				cr.LineTo (x + (cursor.HandleSize / 2), cy - cursor.HandleSize + 1);
+				cr.LineTo (x - (cursor.HandleSize / 2), cy - cursor.HandleSize + 1);
+				cr.ClosePath ();
+				cr.Stroke ();
+				if (activeCursor == cursor)
+					cr.Fill ();
+				cr.MoveTo (x, top);
+				cr.LineTo (x, top + height);
+				cr.Stroke ();
+			} else {
+				throw new NotSupportedException ();
 			}
 		}
-		
-		void DrawCursorLabel (ChartCursor cursor)
+
+		void DrawCursorLabel (Cairo.Context cr, ChartCursor cursor)
 		{
-			using (Gdk.GC gc = new Gdk.GC (GdkWindow)) {
-				gc.RgbFgColor = cursor.Color;
+			int x, y;
+			GetPoint (cursor.Value, cursor.Value, out x, out y);
 
-				int x, y;
-				GetPoint (cursor.Value, cursor.Value, out x, out y);
+			if (cursor.Dimension == AxisDimension.X) {
 
-				if (cursor.Dimension == AxisDimension.X) {
+				string text;
 
-					string text;
-
-					if (cursor.LabelAxis != null) {
-						double minStep = GetMinTickStep (cursor.Dimension);
-						TickEnumerator tenum = cursor.LabelAxis.GetTickEnumerator (minStep);
-						tenum.Init (cursor.Value);
-						text = tenum.CurrentLabel;
-					} else {
-						text = GetValueLabel (cursor.Dimension, cursor.Value);
-					}
-
-					if (text != null && text.Length > 0) {
-						Pango.Layout layout = new Pango.Layout (this.PangoContext);
-						layout.FontDescription = IdeServices.FontService.SansFont.CopyModified (Ide.Gui.Styles.FontScale11);
-						layout.SetMarkup (text);
-
-						int tw, th;
-						layout.GetPixelSize (out tw, out th);
-						int tl = x - tw / 2;
-						int tt = top + 4;
-						if (tl + tw + 2 >= left + width) tl = left + width - tw - 1;
-						if (tl < left + 1) tl = left + 1;
-						GdkWindow.DrawRectangle (Style.WhiteGC, true, tl - 1, tt - 1, tw + 2, th + 2);
-						GdkWindow.DrawRectangle (Style.BlackGC, false, tl - 2, tt - 2, tw + 3, th + 3);
-						GdkWindow.DrawLayout (gc, tl, tt, layout);
-						layout.Dispose ();
-					}
+				if (cursor.LabelAxis != null) {
+					double minStep = GetMinTickStep (cursor.Dimension);
+					TickEnumerator tenum = cursor.LabelAxis.GetTickEnumerator (minStep);
+					tenum.Init (cursor.Value);
+					text = tenum.CurrentLabel;
 				} else {
-					throw new NotSupportedException ();
+					text = GetValueLabel (cursor.Dimension, cursor.Value);
 				}
+
+				if (text != null && text.Length > 0) {
+					Pango.Layout layout = new Pango.Layout (this.PangoContext);
+					layout.FontDescription = IdeServices.FontService.SansFont.CopyModified (Ide.Gui.Styles.FontScale11);
+					layout.SetMarkup (text);
+
+					int tw, th;
+					layout.GetPixelSize (out tw, out th);
+					int tl = x - tw / 2;
+					int tt = top + 4;
+					if (tl + tw + 2 >= left + width) tl = left + width - tw - 1;
+					if (tl < left + 1) tl = left + 1;
+					cr.SetSourceColor (new Cairo.Color (1, 1, 1));
+					cr.Rectangle (tl - 1, tt - 1, tw + 2, th + 2);
+					cr.Fill ();
+					cr.SetSourceColor (new Cairo.Color (0, 0, 0));
+					cr.LineWidth = 1;
+					cr.Rectangle (tl - 2, tt - 2, tw + 3, th + 3);
+					cr.Stroke ();
+					cr.SetSourceColor (cursor.Color.ToCairoColor ());
+					cr.MoveTo (tl, tt);
+					Pango.CairoHelper.ShowLayout (cr, layout);
+					layout.Dispose ();
+				}
+			} else {
+				throw new NotSupportedException ();
 			}
+		}
+
+		void DrawChartLabel (Cairo.Context cr, int x, int y, Pango.Layout layout)
+		{
+			cr.SetSourceColor (new Cairo.Color (0, 0, 0));
+			cr.MoveTo (x, y);
+			Pango.CairoHelper.ShowLayout (cr, layout);
+		}
+
+		static void DrawChartLine (Cairo.Context cr, int x1, int y1, int x2, int y2)
+		{
+			cr.SetSourceColor (new Cairo.Color (0, 0, 0));
+			cr.LineWidth = 1;
+			cr.MoveTo (x1, y1);
+			cr.LineTo (x2, y2);
+			cr.Stroke ();
 		}
 		
 		void GetPoint (double wx, double wy, out int x, out int y)

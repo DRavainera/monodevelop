@@ -9,7 +9,7 @@
   </PropertyGroup>
   <PropertyGroup Condition=" '$(RunConfiguration)' == 'Default' ">
     <StartAction>Program</StartAction>
-    <StartProgram>..\..\..\..\build\bin\MonoDevelop.exe</StartProgram>
+    <StartProgram>..\..\..\..\build\MonoDevelop.exe</StartProgram>
     <StartArguments>--no-redirect</StartArguments>
     <ExternalConsole>false</ExternalConsole>
   </PropertyGroup>
@@ -17,19 +17,19 @@
     <Reference Include="System.ComponentModel.Composition" />
     <Reference Include="Xamarin.Mac" HintPath="$(RootDirectory)\external\Xamarin.Mac.dll" Private="False" />
     <Reference Include="MonoDevelop.Core">
-      <HintPath>$(RootDirectory)\build\bin\MonoDevelop.Core.dll</HintPath>
+      <HintPath>$(RootDirectory)\build\MonoDevelop.Core.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="MonoDevelop.Ide">
-      <HintPath>$(RootDirectory)\build\bin\MonoDevelop.Ide.dll</HintPath>
+      <HintPath>$(RootDirectory)\build\MonoDevelop.Ide.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="Mono.Addins.Setup">
-      <HintPath>$(RootDirectory)\build\bin\Mono.Addins.Setup.dll</HintPath>
+      <HintPath>$(RootDirectory)\build\Mono.Addins.Setup.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="Mono.Addins">
-      <HintPath>$(RootDirectory)\build\bin\Mono.Addins.dll</HintPath>
+      <HintPath>$(RootDirectory)\build\Mono.Addins.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="MonoDevelop.SourceEditor">
@@ -37,7 +37,7 @@
       <Private>False</Private>
     </Reference>
     <Reference Include="Microsoft.CodeAnalysis.Workspaces">
-      <HintPath>$(RootDirectory)\build\bin\Microsoft.CodeAnalysis.Workspaces.dll</HintPath>
+      <HintPath>$(RootDirectory)\build\Microsoft.CodeAnalysis.Workspaces.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="MonoDevelop.TextEditor">

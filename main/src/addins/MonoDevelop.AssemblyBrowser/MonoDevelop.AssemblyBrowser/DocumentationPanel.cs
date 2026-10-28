@@ -28,6 +28,7 @@ using System;
 using Gtk;
 using Gdk;
 using MonoDevelop.Core;
+using MonoDevelop.Components;
 
 namespace MonoDevelop.AssemblyBrowser
 {
@@ -58,10 +59,11 @@ namespace MonoDevelop.AssemblyBrowser
 			base.OnDestroyed ();
 		}
 
-		protected override bool OnExposeEvent (EventExpose evnt)
+		protected override bool OnDrawn (Cairo.Context cr)
 		{
-			Gdk.Window win = evnt.Window;
-			win.DrawRectangle (Style.BaseGC (string.IsNullOrEmpty (Markup) ? StateType.Insensitive : StateType.Normal), true, evnt.Area);
+			cr.SetSourceColor (this.GetStyleBackgroundColor (string.IsNullOrEmpty (Markup) ? StateType.Insensitive : StateType.Normal).ToCairoColor ());
+			cr.Rectangle (0, 0, Allocation.Width, Allocation.Height);
+			cr.Fill ();
 			int x = 0;
 			int y = 0;
 			if (string.IsNullOrEmpty (Markup)) {
@@ -74,7 +76,11 @@ namespace MonoDevelop.AssemblyBrowser
 				layout.SetMarkup (Markup);
 			}
 			layout.Width = Allocation.Width * (int)Pango.Scale.PangoScale;
-			win.DrawLayout (Style.TextGC (StateType.Normal), x, y, layout);
+			cr.Save ();
+			cr.Translate (x, y);
+			cr.SetSourceColor (this.GetStyleColor (StateType.Normal).ToCairoColor ());
+			Pango.CairoHelper.ShowLayout (cr, layout);
+			cr.Restore ();
 			return true;
 		}
 		

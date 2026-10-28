@@ -155,7 +155,7 @@ namespace Stetic {
 
 		public static Stetic.Wrapper.Widget Paste (IProject project, Gtk.SelectionData seldata)
 		{
-			if (seldata.Type != ApplicationXGladeAtom)
+			if (seldata.DataType != ApplicationXGladeAtom)
 				return null;
 			string data = System.Text.Encoding.UTF8.GetString (seldata.Data);
 

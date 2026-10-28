@@ -200,7 +200,7 @@ namespace Stetic.Wrapper {
 			imageWrapper.Pixbuf = imageInfo;
 		}
 
-		string stockId = Gtk.Stock.Ok;
+		string stockId = StockCompat.Ok;
 		public string StockId {
 			get {
 				return stockId;
@@ -215,7 +215,7 @@ namespace Stetic.Wrapper {
 						sid = sid.Substring (6);
 					button.Label = stockId = sid;
 					button.UseStock = true;
-					Gtk.StockItem item = Gtk.Stock.Lookup (sid);
+					Gtk.StockItem item = StockCompat.Lookup (sid);
 					if (item.StockId == sid) {
 						label = item.Label;
 						useUnderline = true;
@@ -273,19 +273,19 @@ namespace Stetic.Wrapper {
 
 		int ResponseIdForStockId (string stockId)
 		{
-			if (stockId == Gtk.Stock.Ok)
+			if (stockId == StockCompat.Ok)
 				return (int)Gtk.ResponseType.Ok;
-			else if (stockId == Gtk.Stock.Cancel)
+			else if (stockId == StockCompat.Cancel)
 				return (int)Gtk.ResponseType.Cancel;
-			else if (stockId == Gtk.Stock.Close)
+			else if (stockId == StockCompat.Close)
 				return (int)Gtk.ResponseType.Close;
-			else if (stockId == Gtk.Stock.Yes)
+			else if (stockId == StockCompat.Yes)
 				return (int)Gtk.ResponseType.Yes;
-			else if (stockId == Gtk.Stock.No)
+			else if (stockId == StockCompat.No)
 				return (int)Gtk.ResponseType.No;
-			else if (stockId == Gtk.Stock.Apply)
+			else if (stockId == StockCompat.Apply)
 				return (int)Gtk.ResponseType.Apply;
-			else if (stockId == Gtk.Stock.Help)
+			else if (stockId == StockCompat.Help)
 				return (int)Gtk.ResponseType.Help;
 			else
 				return 0;

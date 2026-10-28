@@ -26,7 +26,7 @@ namespace MonoDevelop.Deployment
 	class DeployDirectoryInfoEditorWidget : Gtk.HBox, IPropertyEditor {
 
 		Gtk.EventBox ebox;
-		Gtk.ComboBoxEntry combo;
+		Gtk.ComboBoxText combo;
 		DeployDirectoryInfo[] values;
 
 		public DeployDirectoryInfoEditorWidget () : base (false, 0)
@@ -40,11 +40,8 @@ namespace MonoDevelop.Deployment
 			ebox.Show ();
 			PackStart (ebox, true, true, 0);
 
-			combo = Gtk.ComboBoxEntry.NewText ();
+			combo = new Gtk.ComboBoxText ();
 			combo.Changed += combo_Changed;
-			combo.Entry.IsEditable = false;
-			combo.Entry.HasFrame = false;
-			combo.Entry.HeightRequest = combo.SizeRequest ().Height;
 			combo.Show ();
 			ebox.Add (combo);
 

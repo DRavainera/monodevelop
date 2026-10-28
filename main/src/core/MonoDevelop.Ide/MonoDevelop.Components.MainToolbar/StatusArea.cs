@@ -145,7 +145,7 @@ namespace MonoDevelop.Components.MainToolbar
 			ctxHandler = new StatusBarContextHandler (this);
 			VisibleWindow = false;
 			NoShowAll = true;
-			WidgetFlags |= Gtk.WidgetFlags.AppPaintable;
+			AppPaintable = true;
 
 			statusIconBox.BorderWidth = 0;
 			statusIconBox.Spacing = 3;
@@ -387,27 +387,29 @@ namespace MonoDevelop.Components.MainToolbar
 		protected override void OnRealized ()
 		{
 			base.OnRealized ();
-			ModifyText (StateType.Normal, Styles.StatusBarTextColor.ToGdkColor ());
-			ModifyFg (StateType.Normal, Styles.StatusBarTextColor.ToGdkColor ());
+			OverrideColor (StateFlags.Normal, Styles.StatusBarTextColor.ToGdkColor ().ToRgba ());
 		}
 
-		protected override void OnSizeRequested (ref Requisition requisition)
+		protected override void OnGetPreferredWidth (out int minimum, out int natural)
 		{
-			requisition.Height = 32;
-			base.OnSizeRequested (ref requisition);
+			base.OnGetPreferredWidth (out minimum, out natural);
 		}
 
-		protected override bool OnExposeEvent (Gdk.EventExpose evnt)
+		protected override void OnGetPreferredHeight (out int minimum, out int natural)
 		{
-			using (var context = Gdk.CairoHelper.Create (evnt.Window)) {
-				renderArg.Allocation            = Allocation;
-				renderArg.ChildAllocation       = messageBox.Allocation;
-				renderArg.MousePosition         = tracker.MousePosition;
-				renderArg.Pango                 = PangoContext;
+			base.OnGetPreferredHeight (out minimum, out natural);
+			minimum = natural = 32;
+		}
 
-				theme.Render (context, renderArg, this);
-			}
-			return base.OnExposeEvent (evnt);
+		protected override bool OnDrawn (Cairo.Context cr)
+		{
+			renderArg.Allocation            = Allocation;
+			renderArg.ChildAllocation       = messageBox.Allocation;
+			renderArg.MousePosition         = tracker.MousePosition;
+			renderArg.Pango                 = PangoContext;
+
+			theme.Render (cr, renderArg, this);
+			return base.OnDrawn (cr);
 		}
 
 
@@ -419,7 +421,7 @@ namespace MonoDevelop.Components.MainToolbar
 		{
 			Runtime.AssertMainThread ();
 			StatusIcon icon = new StatusIcon (this, pixbuf);
-			statusIconBox.PackEnd (icon.box);
+			statusIconBox.PackEnd (icon.box, false, false, 0);
 			statusIconBox.ShowAll ();
 			icons.Add (icon);
 			return icon;
@@ -899,29 +901,26 @@ namespace MonoDevelop.Components.MainToolbar
 
 	class StatusAreaSeparator: HBox
 	{
-		protected override bool OnExposeEvent (Gdk.EventExpose evnt)
+		protected override bool OnDrawn (Cairo.Context cr)
 		{
-			using (var ctx = Gdk.CairoHelper.Create (this.GdkWindow)) {
-				var alloc = Allocation;
-				//alloc.Inflate (0, -2);
-				ctx.Rectangle (alloc.X, alloc.Y, 1, alloc.Height);
+			var alloc = Allocation;
+			cr.Rectangle (0, 0, 1, alloc.Height);
 
-				// FIXME: VV: Remove gradient features
-				using (Cairo.LinearGradient gr = new LinearGradient (alloc.X, alloc.Y, alloc.X, alloc.Y + alloc.Height)) {
-					gr.AddColorStop (0, new Cairo.Color (0, 0, 0, 0));
-					gr.AddColorStop (0.5, new Cairo.Color (0, 0, 0, 0.2));
-					gr.AddColorStop (1, new Cairo.Color (0, 0, 0, 0));
-					ctx.SetSource (gr);
-					ctx.Fill ();
-				}
+			// FIXME: VV: Remove gradient features
+			using (Cairo.LinearGradient gr = new LinearGradient (0, 0, 0, alloc.Height)) {
+				gr.AddColorStop (0, new Cairo.Color (0, 0, 0, 0));
+				gr.AddColorStop (0.5, new Cairo.Color (0, 0, 0, 0.2));
+				gr.AddColorStop (1, new Cairo.Color (0, 0, 0, 0));
+				cr.SetSource (gr);
+				cr.Fill ();
 			}
 			return true;
 		}
 
-		protected override void OnSizeRequested (ref Requisition requisition)
+		protected override void OnGetPreferredWidth (out int minimum, out int natural)
 		{
-			base.OnSizeRequested (ref requisition);
-			requisition.Width = 1;
+			base.OnGetPreferredWidth (out minimum, out natural);
+			minimum = natural = 1;
 		}
 	}
 }

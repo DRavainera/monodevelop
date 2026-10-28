@@ -90,9 +90,8 @@ namespace MonoDevelop.Deployment
 			this.Modal = true;
 			this.BorderWidth = ((uint)(6));
 			this.Resizable = false;
-			this.AllowGrow = false;
 			// Internal child MonoDevelop.Deployment.FileReplaceDialog.VBox
-			global::Gtk.VBox w1 = this.VBox;
+			global::Gtk.Box w1 = this.ContentArea;
 			w1.Name = "dialog1_VBox";
 			w1.Spacing = 4;
 			w1.BorderWidth = ((uint)(2));
@@ -175,7 +174,7 @@ namespace MonoDevelop.Deployment
 			this.radioReplace.Name = "radioReplace";
 			this.radioReplace.DrawIndicator = true;
 			this.radioReplace.UseUnderline = true;
-			this.radioReplace.Group = new global::GLib.SList (global::System.IntPtr.Zero);
+			
 			this.radioReplace.Remove (this.radioReplace.Child);
 			// Container child radioReplace.Gtk.Container+ContainerChild
 			this.vbox5 = new global::Gtk.VBox ();
@@ -267,7 +266,7 @@ namespace MonoDevelop.Deployment
 			this.radioKeep.Name = "radioKeep";
 			this.radioKeep.DrawIndicator = true;
 			this.radioKeep.UseUnderline = true;
-			this.radioKeep.Group = this.radioReplace.Group;
+			this.radioKeep.Group = new global::Gtk.RadioButton[] { this.radioReplace };
 			this.radioKeep.Remove (this.radioKeep.Child);
 			// Container child radioKeep.Gtk.Container+ContainerChild
 			this.vbox6 = new global::Gtk.VBox ();
@@ -358,7 +357,7 @@ namespace MonoDevelop.Deployment
 			this.radioNewest.Name = "radioNewest";
 			this.radioNewest.DrawIndicator = true;
 			this.radioNewest.UseUnderline = true;
-			this.radioNewest.Group = this.radioReplace.Group;
+			this.radioNewest.Group = new global::Gtk.RadioButton[] { this.radioReplace };
 			this.radioNewest.Remove (this.radioNewest.Child);
 			// Container child radioNewest.Gtk.Container+ContainerChild
 			this.vbox7 = new global::Gtk.VBox ();
@@ -418,7 +417,7 @@ namespace MonoDevelop.Deployment
 			global::Gtk.Box.BoxChild w37 = ((global::Gtk.Box.BoxChild)(w1 [this.hbox2]));
 			w37.Position = 2;
 			// Internal child MonoDevelop.Deployment.FileReplaceDialog.ActionArea
-			global::Gtk.HButtonBox w38 = this.ActionArea;
+			global::Gtk.ButtonBox w38 = this.ActionArea;
 			w38.Name = "dialog1_ActionArea";
 			w38.Spacing = 6;
 			w38.BorderWidth = ((uint)(5));

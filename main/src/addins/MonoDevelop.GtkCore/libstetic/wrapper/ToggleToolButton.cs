@@ -6,7 +6,7 @@ namespace Stetic.Wrapper {
 
 		public static new Gtk.ToolButton CreateInstance ()
 		{
-			return new Gtk.ToggleToolButton (Gtk.Stock.Bold);
+			return new Gtk.ToggleToolButton (StockCompat.Bold);
 		}
 	}
 }

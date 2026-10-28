@@ -78,7 +78,7 @@ namespace MonoDevelop.GtkCore.Dialogs
 		
 		public string SelectedClass {
 			get {
-				Gtk.TreeModel foo;
+				Gtk.ITreeModel foo;
 				Gtk.TreeIter iter;
 				if (!treeClasses.Selection.GetSelected (out foo, out iter))
 					return null;

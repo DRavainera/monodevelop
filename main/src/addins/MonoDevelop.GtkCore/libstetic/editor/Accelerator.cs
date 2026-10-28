@@ -24,7 +24,7 @@ namespace Stetic.Editor {
 		public Accelerator ()
 		{
 			entry = new Gtk.Entry ();
-			clearButton = new Gtk.Button (new Gtk.Image (Gtk.Stock.Clear, Gtk.IconSize.Menu));
+			clearButton = new Gtk.Button (new Gtk.Image (StockCompat.Clear, Gtk.IconSize.Menu));
 			PackStart (entry, true, true, 0);
 			PackStart (clearButton, false, false, 3);
 			clearButton.Clicked += delegate (object s, EventArgs args) {
@@ -163,8 +163,8 @@ namespace Stetic.Editor {
 			this.SkipTaskbarHint = true;
 			this.WindowPosition = Gtk.WindowPosition.CenterOnParent;
 			Gtk.Frame f = new Gtk.Frame ();
-			f.Shadow = Gtk.ShadowType.Out;
-			this.VBox.PackStart (f, true, true, 0);
+			f.ShadowType = Gtk.ShadowType.Out;
+			this.ContentArea.PackStart (f, true, true, 0);
 			Gtk.Label lab = new Gtk.Label (Catalog.GetString ("Press the key combination you want to assign to the accelerator..."));
 			lab.Xpad = 12;
 			lab.Ypad = 12;

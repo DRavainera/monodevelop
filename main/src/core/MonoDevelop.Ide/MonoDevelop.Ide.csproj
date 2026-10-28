@@ -1,4 +1,4 @@
-<Project DefaultTargets="Build" Sdk="Microsoft.NET.Sdk" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+﻿<Project DefaultTargets="Build" Sdk="Microsoft.NET.Sdk" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <Import Project="..\..\..\MonoDevelop.props" />
   <PropertyGroup>
     <MDFrameworkVersion>v10.0</MDFrameworkVersion>
@@ -22,7 +22,8 @@
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
     <ProjectGuid>{27096E7F-C91C-4AC6-B289-6897A701DF21}</ProjectGuid>
     <TargetFrameworkVersion>$(MDFrameworkVersion)</TargetFrameworkVersion>
-    <OutputPath>..\..\..\build\bin</OutputPath>
+    <OutputPath>..\..\..\build</OutputPath>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
@@ -41,10 +42,6 @@
     </Reference>
     <Reference Include="PresentationCore" Condition=" '$(Configuration)' == 'DebugWin32' Or '$(Configuration)' == 'ReleaseWin32' " />
     <Reference Include="PresentationFramework" Condition=" '$(Configuration)' == 'DebugWin32' Or '$(Configuration)' == 'ReleaseWin32' " />
-    <Reference Include="Mono.Cairo">
-      <HintPath>$(MonoFrameworkNet45Directory)/Mono.Cairo.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
     <Reference Include="System.ComponentModel.Composition">
       <HintPath>$(NuGetPackageRoot)system.componentmodel.composition/7.0.0/lib/net6.0/System.ComponentModel.Composition.dll</HintPath>
       <Private>False</Private>

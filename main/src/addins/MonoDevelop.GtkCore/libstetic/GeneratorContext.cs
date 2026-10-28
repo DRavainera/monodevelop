@@ -324,132 +324,132 @@ namespace Stetic
 				);
 				
 				CodeStatementCollection stms = cond.FalseStatements;
+				CodeExpression surfaceExp = new CodeVariableReferenceExpression ("surface");
+				CodeExpression crExp = new CodeVariableReferenceExpression ("cr");
 				
 				stms.Add (
-					new CodeVariableDeclarationStatement (typeof(Gdk.Pixmap), "pmap", 
+					new CodeVariableDeclarationStatement (new CodeTypeReference ("Cairo.ImageSurface"), "surface",
 						new CodeObjectCreateExpression (
-							typeof(Gdk.Pixmap),
-							new CodePropertyReferenceExpression (
-								new CodePropertyReferenceExpression (
-									new CodeTypeReferenceExpression (typeof(Gdk.Screen)),
-									"Default"
-								),
-								"RootWindow"
-							),
+							new CodeTypeReference ("Cairo.ImageSurface"),
+							new CodeFieldReferenceExpression (new CodeTypeReferenceExpression (new CodeTypeReference ("Cairo.Format")), "Argb32"),
 							szExp,
 							szExp
 						)
 					)
 				);
 				stms.Add (
-					new CodeVariableDeclarationStatement (typeof(Gdk.GC), "gc", 
-						new CodeObjectCreateExpression (typeof(Gdk.GC), pmapExp)
-					)
-				);
-				stms.Add (
-					new CodeAssignStatement (
-						new CodePropertyReferenceExpression (
-							gcExp,
-							"RgbFgColor"
-						),
+					new CodeVariableDeclarationStatement (new CodeTypeReference ("Cairo.Context"), "cr",
 						new CodeObjectCreateExpression (
-							typeof(Gdk.Color),
-							new CodePrimitiveExpression (255),
-							new CodePrimitiveExpression (255),
-							new CodePrimitiveExpression (255)
+							new CodeTypeReference ("Cairo.Context"),
+							surfaceExp
 						)
 					)
 				);
 				stms.Add (
 					new CodeMethodInvokeExpression (
-						pmapExp,
-						"DrawRectangle",
-						gcExp,
-						new CodePrimitiveExpression (true),
+						crExp,
+						"SetSourceColor",
+						new CodeObjectCreateExpression (
+							new CodeTypeReference ("Cairo.Color"),
+							new CodePrimitiveExpression (1),
+							new CodePrimitiveExpression (1),
+							new CodePrimitiveExpression (1)
+						)
+					)
+				);
+				stms.Add (
+					new CodeMethodInvokeExpression (
+						crExp,
+						"Rectangle",
 						zeroExp,
 						zeroExp,
 						szExp,
 						szExp
 					)
 				);
+				stms.Add (new CodeMethodInvokeExpression (crExp, "Fill"));
 				stms.Add (
-					new CodeAssignStatement (
-						new CodePropertyReferenceExpression (
-							gcExp,
-							"RgbFgColor"
-						),
+					new CodeMethodInvokeExpression (
+						crExp,
+						"SetSourceColor",
 						new CodeObjectCreateExpression (
-							typeof(Gdk.Color),
+							new CodeTypeReference ("Cairo.Color"),
 							zeroExp, zeroExp, zeroExp
 						)
 					)
 				);
 				stms.Add (
+					new CodeAssignStatement (
+						new CodePropertyReferenceExpression (crExp, "LineWidth"),
+						new CodePrimitiveExpression (1)
+					)
+				);
+				stms.Add (
 					new CodeMethodInvokeExpression (
-						pmapExp,
-						"DrawRectangle",
-						gcExp,
-						new CodePrimitiveExpression (false),
-						zeroExp,
-						zeroExp,
+						crExp,
+						"Rectangle",
+						new CodePrimitiveExpression (0.5),
+						new CodePrimitiveExpression (0.5),
 						szM1Exp,
 						szM1Exp
 					)
 				);
+				stms.Add (new CodeMethodInvokeExpression (crExp, "Stroke"));
 				stms.Add (
 					new CodeMethodInvokeExpression (
-						gcExp,
-						"SetLineAttributes",
-						new CodePrimitiveExpression (3),
-						new CodeFieldReferenceExpression (new CodeTypeReferenceExpression (typeof(Gdk.LineStyle)), "Solid"),
-						new CodeFieldReferenceExpression (new CodeTypeReferenceExpression (typeof(Gdk.CapStyle)), "Round"),
-						new CodeFieldReferenceExpression (new CodeTypeReferenceExpression (typeof(Gdk.JoinStyle)), "Round")
-					)
-				);
-				stms.Add (
-					new CodeAssignStatement (
-						new CodePropertyReferenceExpression (
-							gcExp,
-							"RgbFgColor"
-						),
+						crExp,
+						"SetSourceColor",
 						new CodeObjectCreateExpression (
-							typeof(Gdk.Color),
-							new CodePrimitiveExpression (255),
-							zeroExp,
-							zeroExp
+							new CodeTypeReference ("Cairo.Color"),
+							new CodePrimitiveExpression (1), zeroExp, zeroExp
 						)
 					)
 				);
 				stms.Add (
+					new CodeAssignStatement (
+						new CodePropertyReferenceExpression (crExp, "LineWidth"),
+						new CodePrimitiveExpression (3)
+					)
+				);
+				stms.Add (
 					new CodeMethodInvokeExpression (
-						pmapExp,
-						"DrawLine",
-						gcExp,
+						crExp,
+						"MoveTo",
 						mgExp,
-						mgExp,
+						mgExp
+					)
+				);
+				stms.Add (
+					new CodeMethodInvokeExpression (
+						crExp,
+						"LineTo",
 						new CodeBinaryOperatorExpression (szM1Exp, CodeBinaryOperatorType.Subtract, mgExp),
 						new CodeBinaryOperatorExpression (szM1Exp, CodeBinaryOperatorType.Subtract, mgExp)
 					)
 				);
 				stms.Add (
 					new CodeMethodInvokeExpression (
-						pmapExp,
-						"DrawLine",
-						gcExp,
+						crExp,
+						"MoveTo",
 						new CodeBinaryOperatorExpression (szM1Exp, CodeBinaryOperatorType.Subtract, mgExp),
-						mgExp,
+						mgExp
+					)
+				);
+				stms.Add (
+					new CodeMethodInvokeExpression (
+						crExp,
+						"LineTo",
 						mgExp,
 						new CodeBinaryOperatorExpression (szM1Exp, CodeBinaryOperatorType.Subtract, mgExp)
 					)
 				);
+				stms.Add (new CodeMethodInvokeExpression (crExp, "Stroke"));
 				stms.Add (
 					new CodeMethodReturnStatement (
-						new CodeMethodInvokeExpression (
-							new CodeTypeReferenceExpression (typeof(Gdk.Pixbuf)),
-							"FromDrawable",
-							pmapExp,
-							new CodePropertyReferenceExpression (pmapExp, "Colormap"),
-							zeroExp, zeroExp, zeroExp, zeroExp, szExp, szExp
+						new CodeObjectCreateExpression (
+							typeof(Gdk.Pixbuf),
+							surfaceExp,
+							zeroExp, zeroExp, szExp, szExp
 						)
 					)
 				);

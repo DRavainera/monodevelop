@@ -7,7 +7,6 @@ namespace Stetic {
 		public MessageDialog ()
 		{
 			Resizable = false;
-			HasSeparator = false;
 			BorderWidth = 12;
 
 			label = new Gtk.Label ();
@@ -22,10 +21,10 @@ namespace Stetic {
 			secondaryLabel.UseMarkup = true;
 			secondaryLabel.SetAlignment (0.0f, 0.0f);
 
-			icon = new Gtk.Image (Gtk.Stock.DialogInfo, Gtk.IconSize.Dialog);
+			icon = new Gtk.Image (StockCompat.DialogInfo, Gtk.IconSize.Dialog);
 			icon.SetAlignment (0.5f, 0.0f);
 
-			Gtk.StockItem item = Gtk.Stock.Lookup (icon.Stock);
+			Gtk.StockItem item = StockCompat.Lookup (icon.Stock);
 			Title = item.Label;
 
 			Gtk.HBox hbox = new Gtk.HBox (false, 12);
@@ -37,7 +36,7 @@ namespace Stetic {
 			hbox.PackStart (icon, false, false, 0);
 			hbox.PackStart (vbox, true, true, 0);
 
-			VBox.PackStart (hbox, false, false, 0);
+			ContentArea.PackStart (hbox, false, false, 0);
 			hbox.ShowAll ();
 
 			Buttons = Gtk.ButtonsType.OkCancel;
@@ -48,30 +47,30 @@ namespace Stetic {
 
 		public Gtk.MessageType MessageType {
 			get {
-				if (icon.Stock == Gtk.Stock.DialogInfo)
+				if (icon.Stock == StockCompat.DialogInfo)
 					return Gtk.MessageType.Info;
-				else if (icon.Stock == Gtk.Stock.DialogQuestion)
+				else if (icon.Stock == StockCompat.DialogQuestion)
 					return Gtk.MessageType.Question;
-				else if (icon.Stock == Gtk.Stock.DialogWarning)
+				else if (icon.Stock == StockCompat.DialogWarning)
 					return Gtk.MessageType.Warning;
 				else
 					return Gtk.MessageType.Error;
 			}
 			set {
-				Gtk.StockItem item = Gtk.Stock.Lookup (icon.Stock);
+				Gtk.StockItem item = StockCompat.Lookup (icon.Stock);
 				bool setTitle = (Title == "") || (Title == item.Label);
 
 				if (value == Gtk.MessageType.Info)
-					icon.Stock = Gtk.Stock.DialogInfo;
+					icon.Stock = StockCompat.DialogInfo;
 				else if (value == Gtk.MessageType.Question)
-					icon.Stock = Gtk.Stock.DialogQuestion;
+					icon.Stock = StockCompat.DialogQuestion;
 				else if (value == Gtk.MessageType.Warning)
-					icon.Stock = Gtk.Stock.DialogWarning;
+					icon.Stock = StockCompat.DialogWarning;
 				else
-					icon.Stock = Gtk.Stock.DialogError;
+					icon.Stock = StockCompat.DialogError;
 
 				if (setTitle) {
-					item = Gtk.Stock.Lookup (icon.Stock);
+					item = StockCompat.Lookup (icon.Stock);
 					Title = item.Label;
 				}
 			}
@@ -114,25 +113,25 @@ namespace Stetic {
 					break;
 
 				case Gtk.ButtonsType.Ok:
-					AddButton (Gtk.Stock.Ok, Gtk.ResponseType.Ok);
+					AddButton (StockCompat.Ok, Gtk.ResponseType.Ok);
 					break;
 
 				case Gtk.ButtonsType.Close:
-					AddButton (Gtk.Stock.Close, Gtk.ResponseType.Close);
+					AddButton (StockCompat.Close, Gtk.ResponseType.Close);
 					break;
 
 				case Gtk.ButtonsType.Cancel:
-					AddButton (Gtk.Stock.Cancel, Gtk.ResponseType.Cancel);
+					AddButton (StockCompat.Cancel, Gtk.ResponseType.Cancel);
 					break;
 
 				case Gtk.ButtonsType.YesNo:
-					AddButton (Gtk.Stock.No, Gtk.ResponseType.No);
-					AddButton (Gtk.Stock.Yes, Gtk.ResponseType.Yes);
+					AddButton (StockCompat.No, Gtk.ResponseType.No);
+					AddButton (StockCompat.Yes, Gtk.ResponseType.Yes);
 					break;
 
 				case Gtk.ButtonsType.OkCancel:
-					AddButton (Gtk.Stock.Cancel, Gtk.ResponseType.Cancel);
-					AddButton (Gtk.Stock.Ok, Gtk.ResponseType.Ok);
+					AddButton (StockCompat.Cancel, Gtk.ResponseType.Cancel);
+					AddButton (StockCompat.Ok, Gtk.ResponseType.Ok);
 					break;
 				}
 			}

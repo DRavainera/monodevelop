@@ -17,9 +17,10 @@
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
     <ProjectGuid>{25FBDD35-1CA0-4BED-93F6-927FAF33F96B}</ProjectGuid>
     <TargetFrameworkVersion>$(MDFrameworkVersion)</TargetFrameworkVersion>
-    <TestRunnerCommand>..\..\..\..\build\bin\mdtool.exe</TestRunnerCommand>
+    <TestRunnerCommand>..\..\..\..\build\mdtool.exe</TestRunnerCommand>
     <TestRunnerArgs>run-md-tests</TestRunnerArgs>
     <OutputPath>..\..\..\..\build\tests</OutputPath>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <RARResolveFromOutputDirectory>true</RARResolveFromOutputDirectory>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' " />

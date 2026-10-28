@@ -10,13 +10,18 @@ namespace Stetic.Editor {
 			height = 16;
 		}
 		
-		public override void Render (Gdk.Drawable window, Gdk.Rectangle bounds, Gtk.StateType state)
+		public override void Render (Cairo.Context cr, Gdk.Rectangle bounds, Gtk.StateType state)
 		{
-			using (Gdk.GC gc = new Gdk.GC (window)) {
-				gc.RgbFgColor = (Gdk.Color)Value;
-				window.DrawRectangle (gc, true, bounds.X, bounds.Y, bounds.Width - 1, bounds.Height - 1);
-				window.DrawRectangle (Container.Style.BlackGC, false, bounds.X, bounds.Y, bounds.Width - 1, bounds.Height - 1);
-			}
+			Gdk.Color c = (Gdk.Color) Value;
+			cr.SetSourceColor (new Cairo.Color ((float) c.Red / 65535f, (float) c.Green / 65535f, (float) c.Blue / 65535f));
+			cr.Rectangle (bounds.X, bounds.Y, bounds.Width - 1, bounds.Height - 1);
+			cr.Fill ();
+			
+			Gdk.RGBA border = Container.StyleContext.GetColor (ToStateFlags (state));
+			cr.SetSourceColor (new Cairo.Color ((float) border.Red, (float) border.Green, (float) border.Blue));
+			cr.LineWidth = 1;
+			cr.Rectangle (bounds.X + 0.5, bounds.Y + 0.5, bounds.Width - 2, bounds.Height - 2);
+			cr.Stroke ();
 		}
 		
 		protected override IPropertyEditor CreateEditor (Gdk.Rectangle cell_area, Gtk.StateType state)

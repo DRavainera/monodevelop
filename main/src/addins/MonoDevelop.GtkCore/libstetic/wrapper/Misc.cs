@@ -34,7 +34,7 @@ namespace Stetic.Wrapper
 
 		public static Gtk.Image CreateInstance ()
 		{
-			return new Gtk.Image (Gtk.Stock.MissingImage, Gtk.IconSize.Menu);
+			return new Gtk.Image (StockCompat.MissingImage, Gtk.IconSize.Menu);
 		}
 	}
 }

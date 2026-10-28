@@ -42,7 +42,6 @@ namespace MonoDevelop.VersionControl.Git
 		{
 			this.Build ();
 			this.repo = repo;
-			HasSeparator = false;
 
 			this.UseNativeContextMenus ();
 

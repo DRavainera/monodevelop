@@ -168,7 +168,7 @@ namespace Stetic.Wrapper
 				if (GtkAction.StockId == null)
 					return "";
 
-				Gtk.StockItem item = Gtk.Stock.Lookup (GtkAction.StockId);
+				Gtk.StockItem item = StockCompat.Lookup (GtkAction.StockId);
 				if (item.Label != null)
 					return item.Label;
 

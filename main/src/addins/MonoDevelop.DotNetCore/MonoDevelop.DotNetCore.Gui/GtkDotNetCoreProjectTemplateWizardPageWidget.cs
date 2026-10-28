@@ -50,11 +50,11 @@ namespace MonoDevelop.DotNetCore.Gui
 		EventBox configurationTableEventBox;
 		Table configurationTable;
 
-		ComboBox targetFrameworkComboBox;
+		ComboBoxText targetFrameworkComboBox;
 		Label targetFrameworkInformationLabel;
 		Label targetFrameworkLabel;
 
-		ComboBox authenticationComboBox;
+		ComboBoxText authenticationComboBox;
 		Label authenticationInformationLabel;
 		Label authenticationLabel;
 
@@ -180,8 +180,8 @@ namespace MonoDevelop.DotNetCore.Gui
 			configurationBottomEventBox = new EventBox {
 				Name = "configurationBottomEventBox"
 			};
-			configurationVBox.PackStart (configurationBottomEventBox);
-			mainHBox.PackStart (configurationVBox);
+			configurationVBox.PackStart (configurationBottomEventBox, false, true, 0);
+			mainHBox.PackStart (configurationVBox, false, true, 0);
 
 			// Add the image
 			backgroundLargeImageEventBox = new EventBox {
@@ -191,7 +191,7 @@ namespace MonoDevelop.DotNetCore.Gui
 				Name = "backgroundLargeImageVBox"
 			};
 			backgroundLargeImageEventBox.Add (backgroundLargeImageVBox);
-			mainHBox.PackStart (backgroundLargeImageEventBox);
+			mainHBox.PackStart (backgroundLargeImageEventBox, false, true, 0);
 
 			Add (mainHBox);
 
@@ -204,7 +204,7 @@ namespace MonoDevelop.DotNetCore.Gui
 
 		void AddFrameworkSelection()
 		{
-			targetFrameworkComboBox = ComboBox.NewText ();
+			targetFrameworkComboBox = new ComboBoxText ();
 			targetFrameworkComboBox.WidthRequest = 350;
 			targetFrameworkComboBox.Name = "targetFrameworkComboBox";
 			configurationTable.Attach (targetFrameworkComboBox, 1, 2, 1, 2, AttachOptions.Fill, AttachOptions.Fill, 0, 0);
@@ -232,7 +232,7 @@ namespace MonoDevelop.DotNetCore.Gui
 
 		void AddAuthenticationSelection(uint primaryRow)
 		{
-			authenticationComboBox = ComboBox.NewText ();
+			authenticationComboBox = new ComboBoxText ();
 			authenticationComboBox.WidthRequest = 350;
 			authenticationComboBox.Name = "authenticationComboBox";
 			configurationTable.Attach (authenticationComboBox, 1, 2, primaryRow, primaryRow + 1, AttachOptions.Fill, AttachOptions.Fill, 0, 0);

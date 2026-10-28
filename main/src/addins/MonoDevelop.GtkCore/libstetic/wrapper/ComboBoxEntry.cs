@@ -5,9 +5,9 @@ namespace Stetic.Wrapper {
 
 	public class ComboBoxEntry : ComboBox {
 
-		public static new Gtk.ComboBoxEntry CreateInstance ()
+		public static new Gtk.ComboBox CreateInstance ()
 		{
-			Gtk.ComboBoxEntry c = Gtk.ComboBoxEntry.NewText ();
+			Gtk.ComboBox c = Gtk.ComboBox.NewWithEntry ();
 			// Make sure all children are created, so the mouse events can be
 			// bound and the widget can be selected.
 			c.EnsureStyle ();
@@ -22,8 +22,8 @@ namespace Stetic.Wrapper {
 		{
 			if (IsTextCombo) {
 				return new CodeMethodInvokeExpression (
-					new CodeTypeReferenceExpression (new CodeTypeReference ("Gtk.ComboBoxEntry", CodeTypeReferenceOptions.GlobalReference)),
-					"NewText"
+					new CodeTypeReferenceExpression (new CodeTypeReference ("Gtk.ComboBox", CodeTypeReferenceOptions.GlobalReference)),
+					"NewWithEntry"
 				);
 			} else
 				return base.GenerateObjectCreation (ctx);

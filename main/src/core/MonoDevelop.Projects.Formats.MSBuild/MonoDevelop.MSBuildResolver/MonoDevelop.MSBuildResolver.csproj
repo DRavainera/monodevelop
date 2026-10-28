@@ -12,7 +12,8 @@
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
     <ProjectGuid>{BD432AE0-B262-4F63-A695-7B86D11B644F}</ProjectGuid>
     <!-- this is loaded by MSBuild, so framework should match MSBuild -->
-    <OutputPath>..\..\..\..\build\bin\MSBuild</OutputPath>
+    <OutputPath>..\..\..\..\build\MSBuild</OutputPath>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <DefineConstants>PUBLIC_API</DefineConstants>
     <PlatformTarget>x64</PlatformTarget>
   </PropertyGroup>

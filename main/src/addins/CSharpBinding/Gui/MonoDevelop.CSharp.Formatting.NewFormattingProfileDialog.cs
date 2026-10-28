@@ -27,7 +27,7 @@ namespace MonoDevelop.CSharp.Formatting
 			this.WindowPosition = ((global::Gtk.WindowPosition)(4));
 			this.BorderWidth = ((uint)(6));
 			// Internal child MonoDevelop.CSharp.Formatting.NewFormattingProfileDialog.VBox
-			global::Gtk.VBox w1 = this.VBox;
+			global::Gtk.Box w1 = this.ContentArea;
 			w1.Name = "dialog1_VBox";
 			w1.Spacing = 6;
 			w1.BorderWidth = ((uint)(2));
@@ -69,7 +69,7 @@ namespace MonoDevelop.CSharp.Formatting
 			w4.Expand = false;
 			w4.Fill = false;
 			// Container child vbox4.Gtk.Box+BoxChild
-			this.comboboxInitFrom = global::Gtk.ComboBox.NewText ();
+			this.comboboxInitFrom = new global::Gtk.ComboBox ();
 			this.comboboxInitFrom.Name = "comboboxInitFrom";
 			this.vbox4.Add (this.comboboxInitFrom);
 			global::Gtk.Box.BoxChild w5 = ((global::Gtk.Box.BoxChild)(this.vbox4 [this.comboboxInitFrom]));
@@ -82,7 +82,7 @@ namespace MonoDevelop.CSharp.Formatting
 			w6.Expand = false;
 			w6.Fill = false;
 			// Internal child MonoDevelop.CSharp.Formatting.NewFormattingProfileDialog.ActionArea
-			global::Gtk.HButtonBox w7 = this.ActionArea;
+			global::Gtk.ButtonBox w7 = this.ActionArea;
 			w7.Name = "dialog1_ActionArea";
 			w7.Spacing = 10;
 			w7.BorderWidth = ((uint)(5));

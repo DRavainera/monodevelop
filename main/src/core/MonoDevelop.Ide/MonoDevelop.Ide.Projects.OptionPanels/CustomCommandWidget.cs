@@ -83,7 +83,7 @@ namespace MonoDevelop.Ide.Projects.OptionPanels
 			
 			this.entry = entry;
 			UpdateControls ();
-			this.WidgetFlags |= Gtk.WidgetFlags.NoShowAll;
+			NoShowAll = true;
 			
 			StringTagModelDescription tagModel;
 			if (entry is SolutionFolderItem)
@@ -190,7 +190,7 @@ namespace MonoDevelop.Ide.Projects.OptionPanels
 						cmd = new CustomCommand ();
 						cmd.Type = supportedTypes [comboType.Active - 1];
 						updating = true;
-						comboType.RemoveText (0);
+						comboType.Remove (0);
 						updating = false;
 						if (CommandCreated != null)
 							CommandCreated (this, EventArgs.Empty);

@@ -46,7 +46,7 @@ namespace Stetic
 			RootWidget = rootWidget;
 		}
 		
-		public override void Dispose ()
+		protected override void Dispose (bool disposing)
 		{
 			if (disposed)
 				return;
@@ -55,7 +55,7 @@ namespace Stetic
 			combo = null;
 			RootWidget = null;
 			Clear ();
-			base.Dispose ();
+			base.Dispose (disposing);
 		}
 		
 		public bool AllowWidgetBinding {

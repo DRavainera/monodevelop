@@ -222,7 +222,7 @@ namespace MonoDevelop.Components
 			return base.OnEnterNotifyEvent (evnt);
 		}
 
-		internal class ListWidget: DrawingArea
+		internal class ListWidget: DrawingArea, Gtk.IScrollable
 		{
 			const int leftXAlignment = 1;
 			const int padding = 4;
@@ -431,8 +431,8 @@ namespace MonoDevelop.Components
 			int curMouseY;
 			protected override bool OnMotionNotifyEvent (Gdk.EventMotion evnt)
 			{
-				int winWidth, winHeight;
-				GdkWindow.GetSize (out winWidth, out winHeight);
+				int winWidth = GdkWindow.Width;
+				int winHeight = GdkWindow.Height;
 				curMouseY = (int)evnt.Y;
 				Selection = GetRowByPosition (curMouseY);
 				
@@ -452,17 +452,16 @@ namespace MonoDevelop.Components
 				return base.OnScrollEvent (evnt);
 			}
 
-			protected override bool OnExposeEvent (Gdk.EventExpose evnt)
+			protected override bool OnDrawn (Cairo.Context cr)
 			{
-				base.OnExposeEvent (evnt);
-				DrawList ();
+				base.OnDrawn (cr);
+				DrawList (cr);
 				return false;
 			}
 
-			void DrawList ()
+			void DrawList (Cairo.Context cr)
 			{
-				int winWidth, winHeight;
-				GdkWindow.GetSize (out winWidth, out winHeight);
+				int winWidth = GdkWindow.Width, winHeight = GdkWindow.Height;
 
 				int lineWidth = winWidth - leftXAlignment * 2;
 				const int xpos = leftXAlignment + padding;
@@ -487,25 +486,31 @@ namespace MonoDevelop.Components
 					
 					if (n == selection) {
 						if (!disableSelection) {
-							GdkWindow.DrawRectangle (Style.BaseGC (StateType.Selected), 
-								true, leftXAlignment, ypos, lineWidth, rowHeight);
-							GdkWindow.DrawLayout (Style.TextGC (StateType.Selected), 
-							                      xpos + iconWidth + iconTextDistance, typos, layout);
+							cr.SetSourceColor (this.GetStyleBackgroundColor (StateType.Selected).ToCairoColor ());
+							cr.Rectangle (leftXAlignment, ypos, lineWidth, rowHeight);
+							cr.Fill ();
+							cr.SetSourceColor (this.GetStyleColor (StateType.Selected).ToCairoColor ());
+							cr.MoveTo (xpos + iconWidth + iconTextDistance, typos);
+							Pango.CairoHelper.ShowLayout (cr, layout);
 							if (icon != null)
 								icon = icon.WithStyles ("sel");
 						} else {
-							GdkWindow.DrawRectangle (Style.BaseGC (StateType.Selected), 
-								false, leftXAlignment, ypos, lineWidth, rowHeight);
-							GdkWindow.DrawLayout (Style.TextGC (StateType.Normal), 
-							                      xpos + iconWidth + iconTextDistance, typos, layout);
+							cr.SetSourceColor (this.GetStyleBackgroundColor (StateType.Selected).ToCairoColor ());
+							cr.LineWidth = 1;
+							cr.Rectangle (leftXAlignment, ypos, lineWidth, rowHeight);
+							cr.Stroke ();
+							cr.SetSourceColor (this.GetStyleColor (StateType.Normal).ToCairoColor ());
+							cr.MoveTo (xpos + iconWidth + iconTextDistance, typos);
+							Pango.CairoHelper.ShowLayout (cr, layout);
 						}
-					} else
-						GdkWindow.DrawLayout (Style.TextGC (StateType.Normal), 
-						                      xpos + iconWidth + iconTextDistance, typos, layout);
+					} else {
+						cr.SetSourceColor (this.GetStyleColor (StateType.Normal).ToCairoColor ());
+						cr.MoveTo (xpos + iconWidth + iconTextDistance, typos);
+						Pango.CairoHelper.ShowLayout (cr, layout);
+					}
 					
 					if (icon != null) {
-						using (var ctx = Gdk.CairoHelper.Create (this.GdkWindow))
-							ctx.DrawImage (this, icon, xpos, iypos);
+						cr.DrawImage (this, icon, xpos, iypos);
 					}
 					
 					ypos += rowHeight;
@@ -607,8 +612,10 @@ namespace MonoDevelop.Components
 
 			void UpdateStyle ()
 			{
-				if (IsRealized)
-					GdkWindow.Background = Style.Base (StateType.Normal);
+				if (IsRealized) {
+					Gdk.RGBA rgba = StyleContext.GetColor (Gtk.StateFlags.Normal);
+					ModifyBg (StateType.Normal, new Gdk.Color ((byte) (rgba.Red * 255), (byte) (rgba.Green * 255), (byte) (rgba.Blue * 255)));
+				}
 				if (layout != null)
 					layout.Dispose ();
 				layout = new Pango.Layout (PangoContext);
@@ -621,17 +628,28 @@ namespace MonoDevelop.Components
 			Adjustment hAdjustment;
 			Adjustment vAdjustment;
 
-			protected override void OnSetScrollAdjustments (Adjustment hadj, Adjustment vadj)
+			Gtk.Adjustment Gtk.IScrollable.Hadjustment {
+				get { return hAdjustment; }
+				set { hAdjustment = value; }
+			}
+			Gtk.Adjustment Gtk.IScrollable.Vadjustment {
+				get { return vAdjustment; }
+				set {
+					vAdjustment = value;
+					if (vAdjustment != null)
+						vAdjustment.ValueChanged += delegate {
+							if (selection > -1)
+								Selection = GetRowByPosition (curMouseY);
+							QueueDraw ();
+						};
+				}
+			}
+			Gtk.ScrollablePolicy Gtk.IScrollable.HscrollPolicy { get; set; }
+			Gtk.ScrollablePolicy Gtk.IScrollable.VscrollPolicy { get; set; }
+			bool Gtk.IScrollable.GetBorder (out Gtk.Border border)
 			{
-				hAdjustment = hadj;
-				vAdjustment = vadj;
-				if (vAdjustment != null)
-					vAdjustment.ValueChanged += delegate {
-						if (selection > -1)
-							Selection = GetRowByPosition (curMouseY);
-						QueueDraw ();
-					};
-				base.OnSetScrollAdjustments (hadj, vadj);
+				border = default;
+				return false;
 			}
 
 			internal virtual void OnSelectItem (EventArgs e)

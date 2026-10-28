@@ -25,7 +25,7 @@ namespace MonoDevelop.VersionControl.Git
 			this.Title = global::Mono.Unix.Catalog.GetString ("User Information Conflict");
 			this.WindowPosition = ((global::Gtk.WindowPosition)(4));
 			// Internal child MonoDevelop.VersionControl.Git.UserInfoConflictDialog.VBox
-			global::Gtk.VBox w1 = this.VBox;
+			global::Gtk.Box w1 = this.ContentArea;
 			w1.Name = "dialog1_VBox";
 			w1.BorderWidth = ((uint)(2));
 			// Container child dialog1_VBox.Gtk.Box+BoxChild
@@ -52,7 +52,7 @@ namespace MonoDevelop.VersionControl.Git
 			this.radioMD.Active = true;
 			this.radioMD.DrawIndicator = true;
 			this.radioMD.UseUnderline = true;
-			this.radioMD.Group = new global::GLib.SList (global::System.IntPtr.Zero);
+			this.radioMD.Group = new global::Gtk.RadioButton[0];
 			this.vbox2.Add (this.radioMD);
 			global::Gtk.Box.BoxChild w3 = ((global::Gtk.Box.BoxChild)(this.vbox2 [this.radioMD]));
 			w3.Position = 1;
@@ -119,7 +119,7 @@ namespace MonoDevelop.VersionControl.Git
 			w11.Expand = false;
 			w11.Fill = false;
 			// Internal child MonoDevelop.VersionControl.Git.UserInfoConflictDialog.ActionArea
-			global::Gtk.HButtonBox w12 = this.ActionArea;
+			global::Gtk.ButtonBox w12 = this.ActionArea;
 			w12.Name = "dialog1_ActionArea";
 			w12.Spacing = 10;
 			w12.BorderWidth = ((uint)(5));

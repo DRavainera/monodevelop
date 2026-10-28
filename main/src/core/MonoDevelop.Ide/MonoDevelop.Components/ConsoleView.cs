@@ -80,8 +80,8 @@ namespace MonoDevelop.Components
 			item.Show ();
 			sep.Show ();
 			
-			args.Menu.Add (sep);
-			args.Menu.Add (item);
+			((Menu)args.Popup).Add (sep);
+			((Menu)args.Popup).Add (item);
 		}
 
 		void ClearActivated (object sender, EventArgs e)

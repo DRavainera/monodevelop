@@ -288,7 +288,7 @@ namespace MonoDevelop.Components
 		{
 			if (Platform.IsLinux) {
 				var defaultStyle = Gtk.Rc.GetStyle (IdeApp.Workbench.RootWindow);
-				var bgColor = defaultStyle.Background (Gtk.StateType.Normal);
+				var bgColor = defaultStyle.Context.GetBackgroundColor (Gtk.StateFlags.Normal).ToGdkColor ();
 				UserInterfaceTheme = HslColor.Brightness (bgColor) < 0.5 ? Theme.Dark : Theme.Light;
 			}
 

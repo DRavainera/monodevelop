@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Text;
 using Gtk;
+using Cairo;
 using Gdk;
 
 namespace Stetic.Windows
@@ -72,10 +73,24 @@ namespace Stetic.Windows
 			}
 		}
 
-		protected override void OnSizeRequested (ref Requisition requisition)
+		protected override void OnGetPreferredWidth (out int minimum, out int natural)
 		{
-			if (child != null)
-				requisition = child.SizeRequest ();
+			if (child != null) {
+				Requisition req = child.SizeRequest ();
+				minimum = natural = req.Width;
+				return;
+			}
+			minimum = natural = 0;
+		}
+
+		protected override void OnGetPreferredHeight (out int minimum, out int natural)
+		{
+			if (child != null) {
+				Requisition req = child.SizeRequest ();
+				minimum = natural = req.Height;
+				return;
+			}
+			minimum = natural = 0;
 		}
 
 		protected override void OnSizeAllocated (Gdk.Rectangle allocation)
@@ -83,9 +98,9 @@ namespace Stetic.Windows
 			base.OnSizeAllocated (allocation);
 			if (child != null) {
 				if (wtheme != null)
-					child.Allocation = wtheme.GetWindowClientArea (allocation);
+					child.SetAllocation (wtheme.GetWindowClientArea (allocation));
 				else
-					child.Allocation = allocation;
+					child.SetAllocation (allocation);
 			}
 		}
 
@@ -94,16 +109,14 @@ namespace Stetic.Windows
 			base.OnRealized ();
 			wtheme = new WindowsTheme (GdkWindow);
 			if (child != null)
-				child.Allocation = wtheme.GetWindowClientArea (Allocation);
+				child.SetAllocation (wtheme.GetWindowClientArea (Allocation));
 		}
 
-		protected override bool OnExposeEvent (Gdk.EventExpose evnt)
+		protected override bool OnDrawn (Cairo.Context cr)
 		{
-//			Gdk.Rectangle rect = new Gdk.Rectangle (Allocation.X+50, Allocation.Y+50, Allocation.Width - 1, Allocation.Height - 1);
+			bool r = base.OnDrawn (cr);
 			wtheme.DrawWindowFrame (this, caption, Allocation.X, Allocation.Y, Allocation.Width, Allocation.Height);
-			foreach (Widget child in Children)
-				PropagateExpose (child, evnt);
-			return false;
+			return r;
 		}
 	}
 }

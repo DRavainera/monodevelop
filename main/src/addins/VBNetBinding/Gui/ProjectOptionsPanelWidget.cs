@@ -63,12 +63,9 @@ namespace MonoDevelop.VBNetBinding
 				entryMainClass.Sensitive = compileTargetCombo.Active != (int) CompileTarget.Library	&& compileTargetCombo.Active != (int) CompileTarget.Module;
 			};
 
-			store = new Gtk.ListStore (typeof (string));
-			store.AppendValues ("WindowsForms");
-			store.AppendValues ("Windows");
-			store.AppendValues ("Console");
-			txtMyType.Model = store;
-			txtMyType.TextColumn = 0;
+			txtMyType.AppendText ("WindowsForms");
+			txtMyType.AppendText ("Windows");
+			txtMyType.AppendText ("Console");
 			switch (this.project.MyType) {
 			case "WindowsForms":
 				txtMyType.Active = 0;
@@ -135,23 +132,34 @@ namespace MonoDevelop.VBNetBinding
 				cmbCodePage.AppendText (e.Id);
 			}
 			if (foundEncoding != null)
-				cmbCodePage.Entry.Text = foundEncoding;
+				((Gtk.Entry)cmbCodePage.Child).Text = foundEncoding;
 			else if (!string.IsNullOrEmpty (currentCodepage))
-				cmbCodePage.Entry.Text = currentCodepage;
+				((Gtk.Entry)cmbCodePage.Child).Text = currentCodepage;
 			
-			entryMainClass.Entry.Text = this.project.StartupObject;
+			((Gtk.Entry)entryMainClass.Child).Text = this.project.StartupObject;
 			iconEntry.Path = this.project.ApplicationIcon;
+		}
+		
+		static string ComboText (global::Gtk.ComboBox combo)
+		{
+			global::Gtk.ITreeModel model = combo.Model;
+			if (model == null || combo.Active < 0)
+				return null;
+			global::Gtk.TreeIter iter;
+			if (!model.GetIter (out iter, new global::Gtk.TreePath (combo.Active)))
+				return null;
+			return model.GetValue (iter, 0) as string;
 		}
 		
 		public void StorePanelContents ()
 		{
-			project.BinaryOptionCompare = cmbOptionCompare.ActiveText == "Binary";
-			project.OptionExplicit = cmbOptionExplicit.ActiveText == "On";
-			project.OptionInfer = cmbOptionInfer.ActiveText == "On";
-			project.OptionStrict = cmbOptionStrict.ActiveText == "On";
+			project.BinaryOptionCompare = ComboText (cmbOptionCompare) == "Binary";
+			project.OptionExplicit = ComboText (cmbOptionExplicit) == "On";
+			project.OptionInfer = ComboText (cmbOptionInfer) == "On";
+			project.OptionStrict = ComboText (cmbOptionStrict) == "On";
 			project.MyType = txtMyType.ActiveText;
 			project.StartupObject = entryMainClass.ActiveText;
-			project.CodePage = cmbCodePage.Entry.Text;
+			project.CodePage = ((Gtk.Entry)cmbCodePage.Child).Text;
 			project.ApplicationIcon = iconEntry.Path;
 			project.CompileTarget = (CompileTarget) compileTargetCombo.Active;
 		}

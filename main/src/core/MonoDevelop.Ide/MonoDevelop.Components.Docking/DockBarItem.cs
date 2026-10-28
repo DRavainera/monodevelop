@@ -89,23 +89,27 @@ namespace MonoDevelop.Components.Docking
 			base.OnDestroyed ();
 		}
 
-		protected override void OnSizeRequested (ref Requisition requisition)
+		protected override void OnGetPreferredWidth (out int minimum, out int natural)
 		{
-			base.OnSizeRequested (ref requisition);
+			base.OnGetPreferredWidth (out minimum, out natural);
 
-			requisition.Width = (int) primary.Width;
-			requisition.Height = (int) primary.Height;
+			minimum = natural = (int) primary.Width;
 		}
 
-		protected override bool OnExposeEvent (Gdk.EventExpose evnt)
+		protected override void OnGetPreferredHeight (out int minimum, out int natural)
 		{
-			using (Cairo.Context context = Gdk.CairoHelper.Create (evnt.Window)) {
-				if (secondaryOpacity < 1.0f)
-					RenderIcon (context, primary, 1.0f - (float)Math.Pow (secondaryOpacity, 3.0f));
+			base.OnGetPreferredHeight (out minimum, out natural);
 
-				if (secondaryOpacity > 0.0f)
-					RenderIcon (context, secondary, secondaryOpacity);
-			}
+			minimum = natural = (int) primary.Height;
+		}
+
+		protected override bool OnDrawn (Cairo.Context cr)
+		{
+			if (secondaryOpacity < 1.0f)
+				RenderIcon (cr, primary, 1.0f - (float)Math.Pow (secondaryOpacity, 3.0f));
+
+			if (secondaryOpacity > 0.0f)
+				RenderIcon (cr, secondary, secondaryOpacity);
 
 			return false;
 		}
@@ -113,8 +117,8 @@ namespace MonoDevelop.Components.Docking
 		void RenderIcon (Cairo.Context context, Xwt.Drawing.Image surface, double opacity)
 		{
 			context.DrawImage (this, surface.WithAlpha (opacity),
-			                          Allocation.X + (Allocation.Width - surface.Width) / 2,
-			                          Allocation.Y + (Allocation.Height - surface.Height) / 2);
+			                          (Allocation.Width - surface.Width) / 2,
+			                          (Allocation.Height - surface.Height) / 2);
 		}
 	}
 
@@ -291,7 +295,7 @@ namespace MonoDevelop.Components.Docking
 		void UpdateStyle (object sender, EventArgs e)
 		{
 			if (label != null)
-				label.ModifyFg (StateType.Normal, Styles.DockBarLabelColor.ToGdkColor ());
+				label.OverrideColor (StateFlags.Normal, Styles.DockBarLabelColor.ToGdkColor ().ToRgba ());
 		}
 		
 		public MonoDevelop.Components.Docking.DockItem DockItem {
@@ -532,43 +536,41 @@ namespace MonoDevelop.Components.Docking
 			return true;
 		}
 
-		protected override bool OnExposeEvent (Gdk.EventExpose evnt)
+		protected override bool OnDrawn (Cairo.Context cr)
 		{
-			using (var context = Gdk.CairoHelper.Create (evnt.Window)) {
-				var alloc = Allocation;
+			var alloc = Allocation;
 
-				// TODO: VV: Remove preflight gradient features and replace with a flat color
+			// TODO: VV: Remove preflight gradient features and replace with a flat color
 
-				Cairo.LinearGradient lg;
+			Cairo.LinearGradient lg;
 
-				if (bar.Orientation == Orientation.Horizontal) {
-					lg = new Cairo.LinearGradient (alloc.X, 0, alloc.X + alloc.Width, 0);
-				} else {
-					lg = new Cairo.LinearGradient (0, alloc.Y, 0, alloc.Y + alloc.Height);
-				}
-
-				using (lg) {
-					Cairo.Color primaryColor = Styles.DockBarPrelightColor.ToCairoColor ();
-					primaryColor.A = hoverProgress;
-
-					Cairo.Color transparent = primaryColor;
-					transparent.A = 0;
-
-					lg.AddColorStop (0.0, transparent);
-					lg.AddColorStop (0.35, primaryColor);
-					lg.AddColorStop (0.65, primaryColor);
-					lg.AddColorStop (1.0, transparent);
-
-					context.Rectangle (alloc.ToCairoRect ());
-					context.SetSource (lg);
-				}
-				context.Fill ();
+			if (bar.Orientation == Orientation.Horizontal) {
+				lg = new Cairo.LinearGradient (0, 0, alloc.Width, 0);
+			} else {
+				lg = new Cairo.LinearGradient (0, 0, 0, alloc.Height);
 			}
+
+			using (lg) {
+				Cairo.Color primaryColor = Styles.DockBarPrelightColor.ToCairoColor ();
+				primaryColor.A = hoverProgress;
+
+				Cairo.Color transparent = primaryColor;
+				transparent.A = 0;
+
+				lg.AddColorStop (0.0, transparent);
+				lg.AddColorStop (0.35, primaryColor);
+				lg.AddColorStop (0.65, primaryColor);
+				lg.AddColorStop (1.0, transparent);
+
+				cr.Rectangle (0, 0, alloc.Width, alloc.Height);
+				cr.SetSource (lg);
+			}
+			cr.Fill ();
 
 			if (HasFocus) {
-				Gtk.Style.PaintFocus (Style, GdkWindow, State, Allocation, this, "button", Allocation.X + 2, Allocation.Y + 2, Allocation.Width - 4, Allocation.Height - 4);
+				StyleContext.RenderFocus (cr, 2, 2, alloc.Width - 4, alloc.Height - 4);
 			}
-			return base.OnExposeEvent (evnt);
+			return base.OnDrawn (cr);
 		}
 
 		protected override bool OnFocusInEvent (Gdk.EventFocus evnt)

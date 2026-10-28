@@ -129,7 +129,7 @@ namespace MonoDevelop.Ide.Projects
 			BorderWidth = 6;
 		}
 
-		private int Sort (TreeModel model, TreeIter left, TreeIter right)
+		private int Sort (ITreeModel model, TreeIter left, TreeIter right)
 		{
 			int result = 0;
 
@@ -287,8 +287,8 @@ namespace MonoDevelop.Ide.Projects
 		{
 			StringBuilder result = StringBuilderCache.Allocate ();
 			int lastPos = 0;
-			var color = HslColor.GenerateHighlightColors (widget.Style.Base (StateType.Normal), 
-				widget.Style.Text (StateType.Normal), 3)[2];
+			var color = HslColor.GenerateHighlightColors (widget.GetStyleBackgroundColor (StateType.Normal).ToGdkColor (), 
+				widget.GetStyleColor (StateType.Normal).ToGdkColor (), 3)[2];
 			for (int n=0; n < matches.Length; n++) {
 				int pos = matches[n] - startIndex;
 				if (pos < 0 || pos >= text.Length)

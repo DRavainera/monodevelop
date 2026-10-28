@@ -10,7 +10,7 @@ namespace Stetic.Wrapper {
 
 		public static new Gtk.Image CreateInstance ()
 		{
-			return new Gtk.Image (Gtk.Stock.Execute, Gtk.IconSize.Dialog);
+			return new Gtk.Image (StockCompat.Execute, Gtk.IconSize.Dialog);
 		}
 		
 		protected override void ReadProperties (ObjectReader reader, XmlElement elem)
@@ -62,7 +62,7 @@ namespace Stetic.Wrapper {
 		void BreakImage ()
 		{
 			image.IconSize = (int)Gtk.IconSize.Button;
-			image.Stock = Gtk.Stock.MissingImage;
+			image.Stock = StockCompat.MissingImage;
 		}
 
 		public ImageInfo Pixbuf {

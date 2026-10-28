@@ -33,13 +33,13 @@ using MonoDevelop.Components;
 
 namespace Mono.TextEditor.PopupWindow
 {
-	class ListWidget<T> : Gtk.DrawingArea
+	class ListWidget<T> : Gtk.DrawingArea, Gtk.IScrollable
 	{
 		int margin = 0;
 		int padding = 4;
 		int listWidth = 300;
 		
-		Xwt.Drawing.TextLayout layout;
+		Pango.Layout layout;
 		ListWindow<T> win;
 		int selection = 0;
 		int visibleRows = -1;
@@ -149,8 +149,7 @@ namespace Mono.TextEditor.PopupWindow
 			if (!buttonPressed)
 				return base.OnMotionNotifyEvent (e);
 			
-			int winWidth, winHeight;
-			this.GdkWindow.GetSize (out winWidth, out winHeight);
+			int winWidth = Allocation.Width, winHeight = Allocation.Height;
 			
 	/*		int ypos = (int) e.Y;
 			if (ypos < 0) {
@@ -166,13 +165,32 @@ namespace Mono.TextEditor.PopupWindow
 		Adjustment hadj;
 		Adjustment vadj;
 
-		protected override void OnSetScrollAdjustments (Adjustment hadj, Adjustment vadj)
+		void HandleVAdjustmentChanged (object sender, EventArgs e)
 		{
-			this.hadj = hadj;
-			this.vadj = vadj;
-			if (this.vadj != null)
-				this.vadj.ValueChanged += (sender, e) => QueueDraw ();
-			base.OnSetScrollAdjustments (hadj, vadj);
+			QueueDraw ();
+		}
+		Gtk.Adjustment Gtk.IScrollable.Hadjustment {
+			get { return hadj; }
+			set { hadj = value; }
+		}
+		Gtk.Adjustment Gtk.IScrollable.Vadjustment {
+			get { return vadj; }
+			set {
+				if (this.vadj != null)
+				this.vadj.ValueChanged -= HandleVAdjustmentChanged;
+				this.vadj = value;
+				if (this.vadj != null) {
+					this.vadj.ValueChanged += HandleVAdjustmentChanged;
+					SetAdjustments (Allocation);
+				}
+			}
+		}
+		Gtk.ScrollablePolicy Gtk.IScrollable.HscrollPolicy { get; set; }
+		Gtk.ScrollablePolicy Gtk.IScrollable.VscrollPolicy { get; set; }
+		bool Gtk.IScrollable.GetBorder (out Gtk.Border border)
+		{
+			border = default;
+			return false;
 		}
 
 		void SetAdjustments (Gdk.Rectangle allocation)
@@ -189,11 +207,11 @@ namespace Mono.TextEditor.PopupWindow
 			base.OnSizeAllocated (allocation);
 		}
 
-		protected override bool OnExposeEvent (Gdk.EventExpose args)
+		protected override bool OnDrawn (Cairo.Context cr)
 		{
-			base.OnExposeEvent (args);
-			DrawList (args);
-	  		return true;
+			base.OnDrawn (cr);
+			DrawList (cr);
+			return true;
 		}
 		
 		public int TextOffset {
@@ -207,86 +225,84 @@ namespace Mono.TextEditor.PopupWindow
 		}
 
 		//FIXME: we could use the expose event's clipbox to make the drawing more efficient
-		void DrawList (Gdk.EventExpose args)
+		void DrawList (Cairo.Context cr)
 		{
-			var window = args.Window;
-			
-			int winWidth, winHeight;
-			window.GetSize (out winWidth, out winHeight);
-			
+			int winWidth = Allocation.Width, winHeight = Allocation.Height;
+
 			int ypos = margin;
 			int lineWidth = winWidth - margin*2;
 			int xpos = margin + padding;
 
-			using (var cr = this.CreateXwtContext ()) {
+			//avoid recreating the GC objects that we use multiple times
+			var textColor = this.GetStyleColor (StateType.Normal).ToCairoColor ();
 
-				//avoid recreating the GC objects that we use multiple times
-				var textColor = this.Style.Text (StateType.Normal).ToXwtColor ();
+			int n = 0;
+			n = (int)(vadj.Value / rowHeight);
 
-				int n = 0;
-				n = (int)(vadj.Value / rowHeight);
-
-				while (ypos < winHeight - margin && n < win.DataProvider.Count) {
-					bool hasMarkup = false;
-					IMarkupListDataProvider<T> markupListDataProvider = win.DataProvider as IMarkupListDataProvider<T>;
-					if (markupListDataProvider != null) {
-						if (markupListDataProvider.HasMarkup (n)) {
-							layout.Markup = (markupListDataProvider.GetMarkup (n) ?? "&lt;null&gt;");
-							hasMarkup = true;
-						}
+			while (ypos < winHeight - margin && n < win.DataProvider.Count) {
+				bool hasMarkup = false;
+				IMarkupListDataProvider<T> markupListDataProvider = win.DataProvider as IMarkupListDataProvider<T>;
+				if (markupListDataProvider != null) {
+					if (markupListDataProvider.HasMarkup (n)) {
+						layout.SetMarkup ((markupListDataProvider.GetMarkup (n) ?? "&lt;null&gt;"));
+						hasMarkup = true;
 					}
-				
-					if (!hasMarkup)
-						layout.Text = (win.DataProvider.GetText (n) ?? "<null>");
-				
-					Xwt.Drawing.Image icon = win.DataProvider.GetIcon (n);
-					int iconHeight, iconWidth;
-				
-					if (icon != null) {
-						iconWidth = (int)icon.Width;
-						iconHeight = (int)icon.Height;
-					} else if (!Gtk.Icon.SizeLookup (Gtk.IconSize.Menu, out iconWidth, out iconHeight)) {
-						iconHeight = iconWidth = 24;
-					}
-				
-					var s = layout.GetSize ();
-					int typos, iypos;
-					int he = (int)s.Height;
-
-					typos = he < rowHeight ? ypos + (rowHeight - he) / 2 : ypos;
-					iypos = iconHeight < rowHeight ? ypos + (rowHeight - iconHeight) / 2 : ypos;
-				
-					if (n == selection) {
-						if (!disableSelection) {
-							cr.Rectangle (margin, ypos, lineWidth, he + padding);
-							cr.SetColor (this.Style.Base (StateType.Selected).ToXwtColor ());
-							cr.Fill ();
-
-							cr.SetColor (this.Style.Text (StateType.Selected).ToXwtColor ());
-							cr.DrawTextLayout (layout, xpos + iconWidth + 2, typos);
-						} else {
-							cr.Rectangle (margin, ypos, lineWidth, he + padding);
-							cr.SetColor (this.Style.Base (StateType.Selected).ToXwtColor ());
-							cr.Stroke ();
-
-							cr.SetColor (textColor);
-							cr.DrawTextLayout (layout, xpos + iconWidth + 2, typos);
-						}
-					} else {
-						cr.SetColor (textColor);
-						cr.DrawTextLayout (layout, xpos + iconWidth + 2, typos);
-					}
-				
-					if (icon != null)
-						cr.DrawImage (icon, xpos, iypos);
-				
-					ypos += rowHeight;
-					n++;
-				
-					//reset the markup or it carries over to the next SetText
-					if (hasMarkup)
-						layout.Markup = string.Empty;
 				}
+
+				if (!hasMarkup)
+					layout.SetText ((win.DataProvider.GetText (n) ?? "<null>"));
+
+				Xwt.Drawing.Image icon = win.DataProvider.GetIcon (n);
+				int iconHeight, iconWidth;
+
+				if (icon != null) {
+					iconWidth = (int)icon.Width;
+					iconHeight = (int)icon.Height;
+				} else if (!Gtk.Icon.SizeLookup (Gtk.IconSize.Menu, out iconWidth, out iconHeight)) {
+					iconHeight = iconWidth = 24;
+				}
+
+				int lWidth, lHeight;
+				layout.GetPixelSize (out lWidth, out lHeight);
+				int typos, iypos;
+				int he = lHeight;
+
+				typos = he < rowHeight ? ypos + (rowHeight - he) / 2 : ypos;
+				iypos = iconHeight < rowHeight ? ypos + (rowHeight - iconHeight) / 2 : ypos;
+
+				if (n == selection) {
+					if (!disableSelection) {
+						cr.Rectangle (margin, ypos, lineWidth, he + padding);
+						cr.SetSourceColor (this.GetStyleBackgroundColor (StateType.Selected).ToCairoColor ());
+						cr.Fill ();
+
+						cr.SetSourceColor (this.GetStyleColor (StateType.Selected).ToCairoColor ());
+						cr.MoveTo (xpos + iconWidth + 2, typos);
+						Pango.CairoHelper.ShowLayout (cr, layout);
+					} else {
+						cr.Rectangle (margin, ypos, lineWidth, he + padding);
+						cr.SetSourceColor (this.GetStyleBackgroundColor (StateType.Selected).ToCairoColor ());
+						cr.Stroke ();
+
+						cr.SetSourceColor (textColor);
+						cr.MoveTo (xpos + iconWidth + 2, typos);
+						Pango.CairoHelper.ShowLayout (cr, layout);
+					}
+				} else {
+					cr.SetSourceColor (textColor);
+					cr.MoveTo (xpos + iconWidth + 2, typos);
+					Pango.CairoHelper.ShowLayout (cr, layout);
+				}
+
+				if (icon != null)
+					cr.DrawImage (this, icon, xpos, iypos);
+
+				ypos += rowHeight;
+				n++;
+
+				//reset the markup or it carries over to the next SetText
+				if (hasMarkup)
+					layout.SetMarkup (string.Empty);
 			}
 		}
 		
@@ -315,8 +331,9 @@ namespace Mono.TextEditor.PopupWindow
 
 			this.GetSizeRequest (out lvWidth, out lvHeight);
 
-			var s = layout.GetSize ();
-			rowHeight = (int)s.Height + padding;
+			int lWidth, lHeight;
+			layout.GetPixelSize (out lWidth, out lHeight);
+			rowHeight = lHeight + padding;
 
 			visibleRows = 7;//(winHeight + padding - margin * 2) / rowHeight;
 			
@@ -340,12 +357,11 @@ namespace Mono.TextEditor.PopupWindow
 		
 		void UpdateStyle ()
 		{
-			this.GdkWindow.Background = this.Style.Base (StateType.Normal);
 			if (layout != null)
 				layout.Dispose ();
-			layout = new Xwt.Drawing.TextLayout ();
-			layout.Trimming = Xwt.Drawing.TextTrimming.Word;
-			
+			layout = new Pango.Layout (this.PangoContext);
+			layout.Wrap = Pango.WrapMode.Word;
+
 			CalcVisibleRows ();
 		}
 	}

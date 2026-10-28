@@ -92,9 +92,9 @@ namespace MonoDevelop.SourceEditor
 			Gtk.Widget oldWidget = null;
 			this.FocusChildSet += delegate (object sender, Gtk.FocusChildSetArgs args) {
 				// only store state when the focus comes from a non child widget
-				if (args.Widget != null && oldWidget == null)
+				if (args.Child != null && oldWidget == null)
 					StoreWidgetState ();
-				oldWidget = args.Widget;
+				oldWidget = args.Child;
 			};
 			
 			this.entryLineNumber.Changed += delegate {
@@ -177,8 +177,6 @@ namespace MonoDevelop.SourceEditor
 		void PreviewLine ()
 		{
 			if (String.IsNullOrEmpty (entryLineNumber.Text) || entryLineNumber.Text == "+" || entryLineNumber.Text == "-") {
-				this.entryLineNumber.ModifyBase (Gtk.StateType.Normal, Style.Base (Gtk.StateType.Normal));
-				this.entryLineNumber.ModifyText (Gtk.StateType.Normal, Style.Foreground (Gtk.StateType.Normal));
 				RestoreWidgetState ();
 				return;
 			}
@@ -188,13 +186,10 @@ namespace MonoDevelop.SourceEditor
 					targetLine = Math.Max (1, Math.Min (textEditor.Document.LineCount, targetLine));
 					
 				} else {
-					this.entryLineNumber.ModifyBase (Gtk.StateType.Normal, Style.Base (Gtk.StateType.Normal));
-					this.entryLineNumber.ModifyText (Gtk.StateType.Normal, Style.Foreground (Gtk.StateType.Normal));
 				}
 				textEditor.Caret.Line = targetLine;
 				textEditor.CenterToCaret ();
 			} catch (System.Exception) {
-				this.entryLineNumber.ModifyText (Gtk.StateType.Normal, Ide.Gui.Styles.Editor.SearchErrorForegroundColor.ToGdkColor ());
 			}
 		}
 		

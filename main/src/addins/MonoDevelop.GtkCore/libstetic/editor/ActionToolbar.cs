@@ -386,14 +386,17 @@ namespace Stetic.Editor
 			
 			return base.OnDragDrop (context, x,	y, time);
 		}		
-		protected override bool OnExposeEvent (Gdk.EventExpose ev)
+		protected override bool OnDrawn (Cairo.Context cr)
 		{
-			bool r = base.OnExposeEvent (ev);
+			bool r = base.OnDrawn (cr);
 			if (dropPosition != -1) {
+				Gdk.RGBA dark = StyleContext.GetColor (Gtk.StateFlags.Normal);
+				cr.SetSourceColor (new Cairo.Color ((float) dark.Red, (float) dark.Green, (float) dark.Blue));
 				if (this.Orientation == Gtk.Orientation.Horizontal)
-					GdkWindow.DrawRectangle (this.Style.BlackGC, true, dropPosition, Allocation.Y, 3, Allocation.Height);
+					cr.Rectangle (dropPosition, Allocation.Y, 3, Allocation.Height);
 				else
-					GdkWindow.DrawRectangle (this.Style.BlackGC, true, Allocation.X, dropPosition, Allocation.Width, 3);
+					cr.Rectangle (Allocation.X, dropPosition, Allocation.Width, 3);
+				cr.Fill ();
 			}
 			return r;
 		}
@@ -467,22 +470,22 @@ namespace Stetic.Editor
 			
 			m.Add (new Gtk.SeparatorMenuItem ());
 			
-			item = new Gtk.ImageMenuItem (Gtk.Stock.Cut, null);
+			item = new Gtk.ImageMenuItem (StockCompat.Cut, null);
 			m.Add (item);
 			item.Activated += delegate (object s, EventArgs a) {
 				menuItem.Cut ();
 			};
-			item = new Gtk.ImageMenuItem (Gtk.Stock.Copy, null);
+			item = new Gtk.ImageMenuItem (StockCompat.Copy, null);
 			m.Add (item);
 			item.Activated += delegate (object s, EventArgs a) {
 				menuItem.Copy ();
 			};
-			item = new Gtk.ImageMenuItem (Gtk.Stock.Paste, null);
+			item = new Gtk.ImageMenuItem (StockCompat.Paste, null);
 			m.Add (item);
 			item.Activated += delegate (object s, EventArgs a) {
 				Paste (menuItem);
 			};
-			item = new Gtk.ImageMenuItem (Gtk.Stock.Delete, null);
+			item = new Gtk.ImageMenuItem (StockCompat.Delete, null);
 			m.Add (item);
 			item.Activated += delegate (object s, EventArgs a) {
 				menuItem.Delete ();
@@ -529,10 +532,11 @@ namespace Stetic.Editor
 	
 	class CustomToolbarItem: Gtk.ToolItem
 	{
-		public override void Dispose ()
+		protected override void Dispose (bool disposing)
 		{
-			ActionToolItem.Destroy ();
-			base.Dispose ();
+			if (disposing)
+				ActionToolItem.Destroy ();
+			base.Dispose (disposing);
 		}
 		
 		public ActionToolItem ActionToolItem;

@@ -95,7 +95,7 @@ namespace MonoDevelop.Packaging.Gui
 
 		void PackageIdTextInserted (object o, TextInsertedArgs args)
 		{
-			if (args.Text.IndexOf ('\r') >= 0) {
+			if (args.NewText.IndexOf ('\r') >= 0) {
 				var textBox = (Entry)o;
 				textBox.Text = textBox.Text.Replace ("\r", string.Empty);
 			}
@@ -131,12 +131,13 @@ namespace MonoDevelop.Packaging.Gui
 			wizardPage.Description = packageDescriptionTextBox.Text;
 		}
 
-		public override void Dispose ()
+		protected override void Dispose (bool disposing)
 		{
-			Dispose (idTooltip);
-			Dispose (backgroundImage);
-
-			base.Dispose ();
+			if (disposing) {
+				Dispose (idTooltip);
+				Dispose (backgroundImage);
+			}
+			base.Dispose (disposing);
 		}
 
 		void Dispose (IDisposable disposable)

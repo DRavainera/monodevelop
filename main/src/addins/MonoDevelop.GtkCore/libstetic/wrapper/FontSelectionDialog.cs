@@ -8,7 +8,7 @@ namespace Stetic.Wrapper {
 			get {
 				Gtk.Dialog dialog = (Gtk.Dialog)Wrapped;
 
-				foreach (Gtk.Widget w in dialog.VBox) {
+				foreach (Gtk.Widget w in dialog.ContentArea) {
 					if (w is Gtk.FontSelection)
 						return (Gtk.FontSelection)w;
 				}

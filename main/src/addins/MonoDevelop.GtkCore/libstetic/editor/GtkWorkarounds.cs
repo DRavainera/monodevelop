@@ -119,7 +119,11 @@ namespace Stetic.Editor
 				typeof(GtkWorkarounds).Module,
 				true);
 			
-			var invokerType = typeof(Gtk.Container.CallbackInvoker);
+			// Gtk.Container.CallbackInvoker no existe en GtkSharp 3.24. Esta ruta es inactiva en
+			// runtime: el glue (libgtksharpglue-2) exporta gtksharp_container_leak_fixed_marker,
+			// por lo que FixContainerLeak hace return antes de llegar aquí.
+			var invokerType = Type.GetType ("Gtk.Container+CallbackInvoker, GtkSharp")
+				?? throw new MissingMethodException ("Gtk.Container.CallbackInvoker no disponible en GtkSharp 3.24");
 			
 			//this was based on compiling a similar method and disassembling it
 			ILGenerator il = dm.GetILGenerator ();

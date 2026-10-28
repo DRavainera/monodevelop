@@ -15,7 +15,7 @@ namespace MonoDevelop.Ide.Gui.OptionPanels
 
 		private global::Gtk.CheckButton skipBuildingUnmodifiedProjectsCheckbox;
 
-		private global::Gtk.ComboBox verbosityCombo;
+		private global::Gtk.ComboBoxText verbosityCombo;
 
 		private global::Gtk.Label buildAndRunOptionsLabel;
 
@@ -97,7 +97,7 @@ namespace MonoDevelop.Ide.Gui.OptionPanels
  			label.LabelProp = global::Mono.Unix.Catalog.GetString("Log _verbosity:");		
  			label.UseUnderline = true;
 			logContainer.PackStart (label, false, false, 6);
-			this.verbosityCombo = global::Gtk.ComboBox.NewText ();
+			this.verbosityCombo = new global::Gtk.ComboBoxText ();
 			this.verbosityCombo.AppendText (global::Mono.Unix.Catalog.GetString ("Quiet"));
 			this.verbosityCombo.AppendText (global::Mono.Unix.Catalog.GetString ("Minimal"));
 			this.verbosityCombo.AppendText (global::Mono.Unix.Catalog.GetString ("Normal"));
@@ -160,7 +160,6 @@ namespace MonoDevelop.Ide.Gui.OptionPanels
 			this.saveChangesRadioButton.Name = "saveChangesRadioButton";
 			this.saveChangesRadioButton.DrawIndicator = true;
 			this.saveChangesRadioButton.UseUnderline = true;
-			this.saveChangesRadioButton.Group = new global::GLib.SList(global::System.IntPtr.Zero);
 			this.vbox67.Add(this.saveChangesRadioButton);
 			global::Gtk.Box.BoxChild w9 = ((global::Gtk.Box.BoxChild)(this.vbox67[this.saveChangesRadioButton]));
 			w9.Position = 0;

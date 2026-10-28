@@ -2,20 +2,17 @@ using System;
 using System.Collections;
 using System.Xml;
 
-// Don't warn that OptionMenu is deprecated. We know that.
-#pragma warning disable 612
-
 namespace Stetic.Wrapper {
 
 	public class OptionMenu : Container {
 
 		public override void Wrap (object obj, bool initialized)
 		{
-			Gtk.OptionMenu omenu = (Gtk.OptionMenu)obj;
-			if (omenu.Menu == null) {
+			Gtk.MenuButton omenu = (Gtk.MenuButton)obj;
+			if (omenu.Popup == null) {
 				Gtk.Menu menu = new Gtk.Menu ();
 				menu.Show ();
-				omenu.Menu = menu;
+				omenu.Popup = menu;
 			}
 
 			base.Wrap (obj, initialized);
@@ -25,11 +22,6 @@ namespace Stetic.Wrapper {
 		{
 			int history = (int)GladeUtils.ExtractProperty (elem, "history", -1);
 			base.ReadProperties (reader, elem);
-
-			// Fiddle with things to make the optionmenu resize itself correctly
-			Gtk.Widget menu = optionmenu.Menu;
-			optionmenu.Menu = new Gtk.Menu ();
-			optionmenu.Menu = menu;
 
 			if (history != -1)
 				Active = history;
@@ -49,29 +41,31 @@ namespace Stetic.Wrapper {
 
 		protected override ObjectWrapper ReadChild (ObjectReader reader, XmlElement child_elem)
 		{
-			Widget wrapper = Stetic.Wrapper.Widget.Lookup (optionmenu.Menu);
+			Widget wrapper = Stetic.Wrapper.Widget.Lookup (optionmenu.Popup);
 			reader.ReadObject (wrapper, child_elem["widget"]);
 			return wrapper;
 		}
 
 		public override IEnumerable GladeChildren {
 			get {
-				return new Gtk.Widget[] { optionmenu.Menu };
+				return new Gtk.Widget[] { optionmenu.Popup };
 			}
 		}
 
-		Gtk.OptionMenu optionmenu {
+		Gtk.MenuButton optionmenu {
 			get {
-				return (Gtk.OptionMenu)Wrapped;
+				return (Gtk.MenuButton)Wrapped;
 			}
 		}
+
+		int active;
 
 		public int Active {
 			get {
-				return optionmenu.History;
+				return active;
 			}
 			set {
-				optionmenu.SetHistory ((uint)value);
+				active = value;
 				EmitNotify ("Active");
 			}
 		}

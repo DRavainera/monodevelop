@@ -25,6 +25,7 @@
 // THE SOFTWARE.
 
 using System; 
+using SearchEntry = MonoDevelop.Components.SearchEntry;
 using System.Linq;
 using System.Threading;
 using System.Text;
@@ -61,8 +62,8 @@ namespace MonoDevelop.Ide.FindInFiles
 		}
 		
 		CheckButton checkbuttonRecursively;
-		ComboBoxEntry comboboxentryReplace;
-		ComboBoxEntry comboboxentryPath;
+		ComboBoxText comboboxentryReplace;
+		ComboBoxText comboboxentryPath;
 		SearchEntry searchentryFileMask;
 		Button buttonBrowsePaths;
 		Button buttonReplace;
@@ -123,7 +124,7 @@ namespace MonoDevelop.Ide.FindInFiles
 		FindInFilesDialog (bool showReplace, string directory) : this (showReplace)
 		{
 			comboboxScope.Active = (int)SearchScope.Directories;
-			comboboxentryPath.Entry.Text = directory;
+			GetComboEntry (comboboxentryPath).Text = directory;
 			writeScope = false;
 		}
 		
@@ -216,7 +217,7 @@ namespace MonoDevelop.Ide.FindInFiles
 						} else {
 							if (comboboxScope.Active == (int) SearchScope.Selection)
 								comboboxScope.Active = (int) SearchScope.CurrentDocument;
-							comboboxentryFind.Entry.Text = selectedText;
+							GetComboEntry (comboboxentryFind).Text = selectedText;
 						}
 					} else if (comboboxScope.Active == (int) SearchScope.Selection) {
 						comboboxScope.Active = (int) SearchScope.CurrentDocument;
@@ -224,7 +225,7 @@ namespace MonoDevelop.Ide.FindInFiles
 					
 				}
 			}
-			comboboxentryFind.Entry.SelectRegion (0, comboboxentryFind.ActiveText.Length);
+			GetComboEntry (comboboxentryFind).SelectRegion (0, comboboxentryFind.ActiveText.Length);
 			comboboxentryFind.GrabFocus ();
 			DeleteEvent += delegate { Destroy (); };
 			UpdateStopButton ();
@@ -362,7 +363,7 @@ namespace MonoDevelop.Ide.FindInFiles
 				return;
 			
 			labelReplace = new Label { Text = GettextCatalog.GetString ("_Replace:"), Xalign = 0f, UseUnderline = true };
-			comboboxentryReplace = new ComboBoxEntry ();
+			comboboxentryReplace = Gtk.ComboBoxText.NewWithEntry ();
 			LoadHistory ("MonoDevelop.FindReplaceDialogs.ReplaceHistory", comboboxentryReplace);
 			comboboxentryReplace.Show ();
 			labelReplace.Show ();
@@ -430,11 +431,11 @@ namespace MonoDevelop.Ide.FindInFiles
 			labelPath.Show ();
 			
 			hboxPath = new HBox ();
-			comboboxentryPath = new ComboBoxEntry ();
+			comboboxentryPath = Gtk.ComboBoxText.NewWithEntry ();
 			comboboxentryPath.Destroyed += ComboboxentryPathDestroyed;
 			LoadHistory ("MonoDevelop.FindReplaceDialogs.PathHistory", comboboxentryPath);
 			comboboxentryPath.Show ();
-			hboxPath.PackStart (comboboxentryPath);
+			hboxPath.PackStart (comboboxentryPath, false, false, 0);
 			
 			labelPath.MnemonicWidget = comboboxentryPath;
 
@@ -594,15 +595,16 @@ namespace MonoDevelop.Ide.FindInFiles
 				buttonReplace.Sensitive = isSensitive;
 		}
 
-		protected override void OnSizeRequested (ref Requisition requisition)
+		protected override void OnGetPreferredWidth (out int minimum, out int natural)
 		{
-			base.OnSizeRequested (ref requisition);
-			requisition.Width = Math.Max (480, requisition.Width);
+			base.OnGetPreferredWidth (out minimum, out natural);
+			int w = Math.Max (480, natural);
+			minimum = natural = w;
 		}
 
 		static void ComboboxentryPathDestroyed (object sender, EventArgs e)
 		{
-			StoreHistory ("MonoDevelop.FindReplaceDialogs.PathHistory", (ComboBoxEntry)sender);
+			StoreHistory ("MonoDevelop.FindReplaceDialogs.PathHistory", (ComboBoxText)sender);
 		}
 
 		void ButtonBrowsePathsClicked (object sender, EventArgs e)
@@ -611,14 +613,14 @@ namespace MonoDevelop.Ide.FindInFiles
 				TransientFor = this,
 			};
 			
-			string defaultFolder = comboboxentryPath.Entry.Text;
+			string defaultFolder = GetComboEntry (comboboxentryPath).Text;
 			if (string.IsNullOrEmpty (defaultFolder))
 				defaultFolder = IdeApp.Preferences.ProjectsDefaultPath;
 			if (!string.IsNullOrEmpty (defaultFolder))
 				dlg.CurrentFolder = defaultFolder;
 			
 			if (dlg.Run ())
-				comboboxentryPath.Entry.Text = dlg.SelectedFile;
+				GetComboEntry (comboboxentryPath).Text = dlg.SelectedFile;
 		}
 
 		void CheckbuttonRecursivelyDestroyed (object sender, EventArgs e)
@@ -643,22 +645,27 @@ namespace MonoDevelop.Ide.FindInFiles
 //			LoadHistory ("MonoDevelop.FindReplaceDialogs.FileMaskHistory", comboboxentryFileMask);
 		}
 
-		static void LoadHistory (string propertyName, ComboBoxEntry entry)
+		static Gtk.Entry GetComboEntry (Gtk.ComboBox combo)
+		{
+			var children = (combo as Gtk.Container)?.Children;
+			if (children == null)
+				return null;
+			foreach (var child in children) {
+				if (child is Gtk.Entry entry)
+					return entry;
+			}
+			return null;
+		}
+
+		static void LoadHistory (string propertyName, ComboBoxText entry)
 		{
 			var ec = new EntryCompletion ();
-/*			entry.Changed += delegate {
-				if (!entry.Entry.HasFocus)
-					entry.Entry.GrabFocus ();
-
-			};*/
-
-
-			entry.Entry.Completion = ec;
+			var entryWidget = GetComboEntry (entry);
 			var store = new ListStore (typeof(string));
-			entry.Entry.Completion.Model = store;
+			entryWidget.Completion = ec;
+			entryWidget.Completion.Model = store;
 			entry.Model = store;
-			entry.Entry.ActivatesDefault = true;
-			entry.TextColumn = 0;
+			entryWidget.ActivatesDefault = true;
 			var history = PropertyService.Get<string> (propertyName);
 			if (!string.IsNullOrEmpty (history)) {
 				string[] items = history.Split (historySeparator);
@@ -667,7 +674,7 @@ namespace MonoDevelop.Ide.FindInFiles
 						continue;
 					store.AppendValues (item);
 				}
-				entry.Entry.Text = items[0];
+				entryWidget.Text = items[0];
 			}
 		}
 
@@ -690,7 +697,7 @@ namespace MonoDevelop.Ide.FindInFiles
 			//StoreHistory ("MonoDevelop.FindReplaceDialogs.FileMaskHistory", comboboxentryFileMask);
 		}
 
-		static void StoreHistory (string propertyName, ComboBoxEntry comboBox)
+		static void StoreHistory (string propertyName, ComboBoxText comboBox)
 		{
 			var store = (ListStore)comboBox.Model;
 			var history = new List<string> ();
@@ -704,9 +711,10 @@ namespace MonoDevelop.Ide.FindInFiles
 			if (history.Count > limit) {
 				history.RemoveRange (history.Count - (history.Count - limit), history.Count - limit);
 			}
-			if (history.Contains (comboBox.Entry.Text))
-				history.Remove (comboBox.Entry.Text);
-			history.Insert (0, comboBox.Entry.Text);
+			var comboEntry = GetComboEntry (comboBox);
+			if (history.Contains (comboEntry.Text))
+				history.Remove (comboEntry.Text);
+			history.Insert (0, comboEntry.Text);
 			PropertyService.Set (propertyName, string.Join (historySeparator.ToString (), history.ToArray ()));
 		}
 
@@ -780,13 +788,14 @@ namespace MonoDevelop.Ide.FindInFiles
 				scope = new AllOpenFilesScope ();
 				break;
 			case SearchScope.Directories: 
-				if (!System.IO.Directory.Exists (comboboxentryPath.Entry.Text)) {
+				string pathText = GetComboEntry (comboboxentryPath).Text;
+				if (!System.IO.Directory.Exists (pathText)) {
 					MessageService.ShowError (string.Format (GettextCatalog.GetString ("Directory not found: {0}"),
-						comboboxentryPath.Entry.Text));
+						pathText));
 					return null;
 				}
 				
-				scope = new DirectoryScope (comboboxentryPath.Entry.Text, checkbuttonRecursively.Active);
+				scope = new DirectoryScope (pathText, checkbuttonRecursively.Active);
 				break;
 			default:
 				throw new ApplicationException ("Unknown scope:" + comboboxScope.Active);
@@ -808,12 +817,12 @@ namespace MonoDevelop.Ide.FindInFiles
 		static FindReplace find;
 		void HandleReplaceClicked (object sender, EventArgs e)
 		{
-			SearchReplace (comboboxentryFind.Entry.Text, comboboxentryReplace.Entry.Text ?? "", GetScope (), GetFilterOptions (), () => UpdateStopButton (), UpdateResultPad);
+			SearchReplace (GetComboEntry (comboboxentryFind).Text, GetComboEntry (comboboxentryReplace).Text ?? "", GetScope (), GetFilterOptions (), () => UpdateStopButton (), UpdateResultPad);
 		}
 
 		void HandleSearchClicked (object sender, EventArgs e)
 		{
-			SearchReplace (comboboxentryFind.Entry.Text, null, GetScope (), GetFilterOptions (), () => UpdateStopButton (), UpdateResultPad);
+			SearchReplace (GetComboEntry (comboboxentryFind).Text, null, GetScope (), GetFilterOptions (), () => UpdateStopButton (), UpdateResultPad);
 		}
 
 		static CancellationTokenSource searchTokenSource = new CancellationTokenSource ();

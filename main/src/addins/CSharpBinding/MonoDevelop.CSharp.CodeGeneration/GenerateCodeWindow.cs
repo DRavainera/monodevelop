@@ -207,21 +207,16 @@ namespace MonoDevelop.CodeGeneration
 				BorderWidth = 3;
 			}
 			
-			protected override bool OnExposeEvent (Gdk.EventExpose evnt)
+			protected override bool OnDrawn (Cairo.Context cr)
 			{
-				Style.PaintFlatBox (Style,
-				                    evnt.Window,
-				                    StateType.Normal,
-				                    ShadowType.Out,
-				                    evnt.Area,
-				                    this,
-				                    "tooltip",
-				                    Allocation.X + 1,
-				                    Allocation.Y + 1,
-				                    Allocation.Width - 2,
-				                    Allocation.Height - 2);
+				cr.Rectangle (1, 1, Allocation.Width - 2, Allocation.Height - 2);
+				cr.SetSourceColor (this.GetStyleBackgroundColor (StateType.Normal).ToCairoColor ());
+				cr.FillPreserve ();
+				cr.LineWidth = 1;
+				cr.SetSourceColor (new Cairo.Color (0, 0, 0));
+				cr.Stroke ();
 				
-				return base.OnExposeEvent (evnt);
+				return base.OnDrawn (cr);
 			}
 		}
 		

@@ -41,12 +41,14 @@ namespace MonoDevelop.PackageManagement
 			this.viewModel.PackageSourceChanged += PackageSourceChanged;
 		}
 
-		public override void Dispose ()
+		protected override void Dispose (bool disposing)
 		{
-			this.viewModel.PackageSourceViewModels.CollectionChanged -= PackageSourceViewModelsCollectionChanged;
-			this.viewModel.PackageSourceChanged -= PackageSourceChanged;
-			this.viewModel.Dispose ();
-			base.Dispose ();
+			if (disposing) {
+				this.viewModel.PackageSourceViewModels.CollectionChanged -= PackageSourceViewModelsCollectionChanged;
+				this.viewModel.PackageSourceChanged -= PackageSourceChanged;
+				this.viewModel.Dispose ();
+			}
+			base.Dispose (disposing);
 		}
 		
 		void InitializeTreeView ()

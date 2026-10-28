@@ -16,7 +16,8 @@
     <Platform Condition=" '$(Platform)' == '' ">x86</Platform>
     <ProjectGuid>{8A04FF99-5DFE-4E3D-A24F-72A621C8DDC6}</ProjectGuid>
     <OutputType>Exe</OutputType>
-    <OutputPath>..\..\..\build\bin</OutputPath>
+    <OutputPath>..\..\..\build</OutputPath>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <TargetFrameworkVersion>$(MDFrameworkVersion)</TargetFrameworkVersion>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|x86' " />

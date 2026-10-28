@@ -205,11 +205,10 @@ namespace MonoDevelop.DesignerSupport.Toolbox
 		const int ItemIconTextItemSpacing = 4;
 		const int IconModePadding = 2;
 
-		protected override bool OnExposeEvent (Gdk.EventExpose e)
+		protected override bool OnDrawn (Cairo.Context cr)
 		{
-			Cairo.Context cr = Gdk.CairoHelper.Create (e.Window);
 
-			Gdk.Rectangle area = e.Area;
+			Gdk.Rectangle area = Allocation;
 
 			if (this.categories.Count == 0 || !string.IsNullOrEmpty (CustomMessage)) {
 				Pango.Layout messageLayout = new Pango.Layout (this.PangoContext);
@@ -220,14 +219,13 @@ namespace MonoDevelop.DesignerSupport.Toolbox
 				else
 					messageLayout.SetText (MonoDevelop.Core.GettextCatalog.GetString ("There are no tools available for the current document."));
 				cr.MoveTo (Allocation.Width * 1 / 6, 12);
-				cr.SetSourceColor (Style.Text (StateType.Normal).ToCairoColor ());
+				cr.SetSourceColor (this.StyleContext.GetColor (StateType.Normal.ToStateFlags ()).ToCairoColor ());
 				Pango.CairoHelper.ShowLayout (cr, messageLayout);
 				messageLayout.Dispose ();
-				((IDisposable)cr).Dispose ();
 				return true;
 			}
 
-			var backColor = Style.Base (StateType.Normal).ToCairoColor ();
+			var backColor = this.StyleContext.GetBackgroundColor (StateType.Normal.ToStateFlags ()).ToCairoColor ();
 			cr.SetSourceColor (backColor);
 			cr.Rectangle (area.X, area.Y, area.Width, area.Height);
 			cr.Fill ();
@@ -283,7 +281,7 @@ namespace MonoDevelop.DesignerSupport.Toolbox
 				}
 				if (item == SelectedItem) {
 					icon = icon.WithStyles ("sel");
-					cr.SetSourceColor (Style.Base (StateType.Selected).ToCairoColor ());
+					cr.SetSourceColor (this.StyleContext.GetBackgroundColor (StateType.Selected.ToStateFlags ()).ToCairoColor ());
 					cr.Rectangle (xpos, ypos, itemDimension.Width, itemDimension.Height);
 					cr.Fill ();
 				}
@@ -292,7 +290,7 @@ namespace MonoDevelop.DesignerSupport.Toolbox
 					layout.SetMarkup (item.Text);
 					layout.Width = (int)((itemDimension.Width - ItemIconTextItemSpacing - iconSize.Width - ItemLeftPadding * 2) * Pango.Scale.PangoScale);
 					layout.GetPixelSize (out var width, out var height);
-					cr.SetSourceColor (Style.Text (item != SelectedItem ? StateType.Normal : StateType.Selected).ToCairoColor ());
+					cr.SetSourceColor (this.StyleContext.GetColor ((item != SelectedItem ? StateType.Normal : StateType.Selected).ToStateFlags ()).ToCairoColor ());
 					cr.MoveTo (xpos + ItemLeftPadding + iconSize.Width + ItemIconTextItemSpacing, ypos + Math.Round ((double)(itemDimension.Height - height) / 2));
 					Pango.CairoHelper.ShowLayout (cr, layout);
 				} else {
@@ -300,7 +298,7 @@ namespace MonoDevelop.DesignerSupport.Toolbox
 				}
 
 				if (item == mouseOverItem) {
-					cr.SetSourceColor (Style.Dark (StateType.Prelight).ToCairoColor ());
+					cr.SetSourceColor (this.StyleContext.GetColor (StateType.Prelight.ToStateFlags ()).ToCairoColor ());
 					cr.Rectangle (xpos + 0.5, ypos + 0.5, itemDimension.Width - 1, itemDimension.Height - 1);
 					cr.Stroke ();
 				}
@@ -318,8 +316,7 @@ namespace MonoDevelop.DesignerSupport.Toolbox
 				cr.Stroke ();
 			}
 
-			((IDisposable)cr).Dispose ();
-			return true;
+return true;
 		}
 
 		void ProcessExpandAnimation (Cairo.Context cr, ToolboxWidgetCategory lastCategory, int lastCategoryYpos, Cairo.Color backColor, Gdk.Rectangle area, ref int ypos)
@@ -788,7 +785,7 @@ namespace MonoDevelop.DesignerSupport.Toolbox
 				this.vAdjustement.Value = rect.Bottom - this.Allocation.Height;
 		}
 
-		protected override void OnSetScrollAdjustments (Adjustment hAdjustement, Adjustment vAdjustement)
+		internal void OnSetScrollAdjustments (Adjustment hAdjustement, Adjustment vAdjustement)
 		{
 			this.hAdjustement = hAdjustement;
 			if (this.hAdjustement != null) {
@@ -872,20 +869,21 @@ namespace MonoDevelop.DesignerSupport.Toolbox
 
 		#region Control size management
 		bool realSizeRequest;
-		protected override void OnSizeRequested (ref Requisition requisition)
+		protected override void OnGetPreferredWidth (out int minimum, out int natural)
+		{
+			minimum = natural = 50;
+		}
+
+		protected override void OnGetPreferredHeight (out int minimum, out int natural)
 		{
 			if (!realSizeRequest) {
-				// Request a minimal width, to size recalculation infinite loops with
-				// small widths, due to the vscrollbar being shown and hidden.
-				requisition.Width = 50;
-				requisition.Height = 0;
+				minimum = natural = 0;
 				return;
 			}
 			int xpos = 0;
 			int ypos = 0;
 			Iterate (ref xpos, ref ypos, null, null);
-			requisition.Width = 50;
-			requisition.Height = ypos;
+			minimum = natural = ypos;
 			if (this.vAdjustement != null) {
 				this.vAdjustement.SetBounds (0,
 											 ypos,

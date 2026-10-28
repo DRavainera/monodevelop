@@ -1,4 +1,4 @@
-<Project DefaultTargets="Build" Sdk="Microsoft.NET.Sdk" ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+﻿<Project DefaultTargets="Build" Sdk="Microsoft.NET.Sdk" ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <Import Project="..\..\..\MonoDevelop.props" />
   <Import Project="$(ReferencesGtk)" />
   <PropertyGroup>
@@ -19,6 +19,7 @@
     <ProjectGuid>{443311BF-766D-4863-B5A1-AFAA7F41DBDA}</ProjectGuid>
     <TargetFrameworkVersion>$(MDFrameworkVersion)</TargetFrameworkVersion>
     <OutputPath>..\..\..\build\AddIns\MonoDevelop.Packaging</OutputPath>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <!-- 0.2.5-dev.8 no existe en ningun feed publico (feed privado original
          desaparecido); 0.2.2 es la ultima version disponible en nuget.org -->
     <_BuildPackagingVersion>0.2.2</_BuildPackagingVersion>
@@ -33,7 +34,6 @@
     <Reference Include="NuGet.Packaging"><HintPath>$(NuGetPackageRoot)nuget.packaging\$(NuGetVersionNuGet)\lib\net472\NuGet.Packaging.dll</HintPath><Private>False</Private></Reference>
     <Reference Include="NuGet.Protocol"><HintPath>$(NuGetPackageRoot)nuget.protocol\$(NuGetVersionNuGet)\lib\net472\NuGet.Protocol.dll</HintPath><Private>False</Private></Reference>
     <Reference Include="NuGet.Versioning"><HintPath>$(NuGetPackageRoot)nuget.versioning\$(NuGetVersionNuGet)\lib\net472\NuGet.Versioning.dll</HintPath><Private>False</Private></Reference>
-    <Reference Include="Mono.Cairo"><HintPath>$(MonoFrameworkNet45Directory)\Mono.Cairo.dll</HintPath><Private>False</Private></Reference>
     <Reference Include="System.Collections.Immutable"><HintPath>$(NuGetPackageRoot)system.collections.immutable/10.0.1\lib\netstandard2.0\System.Collections.Immutable.dll</HintPath><Private>False</Private></Reference>
   </ItemGroup>
   <ItemGroup>

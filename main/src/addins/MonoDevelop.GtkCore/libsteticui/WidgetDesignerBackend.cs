@@ -251,14 +251,14 @@ namespace Stetic
 			this.child = child;
 			this.container = container;
 			fixd.Put (child, selectionBorder + padding, selectionBorder + padding);
-			child.SizeRequested += new SizeRequestedHandler (OnSizeReq);
+			child.SizeAllocated += OnSizeReq;
 		}
 		
-		public override void Dispose ()
+		protected override void Dispose (bool disposing)
 		{
 			if (child != null)
-				child.SizeRequested -= new SizeRequestedHandler (OnSizeReq);
-			base.Dispose ();
+				child.SizeAllocated -= OnSizeReq;
+			base.Dispose (disposing);
 		}
 		
 		public bool IsSelected (Gtk.Widget widget)
@@ -456,43 +456,40 @@ namespace Stetic
 		}
 		
 		
-		void OnSizeReq (object o, SizeRequestedArgs a)
+		void OnSizeReq (object o, EventArgs a)
 		{
 			if (!AllowResize) {
-				a.RetVal = false;
 				QueueDraw ();
 				return;
 			}
 
-			currentSizeRequest = a.Requisition;
-			
 			Rectangle alloc = child.Allocation;
-			int nw = alloc.Width;
-			int nh = alloc.Height;
-			
-			if (a.Requisition.Width > nw) nw = a.Requisition.Width;
-			if (a.Requisition.Height > nh) nh = a.Requisition.Height;
-			
-			if (nw != alloc.Width || nh != alloc.Height) {
-				int ow = child.WidthRequest;
-				int oh = child.HeightRequest;
-				child.SetSizeRequest (nw, nh);
-				if (ow > nw)
-					child.WidthRequest = ow;
-				if (oh > nh)
-					child.HeightRequest = oh;
-				QueueDraw ();
-			}
+			currentSizeRequest = new Requisition ();
+			currentSizeRequest.Width = alloc.Width;
+			currentSizeRequest.Height = alloc.Height;
+			QueueDraw ();
 		}
 		
-		protected override void OnSizeRequested (ref Requisition req)
+		protected override void OnGetPreferredWidth (out int minimum, out int natural)
+		{
+			Requisition req = ComputeSizeRequest ();
+			minimum = natural = req.Width;
+		}
+
+		protected override void OnGetPreferredHeight (out int minimum, out int natural)
+		{
+			Requisition req = ComputeSizeRequest ();
+			minimum = natural = req.Height;
+		}
+
+		Requisition ComputeSizeRequest ()
 		{
 			// The Toplevel check is done to ensure that this widget is anchored,
 			// otherwise the Realize call will fail.
 			if (!child.IsRealized && Toplevel is Gtk.Window)
 				child.Realize ();
-			
-			req = child.SizeRequest ();
+
+			Requisition req = child.SizeRequest ();
 			// Make some room for the border
 			req.Width += padding * 2 + selectionBorder * 2;
 			req.Height += padding * 2 + selectionBorder * 2;
@@ -509,6 +506,7 @@ namespace Stetic
 				if (tchild.Y + treq.Height > req.Height)
 					req.Height = tchild.Y + treq.Height;
 			}
+			return req;
 		}
 
 		protected override void OnSizeAllocated (Gdk.Rectangle rect)
@@ -631,37 +629,20 @@ namespace Stetic
 			return base.OnButtonReleaseEvent (ev);
 		}
 		
-		protected override bool OnExposeEvent (Gdk.EventExpose ev)
+		protected override bool OnDrawn (Cairo.Context cr)
 		{
-			bool r = base.OnExposeEvent (ev);
+			bool r = base.OnDrawn (cr);
 			//FIXME Disabled checkerboard background because it's very inefficient and makes the control *very* slow to resize
-			// It should take the EventExpose area into account, invalidate more selectively during resizes (GTK viewport 
+			// It should take the draw area into account, invalidate more selectively during resizes (GTK viewport
 			// code would probably be a good start), and take advantage of the flat block color the parent is rendering.
-			/*
-			int size = 8;
-			bool squareColor = true;
-			bool startsquareColor = true;
-			int x1 = 0;
-			int x2 = Allocation.Width;
-			int y1 = 0;
-			int y2 = Allocation.Height;
-			for (int y = y1; y < y2; y += size) {
-				squareColor = startsquareColor;
-				startsquareColor = !startsquareColor;
-				for (int x = x1; x < x2; x += size) {
-					GdkWindow.DrawRectangle (squareColor ? Style.DarkGC (StateType.Normal) : Style.DarkGC (StateType.Active), true, x, y, size, size);
-					squareColor = !squareColor;
-				}
-			}
-
-			foreach (Widget cw in Children)
-				PropagateExpose (cw, ev);*/
 
 			Gdk.Rectangle rect = child.Allocation;
-			GdkWindow.DrawRectangle (this.Style.BackgroundGC (StateType.Normal), true, rect.X, rect.Y, rect.Width, rect.Height);
-			
+			cr.SetSourceColor (Gdk2Compat.ToCairo (this.StyleContext.GetBackgroundColor (this.StateFlags)));
+			cr.Rectangle (rect.X, rect.Y, rect.Width, rect.Height);
+			cr.Fill ();
+
 			Pixbuf sh = Shadow.AddShadow (rect.Width, rect.Height);
-			GdkWindow.DrawPixbuf (this.Style.BackgroundGC (StateType.Normal), sh, 0, 0, rect.X - 5, rect.Y - 5, sh.Width, sh.Height, RgbDither.None, 0, 0); 
+			Gdk.CairoHelper.SetSourcePixbuf (cr, sh, rect.X - 5, rect.Y - 5);
 			return r;
 		}
 		
@@ -827,7 +808,7 @@ namespace Stetic
 			pxEnd += xEnd;
 			pyEnd += yEnd;
 			
-			Allocation = new Gdk.Rectangle (px, py, pxEnd - px, pyEnd - py);
+			SetAllocation (new Gdk.Rectangle (px, py, pxEnd - px, pyEnd - py));
 			ox = rect.X;
 			oy = rect.Y;
 		}
@@ -849,34 +830,42 @@ namespace Stetic
 				px = rect.X + rect.Width / 2;
 		}
 		
-		protected override bool OnExposeEvent (Gdk.EventExpose ev)
+		protected override bool OnDrawn (Cairo.Context cr)
 		{
-			int w, h;
-			this.GdkWindow.GetSize (out w, out h);
-			
+			int w = Allocation.Width;
+			int h = Allocation.Height;
+
 			if (fill == BoxFill.Box) {
-				this.GdkWindow.DrawRectangle (this.Style.WhiteGC, true, 0, 0, w, h);
-				this.GdkWindow.DrawRectangle (this.Style.BlackGC, false, 0, 0, w-1, h-1);
+				cr.SetSourceColor (new Cairo.Color (1, 1, 1));
+				cr.Rectangle (0, 0, w, h);
+				cr.Fill ();
+				cr.SetSourceColor (new Cairo.Color (0, 0, 0));
+				cr.Rectangle (0, 0, w - 1, h - 1);
+				cr.Stroke ();
 			} else if (fill == BoxFill.HLine) {
-				using (Gdk.GC gc = new Gdk.GC (this.GdkWindow)) {
-					gc.SetDashes (0, new sbyte [] { 1, 1 }, 2);
-					gc.SetLineAttributes (SelectionHandleBox.selectionLineWidth, Gdk.LineStyle.OnOffDash, Gdk.CapStyle.NotLast, Gdk.JoinStyle.Miter);
-					gc.Foreground = this.Style.Black;
-					this.GdkWindow.DrawLine (gc, 0, h / 2, w, h / 2);
-					gc.Foreground = this.Style.White;
-					this.GdkWindow.DrawLine (gc, 1, h/2, w, h/2);
-				}
+				cr.SetDash (new double[] { 1, 1 }, 2);
+				cr.LineWidth = SelectionHandleBox.selectionLineWidth;
+				cr.SetSourceColor (new Cairo.Color (0, 0, 0));
+				cr.MoveTo (0, h / 2);
+				cr.LineTo (w, h / 2);
+				cr.Stroke ();
+				cr.SetSourceColor (new Cairo.Color (1, 1, 1));
+				cr.MoveTo (1, h / 2);
+				cr.LineTo (w, h / 2);
+				cr.Stroke ();
 			} else {
-				using (Gdk.GC gc = new Gdk.GC (this.GdkWindow)) {
-					gc.SetDashes (0, new sbyte [] { 1, 1 }, 2);
-					gc.SetLineAttributes (SelectionHandleBox.selectionLineWidth, Gdk.LineStyle.OnOffDash, Gdk.CapStyle.NotLast, Gdk.JoinStyle.Miter);
-					gc.Foreground = this.Style.Black;
-					this.GdkWindow.DrawLine (gc, w / 2, 0, w / 2, h);
-					gc.Foreground = this.Style.White;
-					this.GdkWindow.DrawLine (gc, w / 2, 1, w/2, h);
-				}
+				cr.SetDash (new double[] { 1, 1 }, 2);
+				cr.LineWidth = SelectionHandleBox.selectionLineWidth;
+				cr.SetSourceColor (new Cairo.Color (0, 0, 0));
+				cr.MoveTo (w / 2, 0);
+				cr.LineTo (w / 2, h);
+				cr.Stroke ();
+				cr.SetSourceColor (new Cairo.Color (1, 1, 1));
+				cr.MoveTo (w / 2, 1);
+				cr.LineTo (w / 2, h);
+				cr.Stroke ();
 			}
-			
+
 			return true;
 		}
 		

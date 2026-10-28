@@ -6,7 +6,7 @@ namespace MonoDevelop.VersionControl
 	{
 		private global::Gtk.Table table1;
 		private global::Gtk.HBox hbox1;
-		private global::Gtk.ComboBox comboProtocol;
+		private global::Gtk.ComboBoxText comboProtocol;
 		private global::Gtk.HBox hbox2;
 		private global::Gtk.SpinButton repositoryPortSpin;
 		private global::Gtk.HSeparator hseparator2;
@@ -39,7 +39,7 @@ namespace MonoDevelop.VersionControl
 			this.hbox1 = new global::Gtk.HBox ();
 			this.hbox1.Name = "hbox1";
 			// Container child hbox1.Gtk.Box+BoxChild
-			this.comboProtocol = global::Gtk.ComboBox.NewText ();
+			this.comboProtocol = new global::Gtk.ComboBoxText ();
 			this.comboProtocol.Name = "comboProtocol";
 			this.hbox1.Add (this.comboProtocol);
 			global::Gtk.Box.BoxChild w1 = ((global::Gtk.Box.BoxChild)(this.hbox1 [this.comboProtocol]));

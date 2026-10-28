@@ -44,9 +44,8 @@ namespace MonoDevelop.AnalysisCore.Gui
 				WidthRequest = 16;
 			}
 
-			protected override bool OnExposeEvent (Gdk.EventExpose evnt)
+			protected override bool OnDrawn (Cairo.Context cr)
 			{
-				using (Cairo.Context cr = Gdk.CairoHelper.Create (evnt.Window)) {
 					const int triangleWidth = 8;
 					const int triangleHeight = 4;
 
@@ -58,7 +57,6 @@ namespace MonoDevelop.AnalysisCore.Gui
 					cr.LineTo (Allocation.Width / 2, topPosition + triangleHeight);
 					cr.LineTo (Allocation.Width / 2 + triangleWidth / 2, topPosition);
 					cr.Fill ();
-				}
 				return true;
 			}
 		}

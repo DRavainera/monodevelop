@@ -98,7 +98,7 @@ namespace MonoDevelop.Ide.CodeCompletion
 	}
 
 	[Obsolete]
-	class ListWidget : Gtk.DrawingArea
+	class ListWidget : Gtk.DrawingArea, Gtk.IScrollable
 	{
 		const int minSize = 400;
 		const int maxListWidth = 800;
@@ -197,31 +197,46 @@ namespace MonoDevelop.Ide.CodeCompletion
 		}
 
 		
-		protected override void OnDestroyed ()
+		protected override void Dispose (bool disposing)
 		{
-			base.OnDestroyed ();
-			if (layout != null) {
-				layout.Dispose ();
-				categoryLayout.Dispose ();
-				noMatchLayout.Dispose ();
-				layout = categoryLayout = noMatchLayout = null;
+			if (disposing) {
+				if (layout != null) {
+					layout.Dispose ();
+					categoryLayout.Dispose ();
+					noMatchLayout.Dispose ();
+					layout = categoryLayout = noMatchLayout = null;
+				}
+				if (itemFont != null) {
+					itemFont.Dispose ();
+					itemFont = null;
+				}
 			}
-			if (itemFont != null) {
-				itemFont.Dispose ();
-				itemFont = null;
-			}
+			base.Dispose (disposing);
 		}
 
-		protected override void OnSetScrollAdjustments (Adjustment hadj, Adjustment vadj)
-		{
-			if (this.vadj != null)
-				this.vadj.ValueChanged -= HandleValueChanged;
-			this.vadj = vadj;
-			base.OnSetScrollAdjustments (hadj, vadj);
-			if (this.vadj != null) {
-				this.vadj.ValueChanged += HandleValueChanged;
-				SetAdjustments ();
+		Gtk.Adjustment hadj;
+		Gtk.Adjustment Gtk.IScrollable.Hadjustment {
+			get { return hadj; }
+			set { hadj = value; }
+		}
+		Gtk.Adjustment Gtk.IScrollable.Vadjustment {
+			get { return vadj; }
+			set {
+				if (this.vadj != null)
+					this.vadj.ValueChanged -= HandleValueChanged;
+				this.vadj = value;
+				if (this.vadj != null) {
+					this.vadj.ValueChanged += HandleValueChanged;
+					SetAdjustments ();
+				}
 			}
+		}
+		Gtk.ScrollablePolicy Gtk.IScrollable.HscrollPolicy { get; set; }
+		Gtk.ScrollablePolicy Gtk.IScrollable.VscrollPolicy { get; set; }
+		bool Gtk.IScrollable.GetBorder (out Gtk.Border border)
+		{
+			border = default;
+			return false;
 		}
 
 		void HandleValueChanged (object sender, EventArgs e)
@@ -373,15 +388,15 @@ namespace MonoDevelop.Ide.CodeCompletion
 		protected override void OnRealized ()
 		{
 			base.OnRealized ();
-			this.GdkWindow.Background = this.Style.Base (StateType.Normal);
+			this.OverrideBackgroundColor (StateFlags.Normal, this.GetStyleBackgroundColor (StateType.Normal));
 		}
 		
 		protected override bool OnMotionNotifyEvent (EventMotion e)
 		{
 			if (!buttonPressed)
 				return base.OnMotionNotifyEvent (e);
-			int winWidth, winHeight;
-			this.GdkWindow.GetSize (out winWidth, out winHeight);
+			int winWidth = this.GdkWindow.Width;
+			int winHeight = this.GdkWindow.Height;
 			SelectedItemIndex = GetRowByPosition ((int)e.Y);
 			return true;
 		}
@@ -394,15 +409,15 @@ namespace MonoDevelop.Ide.CodeCompletion
 			get { return MonoDevelop.Core.GettextCatalog.GetString ("No suggestions"); }
 		}
 
-		protected override bool OnExposeEvent (Gdk.EventExpose args)
+		protected override bool OnDrawn (Cairo.Context context)
 		{
-			using (var context = Gdk.CairoHelper.Create (args.Window)) {
+			{
 				var scalef = GtkWorkarounds.GetScaleFactor (this);
 				context.LineWidth = 1;
 				var alloc = Allocation;
 				int width = alloc.Width;
 				int height = alloc.Height;
-				context.Rectangle (args.Area.X, args.Area.Y, args.Area.Width, args.Area.Height);
+				context.Rectangle (0, 0, width, height);
 				var backgroundColor = Styles.CodeCompletion.BackgroundColor.ToCairoColor ();
 				var textColor = Styles.CodeCompletion.TextColor.ToCairoColor ();
 				var categoryColor = Styles.CodeCompletion.CategoryColor.ToCairoColor ();
@@ -666,12 +681,18 @@ namespace MonoDevelop.Ide.CodeCompletion
 			SetAdjustments (false);
 		}
 		
-		protected override void OnSizeRequested (ref Requisition requisition)
+		protected override void OnGetPreferredWidth (out int minimum, out int natural)
 		{
-			base.OnSizeRequested (ref requisition);
-			requisition.Width = listWidth;
+			base.OnGetPreferredWidth (out minimum, out natural);
+			minimum = natural = listWidth;
+		}
+
+		protected override void OnGetPreferredHeight (out int minimum, out int natural)
+		{
+			base.OnGetPreferredHeight (out minimum, out natural);
 			if (rowHeight > 0)
-				requisition.Height += requisition.Height % rowHeight;
+				natural += natural % rowHeight;
+			minimum = natural;
 		}
 
 		void CalcVisibleRows ()

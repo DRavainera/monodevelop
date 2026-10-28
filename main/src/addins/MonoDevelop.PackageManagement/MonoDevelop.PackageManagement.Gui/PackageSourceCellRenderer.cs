@@ -54,9 +54,9 @@ namespace MonoDevelop.PackageManagement
 		const int textSpacing = 7;
 		const int textTopSpacing = 3;
 
-		protected override void Render (Gdk.Drawable window, Widget widget, Gdk.Rectangle background_area, Gdk.Rectangle cell_area, Gdk.Rectangle expose_area, CellRendererState flags)
+		protected override void OnRender (Cairo.Context cr, Widget widget, Gdk.Rectangle background_area, Gdk.Rectangle cell_area, CellRendererState flags)
 		{
-			base.Render (window, widget, background_area, cell_area, expose_area, flags);
+			base.OnRender (cr, widget, background_area, cell_area, flags);
 
 			if (PackageSourceViewModel == null)
 				return;
@@ -69,16 +69,22 @@ namespace MonoDevelop.PackageManagement
 
 				layout.SetMarkup (GetPackageSourceDescriptionMarkup (flags));
 
-				window.DrawLayout (widget.Style.TextGC (state), cell_area.X + textSpacing, cell_area.Y + textTopSpacing, layout);
+				cr.Save ();
+				cr.Translate (cell_area.X + textSpacing, cell_area.Y + textTopSpacing);
+				cr.SetSourceColor (GtkUtil.GetStyleColor (widget, state).ToCairoColor ());
+				Pango.CairoHelper.ShowLayout (cr, layout);
+				cr.Restore ();
 
 				if (!PackageSourceViewModel.IsValid) {
-					using (var ctx = Gdk.CairoHelper.Create (window)) {
-						ctx.DrawImage (widget, warningImage, cell_area.X + textSpacing + packageSourceNameWidth + imageSpacing, cell_area.Y + textTopSpacing);
-					}
+					GtkUtil.DrawImage (cr, widget, warningImage, cell_area.X + textSpacing + packageSourceNameWidth + imageSpacing, cell_area.Y + textTopSpacing);
 
 					layout.SetMarkup (GetPackageSourceErrorMarkup (flags));
 					int packageSourceErrorTextX = cell_area.X + textSpacing + packageSourceNameWidth + (int)warningImage.Width + (2 * imageSpacing);
-					window.DrawLayout (widget.Style.TextGC (state), packageSourceErrorTextX, cell_area.Y + textTopSpacing, layout);
+					cr.Save ();
+					cr.Translate (packageSourceErrorTextX, cell_area.Y + textTopSpacing);
+					cr.SetSourceColor (GtkUtil.GetStyleColor (widget, state).ToCairoColor ());
+					Pango.CairoHelper.ShowLayout (cr, layout);
+					cr.Restore ();
 				}
 			}
 		}
@@ -132,9 +138,9 @@ namespace MonoDevelop.PackageManagement
 				PackageSourceViewModel.ValidationFailureMessage);
 		}
 
-		public override void GetSize (Widget widget, ref Gdk.Rectangle cell_area, out int x_offset, out int y_offset, out int width, out int height)
+		protected override void OnGetSize (Widget widget, ref Gdk.Rectangle cell_area, out int x_offset, out int y_offset, out int width, out int height)
 		{
-			base.GetSize (widget, ref cell_area, out x_offset, out y_offset, out width, out height);
+			base.OnGetSize (widget, ref cell_area, out x_offset, out y_offset, out width, out height);
 
 			using (var layout = new Pango.Layout (widget.PangoContext)) {
 				layout.SetMarkup (GetPackageSourceDescriptionMarkup ());

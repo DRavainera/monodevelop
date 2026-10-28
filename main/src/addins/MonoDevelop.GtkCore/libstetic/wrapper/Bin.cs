@@ -333,16 +333,9 @@ namespace Stetic.Wrapper
 		public static BinContainer Attach (Gtk.Bin bin)
 		{
 			BinContainer bc = new BinContainer ();
-			bin.SizeRequested += new Gtk.SizeRequestedHandler (bc.OnSizeRequested);
 			bin.SizeAllocated += new Gtk.SizeAllocatedHandler (bc.OnSizeAllocated);
 			bin.Added += new Gtk.AddedHandler (bc.OnAdded);
 			return bin;
-		}
-		
-		void OnSizeRequested (object s, Gtk.SizeRequestedArgs args)
-		{
-			if (child != null)
-				args.Requisition = child.SizeRequest ();
 		}
 		
 		void OnSizeAllocated (object s, Gtk.SizeAllocatedArgs args)

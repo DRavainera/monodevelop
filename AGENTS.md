@@ -170,7 +170,7 @@ Reglas de implementación:
 Cada tarea se valida con un subagente con el rol de Tester QA Senior, que ejecuta las pruebas correspondientes a esa tarea. El ciclo es recursivo y encadenado: el subagente reporta los errores encontrados, el agente de desarrollo los corrige, y el subagente vuelve a validar. El ciclo se repite hasta que no queden errores. Una tarea no se cierra mientras el Tester QA Senior tenga hallazgos abiertos.
 
 18.6 Carpeta de pruebas para agentes
-Los artefactos de prueba de los agentes (scripts de QA, fixtures, capturas, logs, configuraciones temporales) se guardan en `~/opencode/`. No se usa `/tmp/`, porque es un tmpfs que se borra al reiniciar y pierde el estado entre sesiones. `~/opencode/` es persistente y queda fuera del repositorio, por lo que no se commitea.
+Los artefactos de prueba de los agentes y subagentes, Devs y QA(probes, scripts de QA, fixtures, capturas, logs, configuraciones temporales) se guardan en `~/opencode/`. No se usa `/tmp/`, porque es un tmpfs que se borra al reiniciar y pierde el estado entre sesiones. `~/opencode/` es persistente y queda fuera del repositorio, por lo que no se commitea.
 
 18.7 Pull requests
 Los agentes no crean pull requests. El operador los crea y gestiona manualmente en GitHub. El cierre de una tarea por parte de un agente termina en commit y push a la rama correspondiente. Solo cuando el operador lo solicite explicitamente el agente puede crear un pull request.

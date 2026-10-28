@@ -3,6 +3,9 @@ using System.Collections;
 
 namespace Stetic {
 
+	// Equivalente de Gtk.SideType (2.12), ausente en el binding 3.24
+	public enum SideType { Top, Bottom, Left, Right }
+
 	public static class DND {
 		static Gtk.TargetEntry[] targets;
 		static Gtk.TargetList targetList;
@@ -285,7 +288,7 @@ namespace Stetic {
 			if (!widget.IsRealized)
 				return;
 
-			Gdk.Window win = NewWindow (widget, Gdk.WindowClass.InputOnly);
+			Gdk.Window win = NewWindow (widget, Gdk.WindowWindowClass.InputOnly);
 			win.MoveResize (x, y, width, height);
 
 			Hashtable widgetFaults = faultGroups[widget] as Hashtable;
@@ -401,7 +404,7 @@ namespace Stetic {
 		}
 
 		public static void AddFault (Stetic.Wrapper.Widget owner, object faultId,
-					     Gtk.SideType side, Gtk.Widget widget)
+					     SideType side, Gtk.Widget widget)
 		{
 			Gdk.Rectangle fault;
 			Gtk.Orientation orientation;
@@ -414,22 +417,22 @@ namespace Stetic {
 				fault = widget.Allocation;
 
 			switch (side) {
-			case Gtk.SideType.Top:
+			case SideType.Top:
 				fault.Y -= FaultOverlap;
 				fault.Height = 2 * FaultOverlap;
 				orientation = Gtk.Orientation.Horizontal;
 				break;
-			case Gtk.SideType.Bottom:
+			case SideType.Bottom:
 				fault.Y += fault.Height - FaultOverlap;
 				fault.Height = 2 * FaultOverlap;
 				orientation = Gtk.Orientation.Horizontal;
 				break;
-			case Gtk.SideType.Left:
+			case SideType.Left:
 				fault.X -= FaultOverlap;
 				fault.Width = 2 * FaultOverlap;
 				orientation = Gtk.Orientation.Vertical;
 				break;
-			case Gtk.SideType.Right:
+			case SideType.Right:
 				fault.X += fault.Width - FaultOverlap;
 				fault.Width = 2 *FaultOverlap;
 				orientation = Gtk.Orientation.Vertical;
@@ -501,14 +504,14 @@ namespace Stetic {
 
 		static Fault FindFault (int x, int y, Gtk.Widget w)
 		{
-			int wx, wy, width, height, depth;
+			int wx, wy, width, height;
 
 			Hashtable widgetFaults  = (Hashtable) faultGroups [w];
 			if (widgetFaults == null)
 				return null;
 				
 			foreach (Fault f in widgetFaults.Values) {
-				f.Window.GetGeometry (out wx, out wy, out width, out height, out depth);
+				f.Window.GetGeometry (out wx, out wy, out width, out height);
 				if (x >= wx && y >= wy && x <= wx + width && y <= wy + height) {
 					return f;
 				}
@@ -518,7 +521,7 @@ namespace Stetic {
 
 		static void FaultDragMotion (object obj, Gtk.DragMotionArgs args)
 		{
-			int wx, wy, width, height, depth;
+			int wx, wy, width, height;
 			
 			Gtk.Widget widget = (Gtk.Widget) obj;
 			int px = args.X + widget.Allocation.X;
@@ -536,8 +539,8 @@ namespace Stetic {
 				if (dragFault == null)
 					return;
 
-				splitter = NewWindow (fault.Owner.Wrapped, Gdk.WindowClass.InputOutput);
-				fault.Window.GetGeometry (out wx, out wy, out width, out height, out depth);
+				splitter = NewWindow (fault.Owner.Wrapped, Gdk.WindowWindowClass.InputOutput);
+				fault.Window.GetGeometry (out wx, out wy, out width, out height);
 				if (fault.Orientation == Gtk.Orientation.Horizontal) {
 					splitter.MoveResize (wx, wy + height / 2 - FaultOverlap,
 							     width, 2 * FaultOverlap);
@@ -600,33 +603,24 @@ namespace Stetic {
 			}
 		}
 
-		static Gdk.Window NewWindow (Gtk.Widget parent, Gdk.WindowClass wclass)
+		static Gdk.Window NewWindow (Gtk.Widget parent, Gdk.WindowWindowClass wclass)
 		{
 			Gdk.WindowAttr attributes;
-			Gdk.WindowAttributesType attributesMask;
 			Gdk.Window win;
 
 			attributes = new Gdk.WindowAttr ();
 			attributes.WindowType = Gdk.WindowType.Child;
 			attributes.Wclass = wclass ;
 			attributes.Visual = parent.Visual;
-			attributes.Colormap = parent.Colormap;
-			attributes.Mask = (Gdk.EventMask.ButtonPressMask |
+			attributes.EventMask = (int) (Gdk.EventMask.ButtonPressMask |
 					   Gdk.EventMask.ButtonMotionMask |
 					   Gdk.EventMask.ButtonReleaseMask |
 					   Gdk.EventMask.ExposureMask |
 					   Gdk.EventMask.EnterNotifyMask |
 					   Gdk.EventMask.LeaveNotifyMask);
 
-			attributesMask =
-				Gdk.WindowAttributesType.Visual |
-				Gdk.WindowAttributesType.Colormap;
-
-			win = new Gdk.Window (parent.GdkWindow, attributes, attributesMask);
+			win = new Gdk.Window (parent.GdkWindow, attributes, Gdk.WindowAttributesType.Visual);
 			win.UserData = parent.Handle;
-
-			if (wclass == Gdk.WindowClass.InputOutput)
-				parent.Style.Attach (win);
 
 			return win;
 		}

@@ -11,7 +11,7 @@ namespace Stetic.Editor {
 	[PropertyEditor ("Group", "Changed")]
 	class GroupPicker : Gtk.HBox, IPropertyEditor {
 
-		Gtk.ComboBox combo;
+		Gtk.ComboBoxText combo;
 		IRadioGroupManager manager;
 		ArrayList values;
 		string group;
@@ -40,10 +40,11 @@ namespace Stetic.Editor {
 			GroupsChanged ();
 		}
 
-		public override void Dispose ()
+		protected override void Dispose (bool disposing)
 		{
-			manager.GroupsChanged -= GroupsChanged;
-			base.Dispose ();
+			if (disposing)
+				manager.GroupsChanged -= GroupsChanged;
+			base.Dispose (disposing);
 		}
 
 		void GroupsChanged ()
@@ -53,7 +54,7 @@ namespace Stetic.Editor {
 				Remove (combo);
 			}
 
-			combo = Gtk.ComboBox.NewText ();
+			combo = new Gtk.ComboBoxText ();
 			combo.Changed += combo_Changed;
 #if GTK_SHARP_2_6
 			combo.RowSeparatorFunc = RowSeparatorFunc;
@@ -127,14 +128,13 @@ namespace Stetic.Editor {
 			Gtk.Dialog dialog = new Gtk.Dialog (
 				rename ? Catalog.GetString ("Rename Group") : Catalog.GetString ("New Group"),
 				combo.Toplevel as Gtk.Window,
-				Gtk.DialogFlags.Modal | Gtk.DialogFlags.NoSeparator, 
-				Gtk.Stock.Cancel, Gtk.ResponseType.Cancel,
-				Gtk.Stock.Ok, Gtk.ResponseType.Ok);
+				Gtk.DialogFlags.Modal,
+				StockCompat.Cancel, Gtk.ResponseType.Cancel,
+				StockCompat.Ok, Gtk.ResponseType.Ok);
 			dialog.DefaultResponse = Gtk.ResponseType.Ok;
-			dialog.HasSeparator = false;
 			dialog.BorderWidth = 12;
-			dialog.VBox.Spacing = 18;
-			dialog.VBox.BorderWidth = 0;
+			dialog.ContentArea.Spacing = 18;
+			dialog.ContentArea.BorderWidth = 0;
 
 			Gtk.HBox hbox = new Gtk.HBox (false, 12);
 			Gtk.Label label = new Gtk.Label (rename ? Catalog.GetString ("_New name:") : Catalog.GetString ("_Name:"));
@@ -145,7 +145,7 @@ namespace Stetic.Editor {
 			if (rename)
 				entry.Text = group;
 			hbox.PackStart (entry, true, true, 0);
-			dialog.VBox.PackStart (hbox, false, false, 0);
+			dialog.ContentArea.PackStart (hbox, false, false, 0);
 
 			dialog.ShowAll ();
 			// Have to set this *after* ShowAll

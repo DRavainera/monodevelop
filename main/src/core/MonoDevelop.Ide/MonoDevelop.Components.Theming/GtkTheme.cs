@@ -43,17 +43,15 @@ namespace MonoDevelop.Components.Theming
 
 		public static Cairo.Color GetCairoTextMidColor (Widget widget)
 		{
-			Cairo.Color text_color = CairoExtensions.GdkColorToCairoColor (widget.Style.Foreground (StateType.Normal));
-			Cairo.Color background_color = CairoExtensions.GdkColorToCairoColor (widget.Style.Background (StateType.Normal));
+			Cairo.Color text_color = CairoExtensions.GdkColorToCairoColor (widget.GetStyleColor (StateType.Normal).ToGdkColor ());
+			Cairo.Color background_color = CairoExtensions.GdkColorToCairoColor (widget.GetStyleBackgroundColor (StateType.Normal).ToGdkColor ());
 			return CairoExtensions.AlphaBlend (text_color, background_color, 0.5);
 		}
 
 		public static Gdk.Color GetGdkTextMidColor (Widget widget)
 		{
 			Cairo.Color color = GetCairoTextMidColor (widget);
-			Gdk.Color gdk_color = new Gdk.Color ((byte)(color.R * 255), (byte)(color.G * 255), (byte)(color.B * 255));
-			Gdk.Colormap.System.AllocColor (ref gdk_color, true, true);
-			return gdk_color;
+			return new Gdk.Color ((byte)(color.R * 255), (byte)(color.G * 255), (byte)(color.B * 255));
 		}
 
 		protected override void OnColorsRefreshed ()

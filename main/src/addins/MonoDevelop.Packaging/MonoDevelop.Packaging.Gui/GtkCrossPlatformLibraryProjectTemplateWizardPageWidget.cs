@@ -113,7 +113,7 @@ namespace MonoDevelop.Packaging.Gui
 
 		void NameTextInserted (object o, TextInsertedArgs args)
 		{
-			if (args.Text.IndexOf ('\r') >= 0) {
+			if (args.NewText.IndexOf ('\r') >= 0) {
 				var textBox = (Entry)o;
 				textBox.Text = textBox.Text.Replace ("\r", string.Empty);
 			}
@@ -165,12 +165,13 @@ namespace MonoDevelop.Packaging.Gui
 			wizardPage.IsSharedProjectSelected = sharedProjectRadioButton.Active;
 		}
 
-		public override void Dispose ()
+		protected override void Dispose (bool disposing)
 		{
-			Dispose (nameTooltip);
-			Dispose (backgroundImage);
-
-			base.Dispose ();
+			if (disposing) {
+				Dispose (nameTooltip);
+				Dispose (backgroundImage);
+			}
+			base.Dispose (disposing);
 		}
 
 		void Dispose (IDisposable disposable)

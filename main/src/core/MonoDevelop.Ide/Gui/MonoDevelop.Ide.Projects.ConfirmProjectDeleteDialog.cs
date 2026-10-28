@@ -34,7 +34,7 @@ namespace MonoDevelop.Ide.Projects
 			this.WindowPosition = ((global::Gtk.WindowPosition)(4));
 			this.Modal = true;
 			// Internal child MonoDevelop.Ide.Projects.ConfirmProjectDeleteDialog.VBox
-			global::Gtk.VBox w1 = this.VBox;
+			global::Gtk.Box w1 = this.ContentArea;
 			w1.Name = "dialog1_VBox";
 			w1.BorderWidth = ((uint)(2));
 			// Container child dialog1_VBox.Gtk.Box+BoxChild
@@ -58,7 +58,6 @@ namespace MonoDevelop.Ide.Projects
 			this.radioDeleteAll.Name = "radioDeleteAll";
 			this.radioDeleteAll.DrawIndicator = true;
 			this.radioDeleteAll.UseUnderline = true;
-			this.radioDeleteAll.Group = new global::GLib.SList (global::System.IntPtr.Zero);
 			this.vbox2.Add (this.radioDeleteAll);
 			global::Gtk.Box.BoxChild w3 = ((global::Gtk.Box.BoxChild)(this.vbox2 [this.radioDeleteAll]));
 			w3.Position = 1;
@@ -112,7 +111,7 @@ namespace MonoDevelop.Ide.Projects
 			global::Gtk.Box.BoxChild w10 = ((global::Gtk.Box.BoxChild)(w1 [this.vbox2]));
 			w10.Position = 0;
 			// Internal child MonoDevelop.Ide.Projects.ConfirmProjectDeleteDialog.ActionArea
-			global::Gtk.HButtonBox w11 = this.ActionArea;
+			global::Gtk.ButtonBox w11 = this.ActionArea;
 			w11.Name = "dialog1_ActionArea";
 			w11.Spacing = 10;
 			w11.BorderWidth = ((uint)(5));

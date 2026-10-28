@@ -66,7 +66,7 @@ namespace MonoDevelop.AspNet.Projects
 			backgroundImageView = new ImageView (backgroundImage);
 			backgroundImageView.Xalign = 1.0f;
 			backgroundImageView.Yalign = 1.0f;
-			backgroundImageView.SizeRequested += BackgroundImageViewSizeRequested;
+			backgroundImageView.WidthRequest = (int)backgroundImage.Width + 30;
 			backgroundLargeImageVBox.PackStart (backgroundImageView, true, true, 0);
 
 			var separatorColor = Ide.Gui.Styles.NewProjectDialog.ProjectConfigurationSeparatorColor.ToGdkColor ();
@@ -86,11 +86,12 @@ namespace MonoDevelop.AspNet.Projects
 			WizardPage = wizardPage;
 		}
 
-		public override void Dispose ()
+		protected override void Dispose (bool disposing)
 		{
-			backgroundImageView.SizeRequested -= BackgroundImageViewSizeRequested;
-			Dispose (backgroundImage);
-			base.Dispose ();
+			if (disposing) {
+				Dispose (backgroundImage);
+			}
+			base.Dispose (disposing);
 		}
 
 		void Dispose (IDisposable disposable)
@@ -152,17 +153,6 @@ namespace MonoDevelop.AspNet.Projects
 			return Platform.OSVersion >= MacSystemInformation.Yosemite;
 		}
 
-		void BackgroundImageViewSizeRequested (object o, SizeRequestedArgs args)
-		{
-			if (args.Requisition.Width <= backgroundImage.Width) {
-				// Ensure there is a gap between the image and the left hand side of the wizard
-				// if the labels have expanded to fit their text.
-				args.Requisition = new Requisition {
-					Height = args.Requisition.Height,
-					Width = args.Requisition.Width + 30
-				};
-			}
-		}
 	}
 }
 

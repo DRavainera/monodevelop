@@ -2889,9 +2889,104 @@ mono-addins y xwt commiteados/pushed en su rama `net10` (forks DRavainera) y pun
 actualizados en el commit de ola 4 del repo principal.
 
 **Pendiente / follow-up**:
-- T7 (bloqueado): Gtk# 3.x — falta binding gtk-sharp 3.x; retira el residual G1 de
-  `Mono.Cairo` (core + 14 addins) y el pipeline Gtk legacy.
 - T8: reimplementar funcionalidades quitadas (auditoría T3, 68 items).
 - T9: higiene de build — regeneración de outputs de `vs-editor-api` desde cero; carrera
   `runtimeconfig.json` entre TFMs net10.0/net10.0-windows sobre `main/build/` (lock MSB4018
   transitorio; relanzar el gate si aparece).
+
+### T7 — Gtk# 2.12 → GtkSharp 3.24.24.95 (cierre del pipeline Gtk legacy `--old-gui`, 2026-10-28)
+Antecedente: T7 llevaba pendiente desde el cierre de ola 4 ("bloqueado: falta binding
+gtk-sharp 3.x"). El binding `GtkSharp 3.24.24.95` (nuget, con `GLibSharp`/`GdkSharp`/
+`AtkSharp`/`PangoSharp` 3) ya estaba adoptado en los submódulos (xwt, mono-addins,
+fsharpbinding, debugger-libs, PropertyEditing) en cierres previos; esta sesión completó la
+migración del núcleo (`main/src/**` contra GtkSharp 3) y la validación/estabilización de
+arranque de la interfaz Gtk legacy.
+
+**Qué se hizo** (cambios de esta sesión sobre el changeset T7 acumulado, 536 ficheros):
+1. **Fix AtkCocoaHelper (críticos `g_signal` ×125-128 por arranque)**:
+   `main/src/core/MonoDevelop.Ide/MonoDevelop.Components.AtkCocoaHelper/AtkCocoaHelper.cs` —
+   `ActionDelegate` ahora guarda con `Attach(action, name, handler)` que consulta
+   `g_signal_lookup(name, owner.NativeType.Val) != 0` (P/Invoke a `libgobject-2.0.so.0` /
+   `libgobject-2.0.0.dylib` bajo `#if MAC`) antes de `AddSignalHandler`. Las señales Cocoa
+   (`request-actions`, `perform-*`) solo existen en macOS; en Linux `g_signal_lookup`
+   devuelve 0 y se salta el attach. Nota: `GLib.Signal.GetSignalId` es `private static` en
+   GtkSharp 3 (no accesible) → por eso el P/Invoke. Resultado: 128→0.
+2. **Fix `SetData<T>` (críticos `IA__gtk_object_set_data` ×40 por arranque)**:
+   `MonoDevelop.Components/GtkWorkarounds.cs` y la copia del submódulo
+   `xwt/Xwt.Gtk/Xwt.GtkBackend/GtkWorkarounds.cs` — el `SetData<T> where T: struct` hacía
+   P/Invoke a `gtk_object_set_data` (función GTK2; en la era Gtk# 2.12 el `pdata` se
+   "fugaba" a propósito para que el engine de temas C la leyera) y además hacía
+   `FreeHGlobal(pdata)` (dangling). En GtkSharp 3 `GLib.Object.Data[key]` ya mapea a
+   `g_object_set_data` (libgobject, GTK3) y **no hay reader C del hint** en GTK3 (los
+   engines GTK2 desaparecieron; el único otro consumidor, `AtkCocoaHelperMac`, usa el
+   overload `SetData(o, key, IntPtr)` → `g_object_set_data` directo). El P/Invoke legado
+   se eliminó; `SetData<T>` queda como `gtkobject.Data[key] = data`. Resultado: 40→0.
+3. **Fix del resolver de native libs (doble mundo GTK2+GTK3 → criticals `GDK_IS_WINDOW` /
+   `WIDGET_REALIZED_FOR_EVENT` / `cannot register existing type 'GtkWidget'` y cierres
+   prematuros)**: `MonoDevelop.Startup/MonoDevelopMain.cs` `ResolveNativeLibrary` —
+   `libgtk-win32-2.0-0.dll` → `libgtk-3` (antes `libgtk-x11-2.0`) y
+   `libgdk-win32-2.0-0.dll` → `libgdk-3` (antes `libgdk-x11-2.0`). Causa: los P/Invokes
+   residuales (PangoUtil, GtkWorkarounds, TextArea `im_multicontext`) cargaban GTK2 junto a
+   GTK3; ambas librerías registran `GtkWidget`/`GdkWindow` en el type system de GLib del
+   proceso → el registro perdedor falla (`cannot register existing type`) y los macros
+   `GTK_IS_WIDGET`/`GDK_IS_WINDOW` de cada lib fallan sobre widgets de la otra.
+   Verificado por símbolos (`nm -D`): `libgtk-3`/`libgdk-3` son superset de todos los
+   símbolos que se P/Invocan (los únicos ausentes en ambas, p.ej.
+   `gtk_icon_source_set_scale`, ya tenían fallback `EntryPointNotFoundException`).
+   Resultado: doble registración 3→0 y document-open estable 3/3 (antes 1-2/3 con muerte
+   puntual).
+4. **Staging híbrido del layout plano `main/build/`**: el build limpio T7 genera
+   `build/AddIns/<name>/` **solo con el ensamblado propio** de cada addin (los refs NuGet
+   llevan `<Private>False</Private>` → no copy-local), mientras el set completo de
+   dependencias (XmlTransform, NuGet.*, etc.) vive en los directorios de nivel superior
+   (`build/MonoDevelop.PackageManagement/`, `build/VersionControl/`, …) heredados del
+   staging anterior. Proceso reproducible: `rm -rf main/build` → `dotnet build Main.sln
+   -c DebugLinux` → `tar --skip-old-files -xzf ~/opencode/staging_backup_oct26.tgz` y
+   `…_addins_oct26.tgz` (gap-fill de nivel superior) → por cada `AddIns/<name>/`,
+   `cp -rn <name>/. AddIns/<name>/` (dependencias faltantes sin pisar los ensamblados
+   frescos). Sin esto: `FileNotFoundException` de `Microsoft.Web.XmlTransform.dll` al
+   cargar PackageManagement → DotNetCore/AspNetCore/Packaging no cargan → cierre de la app.
+
+**Cómo validar**:
+- Gate: `dotnet build main/Main.sln -c DebugLinux` = 0 Errores.
+- Smoke Gtk: `bash ~/opencode/qa_t4_gtkdoc.sh` (o `qa_t7_smoke3.sh` ×3) → en los 3 runs:
+  ventana `QaB4 – Program.cs – MonoDevelop`, proc vivo a 75 s, y en el log
+  (`~/.cache/MonoDevelop/9.0/Logs/Ide.*.log`): `g_signal`=0, `gtk_object_set_data`=0,
+  `cannot register existing type`=0, MEF "not assignable"=0, fatals=0.
+- Smoke Avalonia: `bash ~/opencode/qa_t6_avalonia.sh` → ventana `MonoDevelop — Avalonia
+  Shell`, proc vivo, fatals=0.
+
+**QA (§18.5)**: wave T7 en `~/opencode/qa_t7/` (protocolo persistente). Ronda 1 (build
+01:27): Q1 gate OK, Q2 FALLO (cierre prematuro ~4 s tras el arranque; causa: layout de
+AddIns incompleto + doble mundo GTK). Ronda 2 (tras los 3 fixes + staging híbrido):
+**PASS 3/3 en Q2** (ventana+doc, g_signal=0, set_data=0, cannot-register=0, mef=0,
+fatals=0), Q3 Avalonia OK. **Veredicto: APROBADO.**
+
+**Known-issue documentado (no bloqueo)**: persisten ~26-37 `Critical Gtk/Gdk`
+(`GDK_IS_WINDOW` en `gtk_widget_register_window`/`gdk_window_get_scale_factor`,
+`WIDGET_REALIZED_FOR_EVENT` ×1) + `Gdk-WARNING: losing last reference to undestroyed
+window` ×7-10 durante `Creating DefaultWorkbench`, y 1 NRE capturado (`Terminating?
+False`) en `Mono.TextEditor.TextArea.OnMapped()`. Familia del contenedor-leak BXC #3801:
+el workaround `FixContainerLeak` (glue `gtksharp_container_*` de Gtk# 2.12, que
+`libgtksharpglue-2.so` — NEEDED `libgtk-x11-2.0` — no puede reactivarse sin recargar GTK2)
+quedó como stub vacío en T7 y la equivalente de GtkSharp 3 no existe (el modelo de
+wrapping de `GLib.Object` cambió). La app sobrevive y el documento se abre; requiere
+diagnóstico dedicado (trace de dispose del workbench bajo GtkSharp 3).
+
+**Riesgo latente documentado (decisión del operador)**: identidad dual de
+`IThreadingContext` — `MonoRoslynCompat.dll` (stub, `CompatStubs.cs`) y
+`Microsoft.CodeAnalysis.EditorFeatures.dll` (vs-editor-api) definen la misma interfaz;
+`MonoDevelopThreadingContext` exporta el stub y los imports de Roslyn esperan el real →
+"MEF composition error … not assignable" (29 en algunos arranques, 0 en otros según la
+versión de `Microsoft.VisualStudio.Threading.dll` que se resuelve primero: coexisten
+15.8.192 / 16.10.56 / 17.7.0.0 en el árbol). Tras el fix 3 no ha aparecido en los runs de
+ronda 2; el fix completo (unificar la superficie Roslyn/Threading a una sola versión) es
+arquitectónico y de alto riesgo → fuera de T7.
+
+**Cierre**: T7 cerrada — la interfaz Gtk legacy (`--old-gui`) arranca estable sobre
+GtkSharp 3.24.24.95 (solución + documento, sin los criticals de señal/set_data/doble
+registración). Cambios de esta sesión: 4 ficheros del núcleo (AtkCocoaHelper.cs,
+GtkWorkarounds.cs, MonoDevelopMain.cs, + docs) + 1 del submódulo xwt (GtkWorkarounds.cs,
+sobre su changeset T7 de 24 ficheros); el changeset T7 completo (536 ficheros) se commitea
+junto. Submódulos con cambios commiteados/pushed en su rama `net10` (forks DRavainera):
+xwt y mono-addins; punteros actualizados en este commit.

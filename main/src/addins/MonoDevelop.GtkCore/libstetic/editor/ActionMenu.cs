@@ -289,17 +289,24 @@ namespace Stetic.Editor
 			}
 		}
 		
-		protected override bool OnExposeEvent (Gdk.EventExpose ev)
+		protected override bool OnDrawn (Cairo.Context cr)
 		{
-			int w, h;
-			this.GdkWindow.GetSize (out w, out h);
-			Gdk.Rectangle clip = new Gdk.Rectangle (0,0,w,h);
-			Gtk.Style.PaintBox (this.Style, this.GdkWindow, Gtk.StateType.Normal, Gtk.ShadowType.Out, clip, this, "menu", 0, 0, w, h);
+			int w = Allocation.Width;
+			int h = Allocation.Height;
 			
-			bool r = base.OnExposeEvent (ev);
+			// Marco del menú (equivalente a PaintBox ShadowType.Out)
+			Gdk.RGBA bg = StyleContext.GetBackgroundColor (Gtk.StateFlags.Normal);
+			cr.SetSourceColor (new Cairo.Color ((float) bg.Red, (float) bg.Green, (float) bg.Blue));
+			cr.Rectangle (0, 0, w, h);
+			cr.Fill ();
+			
+			bool r = base.OnDrawn (cr);
 			
 			if (dropPosition != -1) {
-				GdkWindow.DrawRectangle (this.Style.BlackGC, true, 0, dropPosition - 1, w - 2, 3);
+				Gdk.RGBA dark = StyleContext.GetColor (Gtk.StateFlags.Normal);
+				cr.SetSourceColor (new Cairo.Color ((float) dark.Red, (float) dark.Green, (float) dark.Blue));
+				cr.Rectangle (0, dropPosition - 1, w - 2, 3);
+				cr.Fill ();
 			}
 			
 			return r;
@@ -550,26 +557,26 @@ namespace Stetic.Editor
 			
 			m.Add (new Gtk.SeparatorMenuItem ());
 			
-			item = new Gtk.ImageMenuItem (Gtk.Stock.Cut, null);
+			item = new Gtk.ImageMenuItem (StockCompat.Cut, null);
 			m.Add (item);
 			item.Activated += delegate (object s, EventArgs a) {
 				menuItem.Cut ();
 			};
 			item.Visible = false;	// No copy & paste for now
-			item = new Gtk.ImageMenuItem (Gtk.Stock.Copy, null);
+			item = new Gtk.ImageMenuItem (StockCompat.Copy, null);
 			m.Add (item);
 			item.Activated += delegate (object s, EventArgs a) {
 				menuItem.Copy ();
 			};
 			item.Visible = false;
-			item = new Gtk.ImageMenuItem (Gtk.Stock.Paste, null);
+			item = new Gtk.ImageMenuItem (StockCompat.Paste, null);
 			m.Add (item);
 			item.Activated += delegate (object s, EventArgs a) {
 				Paste (menuItem);
 			};
 			item.Visible = false;
 			
-			item = new Gtk.ImageMenuItem (Gtk.Stock.Delete, null);
+			item = new Gtk.ImageMenuItem (StockCompat.Delete, null);
 			m.Add (item);
 			item.Activated += delegate (object s, EventArgs a) {
 				DeleteAction (menuItem);

@@ -59,8 +59,6 @@ namespace MonoDevelop.Ide.Gui.Dialogs
 		{
 			Name = "wizard_dialog";
 			Title = string.Format (GettextCatalog.GetString ("About {0}"), BrandingService.ApplicationName);
-			AllowGrow = false;
-			HasSeparator = false;
 			BorderWidth = 0;
 
 			var notebook = new Notebook ();
@@ -69,7 +67,7 @@ namespace MonoDevelop.Ide.Gui.Dialogs
 			notebook.BorderWidth = 0;
 			notebook.AppendPage (new AboutMonoDevelopTabPage (), new Label (Title));
 			notebook.AppendPage (new VersionInformationTabPage (), new Label (GettextCatalog.GetString ("Version Information")));
-			VBox.PackStart (notebook, true, true, 0);
+			ContentArea.PackStart (notebook, true, true, 0);
 			
 			var copyButton = new Button () { Label = GettextCatalog.GetString ("Copy Information") };
 			copyButton.Clicked += (sender, e) => CopyBufferToClipboard ();
@@ -106,9 +104,9 @@ namespace MonoDevelop.Ide.Gui.Dialogs
 		{
 			w.ModifyBg (Gtk.StateType.Normal, new Gdk.Color (69, 69, 94));
 			w.ModifyBg (Gtk.StateType.Active, new Gdk.Color (69, 69, 94));
-			w.ModifyFg (Gtk.StateType.Normal, new Gdk.Color (255, 255, 255));
-			w.ModifyFg (Gtk.StateType.Active, new Gdk.Color (255, 255, 255));
-			w.ModifyFg (Gtk.StateType.Prelight, new Gdk.Color (255, 255, 255));
+			w.OverrideColor (StateFlags.Normal, new Gdk.Color (255, 255, 255).ToRgba ());
+			w.OverrideColor (StateFlags.Active, new Gdk.Color (255, 255, 255).ToRgba ());
+			w.OverrideColor (StateFlags.Prelight, new Gdk.Color (255, 255, 255).ToRgba ());
 			Gtk.Container c = w as Gtk.Container;
 			if (c != null) {
 				foreach (Widget cw in c.Children)

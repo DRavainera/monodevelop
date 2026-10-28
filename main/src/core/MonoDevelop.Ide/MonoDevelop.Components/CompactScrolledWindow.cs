@@ -25,6 +25,7 @@
 // THE SOFTWARE.
 
 using System;
+using Cairo;
 
 namespace MonoDevelop.Components
 {
@@ -61,14 +62,26 @@ namespace MonoDevelop.Components
 			}
 		}
 
-		protected override void OnSizeRequested (ref Gtk.Requisition requisition)
+		protected override void OnGetPreferredWidth (out int minimum, out int natural)
 		{
-			base.OnSizeRequested (ref requisition);
+			base.OnGetPreferredWidth (out minimum, out natural);
 
 			//if showing a border line, request a little more space
 			if (showBorderLine) {
-				requisition.Height += HScrollbar.Visible? 1 : 2;
-				requisition.Width += VScrollbar.Visible? 1 : 2;
+				int extra = VScrollbar.Visible? 1 : 2;
+				minimum += extra;
+				natural += extra;
+			}
+		}
+
+		protected override void OnGetPreferredHeight (out int minimum, out int natural)
+		{
+			base.OnGetPreferredHeight (out minimum, out natural);
+
+			if (showBorderLine) {
+				int extra = HScrollbar.Visible? 1 : 2;
+				minimum += extra;
+				natural += extra;
 			}
 		}
 
@@ -104,9 +117,9 @@ namespace MonoDevelop.Components
 			}
 		}
 
-		protected override bool OnExposeEvent (Gdk.EventExpose evnt)
+		protected override bool OnDrawn (Cairo.Context cr)
 		{
-			var ret = base.OnExposeEvent (evnt);
+			var ret = base.OnDrawn (cr);
 			if (!showBorderLine)
 				return ret;
 
@@ -135,36 +148,31 @@ namespace MonoDevelop.Components
 			var halfLineWidth = lineWidth / 2.0;
 
 			//draw the border lines
-			using (var cr = Gdk.CairoHelper.Create (evnt.Window)) {
-				Gdk.CairoHelper.Region (cr, evnt.Region);
-				cr.Clip ();
-				
-				cr.SetSourceColor (Style.Dark (Gtk.StateType.Normal).ToCairoColor ());
-				cr.LineWidth = lineWidth;
-				cr.Translate (rect.X, rect.Y);
+			cr.SetSourceColor (this.GetStyleBackgroundColor (Gtk.StateType.Normal).ToGdkColor ().AddLight (-0.15).ToCairoColor ());
+			cr.LineWidth = lineWidth;
+			cr.Translate (rect.X, rect.Y);
 
-				//top
-				cr.MoveTo (0, halfLineWidth);
-				cr.LineTo (rect.Width, halfLineWidth);
+			//top
+			cr.MoveTo (0, halfLineWidth);
+			cr.LineTo (rect.Width, halfLineWidth);
 
-				//bottom. redundant if there's a horizontal scrollbar.
-				if (!hasHScroll) {
-					cr.MoveTo (0, rect.Height - halfLineWidth);
-					cr.LineTo (rect.Width, rect.Height - halfLineWidth);
-				}
-
-				//left
-				cr.MoveTo (halfLineWidth, 0);
-				cr.LineTo (halfLineWidth, rect.Height);
-
-				//right. redundant if there's a vertical scrollbar.
-				if (!hasVScroll) {
-					cr.MoveTo (rect.Width - halfLineWidth, 0);
-					cr.LineTo (rect.Width - halfLineWidth, rect.Height);
-				}
-
-				cr.Stroke ();
+			//bottom. redundant if there's a horizontal scrollbar.
+			if (!hasHScroll) {
+				cr.MoveTo (0, rect.Height - halfLineWidth);
+				cr.LineTo (rect.Width, rect.Height - halfLineWidth);
 			}
+
+			//left
+			cr.MoveTo (halfLineWidth, 0);
+			cr.LineTo (halfLineWidth, rect.Height);
+
+			//right. redundant if there's a vertical scrollbar.
+			if (!hasVScroll) {
+				cr.MoveTo (rect.Width - halfLineWidth, 0);
+				cr.LineTo (rect.Width - halfLineWidth, rect.Height);
+			}
+
+			cr.Stroke ();
 			
 			return ret;
 		}

@@ -100,6 +100,17 @@ namespace MonoDevelop.VBNetBinding
 			cmbRemoveIntegerChecks.AddAttribute (cr, "text", 0);
 		}
 		
+		static string ComboText (global::Gtk.ComboBox combo)
+		{
+			global::Gtk.ITreeModel model = combo.Model;
+			if (model == null || combo.Active < 0)
+				return null;
+			global::Gtk.TreeIter iter;
+			if (!model.GetIter (out iter, new global::Gtk.TreePath (combo.Active)))
+				return null;
+			return model.GetValue (iter, 0) as string;
+		}
+		
 		public void StorePanelContents ()
 		{
 			VBCompilerParameters c = (VBCompilerParameters) config.CompilationParameters;
@@ -110,7 +121,7 @@ namespace MonoDevelop.VBNetBinding
 			c.WarningsDisabled = cmbEnableWarnings.Active == 1;
 			c.DocumentationFile = cmbGenerateXmlDocumentation.Active == 0 ? config.ParentItem.Name + ".xml" : string.Empty;
 			c.RemoveIntegerChecks = cmbRemoveIntegerChecks.Active == 0;
-			c.DebugType = cmbDebugType.ActiveText;
+			c.DebugType = ComboText (cmbDebugType);
 			c.NoWarn = txtDontWarnAbout.Text;
 			c.DefineConstants = txtDefineConstants.Text;
 			c.WarningsAsErrors = txtTreatAsError.Text;

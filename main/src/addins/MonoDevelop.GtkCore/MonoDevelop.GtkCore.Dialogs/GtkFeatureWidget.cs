@@ -9,13 +9,13 @@ namespace MonoDevelop.GtkCore.Dialogs
 {
 	class GtkFeatureWidget : Gtk.VBox
 	{
-		ComboBox versionCombo;
+		ComboBoxText versionCombo;
 		
 		public GtkFeatureWidget (DotNetProject project)
 		{
 			Spacing = 6;
 			
-			versionCombo = Gtk.ComboBox.NewText ();
+			versionCombo = new Gtk.ComboBoxText ();
 			ReferenceManager refmgr = new ReferenceManager (project);
 			foreach (string v in refmgr.SupportedGtkVersions)
 				versionCombo.AppendText (v);

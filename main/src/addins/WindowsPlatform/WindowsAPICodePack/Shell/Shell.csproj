@@ -27,6 +27,7 @@
     <RootNamespace>Microsoft.WindowsAPICodePack.Shell</RootNamespace>
     <AssemblyName>Microsoft.WindowsAPICodePack.Shell</AssemblyName>
     <OutputPath>..\..\..\..\..\build\AddIns\WindowsPlatform</OutputPath>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <DefineConstants>TRACE</DefineConstants>
     <!-- see https://github.com/mono/monodevelop/issues/5501 -->
     <ShortEmbeddedResourceIDs>False</ShortEmbeddedResourceIDs>

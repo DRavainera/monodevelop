@@ -91,7 +91,7 @@ namespace MonoDevelop.Components
 		{
 			this.Relief = oldRelief;
 			isOpen = false;
-			this.State = StateType.Normal;
+			SetStateFlags (StateType.Normal.ToStateFlags (), true);
 		}
 
 		protected override void OnClicked ()
@@ -115,7 +115,7 @@ namespace MonoDevelop.Components
 			
 			//while the menu's open, make sure the button looks depressed
 			if (isOpen && this.State != StateType.Active)
-				this.State = StateType.Active;
+				SetStateFlags (StateType.Active.ToStateFlags (), true);
 		}
 		
 		void PositionFunc (Menu mn, out int x, out int y, out bool push_in)
@@ -126,8 +126,8 @@ namespace MonoDevelop.Components
 			y += rect.Y + rect.Height;
 			
 			//if the menu would be off the bottom of the screen, "drop" it upwards
-			if (y + mn.Requisition.Height > this.Screen.Height) {
-				y -= mn.Requisition.Height;
+			if (y + mn.SizeRequest ().Height > this.Screen.Height) {
+				y -= mn.SizeRequest ().Height;
 				y -= rect.Height;
 			}
 			

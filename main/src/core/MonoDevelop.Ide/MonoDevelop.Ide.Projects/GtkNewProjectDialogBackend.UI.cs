@@ -24,6 +24,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+using System;
 using Gdk;
 using Gtk;
 using MonoDevelop.Components;
@@ -123,7 +124,7 @@ namespace MonoDevelop.Ide.Projects
 			topLabelEventBox.Name = "topLabelEventBox";
 			topLabelEventBox.HeightRequest = 52;
 			topLabelEventBox.ModifyBg (StateType.Normal, bannerBackgroundColor);
-			topLabelEventBox.ModifyFg (StateType.Normal, whiteColor);
+			topLabelEventBox.OverrideColor (StateFlags.Normal, whiteColor.ToRgba ());
 			topLabelEventBox.BorderWidth = 0;
 
 			var topBannerBottomEdgeLineEventBox = new EventBox ();
@@ -136,25 +137,25 @@ namespace MonoDevelop.Ide.Projects
 			topBannerLabel = new Label ();
 			topBannerLabel.Name = "topBannerLabel";
 			topBannerLabel.Accessible.Name = "topBannerLabel";
-			Pango.FontDescription font = topBannerLabel.Style.FontDescription.Copy (); // UNDONE: VV: Use FontService?
+			Pango.FontDescription font = topBannerLabel.Style.FontDesc.Copy (); // UNDONE: VV: Use FontService?
 			font.Size = (int)(font.Size * 2.0);
 			font.Weight = Pango.Weight.Bold;
 			topBannerLabel.ModifyFont (font);
-			topBannerLabel.ModifyFg (StateType.Normal, whiteColor);
+			topBannerLabel.OverrideColor (StateFlags.Normal, whiteColor.ToRgba ());
 			var topLabelHBox = new HBox ();
 			topLabelHBox.Accessible.SetShouldIgnore (true);
 			topLabelHBox.Name = "topLabelHBox";
 			topLabelHBox.PackStart (topBannerLabel, false, false, 20);
 			topLabelEventBox.Add (topLabelHBox);
 
-			VBox.PackStart (topLabelEventBox, false, false, 0);
-			VBox.PackStart (topBannerBottomEdgeLineEventBox, false, false, 0);
+			ContentArea.PackStart (topLabelEventBox, false, false, 0);
+			ContentArea.PackStart (topBannerBottomEdgeLineEventBox, false, false, 0);
 
 			// Main templates section.
 			centreVBox = new VBox ();
 			centreVBox.Accessible.SetShouldIgnore (true);
 			centreVBox.Name = "centreVBox";
-			VBox.PackStart (centreVBox, true, true, 0);
+			ContentArea.PackStart (centreVBox, true, true, 0);
 			templatesHBox = new HBox ();
 			templatesHBox.Accessible.SetShouldIgnore (true);
 			templatesHBox.Name = "templatesHBox";
@@ -269,13 +270,13 @@ namespace MonoDevelop.Ide.Projects
 			templateSectionSeparatorEventBox.Name = "templateSectionSeparatorEventBox";
 			templateSectionSeparatorEventBox.HeightRequest = 1;
 			templateSectionSeparatorEventBox.ModifyBg (StateType.Normal, templateSectionSeparatorColor);
-			VBox.PackStart (templateSectionSeparatorEventBox, false, false, 0);
+			ContentArea.PackStart (templateSectionSeparatorEventBox, false, false, 0);
 
 			// Buttons at bottom of dialog.
 			var bottomHBox = new HBox ();
 			bottomHBox.Accessible.SetShouldIgnore (true);
 			bottomHBox.Name = "bottomHBox";
-			VBox.PackStart (bottomHBox, false, false, 0);
+			ContentArea.PackStart (bottomHBox, false, false, 0);
 
 			// Cancel button - bottom left.
 			var cancelButtonBox = new HButtonBox ();
@@ -297,7 +298,7 @@ namespace MonoDevelop.Ide.Projects
 			previousNextButtonBox.Name = "previousNextButtonBox";
 			previousNextButtonBox.BorderWidth = 16;
 			previousNextButtonBox.Spacing = 9;
-			bottomHBox.PackStart (previousNextButtonBox);
+			bottomHBox.PackStart (previousNextButtonBox, false, false, 0);
 			previousNextButtonBox.Layout = ButtonBoxStyle.End;
 
 			previousButton = new Button ();
@@ -306,7 +307,7 @@ namespace MonoDevelop.Ide.Projects
 			previousButton.Accessible.Description = GettextCatalog.GetString ("Return to the previous page");
 			previousButton.Label = GettextCatalog.GetString ("Previous");
 			previousButton.Sensitive = false;
-			previousNextButtonBox.PackEnd (previousButton);
+			previousNextButtonBox.PackEnd (previousButton, false, false, 0);
 
 			// Next button - bottom right.
 			nextButton = new Button ();
@@ -314,10 +315,10 @@ namespace MonoDevelop.Ide.Projects
 			nextButton.Accessible.Name = "nextButton";
 			nextButton.Accessible.Description = GettextCatalog.GetString ("Move to the next page");
 			nextButton.Label = GettextCatalog.GetString ("Next");
-			previousNextButtonBox.PackEnd (nextButton);
+			previousNextButtonBox.PackEnd (nextButton, false, false, 0);
 
 			// Remove default button action area.
-			VBox.Remove (ActionArea);
+			ContentArea.Remove (ActionArea);
 
 			if (Child != null) {
 				Child.ShowAll ();
@@ -373,15 +374,18 @@ namespace MonoDevelop.Ide.Projects
 		/// widgets which will sometimes shrink the dialog. The size also changes
 		/// on moving from page to page so override the requisition if it is too small.
 		/// </summary>
-		protected override void OnSizeRequested (ref Requisition requisition)
+		protected override void OnGetPreferredWidth (out int minimum, out int natural)
 		{
-			base.OnSizeRequested (ref requisition);
+			base.OnGetPreferredWidth (out minimum, out natural);
 
-			if (requisition.Height < DefaultHeight)
-				requisition.Height = DefaultHeight;
+			minimum = natural = Math.Max (natural, DefaultWidth);
+		}
 
-			if (requisition.Width < DefaultWidth)
-				requisition.Width = DefaultWidth;
+		protected override void OnGetPreferredHeight (out int minimum, out int natural)
+		{
+			base.OnGetPreferredHeight (out minimum, out natural);
+
+			minimum = natural = Math.Max (natural, DefaultHeight);
 		}
 	}
 }

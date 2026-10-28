@@ -30,6 +30,7 @@
 
 
 using System;
+using Cairo;
 using Gtk;
 
 namespace MonoDevelop.Components
@@ -63,7 +64,7 @@ namespace MonoDevelop.Components
 		}
 		public FixedWidthWrapLabel ()
 		{
-			WidgetFlags |= WidgetFlags.NoWindow;
+			HasWindow = false;
 		}
 		
 		public FixedWidthWrapLabel (string text)
@@ -142,14 +143,21 @@ namespace MonoDevelop.Components
 			base.OnStyleSet (previous_style);
 		}
 		
-		protected override void OnSizeRequested (ref Requisition requisition)
+		protected override void OnGetPreferredWidth (out int minimum, out int natural)
 		{
-			base.OnSizeRequested (ref requisition);
+			base.OnGetPreferredWidth (out minimum, out natural);
 			UpdateLayout ();
 			int lw, lh;
 			layout.GetPixelSize (out lw, out lh);
-			requisition.Height = lh;
-			requisition.Width = lw;
+			minimum = natural = lw;
+		}
+
+		protected override void OnGetPreferredHeight (out int minimum, out int natural)
+		{
+			base.OnGetPreferredHeight (out minimum, out natural);
+			int lw, lh;
+			layout.GetPixelSize (out lw, out lh);
+			minimum = natural = lh;
 		}
 		
 //		protected override void OnSizeAllocated (Gdk.Rectangle allocation)
@@ -165,15 +173,13 @@ namespace MonoDevelop.Components
 //		}
 
 		
-		protected override bool OnExposeEvent (Gdk.EventExpose evnt)
+		protected override bool OnDrawn (Cairo.Context cr)
 		{
 			UpdateLayout ();
-			if (evnt.Window != GdkWindow) {
-				return base.OnExposeEvent (evnt);
-			}
-            
-			Gtk.Style.PaintLayout (Style, GdkWindow, State, false, evnt.Area, 
-			    this, null, Allocation.X, Allocation.Y, layout);
+
+			cr.SetSourceColor (this.GetStyleColor (State).ToCairoColor ());
+			cr.MoveTo (0, 0);
+			Pango.CairoHelper.ShowLayout (cr, layout);
 			
 			return true;
 		}

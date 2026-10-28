@@ -29,14 +29,14 @@ namespace Stetic.Editor
 
 	public class ResponseIdEditor : Gtk.HBox, IPropertyEditor {
 
-		Gtk.ComboBoxEntry combo;
+		Gtk.ComboBoxText combo;
 		Gtk.Entry entry;
 		EnumDescriptor enm;
 		ArrayList values;
 
 		public ResponseIdEditor ()
 		{
-			combo = Gtk.ComboBoxEntry.NewText ();
+			combo = Gtk.ComboBoxText.NewWithEntry ();
 			combo.Changed += combo_Changed;
 			combo.Show ();
 			PackStart (combo, true, true, 0);

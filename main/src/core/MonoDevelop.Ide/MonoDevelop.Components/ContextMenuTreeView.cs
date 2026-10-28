@@ -40,7 +40,7 @@ namespace MonoDevelop.Components
 			ActionHandler.PerformShowMenu += PerformShowMenu;
 		}
 
-		public ContextMenuTreeView (Gtk.TreeModel model) : base (model)
+		public ContextMenuTreeView (Gtk.ITreeModel model) : base (model)
 		{
 		}
 
@@ -184,7 +184,7 @@ namespace MonoDevelop.Components
 			Selection.SelectFunction = DefaultTreeSelectFunction;
 		}
 
-		static bool DefaultTreeSelectFunction (Gtk.TreeSelection selection, Gtk.TreeModel model, Gtk.TreePath path, bool selected)
+		static bool DefaultTreeSelectFunction (Gtk.TreeSelection selection, Gtk.ITreeModel model, Gtk.TreePath path, bool selected)
 		{
 			return true;
 		}

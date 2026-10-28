@@ -347,8 +347,8 @@ namespace MonoDevelop.Ide.Gui
 			y += rect.Y + rect.Height;
 			
 			//if the menu would be off the bottom of the screen, "drop" it upwards
-			if (y + mn.Requisition.Height > this.Screen.Height) {
-				y -= mn.Requisition.Height;
+			if (y + mn.SizeRequest ().Height > this.Screen.Height) {
+				y -= mn.SizeRequest ().Height;
 				y -= rect.Height;
 			}
 			if (mn.SizeRequest ().Width < rect.Width)

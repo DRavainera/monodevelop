@@ -30,11 +30,11 @@ namespace Stetic
 			Sensitive = false;
 		}
 		
-		public override void Dispose ()
+		protected override void Dispose (bool disposing)
 		{
 			if (popup != null)
 				popup.Destroy ();
-			base.Dispose ();
+			base.Dispose (disposing);
 		}
 
 		

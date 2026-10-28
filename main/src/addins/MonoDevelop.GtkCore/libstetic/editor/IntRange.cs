@@ -33,10 +33,10 @@ namespace Stetic.Editor {
 				width = height = 0;
 		}
 		
-		public override void Render (Gdk.Drawable window, Gdk.Rectangle bounds, Gtk.StateType state)
+		public override void Render (Cairo.Context cr, Gdk.Rectangle bounds, Gtk.StateType state)
 		{
 			if (HasValue)
-				base.Render (window, bounds, state);
+				base.Render (cr, bounds, state);
 		}
 		
 		protected override IPropertyEditor CreateEditor (Gdk.Rectangle cell_area, Gtk.StateType state)

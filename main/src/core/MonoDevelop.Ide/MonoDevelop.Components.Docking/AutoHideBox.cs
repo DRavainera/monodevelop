@@ -90,7 +90,7 @@ namespace MonoDevelop.Components.Docking
 				}
 			}
 
-			EventBox sepBox = new EventBox ();
+			GripEventBox sepBox = new GripEventBox ();
 
 			// FIXME How to actually resize this?
 			sepBox.Accessible.SetRole (AtkCocoa.Roles.AXSplitter, GettextCatalog.GetString ("Pad resize handle"));
@@ -146,9 +146,8 @@ namespace MonoDevelop.Components.Docking
 			sepBox.ButtonPressEvent += OnSizeButtonPress;
 			sepBox.ButtonReleaseEvent += OnSizeButtonRelease;
 			sepBox.MotionNotifyEvent += OnSizeMotion;
-			sepBox.ExposeEvent += OnGripExpose;
-			sepBox.EnterNotifyEvent += delegate { insideGrip = true; sepBox.QueueDraw (); };
-			sepBox.LeaveNotifyEvent += delegate { insideGrip = false; sepBox.QueueDraw (); };
+			sepBox.EnterNotifyEvent += delegate { insideGrip = true; sepBox.GripState = StateType.Prelight; sepBox.QueueDraw (); };
+			sepBox.LeaveNotifyEvent += delegate { insideGrip = false; sepBox.GripState = StateType.Normal; sepBox.QueueDraw (); };
 		}
 
 		public bool Disposed {
@@ -358,15 +357,17 @@ namespace MonoDevelop.Components.Docking
 			}
 		}
 		
-		void OnGripExpose (object sender, Gtk.ExposeEventArgs args)
+	}
+	
+	class GripEventBox: EventBox
+	{
+		public StateType GripState = StateType.Normal;
+		
+		protected override bool OnDrawn (Cairo.Context cr)
 		{
-			var w = (EventBox) sender;
-			StateType s = insideGrip ? StateType.Prelight : StateType.Normal;
-			
-			using (var ctx = CairoHelper.Create (args.Event.Window)) {
-				ctx.SetSourceColor (w.Style.Background (s).ToCairoColor ());
-				ctx.Paint ();
-			}
+			cr.SetSourceColor (this.GetStyleBackgroundColor (GripState).ToCairoColor ());
+			cr.Paint ();
+			return base.OnDrawn (cr);
 		}
 	}
 	
@@ -393,15 +394,28 @@ namespace MonoDevelop.Components.Docking
 			QueueResize ();
 		}
 		
-		protected override void OnSizeRequested (ref Requisition req)
+		protected override void OnGetPreferredWidth (out int minimum, out int natural)
 		{
-			base.OnSizeRequested (ref req);
+			base.OnGetPreferredWidth (out minimum, out natural);
 			if (scrollMode || Child == null) {
-				req.Width = 0;
-				req.Height = 0;
+				minimum = natural = 0;
 			}
-			else
-				req = Child.SizeRequest ();
+			else {
+				var r = Child.SizeRequest ();
+				minimum = natural = r.Width;
+			}
+		}
+
+		protected override void OnGetPreferredHeight (out int minimum, out int natural)
+		{
+			base.OnGetPreferredHeight (out minimum, out natural);
+			if (scrollMode || Child == null) {
+				minimum = natural = 0;
+			}
+			else {
+				var r = Child.SizeRequest ();
+				minimum = natural = r.Height;
+			}
 		}
 
 		protected override void OnSizeAllocated (Rectangle alloc)

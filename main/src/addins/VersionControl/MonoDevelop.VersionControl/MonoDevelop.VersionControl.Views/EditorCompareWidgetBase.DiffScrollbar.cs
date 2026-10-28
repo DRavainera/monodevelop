@@ -104,7 +104,7 @@ namespace MonoDevelop.VersionControl.Views
 				return base.OnButtonReleaseEvent (evnt);
 			}
 
-			protected override bool OnExposeEvent (Gdk.EventExpose e)
+			protected override bool OnDrawn (Cairo.Context cr)
 			{
 				if (widget.LeftDiff == null)
 					return true;
@@ -112,44 +112,42 @@ namespace MonoDevelop.VersionControl.Views
 
 				var diff = useLeftDiff ? widget.LeftDiff : widget.RightDiff;
 
-				using (Cairo.Context cr = Gdk.CairoHelper.Create (e.Window)) {
-					cr.LineWidth = 1;
-					double curY = 0;
+				cr.LineWidth = 1;
+				double curY = 0;
 
-					foreach (var hunk in diff) {
-						double y, count;
-						if (paintInsert) {
-							y = hunk.InsertStart / (double)editor.LineCount;
-							count = hunk.Inserted / (double)editor.LineCount;
-						} else {
-							y = hunk.RemoveStart / (double)editor.LineCount;
-							count = hunk.Removed / (double)editor.LineCount;
-						}
-
-						double start = y * Allocation.Height;
-						FillGradient (cr, 0.5 + curY, start - curY);
-
-						curY = start;
-						double height = Math.Max (cr.LineWidth, count * Allocation.Height);
-						cr.Rectangle (0.5, 0.5 + curY, Allocation.Width, height);
-						cr.SetSourceColor (GetColor (hunk, !paintInsert, false, 1.0));
-						cr.Fill ();
-						curY += height;
+				foreach (var hunk in diff) {
+					double y, count;
+					if (paintInsert) {
+						y = hunk.InsertStart / (double)editor.LineCount;
+						count = hunk.Inserted / (double)editor.LineCount;
+					} else {
+						y = hunk.RemoveStart / (double)editor.LineCount;
+						count = hunk.Removed / (double)editor.LineCount;
 					}
 
-					FillGradient (cr, 0.5 + curY, Allocation.Height - curY);
+					double start = y * Allocation.Height;
+					FillGradient (cr, 0.5 + curY, start - curY);
 
-					int barPadding = 3;
-					var allocH = Allocation.Height;
-					var adjUpper = adj.Upper;
-					var barY = allocH * adj.Value / adjUpper + barPadding;
-					var barH = allocH * (adj.PageSize / adjUpper) - barPadding - barPadding;
-					DrawBar (cr, barY, barH);
-
-					cr.Rectangle (0.5, 0.5, Allocation.Width - 1, Allocation.Height - 1);
-					cr.SetSourceColor ((HslColor)Style.Dark (StateType.Normal));
-					cr.Stroke ();
+					curY = start;
+					double height = Math.Max (cr.LineWidth, count * Allocation.Height);
+					cr.Rectangle (0.5, 0.5 + curY, Allocation.Width, height);
+					cr.SetSourceColor (GetColor (hunk, !paintInsert, false, 1.0));
+					cr.Fill ();
+					curY += height;
 				}
+
+				FillGradient (cr, 0.5 + curY, Allocation.Height - curY);
+
+				int barPadding = 3;
+				var allocH = Allocation.Height;
+				var adjUpper = adj.Upper;
+				var barY = allocH * adj.Value / adjUpper + barPadding;
+				var barH = allocH * (adj.PageSize / adjUpper) - barPadding - barPadding;
+				DrawBar (cr, barY, barH);
+
+				cr.Rectangle (0.5, 0.5, Allocation.Width - 1, Allocation.Height - 1);
+				cr.SetSourceColor (new HslColor (this.GetStyleColor (StateType.Normal).ToCairoColor ()));
+				cr.Stroke ();
 				return true;
 			}
 
@@ -159,10 +157,10 @@ namespace MonoDevelop.VersionControl.Views
 
 				// FIXME: VV: Remove gradient features
 				using (var grad = new Cairo.LinearGradient (0, y, Allocation.Width, y)) {
-					var col = (HslColor)Style.Base (StateType.Normal);
+					var col = (HslColor)this.GetStyleBackgroundColor (StateType.Normal).ToCairoColor ();
 					col.L *= 0.95;
 					grad.AddColorStop (0, col);
-					grad.AddColorStop (0.7, (HslColor)Style.Base (StateType.Normal));
+					grad.AddColorStop (0.7, (HslColor)this.GetStyleBackgroundColor (StateType.Normal).ToCairoColor ());
 					grad.AddColorStop (1, col);
 					cr.SetSource (grad);
 					cr.Fill ();

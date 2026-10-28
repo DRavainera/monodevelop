@@ -78,7 +78,7 @@ namespace MonoDevelop.Components.MainToolbar
 
 		public ButtonBar ()
 		{
-			WidgetFlags |= Gtk.WidgetFlags.AppPaintable;
+			AppPaintable = true;
 			VisibleWindow = false;
 			Events |= EventMask.ButtonPressMask | EventMask.ButtonReleaseMask;
 
@@ -127,23 +127,23 @@ namespace MonoDevelop.Components.MainToolbar
 		StateType leaveState = StateType.Normal;
 		protected override bool OnEnterNotifyEvent (EventCrossing evnt)
 		{
-			State = leaveState;
+			SetStateFlags (leaveState.ToStateFlags (), true);
 			return base.OnEnterNotifyEvent (evnt);
 		}
 
 		protected override bool OnLeaveNotifyEvent (EventCrossing evnt)
 		{
 			leaveState = State;
-			State = StateType.Normal;
+			SetStateFlags (StateType.Normal.ToStateFlags (), true);
 			return base.OnLeaveNotifyEvent (evnt);
 		}
 
 		protected override bool OnButtonPressEvent (EventButton evnt)
 		{
 			if (evnt.Button == 1) {
-				pushedButton = VisibleButtons.FirstOrDefault (b => allocations [b].Contains (Allocation.X + (int)evnt.X, Allocation.Y + (int)evnt.Y));
+				pushedButton = VisibleButtons.FirstOrDefault (b => allocations [b].Contains ((int)evnt.X, (int)evnt.Y));
 				if (pushedButton != null && pushedButton.Enabled)
-					State = StateType.Selected;
+					SetStateFlags (StateType.Selected.ToStateFlags (), true);
 			}
 			return true;
 		}
@@ -153,7 +153,7 @@ namespace MonoDevelop.Components.MainToolbar
 			if (State == StateType.Selected && pushedButton != null) {
 				pushedButton.NotifyPushed ();
 			}
-			State = StateType.Prelight;
+			SetStateFlags (StateType.Prelight.ToStateFlags (), true);
 			leaveState = StateType.Normal;
 			pushedButton = null;
 			return true;
@@ -161,31 +161,33 @@ namespace MonoDevelop.Components.MainToolbar
 
 		protected override bool OnQueryTooltip (int x, int y, bool keyboard_tooltip, Tooltip tooltip)
 		{
-			var button = VisibleButtons.FirstOrDefault (b => allocations [b].Contains (Allocation.X + (int)x, Allocation.Y + (int)y));
+			var button = VisibleButtons.FirstOrDefault (b => allocations [b].Contains ((int)x, (int)y));
 			if (button != null) {
 				tooltip.Text = button.Tooltip;
-				var rect = allocations [button];
-				rect.Offset (-Allocation.X, -Allocation.Y);
-				tooltip.TipArea = rect;
+				tooltip.TipArea = allocations [button];
 				return true;
 			} else {
 				return false;
 			}
 		}
 
-		protected override void OnSizeRequested (ref Requisition requisition)
+		protected override void OnGetPreferredWidth (out int minimum, out int natural)
 		{
-			base.OnSizeRequested (ref requisition);
-			requisition.Width = VisibleButtons.Sum (b => b.Visible ? (!b.IsSeparator ? (int)btnNormalOriginal[0].Width : SeparatorSpacing) : 0);
-			requisition.Height = (int)btnNormalOriginal[0].Height;
+			base.OnGetPreferredWidth (out minimum, out natural);
+			minimum = natural = VisibleButtons.Sum (b => b.Visible ? (!b.IsSeparator ? (int)btnNormalOriginal[0].Width : SeparatorSpacing) : 0);
 		}
 
-		protected override bool OnExposeEvent (EventExpose evnt)
+		protected override void OnGetPreferredHeight (out int minimum, out int natural)
+		{
+			base.OnGetPreferredHeight (out minimum, out natural);
+			minimum = natural = (int)btnNormalOriginal[0].Height;
+		}
+
+		protected override bool OnDrawn (Cairo.Context cr)
 		{
 			ScaleImages (Allocation.Height);
 
-			using (var context = Gdk.CairoHelper.Create (evnt.Window)) {
-				double x = Allocation.X, y = Allocation.Y;
+			double x = 0, y = 0;
 				for (int i = 0; i < VisibleButtons.Length; i++) {
 					bool nextIsSeparator = (i < VisibleButtons.Length - 1 && VisibleButtons[i + 1].IsSeparator) || i == VisibleButtons.Length - 1;
 					bool lastWasSeparator = (i > 0 && VisibleButtons[i - 1].IsSeparator) || i == 0;
@@ -197,18 +199,17 @@ namespace MonoDevelop.Components.MainToolbar
 					}
 					Xwt.Drawing.Image[] images = State == StateType.Selected && pushedButton == button ? btnPressed : btnNormal;
 					Xwt.Drawing.Image img = images [lastWasSeparator ? 0 : nextIsSeparator ? 2 : 1];
-					context.DrawImage (this, img, x, y);
+					cr.DrawImage (this, img, x, y);
 
 					allocations [button] = new Gdk.Rectangle ((int)x, (int)y, (int)img.Width, (int)img.Height);
 
 					var icon = ImageService.GetIcon (button.Image, IconSize.Menu);
 					if (!Sensitive || !button.Enabled)
 						icon = icon.WithAlpha (0.4);
-					context.DrawImage (this, icon, Math.Truncate (x + (img.Width - icon.Width) / 2), Math.Truncate (y + (img.Height - icon.Height) / 2));
+					cr.DrawImage (this, icon, Math.Truncate (x + (img.Width - icon.Width) / 2), Math.Truncate (y + (img.Height - icon.Height) / 2));
 					x += img.Width;
 				}
-			}
-			return base.OnExposeEvent (evnt);
+			return base.OnDrawn (cr);
 		}
 
 		Xwt.Drawing.Image ExpandImageVertically (Xwt.Drawing.Image img, int newHeight)

@@ -167,14 +167,9 @@ namespace Mono.TextEditor
 			base.OnDestroyed ();
 		}
 
-		protected override bool OnExposeEvent (EventExpose evnt)
+		protected override bool OnDrawn (Cairo.Context cr)
 		{
-			using (var cr = CairoHelper.Create (GdkWindow)) {
-				CairoHelper.Region (cr, evnt.Region);
-				cr.Clip ();
-				cr.Translate (Allocation.X, Allocation.Y);
-				Draw (cr);
-			}
+			Draw (cr);
 			return true;
 		}
 

@@ -45,7 +45,7 @@ namespace MonoDevelop.Components.Mac
 
 		public NSViewContainer ()
 		{
-			WidgetFlags |= Gtk.WidgetFlags.NoWindow;
+			HasWindow = false;
 		}
 
 		internal static NSViewContainer GetContainer (NSView v)

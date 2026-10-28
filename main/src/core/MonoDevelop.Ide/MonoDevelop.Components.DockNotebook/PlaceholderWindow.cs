@@ -248,16 +248,11 @@ namespace MonoDevelop.Components.DockNotebook
 			base.OnRealized ();
 			GdkWindow.Opacity = 0.4;
 		}
-		protected override bool OnExposeEvent (EventExpose evnt)
+		protected override bool OnDrawn (Cairo.Context cr)
 		{
-			int w, h;
-			GetSize (out w, out h);
-
-			using (var ctx = CairoHelper.Create (evnt.Window)) {
-				ctx.SetSourceColor (new Cairo.Color (0.17, 0.55, 0.79));
-				ctx.Rectangle (Allocation.ToCairoRect ());
-				ctx.Fill ();
-			}
+			cr.SetSourceColor (new Cairo.Color (0.17, 0.55, 0.79));
+			cr.Rectangle (0, 0, Allocation.Width, Allocation.Height);
+			cr.Fill ();
 			return true;
 		}
 
@@ -289,7 +284,7 @@ namespace MonoDevelop.Components.DockNotebook
 		bool RunAnimation ()
 		{
 			int cx, cy, ch, cw;
-			GetSize (out cw, out ch);
+			GetSizeRequest (out cw, out ch);
 			GetPosition	(out cx, out cy);
 
 			if (cx != rx) {

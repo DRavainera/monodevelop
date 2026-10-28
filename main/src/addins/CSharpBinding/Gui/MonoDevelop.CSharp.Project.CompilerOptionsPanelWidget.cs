@@ -18,7 +18,7 @@ namespace MonoDevelop.CSharp.Project
 		
 		private global::Gtk.Table table7;
 		
-		private global::Gtk.ComboBoxEntry codepageEntry;
+		private global::Gtk.ComboBoxText codepageEntry;
 		
 		private global::Gtk.HBox hbox57;
 		
@@ -34,7 +34,7 @@ namespace MonoDevelop.CSharp.Project
 		
 		private global::Gtk.Label label88;
 		
-		private global::Gtk.ComboBoxEntry mainClassEntry;
+		private global::Gtk.ComboBoxText mainClassEntry;
 		
 		private global::Gtk.CheckButton noStdLibCheckButton;
 		
@@ -102,7 +102,7 @@ namespace MonoDevelop.CSharp.Project
 			this.table7.RowSpacing = ((uint)(6));
 			this.table7.ColumnSpacing = ((uint)(6));
 			// Container child table7.Gtk.Table+TableChild
-			this.codepageEntry = global::Gtk.ComboBoxEntry.NewText ();
+			this.codepageEntry = new global::Gtk.ComboBoxText ();
 			this.codepageEntry.Name = "codepageEntry";
 			this.table7.Add (this.codepageEntry);
 			global::Gtk.Table.TableChild w3 = ((global::Gtk.Table.TableChild)(this.table7 [this.codepageEntry]));
@@ -185,7 +185,7 @@ namespace MonoDevelop.CSharp.Project
 			w10.XOptions = ((global::Gtk.AttachOptions)(4));
 			w10.YOptions = ((global::Gtk.AttachOptions)(0));
 			// Container child table7.Gtk.Table+TableChild
-			this.mainClassEntry = new global::Gtk.ComboBoxEntry ();
+			this.mainClassEntry = new global::Gtk.ComboBoxText ();
 			this.mainClassEntry.Name = "mainClassEntry";
 			this.table7.Add (this.mainClassEntry);
 			global::Gtk.Table.TableChild w11 = ((global::Gtk.Table.TableChild)(this.table7 [this.mainClassEntry]));
@@ -274,7 +274,7 @@ namespace MonoDevelop.CSharp.Project
 			w19.YOptions = ((global::Gtk.AttachOptions)(4));
 			w19.XPadding = 6;
 			// Container child table2.Gtk.Table+TableChild
-			this.langVerCombo = global::Gtk.ComboBox.NewText ();
+			this.langVerCombo = new global::Gtk.ComboBox ();
 			this.langVerCombo.Name = "langVerCombo";
 			this.table2.Add (this.langVerCombo);
 			global::Gtk.Table.TableChild w20 = ((global::Gtk.Table.TableChild)(this.table2 [this.langVerCombo]));

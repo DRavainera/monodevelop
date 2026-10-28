@@ -38,10 +38,10 @@ namespace MonoDevelop.AspNet.Execution
 		Entry ipAddress = new Entry { WidthChars = 39 }; // sized for IPv6
 		SpinButton portNumber = new SpinButton (0, Int16.MaxValue, 1) { WidthChars = 5} ;
 		CheckButton verboseCheck = new CheckButton ();
-		readonly ComboBox sslMode = ComboBox.NewText ();
-		readonly ComboBox sslProtocol = ComboBox.NewText ();
-		readonly ComboBox keyType = ComboBox.NewText ();
-		readonly ComboBox passwordOptions = ComboBox.NewText ();
+		readonly ComboBoxText sslMode = new ComboBoxText ();
+		readonly ComboBoxText sslProtocol = new ComboBoxText ();
+		readonly ComboBoxText keyType = new ComboBoxText ();
+		readonly ComboBoxText passwordOptions = new ComboBoxText ();
 		readonly FileEntry keyLocation = new FileEntry ();
 		readonly FileEntry certLocation = new FileEntry ();
 		readonly Entry passwordEntry = new Entry { InvisibleChar = '●' };
@@ -53,25 +53,25 @@ namespace MonoDevelop.AspNet.Execution
 			XspParameters xPar = project.XspParameters;
 			
 			//index should be equivalent to XspSslMode enum
-			((ListStore) sslMode.Model).Clear ();
+			sslMode.RemoveAll ();
 			sslMode.AppendText (GettextCatalog.GetString ("None"));
 			sslMode.AppendText (GettextCatalog.GetString ("Enabled"));
 			sslMode.AppendText (GettextCatalog.GetString ("Accept Client Certificates"));
 			sslMode.AppendText (GettextCatalog.GetString ("Require Client Certificates"));
 			
 			//index should be equivalent to XspSslProtocol enum
-			((ListStore) sslProtocol.Model).Clear ();
+			sslProtocol.RemoveAll ();
 			sslProtocol.AppendText (GettextCatalog.GetString ("Default"));
 			sslProtocol.AppendText ("TLS");
 
-			((ListStore) keyType.Model).Clear ();
+			keyType.RemoveAll ();
 			keyType.AppendText (GettextCatalog.GetString ("None"));
 #pragma warning disable MD0005
 			keyType.AppendText ("Pkcs12");
 			keyType.AppendText ("PVK");
 #pragma warning restore MD0005
 
-			((ListStore) passwordOptions.Model).Clear ();
+			passwordOptions.RemoveAll ();
 			passwordOptions.AppendText (GettextCatalog.GetString ("None"));
 			passwordOptions.AppendText (GettextCatalog.GetString ("Ask"));
 			passwordOptions.AppendText (GettextCatalog.GetString ("Store (insecure)"));
@@ -93,7 +93,7 @@ namespace MonoDevelop.AspNet.Execution
 		{
 			Spacing = 6;
 
-			PackStart (new Label { Markup = "<b>" + GettextCatalog.GetString ("General Options") + "</b>", Xalign = 0 });
+			PackStart (new Label { Markup = "<b>" + GettextCatalog.GetString ("General Options") + "</b>", Xalign = 0 }, false, true, 0);
 
 			var gpadLabel = new Label { WidthRequest = 12 };
 			var ipLabel = new Label (GettextCatalog.GetString ("IP address:")) { Xalign = 0 };
@@ -116,9 +116,9 @@ namespace MonoDevelop.AspNet.Execution
 			ipTable.Attach (portLabel, 1, 2, 1, 2, AttachOptions.Fill, 0, 0, 0);
 			ipTable.Attach (portHbox, 2, 3, 1, 2, AttachOptions.Fill, 0, 0, 0);
 			ipTable.Attach (verboseCheck, 1, 3, 2, 3, AttachOptions.Fill, 0, 0, 0);
-			PackStart (ipTable);
+			PackStart (ipTable, false, true, 0);
 
-			PackStart (new Label { Markup = "<b>" + GettextCatalog.GetString ("Security") + "</b>", Xalign = 0 });
+			PackStart (new Label { Markup = "<b>" + GettextCatalog.GetString ("Security") + "</b>", Xalign = 0 }, false, true, 0);
 
 			var sslPadLabel = new Label { WidthRequest = 12 };
 			var sslModeLabel = new Label (GettextCatalog.GetString ("SSL mode:")) { Xalign = 0 };
@@ -132,9 +132,9 @@ namespace MonoDevelop.AspNet.Execution
 			sslTable.Attach (sslModeAlign, 2, 3, 0, 1, AttachOptions.Fill, 0, 0, 0);
 			sslTable.Attach (sslProtocolLabel, 1, 2, 1, 2, AttachOptions.Fill, 0, 0, 0);
 			sslTable.Attach (sslProtocolAlign, 2, 3, 1, 2, AttachOptions.Fill, 0, 0, 0);
-			PackStart (sslTable);
+			PackStart (sslTable, false, true, 0);
 
-			PackStart (new Label { Markup = "<b>" + GettextCatalog.GetString ("SSL Key") + "</b>", Xalign = 0 });
+			PackStart (new Label { Markup = "<b>" + GettextCatalog.GetString ("SSL Key") + "</b>", Xalign = 0 }, false, true, 0);
 
 			var keyPadLabel = new Label { WidthRequest = 12 };
 			var keyTypeLabel = new Label (GettextCatalog.GetString ("Key type:")) { Xalign = 0 };
@@ -156,7 +156,7 @@ namespace MonoDevelop.AspNet.Execution
 			keyTable.Attach (certLocation,    2, 4, 2, 3, AttachOptions.Expand | AttachOptions.Fill, 0, 0, 0);
 			keyTable.Attach (passwordLabel,   1, 2, 3, 4, AttachOptions.Fill, 0, 0, 0);
 			keyTable.Attach (passwordHbox,    2, 4, 3, 4, AttachOptions.Expand | AttachOptions.Fill, 0, 0, 0);
-			PackStart (keyTable);
+			PackStart (keyTable, false, true, 0);
 
 			sslMode.Changed += UpdateSensitivity;
 			keyType.Changed += UpdateSensitivity;

@@ -37,13 +37,13 @@ namespace Stetic
 			return app.Backend.GetProjectWidget (frontend);
 		}
 		
-		public override void Dispose ()
+		protected override void Dispose (bool disposing)
 		{
 			frontend.disposed = true;
 			#if !NET
 			System.Runtime.Remoting.RemotingServices.Disconnect (frontend);
 			#endif
-			base.Dispose ();
+			base.Dispose (disposing);
 		}
 	}
 	

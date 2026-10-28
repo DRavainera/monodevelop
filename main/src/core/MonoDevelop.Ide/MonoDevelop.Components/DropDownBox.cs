@@ -182,25 +182,34 @@ namespace MonoDevelop.Components
 			base.OnDestroyed ();
 		}
 
-		protected override void OnSizeRequested (ref Requisition requisition)
+		protected override void OnGetPreferredWidth (out int minimum, out int natural)
 		{
 			int width, height;
 			layout.GetPixelSize (out width, out height);
 			
-			if (Pixbuf != null) {
+			if (Pixbuf != null)
 				width += (int)Pixbuf.Width + pixbufSpacing * 2;
-				height = System.Math.Max (height, (int)Pixbuf.Height);
-			} else {
-				height = System.Math.Max (height, defaultIconHeight);
-			}
 			
 			if (DrawRightBorder)
 				width += 2;
 			int arrowHeight = height / 2; 
 			int arrowWidth = arrowHeight + 1;
 			
-			requisition.Width = FixedWidth > 0 ? FixedWidth : width + arrowWidth + leftSpacing;
-			requisition.Height = FixedHeight >0 ? FixedHeight : height + ySpacing * 2;
+			minimum = natural = FixedWidth > 0 ? FixedWidth : width + arrowWidth + leftSpacing;
+		}
+
+		protected override void OnGetPreferredHeight (out int minimum, out int natural)
+		{
+			int width, height;
+			layout.GetPixelSize (out width, out height);
+			
+			if (Pixbuf != null) {
+				height = System.Math.Max (height, (int)Pixbuf.Height);
+			} else {
+				height = System.Math.Max (height, defaultIconHeight);
+			}
+			
+			minimum = natural = FixedHeight > 0 ? FixedHeight : height + ySpacing * 2;
 		}
 		
 		protected override bool OnFocusOutEvent (Gdk.EventFocus evnt)
@@ -279,16 +288,14 @@ namespace MonoDevelop.Components
 			return base.OnMotionNotifyEvent (e);
 		}
 	
-		protected override bool OnExposeEvent (Gdk.EventExpose args)
+		protected override bool OnDrawn (Cairo.Context ctx)
 		{
-			Gdk.Drawable win = args.Window;
-		
 			int width, height;
 			layout.GetPixelSize (out width, out height);
 			
 			int arrowHeight = height / 2; 
 			int arrowWidth = arrowHeight + 1;
-			int arrowXPos = this.Allocation.X + this.Allocation.Width - arrowWidth;
+			int arrowXPos = this.Allocation.Width - arrowWidth;
 			if (DrawButtonShape) {
 				arrowXPos -= 4;
 			} else if (DrawRightBorder) {
@@ -306,43 +313,73 @@ namespace MonoDevelop.Components
 			// (default-border, inner-border, default-outside-border, etc - see http://git.gnome.org/browse/gtk+/tree/gtk/gtkbutton.c)
 			const int padding = 4;
 			if (DrawButtonShape){
-				Style.PaintBox (Style, args.Window, state, ShadowType.None, args.Area, this, "button", 
-				            Allocation.X, Allocation.Y, Allocation.Width, Allocation.Height);
+				StyleContext.RenderBackground (ctx, 0, 0, Allocation.Width, Allocation.Height);
 
 			} else {
-				Style.PaintBox (Style, args.Window, state, ShadowType.None, args.Area, this, "button", 
-				            Allocation.X - padding, Allocation.Y - padding, Allocation.Width + padding * 2, Allocation.Height + padding * 2);
+				StyleContext.RenderBackground (ctx, -padding, -padding, Allocation.Width + padding * 2, Allocation.Height + padding * 2);
 			}
 
-			int xPos = Allocation.Left;
+			int xPos = 0;
 			if (Pixbuf != null) {
-				using (var ctx = Gdk.CairoHelper.Create (win))
-					ctx.DrawImage (this, Pixbuf, xPos + pixbufSpacing, Allocation.Y + (Allocation.Height - Pixbuf.Height) / 2);
+				ctx.DrawImage (this, Pixbuf, xPos + pixbufSpacing, (Allocation.Height - Pixbuf.Height) / 2);
 				xPos += (int)Pixbuf.Width + pixbufSpacing * 2;
 			}
 			if (DrawButtonShape)
 				xPos += 4;
 			
 			//constrain the text area so it doesn't get rendered under the arrows
-			var textArea = new Gdk.Rectangle (xPos, Allocation.Y + ySpacing, arrowXPos - xPos - 2, Allocation.Height - ySpacing);
+			var textArea = new Gdk.Rectangle (xPos, ySpacing, arrowXPos - xPos - 2, Allocation.Height - ySpacing);
 
 			if (FixedWidth > 0) {
 				layout.Ellipsize = Pango.EllipsizeMode.End;
 				layout.Width = Allocation.Width - textArea.X;
 			}
 
-			Style.PaintLayout (Style, win, state, true, textArea, this, "", textArea.X, textArea.Y + Math.Max (0, (textArea.Height - height) / 2), layout);
+			ctx.SetSourceColor (this.GetStyleColor (state).ToCairoColor ());
+			ctx.MoveTo (textArea.X, textArea.Y + Math.Max (0, (textArea.Height - height) / 2));
+			Pango.CairoHelper.ShowLayout (ctx, layout);
 			
 			state = Sensitive ? StateType.Normal : StateType.Insensitive;
-			Gtk.Style.PaintArrow (this.Style, win, state, ShadowType.None, args.Area, this, "", ArrowType.Up, true, arrowXPos, Allocation.Y + (Allocation.Height) / 2 - arrowHeight, arrowWidth, arrowHeight);
-			Gtk.Style.PaintArrow (this.Style, win, state, ShadowType.None, args.Area, this, "", ArrowType.Down, true, arrowXPos, Allocation.Y + (Allocation.Height) / 2, arrowWidth, arrowHeight);
+			var arrowColor = this.GetStyleColor (state).ToCairoColor ();
+			DrawArrowUp (ctx, arrowXPos, (Allocation.Height) / 2 - arrowHeight, arrowWidth, arrowHeight, arrowColor);
+			DrawArrowDown (ctx, arrowXPos, (Allocation.Height) / 2, arrowWidth, arrowHeight, arrowColor);
 			if (!DrawButtonShape) {
+				var borderColor = this.GetStyleBackgroundColor (StateType.Normal).ToGdkColor ().AddLight (-0.15).ToCairoColor ();
 				if (DrawRightBorder)
-					win.DrawLine (this.Style.DarkGC (StateType.Normal), Allocation.X + Allocation.Width - 1, Allocation.Y, Allocation.X + Allocation.Width - 1, Allocation.Y + Allocation.Height);			
+					DrawVerticalLine (ctx, Allocation.Width - 1, 0, Allocation.Height, borderColor);
 				if (DrawLeftBorder)
-					win.DrawLine (this.Style.DarkGC (StateType.Normal), Allocation.X, Allocation.Y, Allocation.X, Allocation.Y + Allocation.Height);			
+					DrawVerticalLine (ctx, 0, 0, Allocation.Height, borderColor);
 			}
 			return false;
+		}
+
+		static void DrawArrowUp (Cairo.Context ctx, int x, int y, int w, int h, Cairo.Color color)
+		{
+			ctx.SetSourceColor (color);
+			ctx.MoveTo (x + w / 2.0, y);
+			ctx.LineTo (x + w, y + h);
+			ctx.LineTo (x, y + h);
+			ctx.ClosePath ();
+			ctx.Fill ();
+		}
+
+		static void DrawArrowDown (Cairo.Context ctx, int x, int y, int w, int h, Cairo.Color color)
+		{
+			ctx.SetSourceColor (color);
+			ctx.MoveTo (x + w / 2.0, y + h);
+			ctx.LineTo (x + w, y);
+			ctx.LineTo (x, y);
+			ctx.ClosePath ();
+			ctx.Fill ();
+		}
+
+		static void DrawVerticalLine (Cairo.Context ctx, int x, int y, int h, Cairo.Color color)
+		{
+			ctx.SetSourceColor (color);
+			ctx.LineWidth = 1;
+			ctx.MoveTo (x, y);
+			ctx.LineTo (x, y + h);
+			ctx.Stroke ();
 		}
 		
 		public EventHandler ItemSet;

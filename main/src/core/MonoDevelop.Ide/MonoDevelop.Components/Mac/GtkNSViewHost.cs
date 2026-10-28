@@ -90,7 +90,7 @@ namespace Gtk
 			this.view = view ?? throw new ArgumentNullException (nameof (view));
 			this.disposeViewOnGtkDestroy = disposeViewOnGtkDestroy;
 
-			WidgetFlags |= WidgetFlags.NoWindow;
+			HasWindow = false;
 
 			Accessible.SetRole (AtkCocoa.Roles.AXGroup);
 

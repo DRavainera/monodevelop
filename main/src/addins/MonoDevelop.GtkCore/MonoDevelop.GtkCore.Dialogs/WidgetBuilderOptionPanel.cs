@@ -44,7 +44,7 @@ namespace MonoDevelop.GtkCore.Dialogs
 			Gtk.CheckButton checkGettext;
 			Gtk.Entry entryGettext;
 			Gtk.Entry entryResourceLoader;
-			Gtk.ComboBox comboVersions;
+			Gtk.ComboBoxText comboVersions;
 			
 			DotNetProject project;
 			
@@ -55,7 +55,7 @@ namespace MonoDevelop.GtkCore.Dialogs
 				Gtk.HBox box = new Gtk.HBox (false, 3);
 				Gtk.Label lbl = new Gtk.Label (GettextCatalog.GetString ("Target Gtk# version:"));
 				box.PackStart (lbl, false, false, 0);
-				comboVersions = ComboBox.NewText ();
+				comboVersions = new ComboBoxText ();
 				ReferenceManager refmgr = new ReferenceManager (project as DotNetProject);
 				foreach (string v in refmgr.SupportedGtkVersions)
 					comboVersions.AppendText (v);

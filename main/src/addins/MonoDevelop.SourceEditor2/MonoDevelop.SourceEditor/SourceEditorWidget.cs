@@ -195,9 +195,11 @@ namespace MonoDevelop.SourceEditor
 		
 		class Border : Gtk.DrawingArea
 		{
-			protected override bool OnExposeEvent (Gdk.EventExpose evnt)
+			protected override bool OnDrawn (Cairo.Context cr)
 			{
-				evnt.Window.DrawRectangle (this.Style.DarkGC (State), true, evnt.Area);
+				cr.SetSourceColor (this.GetStyleColor (StateType.Normal).ToCairoColor ());
+				cr.Rectangle (0, 0, Allocation.Width, Allocation.Height);
+				cr.Fill ();
 				return true;
 			}
 		}
@@ -272,28 +274,8 @@ namespace MonoDevelop.SourceEditor
 				if (suppressScrollbar == value)
 					return;
 				suppressScrollbar = value;
-
-				if (suppressScrollbar) {
-					scrolledWindow.VScrollbar.SizeRequested += SuppressSize;
-					scrolledWindow.VScrollbar.ExposeEvent += SuppressExpose;
-				} else {
-					scrolledWindow.VScrollbar.SizeRequested -= SuppressSize;
-					scrolledWindow.VScrollbar.ExposeEvent -= SuppressExpose;
-				}
 			}
 
-			[GLib.ConnectBefore]
-			static void SuppressExpose (object o, ExposeEventArgs args)
-			{
-				args.RetVal = true;
-			}
-
-			[GLib.ConnectBefore]
-			static void SuppressSize (object o, SizeRequestedArgs args)
-			{
-				args.Requisition = Requisition.Zero;
-				args.RetVal = true;
-			}
 			
 			public void AddQuickTaskProvider (IQuickTaskProvider p)
 			{
@@ -335,8 +317,8 @@ namespace MonoDevelop.SourceEditor
 				SetSuppressScrollbar (false);
 				QuickTaskStrip.EnableFancyFeatures.Changed -= FancyFeaturesChanged;
 				scrolledWindow.ButtonPressEvent -= PrepareEvent;
-				scrolledWindow.Vadjustment.Destroy ();
-				scrolledWindow.Hadjustment.Destroy ();
+				scrolledWindow.Vadjustment.Dispose ();
+				scrolledWindow.Hadjustment.Dispose ();
 				scrolledWindow.Destroy ();
 				scrolledWindow = null;
 				strip.Destroy ();
@@ -1183,7 +1165,7 @@ namespace MonoDevelop.SourceEditor
 				KillWidgets ();
 				searchAndReplaceWidgetFrame = new RoundedFrame ();
 				//searchAndReplaceWidgetFrame.SetFillColor (MonoDevelop.Components.CairoExtensions.GdkColorToCairoColor (widget.TextEditor.ColorStyle.Default.BackgroundColor));
-				searchAndReplaceWidgetFrame.SetFillColor (CairoExtensions.GdkColorToCairoColor (vbox.Style.Background (StateType.Normal)));
+				searchAndReplaceWidgetFrame.SetFillColor (vbox.GetStyleBackgroundColor (StateType.Normal).ToCairoColor ());
 				
 				searchAndReplaceWidgetFrame.Child = searchAndReplaceWidget = new SearchAndReplaceWidget (TextEditor, searchAndReplaceWidgetFrame);
 				searchAndReplaceWidget.Destroyed += (sender, e) => RemoveSearchWidget ();
@@ -1222,7 +1204,7 @@ namespace MonoDevelop.SourceEditor
 				
 				gotoLineNumberWidgetFrame = new MonoDevelop.Components.RoundedFrame ();
 				//searchAndReplaceWidgetFrame.SetFillColor (MonoDevelop.Components.CairoExtensions.GdkColorToCairoColor (widget.TextEditor.ColorStyle.Default.BackgroundColor));
-				gotoLineNumberWidgetFrame.SetFillColor (MonoDevelop.Components.CairoExtensions.GdkColorToCairoColor (vbox.Style.Background (StateType.Normal)));
+				gotoLineNumberWidgetFrame.SetFillColor (vbox.GetStyleBackgroundColor (StateType.Normal).ToCairoColor ());
 				
 				gotoLineNumberWidgetFrame.Child = gotoLineNumberWidget = new GotoLineNumberWidget (textEditor, gotoLineNumberWidgetFrame);
 				gotoLineNumberWidget.Destroyed += (sender, e) => RemoveSearchWidget ();

@@ -1,4 +1,4 @@
-<Project DefaultTargets="Build" Sdk="Microsoft.NET.Sdk" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+﻿<Project DefaultTargets="Build" Sdk="Microsoft.NET.Sdk" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <Import Project="..\..\..\MonoDevelop.props" />
   <Import Project="$(ReferencesVSEditor)" />
   <Import Project="$(ReferencesGtk)" />
@@ -20,6 +20,7 @@
     <ProjectGuid>{F8F92AA4-A376-4679-A9D4-60E7B7FBF477}</ProjectGuid>
     <TargetFrameworkVersion>$(MDFrameworkVersion)</TargetFrameworkVersion>
     <OutputPath>..\..\..\build\AddIns\DisplayBindings\SourceEditor</OutputPath>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <DefineConstants Condition="$(OS) == 'Windows_NT'">$(DefineConstants);WINDOWS</DefineConstants>
     <!--
@@ -35,7 +36,7 @@
   <PropertyGroup Condition=" '$(RunConfiguration)' == 'Default' ">
     <StartAction>Program</StartAction>
     <StartProgram>mono</StartProgram>
-    <StartArguments>--debug ../../../build/bin/MonoDevelop.exe</StartArguments>
+    <StartArguments>--debug ../../../build/MonoDevelop.exe</StartArguments>
     <ConsolePause>false</ConsolePause>
   </PropertyGroup>
   <ItemGroup>
@@ -93,9 +94,6 @@
     <Reference Include="System.Core" />
     <Reference Include="System.Xml.Linq" />
     <Reference Include="System.Runtime.Serialization" />
-    <Reference Include="Mono.Cairo">
-      <HintPath>$(MonoFrameworkNet45Directory)\Mono.Cairo.dll</HintPath>
-    </Reference>
     <Reference Include="System.Collections.Immutable">
       <HintPath>$(NuGetPackageRoot)system.collections.immutable/10.0.1/lib/netstandard2.0/System.Collections.Immutable.dll</HintPath>
     </Reference>

@@ -24,6 +24,7 @@
 //  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
 
 using System;
+using Task = System.Threading.Tasks.Task;
 using System.IO;
 using System.Collections.Generic;
 using System.Drawing;
@@ -314,7 +315,7 @@ namespace MonoDevelop.Ide.Gui
 			topMenu = IdeApp.CommandService.CreateMenuBar (MainMenuPath);
 			var appMenu = IdeApp.CommandService.CreateMenu (AppMenuPath);
 			if (appMenu != null && appMenu.Children.Length > 0) {
-				var item = new MenuItem (BrandingService.ApplicationName);
+				var item = new Gtk.MenuItem (BrandingService.ApplicationName);
 				item.Submenu = appMenu;
 				topMenu.Insert (item, 0);
 			}

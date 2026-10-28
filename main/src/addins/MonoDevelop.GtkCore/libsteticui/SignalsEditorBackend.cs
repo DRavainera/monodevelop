@@ -90,7 +90,7 @@ namespace Stetic
 		
 		public Signal SelectedSignal {
 			get {
-				Gtk.TreeModel foo;
+				Gtk.ITreeModel foo;
 				Gtk.TreeIter iter;
 				if (!tree.Selection.GetSelected (out foo, out iter))
 					return null;

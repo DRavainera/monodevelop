@@ -56,16 +56,27 @@ namespace MonoDevelop.Components
 
 			disableSizeCheck = false;
 
-			SizeRequested += (object o, SizeRequestedArgs args) => {
-				if (this.AnimationIsRunning("Resize") && !disableSizeCheck) {
-					Gtk.Requisition result = new Gtk.Requisition ();
-					result.Width  = Math.Max (args.Requisition.Width, Math.Max (Allocation.Width, targetSize.Width));
-					result.Height = Math.Max (args.Requisition.Height, Math.Max (Allocation.Height, targetSize.Height));
-					args.Requisition = result;
-				}
-			};
-
 			UpdatePadding ();
+		}
+		
+		protected override void OnGetPreferredWidth (out int minimum, out int natural)
+		{
+			base.OnGetPreferredWidth (out minimum, out natural);
+			if (this.AnimationIsRunning ("Resize") && !disableSizeCheck) {
+				int w = Math.Max (Allocation.Width, targetSize.Width);
+				if (minimum < w) minimum = w;
+				if (natural < w) natural = w;
+			}
+		}
+		
+		protected override void OnGetPreferredHeight (out int minimum, out int natural)
+		{
+			base.OnGetPreferredHeight (out minimum, out natural);
+			if (this.AnimationIsRunning ("Resize") && !disableSizeCheck) {
+				int h = Math.Max (Allocation.Height, targetSize.Height);
+				if (minimum < h) minimum = h;
+				if (natural < h) natural = h;
+			}
 		}
 		
 		void IAnimatable.BatchBegin () { }
@@ -116,12 +127,13 @@ namespace MonoDevelop.Components
 			}
 
 			disableSizeCheck = true;
-			Gtk.Requisition sizeReq = Gtk.Requisition.Zero;
-			// use OnSizeRequested instead of SizeRequest to bypass internal GTK caching
-			OnSizeRequested (ref sizeReq);
+			int minw, natw, minh, nath;
+			// use GetPreferredWidth/Height instead of SizeRequest to bypass internal GTK caching
+			GetPreferredWidth (out minw, out natw);
+			GetPreferredHeight (out minh, out nath);
 			disableSizeCheck = false;
 
-			Gdk.Size size = new Gdk.Size (sizeReq.Width, sizeReq.Height);
+			Gdk.Size size = new Gdk.Size (natw, nath);
 
 			// ensure that our apint area is big enough for our padding
 			if (paintSize.Width <= 15 || paintSize.Height <= 15)
@@ -149,48 +161,48 @@ namespace MonoDevelop.Components
 		void MaybeReanimate ()
 		{
 			disableSizeCheck = true;
-			Gtk.Requisition sizeReq = Gtk.Requisition.Zero;
-			OnSizeRequested (ref sizeReq);
+			int minw, natw, minh, nath;
+			GetPreferredWidth (out minw, out natw);
+			GetPreferredHeight (out minh, out nath);
 			disableSizeCheck = false;
 
-			if (sizeReq.Width == paintSize.Width && sizeReq.Height == paintSize.Height)
+			if (natw == paintSize.Width && nath == paintSize.Height)
 				QueueResize ();
 			else
 				AnimatedResize (); //Desired size changed mid animation
 		}
 
-		protected override bool OnExposeEvent (Gdk.EventExpose evnt)
+		protected override bool OnDrawn (Cairo.Context context)
 		{
 			if ((position & PopupPosition.Top) != 0 || (position & PopupPosition.Bottom) != 0)
 				theme.ArrowOffset = Allocation.Width / 2;
 			else
 				theme.ArrowOffset = Allocation.Height / 2;
 
-			using (var context = Gdk.CairoHelper.Create (evnt.Window)) {
-				context.Save ();
-				Theme.SetBorderPath (context, BorderAllocation, position);
-				context.Clip ();
-				OnDrawContent (evnt, context); // Draw content first so we can easily clip it
-				context.Restore ();
+			context.Save ();
+			Theme.SetBorderPath (context, BorderAllocation, position);
+			context.Clip ();
+			OnDrawContent (context); // Draw content first so we can easily clip it
+			context.Restore ();
 
 
-				// protect against overriden methods which leave in a bad state
-				context.Save ();
-				if (Theme.DrawPager) {
-					Theme.RenderPager (context, 
-					                   PangoContext,
-					                   BorderAllocation);
-				}
-
-				Theme.RenderShadow (context, BorderAllocation, position);
-				context.Restore ();
+			// protect against overriden methods which leave in a bad state
+			context.Save ();
+			if (Theme.DrawPager) {
+				Theme.RenderPager (context, 
+				                   PangoContext,
+				                   BorderAllocation);
 			}
-			return base.OnExposeEvent (evnt);
+
+			Theme.RenderShadow (context, BorderAllocation, position);
+			context.Restore ();
+
+			return base.OnDrawn (context);
 		}
 
-		protected virtual void OnDrawContent (Gdk.EventExpose evnt, Cairo.Context context)
+		protected virtual void OnDrawContent (Cairo.Context context)
 		{
-			Theme.RenderBackground (context, new Gdk.Rectangle (Allocation.X, Allocation.Y, paintSize.Width, paintSize.Height));
+			Theme.RenderBackground (context, new Gdk.Rectangle (0, 0, paintSize.Width, paintSize.Height));
 		}
 
 		void UpdatePadding ()

@@ -19,7 +19,8 @@
     <OutputType>Exe</OutputType>
     <AssemblyName>mdhost</AssemblyName>
     <RootNamespace>mdhost</RootNamespace>
-    <OutputPath>..\..\..\build\bin\</OutputPath>
+    <OutputPath>..\..\..\build\</OutputPath>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <TargetFrameworkVersion>$(MDFrameworkVersion)</TargetFrameworkVersion>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|x86' " />

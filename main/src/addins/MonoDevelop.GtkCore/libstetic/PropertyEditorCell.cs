@@ -62,7 +62,7 @@ namespace Stetic
 			layout = new Pango.Layout (container.PangoContext);
 			layout.Width = -1;
 			
-			Pango.FontDescription des = container.Style.FontDescription.Copy();
+			Pango.FontDescription des = container.PangoContext.FontDescription.Copy();
 			des.Size = 10 * (int) Pango.Scale.PangoScale;
 			layout.FontDescription = des;
 			
@@ -124,12 +124,27 @@ namespace Stetic
 			layout.GetPixelSize (out width, out height);
 		}
 		
-		public virtual void Render (Drawable window, Gdk.Rectangle bounds, StateType state)
+		public virtual void Render (Cairo.Context cr, Gdk.Rectangle bounds, StateType state)
 		{
 			int w, h;
 			layout.GetPixelSize (out w, out h);
 			int dy = (bounds.Height - h) / 2;
-			window.DrawLayout (container.Style.TextGC (state), bounds.X, dy + bounds.Y, layout);
+			Gdk.RGBA fg = container.StyleContext.GetColor (ToStateFlags (state));
+			cr.SetSourceColor (new Cairo.Color ((float) fg.Red, (float) fg.Green, (float) fg.Blue));
+			cr.MoveTo (bounds.X, dy + bounds.Y);
+			Pango.CairoHelper.ShowLayout (cr, layout);
+		}
+		
+		protected static Gtk.StateFlags ToStateFlags (StateType s)
+		{
+			switch (s) {
+				case StateType.Active:
+				case StateType.Selected:
+				case StateType.Prelight:
+					return Gtk.StateFlags.Selected;
+				default:
+					return Gtk.StateFlags.Normal;
+			}
 		}
 		
 		protected virtual IPropertyEditor CreateEditor (Gdk.Rectangle cell_area, StateType state)

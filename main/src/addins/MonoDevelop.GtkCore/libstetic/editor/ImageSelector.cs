@@ -26,20 +26,24 @@ namespace Stetic.Editor
 			height = Math.Max (imgSize, height);
 		}
 		
-		public override void Render (Gdk.Drawable window, Gdk.Rectangle bounds, Gtk.StateType state)
+		public override void Render (Cairo.Context cr, Gdk.Rectangle bounds, Gtk.StateType state)
 		{
 			int iy = bounds.Y + (bounds.Height - imgSize) / 2;
 			
 			if (image != null) {
 				int dy = (imgSize - image.Height) / 2;
 				int dx = (imgSize - image.Width) / 2;
-				window.DrawPixbuf (Container.Style.BackgroundGC (state), image, 0, 0, bounds.X + dx, iy + dy, -1, -1, Gdk.RgbDither.None, 0, 0);
+				IconSelectorItem.DrawPixbuf (cr, image, bounds.X + dx, iy + dy);
 			}
 			
-			window.DrawRectangle (Container.Style.DarkGC (state), false, bounds.X, iy, imgSize - 1, imgSize - 1);
+			Gdk.RGBA border = Container.StyleContext.GetColor (ToStateFlags (state));
+			cr.SetSourceColor (new Cairo.Color ((float) border.Red, (float) border.Green, (float) border.Blue));
+			cr.LineWidth = 1;
+			cr.Rectangle (bounds.X + 0.5, iy + 0.5, imgSize - 1, imgSize - 1);
+			cr.Stroke ();
 			
 			bounds.X += imgSize + spacing;
-			base.Render (window, bounds, state);
+			base.Render (cr, bounds, state);
 		}
 	}
 	
@@ -94,7 +98,7 @@ namespace Stetic.Editor
 		{
 			Spacing = 3;
 			imageFrame = new Gtk.Frame ();
-			imageFrame.Shadow = Gtk.ShadowType.In;
+			imageFrame.ShadowType = Gtk.ShadowType.In;
 			imageFrame.BorderWidth = 2;
 			PackStart (imageFrame, false, false, 0);
 
@@ -104,12 +108,12 @@ namespace Stetic.Editor
 			Gtk.Frame frame = new Gtk.Frame ();
 			entry = new Gtk.Label ();
 			entry.Xalign = 0;
-			frame.Shadow = Gtk.ShadowType.In;
+			frame.ShadowType = Gtk.ShadowType.In;
 			frame.BorderWidth = 2;
 			frame.Add (entry);
 			PackStart (frame, true, true, 0);
 
-			clearButton = new Gtk.Button (new Gtk.Image (Gtk.Stock.Clear, Gtk.IconSize.Menu));
+			clearButton = new Gtk.Button (new Gtk.Image (StockCompat.Clear, Gtk.IconSize.Menu));
 			clearButton.Clicked += OnClearImage;
 			PackStart (clearButton, false, false, 0);
 

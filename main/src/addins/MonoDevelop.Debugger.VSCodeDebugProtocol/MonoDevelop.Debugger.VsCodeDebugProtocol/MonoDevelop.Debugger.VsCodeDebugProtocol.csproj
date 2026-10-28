@@ -12,6 +12,7 @@
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
     <ProjectGuid>{10F5BBD5-8A1D-4563-BCE4-DE681DFD82FD}</ProjectGuid>
     <OutputPath>..\..\..\..\build\AddIns\MonoDevelop.Debugger.VsCodeDebugProtocol</OutputPath>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' " />
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' " />

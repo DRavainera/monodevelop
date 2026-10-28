@@ -51,7 +51,7 @@ namespace MonoDevelop.Ide.Gui
 			int active = 0;
 			for (int i = 0; i < layouts.Count; i++)
 			{
-				Combo.AppendText (layouts[i]);
+				((ListStore)Combo.Model).AppendValues (layouts[i]);
 				if (layouts[i] == IdeApp.Workbench.CurrentLayout)
 					active = i;
 			}

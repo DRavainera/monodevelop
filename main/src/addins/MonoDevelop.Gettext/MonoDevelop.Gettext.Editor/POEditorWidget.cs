@@ -245,13 +245,13 @@ namespace MonoDevelop.Gettext
 			this.scrolledwindowPlural.Child = this.texteditorPlural;
 			this.scrolledwindowOriginal.Child.Show ();
 			this.scrolledwindowPlural.Child.Show ();
-			scrolledwindowOriginal.Child.ModifyBase (Gtk.StateType.Normal, Style.Base (Gtk.StateType.Insensitive));
-			scrolledwindowPlural.Child.ModifyBase (Gtk.StateType.Normal, Style.Base (Gtk.StateType.Insensitive));
+			scrolledwindowOriginal.Child.OverrideBackgroundColor (Gtk.StateFlags.Normal, this.GetStyleBackgroundColor (Gtk.StateType.Insensitive));
+			scrolledwindowPlural.Child.OverrideBackgroundColor (Gtk.StateFlags.Normal, this.GetStyleBackgroundColor (Gtk.StateType.Insensitive));
 			this.texteditorOriginal.Options = DefaultSourceEditorOptions.PlainEditor;
 			this.texteditorPlural.Options = DefaultSourceEditorOptions.PlainEditor;
 			this.texteditorOriginal.IsReadOnly = true;
 			this.texteditorPlural.IsReadOnly = true;
-			toolbarPages.ModifyBg (StateType.Normal, Styles.POEditor.TabBarBackgroundColor);
+			toolbarPages.OverrideBackgroundColor (Gtk.StateFlags.Normal, Styles.POEditor.TabBarBackgroundColor.ToRgba ());
 
 			MonoDevelop.Ide.Gui.Styles.Changed += HandleStylesChanged;
 		}
@@ -259,7 +259,7 @@ namespace MonoDevelop.Gettext
 		void HandleStylesChanged (object sender, EventArgs e)
 		{
 			UpdateFromCatalog ();
-			toolbarPages.ModifyBg (StateType.Normal, Styles.POEditor.TabBarBackgroundColor);
+			toolbarPages.OverrideBackgroundColor (Gtk.StateFlags.Normal, Styles.POEditor.TabBarBackgroundColor.ToRgba ());
 		}
 
 		void HandleCellRendFuzzyToggled (object sender, ToggledArgs args)
@@ -272,21 +272,21 @@ namespace MonoDevelop.Gettext
 			}
 		}
 
-		void CatalogIconDataFunc (Gtk.TreeViewColumn column, Gtk.CellRenderer cell, Gtk.TreeModel model, Gtk.TreeIter iter)
+		void CatalogIconDataFunc (Gtk.TreeViewColumn column, Gtk.CellRenderer cell, Gtk.ITreeModel model, Gtk.TreeIter iter)
 		{
 			CatalogEntry entry = (CatalogEntry)model.GetValue (iter, 0);
 			((CellRendererImage)cell).Image = ImageService.GetIcon (GetStockForEntry (entry), IconSize.Menu);
 			cell.CellBackgroundGdk = GetRowColorForEntry (entry);
 		}
 		
-		void FuzzyToggleDataFunc (Gtk.TreeViewColumn column, Gtk.CellRenderer cell, Gtk.TreeModel model, Gtk.TreeIter iter)
+		void FuzzyToggleDataFunc (Gtk.TreeViewColumn column, Gtk.CellRenderer cell, Gtk.ITreeModel model, Gtk.TreeIter iter)
 		{
 			CatalogEntry entry = (CatalogEntry)model.GetValue (iter, 0);
 			((CellRendererToggle)cell).Active = entry.IsFuzzy;
 			cell.CellBackgroundGdk = GetRowColorForEntry (entry);
 		}
 		
-		void OriginalTextDataFunc (Gtk.TreeViewColumn column, Gtk.CellRenderer cell, Gtk.TreeModel model, Gtk.TreeIter iter)
+		void OriginalTextDataFunc (Gtk.TreeViewColumn column, Gtk.CellRenderer cell, Gtk.ITreeModel model, Gtk.TreeIter iter)
 		{
 			CatalogEntry entry = (CatalogEntry)model.GetValue (iter, 0);
 			((CellRendererText)cell).Text = EscapeForTreeView (entry.String);
@@ -294,7 +294,7 @@ namespace MonoDevelop.Gettext
 			((CellRendererText)cell).ForegroundGdk = GetForeColorForEntry (entry);
 		}
 		
-		void TranslationTextDataFunc (Gtk.TreeViewColumn column, Gtk.CellRenderer cell, Gtk.TreeModel model, Gtk.TreeIter iter)
+		void TranslationTextDataFunc (Gtk.TreeViewColumn column, Gtk.CellRenderer cell, Gtk.ITreeModel model, Gtk.TreeIter iter)
 		{
 			CatalogEntry entry = (CatalogEntry)model.GetValue (iter, 0);
 			((CellRendererText)cell).Text = EscapeForTreeView (entry.GetTranslation (0));
@@ -375,18 +375,15 @@ namespace MonoDevelop.Gettext
 			Menu sub = new Menu ();
 			searchInMenu.Submenu = sub;
 			Gtk.RadioMenuItem  original = null, translated = null, both = null;
-			GLib.SList group = new GLib.SList (IntPtr.Zero);
-			original = new Gtk.RadioMenuItem (group, GettextCatalog.GetString ("_Original"));
-			group = original.Group;
+			original = new Gtk.RadioMenuItem (GettextCatalog.GetString ("_Original"));
 			original.ButtonPressEvent += delegate { original.Activate (); };
 			sub.Append (original);
 			
-			translated = new Gtk.RadioMenuItem (group, GettextCatalog.GetString ("_Translated"));
+			translated = new Gtk.RadioMenuItem (original, GettextCatalog.GetString ("_Translated"));
 			translated.ButtonPressEvent += delegate { translated.Activate (); };
-			group = translated.Group;
 			sub.Append (translated);
 			
-			both = new Gtk.RadioMenuItem (group, GettextCatalog.GetString ("_Both"));
+			both = new Gtk.RadioMenuItem (original, GettextCatalog.GetString ("_Both"));
 			both.ButtonPressEvent += delegate { both.Activate (); };
 			sub.Append (both);
 			switch (DoSearchIn) {
@@ -493,10 +490,10 @@ namespace MonoDevelop.Gettext
 						AddChange (this.currentEntry, oldText, escapedText, index);
 					}
 					IdeApp.Workbench.StatusBar.ShowReady ();
-					window.Child.ModifyBase (Gtk.StateType.Normal, Style.Base (Gtk.StateType.Normal));
+					window.Child.OverrideColor (Gtk.StateFlags.Normal, this.GetStyleBackgroundColor (Gtk.StateType.Normal));
 				} catch (System.Exception e) {
 					IdeApp.Workbench.StatusBar.ShowError (e.Message);
-					window.Child.ModifyBase (Gtk.StateType.Normal, errorColor);
+					window.Child.OverrideColor (Gtk.StateFlags.Normal, errorColor.ToRgba ());
 				}
 				treeviewEntries.QueueDraw ();
 				UpdateProgressBar ();
@@ -705,14 +702,14 @@ namespace MonoDevelop.Gettext
 		{
 			if (entry.References.Length == 0)
 				return Styles.POEditor.EntryMissingBackgroundColor;
-			return entry.IsFuzzy ? Styles.POEditor.EntryFuzzyBackgroundColor : entry.IsTranslated ? Style.Base (StateType.Normal) : Styles.POEditor.EntryUntranslatedBackgroundColor;
+			return entry.IsFuzzy ? Styles.POEditor.EntryFuzzyBackgroundColor : entry.IsTranslated ? this.GetStyleBackgroundColor (StateType.Normal).ToGdkColor () : Styles.POEditor.EntryUntranslatedBackgroundColor;
 		}
 		
 		Color GetForeColorForEntry (CatalogEntry entry)
 		{
 			if (entry.References.Length == 0)
 				return Styles.POEditor.EntryMissingBackgroundColor;
-			return entry.IsFuzzy ? Style.Black : entry.IsTranslated ? Style.Text (StateType.Normal) : Style.Black;
+			return entry.IsFuzzy ? Style.Black : entry.IsTranslated ? this.GetStyleColor (StateType.Normal).ToGdkColor () : Style.Black;
 		}
 		
 		static int GetTypeSortIndicator (CatalogEntry entry)
@@ -810,12 +807,12 @@ namespace MonoDevelop.Gettext
 					regex = new System.Text.RegularExpressions.Regex (filter, options);
 				} catch (Exception e) {
 					IdeApp.Workbench.StatusBar.ShowError (e.Message);
-					this.searchEntryFilter.Entry.ModifyBase (StateType.Normal, errorColor);
+					this.searchEntryFilter.Entry.OverrideColor (Gtk.StateFlags.Normal, errorColor.ToRgba ());
 					this.searchEntryFilter.QueueDraw ();
 					return;
 				}
 			}
-			this.searchEntryFilter.Entry.ModifyBase (StateType.Normal, Style.Base (StateType.Normal));
+			this.searchEntryFilter.Entry.OverrideColor (Gtk.StateFlags.Normal, this.GetStyleBackgroundColor (StateType.Normal));
 			this.searchEntryFilter.QueueDraw ();
 			
 			int found = 0;
@@ -832,17 +829,17 @@ namespace MonoDevelop.Gettext
 				
 			}
 			
-			newStore.SetSortFunc (0, delegate (TreeModel model, TreeIter iter1, TreeIter iter2) {
+			newStore.SetSortFunc (0, delegate (ITreeModel model, TreeIter iter1, TreeIter iter2) {
 				CatalogEntry entry1 = (CatalogEntry)model.GetValue (iter1, 0);
 				CatalogEntry entry2 = (CatalogEntry)model.GetValue (iter2, 0);
 				return GetTypeSortIndicator (entry1).CompareTo (GetTypeSortIndicator (entry2));
 			});
-			newStore.SetSortFunc (1, delegate (TreeModel model, TreeIter iter1, TreeIter iter2) {
+			newStore.SetSortFunc (1, delegate (ITreeModel model, TreeIter iter1, TreeIter iter2) {
 				CatalogEntry entry1 = (CatalogEntry)model.GetValue (iter1, 0);
 				CatalogEntry entry2 = (CatalogEntry)model.GetValue (iter2, 0);
 				return entry1.String.CompareTo (entry2.String);
 			});
-			newStore.SetSortFunc (2, delegate (TreeModel model, TreeIter iter1, TreeIter iter2) {
+			newStore.SetSortFunc (2, delegate (ITreeModel model, TreeIter iter1, TreeIter iter2) {
 				CatalogEntry entry1 = (CatalogEntry)model.GetValue (iter1, 0);
 				CatalogEntry entry2 = (CatalogEntry)model.GetValue (iter2, 0);
 				return entry1.GetTranslation (0).CompareTo (entry2.GetTranslation (0));

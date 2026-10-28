@@ -17,56 +17,68 @@ namespace Stetic.Windows
 
 		public WindowsTheme (Gdk.Window win)
 		{
-			hWnd = gdk_win32_drawable_get_handle (win.Handle);
-			hTheme = OpenThemeData (hWnd, "WINDOW");
+			if (win == null)
+				return;
+			try {
+				hWnd = gdk_win32_drawable_get_handle (win.Handle);
+				hTheme = OpenThemeData (hWnd, "WINDOW");
+			} catch (DllNotFoundException) {
+				hTheme = IntPtr.Zero;
+			}
 		}
 
 		public void Dipose ( )
 		{
-			CloseThemeData (hTheme);
+			if (hTheme != IntPtr.Zero)
+				CloseThemeData (hTheme);
 		}
 
 		public void DrawWindowFrame (Gtk.Widget w, string caption, int x, int y, int width, int height)
 		{
-			Gdk.Drawable drawable = w.GdkWindow;
-			Gdk.Pixmap pix = new Gdk.Pixmap (drawable, width, height, drawable.Depth);
+			var win = w.GdkWindow;
+			if (win == null)
+				return;
+			int captionHeight = GetCaptionHeight ();
+			using (var cr = Gdk.CairoHelper.Create (win)) {
+				cr.SetSourceColor (ToCairo (w.StyleContext.GetBackgroundColor (w.StateFlags)));
+				cr.Rectangle (x, y, width, height);
+				cr.Fill ();
+				cr.SetSourceColor (ToCairo (w.StyleContext.GetColor (w.StateFlags)));
+				cr.MoveTo (x + 4, y + 5);
+				using (var layout = new Pango.Layout (w.PangoContext)) {
+					layout.SetText (caption);
+					Pango.CairoHelper.ShowLayout (cr, layout);
+				}
+				cr.LineWidth = 1;
+				cr.Rectangle (x + 0.5, y + captionHeight + 0.5, width - 1, height - captionHeight - 1);
+				cr.Stroke ();
+			}
+		}
 
-			Gdk.GC gcc = new Gdk.GC (pix);
-			gcc.Foreground = w.Style.Backgrounds [(int)Gtk.StateType.Normal];
-			pix.DrawRectangle (gcc, true, 0, 0, width, height);
+		int GetCaptionHeight ()
+		{
+			if (hTheme != IntPtr.Zero && hWnd != IntPtr.Zero) {
+				IntPtr hdc = GetDC (hWnd);
+				RECT r = new RECT (0, 0, 100, 100);
+				SIZE size;
+				GetThemePartSize (hTheme, hdc, WP_CAPTION, CS_ACTIVE, ref r, 1, out size);
+				ReleaseDC (hWnd, hdc);
+				if (size.cy > 0)
+					return size.cy;
+			}
+			return 20;
+		}
 
-			IntPtr hdc = gdk_win32_hdc_get (pix.Handle, gcc.Handle, 0);
-
-			RECT r = new RECT (0, 0, width, height);
-			SIZE size;
-			GetThemePartSize (hTheme, hdc, WP_CAPTION, CS_ACTIVE, ref r, 1, out size);
-
-			r.Bottom = size.cy;
-			DrawThemeBackground (hTheme, hdc, WP_CAPTION, CS_ACTIVE, ref r, ref r);
-
-			RECT rf = new RECT (FrameBorder, FrameBorder, width - FrameBorder * 2, size.cy);
-			LOGFONT lf = new LOGFONT ();
-			GetThemeSysFont (hTheme, TMT_CAPTIONFONT, ref lf);
-			IntPtr titleFont = CreateFontIndirect (ref lf);
-			IntPtr oldFont = SelectObject (hdc, titleFont);
-			SetBkMode (hdc, 1 /*TRANSPARENT*/);
-			DrawThemeText (hTheme, hdc, WP_CAPTION, CS_ACTIVE, caption, -1, DT_LEFT | DT_SINGLELINE | DT_WORD_ELLIPSIS, 0, ref rf);
-			SelectObject (hdc, oldFont);
-			DeleteObject (titleFont);
-
-			int ny = r.Bottom;
-			r = new RECT (0, ny, width, height);
-			DrawThemeBackground (hTheme, hdc, WP_FRAMEBOTTOM, 0, ref r, ref r);
-
-			gdk_win32_hdc_release (pix.Handle, gcc.Handle, 0);
-
-			Gdk.Pixbuf img = Gdk.Pixbuf.FromDrawable (pix, pix.Colormap, 0, 0, 0, 0, width, height);
-			drawable.DrawPixbuf (new Gdk.GC (drawable), img, 0, 0, x, y, width, height, Gdk.RgbDither.None, 0, 0);
-			drawable.DrawRectangle (w.Style.BackgroundGC (Gtk.StateType.Normal), true, x + FrameBorder, y + size.cy, width - FrameBorder * 2, height - FrameBorder - size.cy);
+		static Cairo.Color ToCairo (Gdk.RGBA rgba)
+		{
+			return new Cairo.Color ((float)rgba.Red, (float)rgba.Green, (float)rgba.Blue);
 		}
 
 		public Gdk.Rectangle GetWindowClientArea (Gdk.Rectangle allocation)
 		{
+			if (hTheme == IntPtr.Zero)
+				return new Gdk.Rectangle (allocation.X + FrameBorder, allocation.Y + 20, allocation.Width - FrameBorder * 2, allocation.Height - 20 - FrameBorder);
+
 			IntPtr hdc = GetDC (hWnd);
 			RECT r = new RECT (allocation.X, allocation.Y, allocation.X + allocation.Width, allocation.Y + allocation.Height);
 			SIZE size;

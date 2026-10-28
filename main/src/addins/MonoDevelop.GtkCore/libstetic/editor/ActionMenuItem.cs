@@ -48,9 +48,9 @@ namespace Stetic.Editor
 		
 		bool disposed;
 
-		public override void Dispose ()
+		protected override void Dispose (bool disposing)
 		{
-			if (disposed)
+			if (!disposing || disposed)
 				return;
 			disposed = true;
 			if (menuBarItem != null) {
@@ -60,7 +60,7 @@ namespace Stetic.Editor
 			}
 			if (node.Action != null)
 				node.Action.ObjectChanged -= OnActionChanged;
-			base.Dispose ();
+			base.Dispose (disposing);
 		}
 		
 		public bool HasSubmenu {
@@ -208,7 +208,7 @@ namespace Stetic.Editor
 			}
 				
 			if (stock != null) {
-				Gtk.StockItem item = Gtk.Stock.Lookup (stock);
+				Gtk.StockItem item = StockCompat.Lookup (stock);
 				if (text == null || text.Length == 0)
 					text = item.Label;
 				
@@ -381,7 +381,7 @@ namespace Stetic.Editor
 			menu.Insert (it, -1);
 			
 			menu.ShowAll ();
-			menu.Popup (null, null, new Gtk.MenuPositionFunc (OnDropMenuPosition), 3, Gtk.Global.CurrentEventTime);
+			menu.Popup (null, null, new Gtk.MenuPositionFunc (OnDropMenuPosition), 3, 0);
 			e.RetVal = false;
 		}
 		
@@ -565,17 +565,42 @@ namespace Stetic.Editor
 			WidthRequest = HeightRequest = 16;
 		}
 		
-		protected override bool OnExposeEvent (Gdk.EventExpose ev)
+		protected override bool OnDrawn (Cairo.Context cr)
 		{
 			Gdk.Rectangle rect = Allocation;
-			rect.X = rect.Y = 0;
+			int w = rect.Width;
+			int h = rect.Height;
 			
-			Gtk.ShadowType sh = active ? Gtk.ShadowType.In : Gtk.ShadowType.Out;
-			if (isRadio)
-				Gtk.Style.PaintOption (this.Style, this.GdkWindow, this.State, sh, rect, this, "", rect.X, rect.Y, rect.Width, rect.Height);
-			else
-				Gtk.Style.PaintCheck (this.Style, this.GdkWindow, this.State, sh, rect, this, "", rect.X, rect.Y, rect.Width, rect.Height);
-			return true;
+			// Indicador de radio/check (equivalente a PaintOption/PaintCheck)
+			Gtk.StateFlags flags = active ? Gtk.StateFlags.Selected : Gtk.StateFlags.Normal;
+			Gdk.RGBA bg = StyleContext.GetBackgroundColor (flags);
+			Gdk.RGBA fg = StyleContext.GetColor (flags);
+			
+			cr.SetSourceColor (new Cairo.Color ((float) bg.Red, (float) bg.Green, (float) bg.Blue));
+			if (isRadio) {
+				cr.Arc (w / 2.0, h / 2.0, Math.Min (w, h) / 2.0 - 2, 0, 2 * Math.PI);
+			} else {
+				cr.Rectangle (2, 2, w - 4, h - 4);
+			}
+			cr.Fill ();
+			
+			cr.SetSourceColor (new Cairo.Color ((float) fg.Red, (float) fg.Green, (float) fg.Blue));
+			cr.LineWidth = 1;
+			if (isRadio) {
+				cr.Arc (w / 2.0, h / 2.0, Math.Min (w, h) / 2.0 - 2, 0, 2 * Math.PI);
+			} else {
+				cr.Rectangle (2.5, 2.5, w - 5, h - 5);
+			}
+			cr.Stroke ();
+			
+			if (active) {
+				cr.MoveTo (w / 4.0, h / 2.0);
+				cr.LineTo (w / 2.0 - 1, h * 3 / 4.0);
+				cr.LineTo (w * 3 / 4.0, h / 4.0);
+				cr.Stroke ();
+			}
+			
+			return base.OnDrawn (cr);
 		}
 	}
 	

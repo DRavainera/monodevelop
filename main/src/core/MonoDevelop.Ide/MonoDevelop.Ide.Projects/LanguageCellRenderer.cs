@@ -99,9 +99,9 @@ namespace MonoDevelop.Ide.Projects
 			return languageRect;
 		}
 
-		public override void GetSize (Widget widget, ref Rectangle cell_area, out int x_offset, out int y_offset, out int width, out int height)
+		protected override void OnGetSize (Widget widget, ref Rectangle cell_area, out int x_offset, out int y_offset, out int width, out int height)
 		{
-			base.GetSize (widget, ref cell_area, out x_offset, out y_offset, out width, out height);
+			base.OnGetSize (widget, ref cell_area, out x_offset, out y_offset, out width, out height);
 
 			textWidth = GetTextWidth (widget);
 			int languageRectangleWidth = textWidth + languageLeftHandPadding;
@@ -136,7 +136,7 @@ namespace MonoDevelop.Ide.Projects
 			}
 		}
 
-		protected override void Render (Gdk.Drawable window, Widget widget, Gdk.Rectangle background_area, Gdk.Rectangle cell_area, Gdk.Rectangle expose_area, CellRendererState flags)
+		protected override void OnRender (Cairo.Context cr, Widget widget, Gdk.Rectangle background_area, Gdk.Rectangle cell_area, CellRendererState flags)
 		{
 			if (Template == null) {
 				return;
@@ -146,20 +146,20 @@ namespace MonoDevelop.Ide.Projects
 				return;
 			}
 
-			using (var ctx = CairoHelper.Create (window)) {
+			{
 				using (var layout = new Pango.Layout (widget.PangoContext)) {
 					int textHeight = 0;
 
 					SetMarkup (layout, GetSelectedLanguage ());
 					layout.GetPixelSize (out textWidth, out textHeight);
 
-					languageRect = GetLanguageButtonRectangle (window, widget, cell_area, textHeight, textWidth);
+					languageRect = GetLanguageButtonRectangle (widget, cell_area, textHeight, textWidth);
 
 					StateType state = StateType.Normal;
 					if (!RenderRecentTemplate) {
-						RoundBorder (ctx, languageRect.X, languageRect.Y, languageRect.Width, languageRect.Height);
-						SetSourceColor (ctx, Styles.NewProjectDialog.TemplateLanguageButtonBackground.ToCairoColor ());
-						ctx.Fill ();
+						RoundBorder (cr, languageRect.X, languageRect.Y, languageRect.Width, languageRect.Height);
+						SetSourceColor (cr, Styles.NewProjectDialog.TemplateLanguageButtonBackground.ToCairoColor ());
+						cr.Fill ();
 					} else {
 						state = GetState (widget, flags);
 					}
@@ -168,12 +168,15 @@ namespace MonoDevelop.Ide.Projects
 					int languageTextX = languageRect.X + ((languageRect.Width - tw) / 2);
 					int languageTextY = languageRect.Y + (languageRect.Height - textHeight) / 2;
 
-					window.DrawLayout (widget.Style.TextGC (state), languageTextX, languageTextY, layout);
+					Gdk.RGBA fg = widget.StyleContext.GetColor (ToStateFlags (state));
+					cr.SetSourceColor (new Cairo.Color ((float) fg.Red, (float) fg.Green, (float) fg.Blue));
+					cr.MoveTo (languageTextX, languageTextY);
+					Pango.CairoHelper.ShowLayout (cr, layout);
 
 					if (TemplateHasMultipleLanguages ()) {
 						int triangleX = languageTextX + textWidth + languageRightHandPadding;
 						int triangleY = languageRect.Y + (languageRect.Height - dropdownTriangleHeight) / 2;
-						DrawTriangle (ctx, triangleX, triangleY);
+						DrawTriangle (cr, triangleX, triangleY);
 					}
 				}
 			}
@@ -192,7 +195,7 @@ namespace MonoDevelop.Ide.Projects
 			ctx.Fill ();
 		}
 
-		Rectangle GetLanguageButtonRectangle (Drawable window, Widget widget, Rectangle cell_area, int textHeight, int textWidth)
+		Rectangle GetLanguageButtonRectangle (Widget widget, Rectangle cell_area, int textHeight, int textWidth)
 		{
 			int languageRectangleHeight = cell_area.Height - 8;
 			int languageRectangleWidth = textWidth + languageLeftHandPadding;
@@ -230,6 +233,17 @@ namespace MonoDevelop.Ide.Projects
 		bool TemplateHasMultipleLanguages ()
 		{
 			return !RenderRecentTemplate && Template != null && Template.AvailableLanguages.Count > 1;
+		}
+
+		static Gtk.StateFlags ToStateFlags (StateType state)
+		{
+			switch (state) {
+				case StateType.Selected: return Gtk.StateFlags.Selected;
+				case StateType.Active: return Gtk.StateFlags.Active;
+				case StateType.Prelight: return Gtk.StateFlags.Prelight;
+				case StateType.Insensitive: return Gtk.StateFlags.Insensitive;
+				default: return Gtk.StateFlags.Normal;
+			}
 		}
 
 		static StateType GetState (Widget widget, CellRendererState flags)

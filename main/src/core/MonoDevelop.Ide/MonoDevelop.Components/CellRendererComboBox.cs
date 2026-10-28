@@ -41,8 +41,8 @@ namespace MonoDevelop.Components
 		public CellRendererComboBox ()
 		{
 			Mode |= Gtk.CellRendererMode.Editable;
-			Gtk.ComboBox dummyEntry = Gtk.ComboBox.NewText ();
-			rowHeight = dummyEntry.SizeRequest ().Height + (2 * dummyEntry.Style?.YThickness ?? 0);
+			Gtk.ComboBoxText dummyEntry = new Gtk.ComboBoxText ();
+			rowHeight = dummyEntry.SizeRequest ().Height + (2 * dummyEntry.Style?.Ythickness ?? 0);
 			Ypad = 0;
 		}
 
@@ -51,18 +51,18 @@ namespace MonoDevelop.Components
 			set { values = value; }
 		}
 		
-		public override void GetSize (Widget widget, ref Rectangle cell_area, out int x_offset, out int y_offset, out int width, out int height)
+		protected override void OnGetSize (Widget widget, ref Rectangle cell_area, out int x_offset, out int y_offset, out int width, out int height)
 		{
-			base.GetSize (widget, ref cell_area, out x_offset, out y_offset, out width, out height);
+			base.OnGetSize (widget, ref cell_area, out x_offset, out y_offset, out width, out height);
 			if (height < rowHeight)
 				height = rowHeight;
 		}
 		
-		public override CellEditable StartEditing (Gdk.Event ev, Widget widget, string path, Gdk.Rectangle background_area, Gdk.Rectangle cell_area, CellRendererState flags)
+		protected override ICellEditable OnStartEditing (Gdk.Event ev, Widget widget, string path, Gdk.Rectangle background_area, Gdk.Rectangle cell_area, CellRendererState flags)
 		{
 			this.path = path;
 
-			Gtk.ComboBox combo = Gtk.ComboBox.NewText ();
+			Gtk.ComboBoxText combo = new Gtk.ComboBoxText ();
 			foreach (string s in values)
 				combo.AppendText (s);
 			
@@ -73,7 +73,7 @@ namespace MonoDevelop.Components
 		
 		void SelectionChanged (object s, EventArgs a)
 		{
-			Gtk.ComboBox combo = (Gtk.ComboBox) s;
+			Gtk.ComboBoxText combo = (Gtk.ComboBoxText) s;
 			if (Changed != null)
 				Changed (this, new ComboSelectionChangedArgs (path, combo.Active, combo.ActiveText));
 		}

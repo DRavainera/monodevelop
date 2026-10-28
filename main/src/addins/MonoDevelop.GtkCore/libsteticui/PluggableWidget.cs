@@ -86,7 +86,7 @@ namespace Stetic
 				Gtk.Widget w = book.GetNthPage (0);
 				Gdk.Window win = w.GdkWindow;
 				if (win != null && win.IsViewable) {
-					Gdk.Pixbuf img = Gdk.Pixbuf.FromDrawable (win, win.Colormap, w.Allocation.X, w.Allocation.Y, 0, 0, w.Allocation.Width, w.Allocation.Height);
+					Gdk.Pixbuf img = new Gdk.Pixbuf (win, w.Allocation.X, w.Allocation.Y, w.Allocation.Width, w.Allocation.Height);
 					Gtk.Image oldImage = new Gtk.Image (img);
 					oldImage.Show ();
 					book.AppendPage (oldImage, null);
@@ -122,7 +122,7 @@ namespace Stetic
 		protected abstract Gtk.Widget OnCreateWidget ();
 		protected virtual void OnDestroyWidget (Gtk.Widget w) { w.Destroy (); }
 		
-		public override void Dispose ()
+		protected override void Dispose (bool disposing)
 		{
 			#if !NET
 			if (app is IsolatedApplication) {
@@ -155,7 +155,7 @@ namespace Stetic
 			socket = new Gtk.Socket ();
 			socket.Show ();
 			book.AppendPage (socket, null);
-			OnCreatePlug (socket.Id);
+			OnCreatePlug ((uint) socket.Id);
 		}
 	}
 }

@@ -135,7 +135,7 @@ namespace MonoDevelop.Components
 		{
 			base.OnRealized ();
 			if (!backgroundColorSet)
-				normalColor = Parent.Style.Background (Gtk.StateType.Normal);
+				normalColor = Parent.GetStyleBackgroundColor (StateType.Normal).ToGdkColor ();
 		}
 		
 		protected override bool OnEnterNotifyEvent (Gdk.EventCrossing evnt)
@@ -161,7 +161,7 @@ namespace MonoDevelop.Components
 		void SetBg (bool hilight)
 		{
 			if (hilight)
-				ModifyBg (StateType.Normal, Style.Base (Gtk.StateType.Normal));
+				ModifyBg (StateType.Normal, this.GetStyleBackgroundColor (StateType.Normal).ToGdkColor ());
 			else
 				ModifyBg (StateType.Normal, normalColor);
 		}

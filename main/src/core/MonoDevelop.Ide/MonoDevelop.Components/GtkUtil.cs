@@ -81,6 +81,65 @@ namespace MonoDevelop.Components
 			return new Gdk.Color ((byte)(color.Red * 255d), (byte)(color.Green * 255d), (byte)(color.Blue * 255d));
 		}
 
+		public static Gtk.StateFlags ToStateFlags (this StateType state)
+		{
+			switch (state) {
+				case StateType.Selected: return Gtk.StateFlags.Selected;
+				case StateType.Active: return Gtk.StateFlags.Active;
+				case StateType.Prelight: return Gtk.StateFlags.Prelight;
+				case StateType.Insensitive: return Gtk.StateFlags.Insensitive;
+				default: return Gtk.StateFlags.Normal;
+			}
+		}
+
+		public static Gdk.RGBA GetStyleColor (this Gtk.Widget widget, StateType state)
+		{
+			return widget.StyleContext.GetColor (state.ToStateFlags ());
+		}
+
+		public static Gdk.RGBA GetStyleBackgroundColor (this Gtk.Widget widget, StateType state)
+		{
+			return widget.StyleContext.GetBackgroundColor (state.ToStateFlags ());
+		}
+
+		public static Cairo.Color ToCairoColor (this Gdk.RGBA rgba)
+		{
+			return new Cairo.Color (rgba.Red, rgba.Green, rgba.Blue, rgba.Alpha);
+		}
+
+		public static Gdk.Color ToGdkColor (this Gdk.RGBA rgba)
+		{
+			return new Gdk.Color ((byte)(rgba.Red * 255), (byte)(rgba.Green * 255), (byte)(rgba.Blue * 255));
+		}
+
+		public static Gdk.RGBA ToRgba (this Gdk.Color color)
+		{
+			var rgba = new Gdk.RGBA ();
+			rgba.Red = color.Red / 65535.0;
+			rgba.Green = color.Green / 65535.0;
+			rgba.Blue = color.Blue / 65535.0;
+			rgba.Alpha = 1.0;
+			return rgba;
+		}
+
+		public static void DrawCheckIndicator (this Cairo.Context cr, Gtk.Widget widget, int x, int y, int size, bool isChecked)
+		{
+			cr.Save ();
+			cr.Rectangle (x, y, size, size);
+			cr.SetSourceColor (widget.GetStyleBackgroundColor (StateType.Normal).ToCairoColor ());
+			cr.FillPreserve ();
+			cr.LineWidth = 1;
+			cr.SetSourceColor (widget.GetStyleColor (StateType.Normal).ToCairoColor ());
+			cr.Stroke ();
+			if (isChecked) {
+				cr.MoveTo (x + size * 0.2, y + size * 0.5);
+				cr.LineTo (x + size * 0.42, y + size * 0.72);
+				cr.LineTo (x + size * 0.8, y + size * 0.28);
+				cr.Stroke ();
+			}
+			cr.Restore ();
+		}
+
 		public static Cairo.Color ToCairoColor (this Xwt.Drawing.Color color)
 		{
 			return new Cairo.Color (color.Red, color.Green, color.Blue, color.Alpha);
@@ -971,13 +1030,19 @@ namespace MonoDevelop.Components
 			col.CellSetCellData (tree.Model, iter, false, false);
 			int x = 0;
 			int th = 0;
-			CellRenderer[] renderers = col.CellRenderers;
-			foreach (CellRenderer cr in renderers) {
-				int sp, wi, he, xo, yo;
-				col.CellGetPosition (cr, out sp, out wi);
+			CellRenderer[] renderers = col.Cells;
+			foreach (CellRenderer renderer in renderers) {
+				int sp, wi, he;
+				col.CellGetPosition (renderer, out sp, out wi);
 				Gdk.Rectangle crect = new Gdk.Rectangle (x, rect.Y, wi, rect.Height);
-				cr.GetSize (tree, ref crect, out xo, out yo, out wi, out he);
-				if (cr != renderers [renderers.Length - 1])
+				int minW, natW, minH, natH;
+				renderer.GetPreferredWidth (tree, out minW, out natW);
+				renderer.GetPreferredHeight (tree, out minH, out natH);
+				wi = Math.Min (natW, crect.Width);
+				he = Math.Min (natH, crect.Height);
+				crect.Width = wi;
+				crect.Height = he;
+				if (renderer != renderers [renderers.Length - 1])
 					x += crect.Width + col.Spacing + 1;
 				else
 					x += wi + 1;
@@ -986,9 +1051,9 @@ namespace MonoDevelop.Components
 			SetSizeRequest (x, th + 2);
 		}
 		
-		protected override bool OnExposeEvent (Gdk.EventExpose evnt)
+		protected override bool OnDrawn (Cairo.Context ctx)
 		{
-			base.OnExposeEvent (evnt);
+			base.OnDrawn (ctx);
 
 			Gdk.Rectangle expose = Allocation;
 			Gdk.Color save = Gdk.Color.Zero;
@@ -1003,29 +1068,33 @@ namespace MonoDevelop.Components
 			}
 			col.CellSetCellData (tree.Model, iter, false, false);
 
-			foreach (CellRenderer cr in col.CellRenderers) {
-				if (!cr.Visible)
+			foreach (CellRenderer renderer in col.Cells) {
+				if (!renderer.Visible)
 					continue;
 
-				if (cr is CellRendererText) {
-					hasFgColor = ((CellRendererText)cr).GetCellForegroundSet ();
-					save = ((CellRendererText)cr).ForegroundGdk;
-					((CellRendererText)cr).ForegroundGdk = Style.Foreground (State);
+				if (renderer is CellRendererText) {
+					hasFgColor = ((CellRendererText)renderer).GetCellForegroundSet ();
+					save = ((CellRendererText)renderer).ForegroundGdk;
+					((CellRendererText)renderer).ForegroundGdk = this.GetStyleColor (State).ToGdkColor ();
 				}
 
-				int sp, wi, he, xo, yo;
-				col.CellGetPosition (cr, out sp, out wi);
+				int sp, wi, he;
+				col.CellGetPosition (renderer, out sp, out wi);
 				Gdk.Rectangle bgrect = new Gdk.Rectangle (x, expose.Y, wi, expose.Height - 2);
-				cr.GetSize (tree, ref bgrect, out xo, out yo, out wi, out he);
-				int leftMargin = (int) ((bgrect.Width - wi) * cr.Xalign);
-				int topMargin = (int) ((bgrect.Height - he) * cr.Yalign);
+				int minW, natW, minH, natH;
+				renderer.GetPreferredWidth (tree, out minW, out natW);
+				renderer.GetPreferredHeight (tree, out minH, out natH);
+				wi = Math.Min (natW, bgrect.Width);
+				he = Math.Min (natH, bgrect.Height);
+				int leftMargin = (int) ((bgrect.Width - wi) * renderer.Xalign);
+				int topMargin = (int) ((bgrect.Height - he) * renderer.Yalign);
 				Gdk.Rectangle cellrect = new Gdk.Rectangle (bgrect.X + leftMargin, bgrect.Y + topMargin + 1, wi, he);
-				cr.Render (this.GdkWindow, this, bgrect, cellrect, expose, CellRendererState.Focused);
+				renderer.Render (ctx, this, bgrect, cellrect, expose, CellRendererState.Focused);
 				x += bgrect.Width + col.Spacing + 1;
 
-				if (cr is CellRendererText) {
-					((CellRendererText)cr).ForegroundGdk = save;
-					((CellRendererText)cr).SetCellForegroundSet (hasFgColor);
+				if (renderer is CellRendererText) {
+					((CellRendererText)renderer).ForegroundGdk = save;
+					((CellRendererText)renderer).SetCellForegroundSet (hasFgColor);
 				}
 			}
 

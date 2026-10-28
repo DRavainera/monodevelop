@@ -38,9 +38,9 @@ namespace Stetic {
 			this.ProjectBackend = project;
 		}
 		
-		public override void Dispose ()
+		protected override void Dispose (bool disposing)
 		{
-			base.Dispose ();
+			base.Dispose (disposing);
 		}
 		
 		void OnRegistryChanging (object o, EventArgs args)

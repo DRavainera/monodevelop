@@ -36,7 +36,7 @@ namespace MonoDevelop.Components.Docking
 {
 	internal class PlaceholderWindow: Gtk.Window
 	{
-		Gdk.GC redgc;
+		Gdk.Color redColor;
 		uint anim;
 		int rx, ry, rw, rh;
 		bool allowDocking;
@@ -57,19 +57,12 @@ namespace MonoDevelop.Components.Docking
 			TransientFor = (Gtk.Window) frame.Toplevel;
 			TypeHint = WindowTypeHint.Utility;
 			
-			// Create the mask for the arrow
-			
 			Realize ();
-			redgc = new Gdk.GC (GdkWindow);
-	   		redgc.RgbFgColor = frame.Style.Background (StateType.Selected);
+			redColor = frame.GetStyleBackgroundColor (StateType.Selected).ToGdkColor ();
 		}
 
 		protected override void OnDestroyed ()
 		{
-			if (redgc != null) {
-				redgc.Dispose ();
-				redgc = null;
-			}
 			base.OnDestroyed ();
 		}
 
@@ -81,24 +74,6 @@ namespace MonoDevelop.Components.Docking
 		
 		void CreateShape (int width, int height)
 		{
-			Gdk.Color black, white;
-			black = new Gdk.Color (0, 0, 0);
-			black.Pixel = 1;
-			white = new Gdk.Color (255, 255, 255);
-			white.Pixel = 0;
-
-			using (Gdk.Pixmap pm = new Pixmap (this.GdkWindow, width, height, 1)) {
-				using (Gdk.GC gc = new Gdk.GC (pm)) {
-					gc.Background = white;
-					gc.Foreground = white;
-					pm.DrawRectangle (gc, true, 0, 0, width, height);
-
-					gc.Foreground = black;
-					pm.DrawRectangle (gc, false, 0, 0, width - 1, height - 1);
-					pm.DrawRectangle (gc, false, 1, 1, width - 3, height - 3);
-				}
-				this.ShapeCombineMask (pm, 0, 0);
-			}
 		}
 		
 		protected override void OnSizeAllocated (Rectangle allocation)
@@ -108,14 +83,17 @@ namespace MonoDevelop.Components.Docking
 		}
 
 		
-		protected override bool OnExposeEvent (Gdk.EventExpose args)
+		protected override bool OnDrawn (Cairo.Context cr)
 		{
-			//base.OnExposeEvent (args);
 			int w, h;
-			this.GetSize (out w, out h);
-			this.GdkWindow.DrawRectangle (redgc, false, 0, 0, w-1, h-1);
-			this.GdkWindow.DrawRectangle (redgc, false, 1, 1, w-3, h-3);
-	  		return true;
+			GetSizeRequest (out w, out h);
+			cr.SetSourceColor (redColor.ToCairoColor ());
+			cr.LineWidth = 1;
+			cr.Rectangle (0.5, 0.5, w - 2, h - 2);
+			cr.Stroke ();
+			cr.Rectangle (1.5, 1.5, w - 4, h - 4);
+			cr.Stroke ();
+			return true;
 		}
 		
 		public void Relocate (int x, int y, int w, int h, bool animate)

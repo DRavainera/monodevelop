@@ -44,15 +44,15 @@ namespace MonoDevelop.Ide.Projects
 		const int iconTextXPadding = 1;
 		const int iconYOffset = -1;
 
-		public override void GetSize (Widget widget, ref Rectangle cell_area, out int x_offset, out int y_offset, out int width, out int height)
+		protected override void OnGetSize (Widget widget, ref Rectangle cell_area, out int x_offset, out int y_offset, out int width, out int height)
 		{
-			base.GetSize (widget, ref cell_area, out x_offset, out y_offset, out width, out height);
+			base.OnGetSize (widget, ref cell_area, out x_offset, out y_offset, out width, out height);
 			if (CategoryIcon != null) {
 				height = (int)CategoryIcon.Height + ((int)Ypad * 2) + topLevelTemplateHeadingTotalYPadding;
 			}
 		}
 
-		protected override void Render (Drawable window, Widget widget, Rectangle background_area, Rectangle cell_area, Rectangle expose_area, CellRendererState flags)
+		protected override void OnRender (Cairo.Context cr, Widget widget, Rectangle background_area, Rectangle cell_area, CellRendererState flags)
 		{
 			StateType state = GetState (widget, flags);
 			var isSelected = state == StateType.Selected || state == StateType.Active;
@@ -60,20 +60,20 @@ namespace MonoDevelop.Ide.Projects
 			int textYOffset = 0;
 			Rectangle iconRect = GetIconRect (cell_area);
 
-			using (var ctx = CairoHelper.Create (window)) {
+			{
 				if (CategoryIcon != null) {
-					iconRect = DrawIcon (ctx, widget, cell_area, flags);
+					iconRect = DrawIcon (cr, widget, cell_area, flags);
 					iconTextPadding = topLevelIconTextXPadding;
 					textYOffset = (Category == null ? 0 : topLevelTemplateHeadingYOffset);
 				}
 
-				DrawTemplateCategoryText (window, widget, cell_area, iconRect, iconTextPadding, textYOffset, flags);
+				DrawTemplateCategoryText (cr, widget, cell_area, iconRect, iconTextPadding, textYOffset, flags);
 				if (Category == null && !isSelected) {
-						ctx.MoveTo (cell_area.X + (int)Xpad, cell_area.Y + cell_area.Height + 1);
-						ctx.SetSourceColor (Gui.Styles.ThinSplitterColor.ToCairoColor ());
-						ctx.LineWidth = 1;
-						ctx.LineTo (cell_area.X + cell_area.Width - (int)Xpad, cell_area.Y + cell_area.Height + 1);
-						ctx.Stroke ();
+						cr.MoveTo (cell_area.X + (int)Xpad, cell_area.Y + cell_area.Height + 1);
+						cr.SetSourceColor (Gui.Styles.ThinSplitterColor.ToCairoColor ());
+						cr.LineWidth = 1;
+						cr.LineTo (cell_area.X + cell_area.Width - (int)Xpad, cell_area.Y + cell_area.Height + 1);
+						cr.Stroke ();
 				}
 			}
 		}
@@ -109,7 +109,7 @@ namespace MonoDevelop.Ide.Projects
 			return iconRect;
 		}
 
-		void DrawTemplateCategoryText (Drawable window, Widget widget, Rectangle cell_area, Rectangle iconRect, int iconTextPadding, int textYOffset, CellRendererState flags)
+		void DrawTemplateCategoryText (Cairo.Context cr, Widget widget, Rectangle cell_area, Rectangle iconRect, int iconTextPadding, int textYOffset, CellRendererState flags)
 		{
 			StateType state = GetState (widget, flags);
 
@@ -125,7 +125,21 @@ namespace MonoDevelop.Ide.Projects
 				layout.GetPixelSize (out w, out h);
 				int textY = cell_area.Y + (cell_area.Height - h) / 2 + textYOffset;
 
-				window.DrawLayout (widget.Style.TextGC (state), iconRect.Right + iconTextPadding, textY, layout);
+				Gdk.RGBA fg = widget.StyleContext.GetColor (ToStateFlags (state));
+				cr.SetSourceColor (new Cairo.Color ((float) fg.Red, (float) fg.Green, (float) fg.Blue));
+				cr.MoveTo (iconRect.Right + iconTextPadding, textY);
+				Pango.CairoHelper.ShowLayout (cr, layout);
+			}
+		}
+
+		static Gtk.StateFlags ToStateFlags (StateType state)
+		{
+			switch (state) {
+				case StateType.Selected: return Gtk.StateFlags.Selected;
+				case StateType.Active: return Gtk.StateFlags.Active;
+				case StateType.Prelight: return Gtk.StateFlags.Prelight;
+				case StateType.Insensitive: return Gtk.StateFlags.Insensitive;
+				default: return Gtk.StateFlags.Normal;
 			}
 		}
 	}

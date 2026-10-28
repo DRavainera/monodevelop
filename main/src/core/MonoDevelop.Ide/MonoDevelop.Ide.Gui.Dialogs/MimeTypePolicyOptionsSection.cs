@@ -102,7 +102,7 @@ namespace MonoDevelop.Ide.Gui.Dialogs
 			policyCombo.AddAttribute (renderer, "text", 0);
 			
 			label.MnemonicWidget = policyCombo;
-			policyCombo.RowSeparatorFunc = (TreeModel model, TreeIter iter) =>
+			policyCombo.RowSeparatorFunc = (ITreeModel model, TreeIter iter) =>
 				((string) model.GetValue (iter, 0)) == "--";
 			hbox.PackStart (policyCombo, false, false, 0);
 			
@@ -190,7 +190,10 @@ namespace MonoDevelop.Ide.Gui.Dialogs
 					notebook.Sensitive = false;
 				}
 				else {
-					string activeName = policyCombo.ActiveText;
+					Gtk.TreeIter miter;
+				string activeName = null;
+				if (store.GetIter (out miter, new TreePath (policyCombo.Active.ToString ())))
+					activeName = (string)store.GetValue (miter, 0);
 					PolicySet pset = PolicyService.GetPolicySet (activeName);
 					if (pset != null)
 						panelData.AssignPolicies (pset);

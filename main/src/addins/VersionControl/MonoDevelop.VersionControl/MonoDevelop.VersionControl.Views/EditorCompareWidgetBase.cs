@@ -486,12 +486,12 @@ namespace MonoDevelop.VersionControl.Views
 		protected override void OnDestroyed ()
 		{
 			if (vAdjustment != null) {
-				vAdjustment.Destroy ();
-				hAdjustment.Destroy ();
+				vAdjustment.Dispose ();
+				hAdjustment.Dispose ();
 				foreach (var adj in attachedVAdjustments)
-					adj.Destroy ();
+					adj.Dispose ();
 				foreach (var adj in attachedHAdjustments)
-					adj.Destroy ();
+					adj.Dispose ();
 				vAdjustment = null;
 			}
 
@@ -516,7 +516,7 @@ namespace MonoDevelop.VersionControl.Views
 
 			bool hScrollBarVisible = hScrollBars[0].Visible;
 
-			int hheight = hScrollBarVisible ? hScrollBars[0].Requisition.Height : 0;
+			int hheight = hScrollBarVisible ? hScrollBars[0].SizeRequest ().Height : 0;
 			int headerSize = 0;
 
 			if (headerWidgets != null)
@@ -569,11 +569,7 @@ namespace MonoDevelop.VersionControl.Views
 			return (dx != 0.0 || dy != 0.0) || base.OnScrollEvent (evnt);
 		}
 
-		protected override void OnSizeRequested (ref Gtk.Requisition requisition)
-		{
-			base.OnSizeRequested (ref requisition);
-			children.ForEach (child => child.Child.SizeRequest ());
-		}
+
 
 		internal static Cairo.Color GetColor (Hunk hunk, bool removeSide, bool border, double alpha)
 		{

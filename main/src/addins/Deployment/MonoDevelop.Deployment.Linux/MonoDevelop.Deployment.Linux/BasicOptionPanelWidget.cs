@@ -16,7 +16,7 @@ namespace MonoDevelop.Deployment.Linux
 		{
 			this.Build();
 			
-			WidgetFlags |= Gtk.WidgetFlags.NoShowAll;
+			NoShowAll = true;
 			
 			this.entry = entry;
 			if (entry is DotNetProject) {

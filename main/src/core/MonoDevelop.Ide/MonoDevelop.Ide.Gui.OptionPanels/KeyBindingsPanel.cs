@@ -120,7 +120,7 @@ namespace MonoDevelop.Ide.Gui.OptionPanels
 				schemeCombo.AppendText (s.Name);
 			
 			if (schemes.Count > 0) {
-				schemeCombo.RowSeparatorFunc = (TreeModel model, TreeIter iter) => {
+				schemeCombo.RowSeparatorFunc = (ITreeModel model, TreeIter iter) => {
 					if (model.GetValue (iter, 0) as string == "---")
 						return true;
 					return false;
@@ -360,7 +360,7 @@ namespace MonoDevelop.Ide.Gui.OptionPanels
 		void OnKeysTreeViewSelectionChange (object sender, EventArgs e)
 		{
 			TreeSelection sel = sender as TreeSelection;
-			TreeModel model;
+			ITreeModel model;
 			TreeIter iter;
 			Command selCommand = null;
 			if (sel.GetSelected (out model, out iter) && model.GetValue (iter, commandCol) != null) {
@@ -650,7 +650,7 @@ namespace MonoDevelop.Ide.Gui.OptionPanels
 		List<Command> FindBindings (string accel)
 		{
 			List<Command> bindings = new List<Command> ();
-			TreeModel model = (TreeModel) keyStore;
+			ITreeModel model = (ITreeModel) keyStore;
 			TreeIter iter;
 			if (!model.GetIterFirst (out iter))
 				return bindings;
@@ -952,12 +952,12 @@ namespace MonoDevelop.Ide.Gui.OptionPanels
 				return false;
 			}
 
-			protected override void Render (Gdk.Drawable window, Widget widget, Gdk.Rectangle background_area, Gdk.Rectangle cell_area, Gdk.Rectangle expose_area, CellRendererState flags)
+			protected override void OnRender (Cairo.Context cr, Widget widget, Gdk.Rectangle background_area, Gdk.Rectangle cell_area, CellRendererState flags)
 			{
 				if (string.IsNullOrEmpty (Text))
 					return;
 
-				using (var cr = Gdk.CairoHelper.Create (window)) {
+				{
 					using (var layout = new Pango.Layout (widget.PangoContext)) {
 						var xpad = (int)Xpad;
 						int w, h;
@@ -1001,9 +1001,9 @@ namespace MonoDevelop.Ide.Gui.OptionPanels
 				}
 			}
 
-			public override void GetSize (Widget widget, ref Gdk.Rectangle cell_area, out int x_offset, out int y_offset, out int width, out int height)
+			protected override void OnGetSize (Widget widget, ref Gdk.Rectangle cell_area, out int x_offset, out int y_offset, out int width, out int height)
 			{
-				base.GetSize (widget, ref cell_area, out x_offset, out y_offset, out width, out height);
+				base.OnGetSize (widget, ref cell_area, out x_offset, out y_offset, out width, out height);
 				x_offset = y_offset = 0;
 				if (string.IsNullOrEmpty (Text)) {
 					width = 0;
@@ -1028,11 +1028,13 @@ namespace MonoDevelop.Ide.Gui.OptionPanels
 				}
 			}
 
-			protected override void OnDestroyed()
+			protected override void Dispose (bool disposing)
 			{
-				keyBindingsPanel = null;
-				HideConflictTooltip ();
-				base.OnDestroyed();
+				if (disposing) {
+					keyBindingsPanel = null;
+					HideConflictTooltip ();
+				}
+				base.Dispose (disposing);
 			}
 		}
 	}

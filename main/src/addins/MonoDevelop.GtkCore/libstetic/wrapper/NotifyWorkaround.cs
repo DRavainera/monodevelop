@@ -61,8 +61,7 @@ namespace Stetic.Wrapper
 		
 		static void ConnectNotification (GLib.Object w, string signal, NotifyHandler handler)
 		{
-			var sig = GLib.Signal.Lookup (w, signal, delegateInstance);
-			sig.AddDelegate (handler);
+			w.AddSignalHandler (signal, handler);
 		}
 		
 		public static void AddNotification (GLib.Object w, NotifyHandler handler)
@@ -77,8 +76,7 @@ namespace Stetic.Wrapper
 		
 		static void DisconnectNotification (GLib.Object w, string signal, NotifyHandler handler)
 		{
-			var sig = GLib.Signal.Lookup (w, signal, delegateInstance);
-			sig.RemoveDelegate (handler);
+			w.RemoveSignalHandler (signal, handler);
 		}
 		
 		public static void RemoveNotification (GLib.Object w, NotifyHandler handler)

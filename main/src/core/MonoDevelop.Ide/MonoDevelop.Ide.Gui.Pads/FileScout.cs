@@ -164,7 +164,7 @@ namespace MonoDevelop.Ide.Gui.Pads
 		void FileSelected (object sender, Gtk.RowActivatedArgs e)
 		{
 			Gtk.TreeIter iter;
-			Gtk.TreeModel model;
+			Gtk.ITreeModel model;
 
 			// we are not using SelectMultiple
 			// nor can more than one be activated here

@@ -21,6 +21,7 @@
     <AssemblyName>MonoDevelop.CSharpBinding</AssemblyName>
     <TargetFrameworkVersion>$(MDFrameworkVersion)</TargetFrameworkVersion>
     <OutputPath>..\..\..\build\AddIns\CSharpBinding</OutputPath>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <!--
     This contains the C# language service for the old editor, which makes use of many deprecated APIs.

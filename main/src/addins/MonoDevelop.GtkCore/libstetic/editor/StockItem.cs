@@ -30,7 +30,7 @@ namespace Stetic.Editor {
 		}
 
 		public static string Blank {
-			get { return blank == null ? Gtk.Stock.New : blank; }
+			get { return blank == null ? StockCompat.New : blank; }
 		}
 
 		public static List<PropertyInfo> Properties {
@@ -56,7 +56,7 @@ namespace Stetic.Editor {
 					return;
 				}
 				
-				Gtk.StockItem item = Gtk.Stock.Lookup (name);
+				Gtk.StockItem item = StockCompat.Lookup (name);
 				label = item.Label != null && item.Label.Length > 0 ? item.Label : name;
 				label = label.Replace ("_", "");
 				
@@ -107,7 +107,7 @@ namespace Stetic.Editor {
 		{
 			Spacing = 3;
 			imageFrame = new Gtk.Frame ();
-			imageFrame.Shadow = Gtk.ShadowType.In;
+			imageFrame.ShadowType = Gtk.ShadowType.In;
 			imageFrame.BorderWidth = 2;
 			PackStart (imageFrame, false, false, 0);
 
@@ -131,7 +131,7 @@ namespace Stetic.Editor {
 			IconSelectorMenu menu = new IconSelectorMenu (project);
 			menu.IconSelected += OnStockSelected;
 			menu.ShowAll ();
-			menu.Popup (null, null, new Gtk.MenuPositionFunc (OnDropMenuPosition), 3, Gtk.Global.CurrentEventTime);
+			menu.Popup (null, null, new Gtk.MenuPositionFunc (OnDropMenuPosition), 3, 0);
 		}
 		
 		void OnDropMenuPosition (Gtk.Menu menu, out int x, out int y, out bool pushIn)

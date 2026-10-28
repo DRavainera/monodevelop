@@ -62,7 +62,7 @@ namespace MonoDevelop.Components.Windows
 				var key = e.Key == System.Windows.Input.Key.System ? e.SystemKey : e.Key;
 				e.Handled = Ide.IdeApp.CommandService.ProcessKeyEvent (GtkWin32Interop.ConvertKeyEvent (e.KeyboardDevice.Modifiers, key));
 			};
-			WidgetFlags |= WidgetFlags.NoWindow;
+			HasWindow = false;
 		}
 
         protected virtual void RepositionWpfWindow ()

@@ -10,10 +10,10 @@ namespace Stetic.Wrapper {
 			base.Wrap (obj, initialized);
 			if (!initialized && AllowPlaceholders) {
 				Placeholder ph = CreatePlaceholder ();
-				box.PackStart (ph);
+				box.PackStart (ph, true, true, 0);
 				NotifyChildAdded (ph);
 				ph = CreatePlaceholder ();
-				box.PackStart (ph);
+				box.PackStart (ph, true, true, 0);
 				NotifyChildAdded (ph);
 				box.Spacing = 6;
 			}
@@ -96,8 +96,8 @@ namespace Stetic.Wrapper {
 			// The orientation of the faults is the opposite of the
 			// orientation of the box
 			Gtk.Orientation orientation = hbox ? Gtk.Orientation.Vertical : Gtk.Orientation.Horizontal;
-			Gtk.SideType before = hbox ? Gtk.SideType.Left : Gtk.SideType.Top;
-			Gtk.SideType after = hbox ? Gtk.SideType.Right : Gtk.SideType.Bottom;
+			Stetic.SideType before = hbox ? Stetic.SideType.Left : Stetic.SideType.Top;
+			Stetic.SideType after = hbox ? Stetic.SideType.Right : Stetic.SideType.Bottom;
 
 			if (!Unselectable) {
 				// If there are no PackStart widgets, we need a fault at the leading
@@ -151,10 +151,10 @@ namespace Stetic.Wrapper {
 
 			Placeholder ph = CreatePlaceholder ();
 			if (type == Gtk.PackType.Start) {
-				box.PackStart (ph);
+				box.PackStart (ph, true, true, 0);
 				box.ReorderChild (ph, position);
 			} else {
-				box.PackEnd (ph);
+				box.PackEnd (ph, true, true, 0);
 				box.ReorderChild (ph, position + 1);
 			}
 			NotifyChildAdded (ph);
@@ -176,10 +176,10 @@ namespace Stetic.Wrapper {
 
 			Placeholder ph = CreatePlaceholder ();
 			if (type == Gtk.PackType.Start) {
-				box.PackStart (ph);
+				box.PackStart (ph, true, true, 0);
 				box.ReorderChild (ph, position + 1);
 			} else {
-				box.PackEnd (ph);
+				box.PackEnd (ph, true, true, 0);
 				box.ReorderChild (ph, position);
 			}
 			NotifyChildAdded (ph);

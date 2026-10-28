@@ -189,7 +189,7 @@ namespace MonoDevelop.Debugger
 				store.Clear ();
 		}
 
-		static bool Search (TreeModel model, int column, string key, TreeIter iter)
+		static bool Search (ITreeModel model, int column, string key, TreeIter iter)
 		{
 			string value = (string)model.GetValue (iter, column);
 
@@ -305,7 +305,7 @@ namespace MonoDevelop.Debugger
 
 			if (tree.GetPathAtPos (x, y, out path, out col, out cx, out cy)) {
 				tree.GetCellArea (path, col);
-				foreach (CellRenderer cr in col.CellRenderers) {
+				foreach (CellRenderer cr in col.Cells) {
 					int xo, w;
 
 					col.CellGetPosition (cr, out xo, out w);
@@ -492,7 +492,7 @@ namespace MonoDevelop.Debugger
 		internal void OnCopy ()
 		{
 			var txt = new StringBuilder ();
-			TreeModel model;
+			ITreeModel model;
 			TreeIter iter;
 
 			foreach (TreePath path in tree.Selection.GetSelectedRows (out model)) {

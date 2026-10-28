@@ -75,8 +75,7 @@ namespace Stetic.Editor
 		protected override void OnSizeAllocated (Gdk.Rectangle allocation)
 		{
 			base.OnSizeAllocated (allocation);
-			box.SizeRequest ();
-			box.Allocation = allocation;
+			box.SetAllocation (allocation);
 		}
 	}
 }

@@ -130,7 +130,7 @@ namespace MonoDevelop.Components
 
 		bool? ignoreSelection;
 
-		protected override void Render (Gdk.Drawable window, Gtk.Widget widget, Gdk.Rectangle background_area, Gdk.Rectangle cell_area, Gdk.Rectangle expose_area, Gtk.CellRendererState flags)
+		protected override void OnRender (Cairo.Context cr, Gtk.Widget widget, Gdk.Rectangle background_area, Gdk.Rectangle cell_area, Gtk.CellRendererState flags)
 		{
 			// In light theme:
 			// On the Mac, the default unfocused selection background is lighter, so the icon should be black
@@ -141,7 +141,8 @@ namespace MonoDevelop.Components
 			if (!ignoreSelection.HasValue) {
 				if (Platform.IsMac) {
 					if (IdeTheme.UserInterfaceTheme == Theme.Light) {
-						var baseColor = widget.Style.Base (widget.State).ToXwtColor ();
+						Gdk.RGBA rgba = widget.StyleContext.GetBackgroundColor (widget.StateFlags);
+						var baseColor = new Gdk.Color ((byte) (rgba.Red * 255), (byte) (rgba.Green * 255), (byte) (rgba.Blue * 255)).ToXwtColor ();
 						ignoreSelection = baseColor.Brightness == 1;
 					} else {
 						ignoreSelection = false;
@@ -161,11 +162,9 @@ namespace MonoDevelop.Components
 			if (!img.HasFixedSize)
 				img = img.WithSize (Gtk.IconSize.Menu);
 			
-			using (var ctx = Gdk.CairoHelper.Create (window)) {
-				var x = cell_area.X + cell_area.Width / 2 - (int)(img.Width / 2);
-				var y = cell_area.Y + cell_area.Height / 2 - (int)(img.Height / 2);
-				ctx.DrawImage (widget, img, x, y);
-			}
+			var x = cell_area.X + cell_area.Width / 2 - (int)(img.Width / 2);
+			var y = cell_area.Y + cell_area.Height / 2 - (int)(img.Height / 2);
+			cr.DrawImage (widget, img, x, y);
 		}
 
 		protected void GetImageInfo (Gdk.Rectangle cell_area, out Image img, out int x, out int y)
@@ -180,15 +179,17 @@ namespace MonoDevelop.Components
 			}
 		}
 
-		public override void GetSize (Gtk.Widget widget, ref Gdk.Rectangle cell_area, out int x_offset, out int y_offset, out int width, out int height)
+		protected override void OnGetSize (Gtk.Widget widget, ref Gdk.Rectangle cell_area, out int x_offset, out int y_offset, out int width, out int height)
 		{
 			var img = GetImage ();
 			if (img != null) {
 				if (img.HasFixedSize) {
 					width = (int)img.Width;
 					height = (int)img.Height;
-				} else
-					Gtk.IconSize.Menu.GetSize(out width, out height);
+				} else {
+					width = (int) Gtk.IconSize.Menu;
+					height = (int) Gtk.IconSize.Menu;
+				}
 			} else
 				width = height = 0;
 

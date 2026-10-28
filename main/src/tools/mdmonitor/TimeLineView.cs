@@ -345,7 +345,7 @@ namespace Mono.Instrumentation.Monitor
 		}
 
 		
-		protected override bool OnExposeEvent (EventExpose evnt)
+		protected override bool OnDrawn (Cairo.Context cr)
 		{
 			if (data == null)
 				BuildData ();
@@ -361,58 +361,59 @@ namespace Mono.Instrumentation.Monitor
 			
 			DateTime initialTime = mainValue.TimeStamp;
 			
-			Cairo.Context ctx = CairoHelper.Create (GdkWindow);
-
-			using (Gdk.GC gc = new Gdk.GC (GdkWindow)) {
-				gc.RgbFgColor = Style.White;
-				GdkWindow.DrawRectangle (gc, true, 0, 0, Allocation.Width, Allocation.Height);
-
-				// Draw full time marker
-
-				ctx.NewPath ();
-				ctx.Rectangle (markerX, ytop + baseTime + 0.5, MarkerWidth / 2, ((mainValue.Duration.TotalMilliseconds * scale) / 1000));
-				HslColor hsl = Style.Foreground (Gtk.StateType.Normal);
-				hsl.L = 0.8;
-				ctx.SetSourceColor (hsl);
-				ctx.Fill ();
-
-				// Draw values
-
-				foreach (CounterValueInfo val in data) {
-					DrawValue (ctx, gc, initialTime, ytop, lx, tx, ref ty, ref maxx, ref maxy, 0, val);
-				}
-
-				if (ty > maxy)
-					maxy = ty;
-
-				int totalms = (int)mainValue.Duration.TotalMilliseconds;
-				int marks = (totalms / 1000) + 1;
-
-				ctx.LineWidth = 1;
-				gc.RgbFgColor = Style.Foreground (Gtk.StateType.Normal);
-
-				for (int n = 0; n <= marks; n++) {
-					ctx.NewPath ();
-					int y = ytop + (int)(n * scale) + baseTime;
-					ctx.MoveTo (markerX, y + 0.5);
-					ctx.LineTo (markerX + MarkerWidth, y + 0.5);
-					ctx.SetSourceColor (Style.Foreground (Gtk.StateType.Normal).ToCairoColor ());
-					ctx.Stroke ();
-
-					y += 2;
-					layout.SetText (n + "s");
-					GdkWindow.DrawLayout (gc, markerX + 1, y + 2, layout);
-
-					int tw, th;
-					layout.GetPixelSize (out tw, out th);
-					y += th;
-
-					if (y > maxy)
-					maxy = y;
-			}
+			var ctx = cr;
+			
+			ctx.Rectangle (0, 0, Allocation.Width, Allocation.Height);
+			ctx.SetSourceColor (Style.White.ToCairoColor ());
+			ctx.Fill ();
+			
+			// Draw full time marker
+			
+			ctx.NewPath ();
+			ctx.Rectangle (markerX, ytop + baseTime + 0.5, MarkerWidth / 2, ((mainValue.Duration.TotalMilliseconds * scale) / 1000));
+			HslColor hsl = new HslColor (this.GetStyleColor (Gtk.StateType.Normal).ToCairoColor ());
+			hsl.L = 0.8;
+			ctx.SetSourceColor (hsl);
+			ctx.Fill ();
+			
+			// Draw values
+			
+			foreach (CounterValueInfo val in data) {
+				DrawValue (ctx, initialTime, ytop, lx, tx, ref ty, ref maxx, ref maxy, 0, val);
 			}
 			
-			((IDisposable)ctx).Dispose ();
+			if (ty > maxy)
+				maxy = ty;
+			
+			int totalms = (int)mainValue.Duration.TotalMilliseconds;
+			int marks = (totalms / 1000) + 1;
+			var fgColor = this.GetStyleColor (Gtk.StateType.Normal).ToCairoColor ();
+			
+			ctx.LineWidth = 1;
+			
+			for (int n = 0; n <= marks; n++) {
+				ctx.NewPath ();
+				int y = ytop + (int)(n * scale) + baseTime;
+				ctx.MoveTo (markerX, y + 0.5);
+				ctx.LineTo (markerX + MarkerWidth, y + 0.5);
+				ctx.SetSourceColor (fgColor);
+				ctx.Stroke ();
+
+				y += 2;
+				layout.SetText (n + "s");
+				ctx.Save ();
+				ctx.Translate (markerX + 1, y + 2);
+				ctx.SetSourceColor (fgColor);
+				Pango.CairoHelper.ShowLayout (ctx, layout);
+				ctx.Restore ();
+
+				int tw, th;
+				layout.GetPixelSize (out tw, out th);
+				y += th;
+
+				if (y > maxy)
+					maxy = y;
+			}
 			
 			maxy += padding;
 			maxx += padding;
@@ -426,7 +427,7 @@ namespace Mono.Instrumentation.Monitor
 			return true;
 		}
 		
-		void DrawValue (Cairo.Context ctx, Gdk.GC gc, DateTime initialTime, int ytop, int lx, int tx, ref int ty, ref int maxx, ref int maxy, int indent, CounterValueInfo val)
+		void DrawValue (Cairo.Context ctx, DateTime initialTime, int ytop, int lx, int tx, ref int ty, ref int maxx, ref int maxy, int indent, CounterValueInfo val)
 		{
 			Gdk.Color color;
 			if (val.Counter != null)
@@ -435,13 +436,16 @@ namespace Mono.Instrumentation.Monitor
 				color = Style.Black;
 			
 			// Draw text
-			gc.RgbFgColor = color;
 			
 			double ms = (val.Time - initialTime).TotalMilliseconds;
 			
 			string txt = (ms / 1000).ToString ("0.00000") + ": " + (val.Duration.TotalMilliseconds / 1000).ToString ("0.00000") + " " + val.Trace;
 			layout.SetText (txt);
-			GdkWindow.DrawLayout (gc, tx + indent, ty, layout);
+			ctx.Save ();
+			ctx.Translate (tx + indent, ty);
+			ctx.SetSourceColor (color.ToCairoColor ());
+			Pango.CairoHelper.ShowLayout (ctx, layout);
+			ctx.Restore ();
 			int tw, th;
 			layout.GetPixelSize (out tw, out th);
 			if (tx + tw + indent > maxx)
@@ -494,12 +498,12 @@ namespace Mono.Instrumentation.Monitor
 				hp = AddHotSpot (ex, ey, ExpanderSize, ExpanderSize);
 				DrawExpander (ctx, ex, ey, val.Expanded, false);
 				hp.OnMouseOver = delegate {
-					using (Cairo.Context c = CairoHelper.Create (GdkWindow)) {
+					using (Cairo.Context c = Gdk.CairoHelper.Create (GdkWindow)) {
 						DrawExpander (c, ex, ey, val.Expanded, true);
 					}
 				};
 				hp.OnMouseLeave = delegate {
-					using (Cairo.Context c = CairoHelper.Create (GdkWindow)) {
+					using (Cairo.Context c = Gdk.CairoHelper.Create (GdkWindow)) {
 						DrawExpander (c, ex, ey, val.Expanded, false);
 					}
 				};
@@ -510,7 +514,7 @@ namespace Mono.Instrumentation.Monitor
 				if (val.Expanded && val.ExpandedTimerTraces.Count > 0) {
 					ty += th + LineSpacing;
 					foreach (CounterValueInfo cv in val.ExpandedTimerTraces)
-						DrawValue (ctx, gc, initialTime, ytop, lx, tx, ref ty, ref maxx, ref maxy, indent + ChildIndent, cv);
+						DrawValue (ctx, initialTime, ytop, lx, tx, ref ty, ref maxx, ref maxy, indent + ChildIndent, cv);
 					incLine = false;
 				}
 			}
@@ -527,11 +531,11 @@ namespace Mono.Instrumentation.Monitor
 			ctx.LineWidth = 1;
 			ctx.Rectangle (ex, ey, ExpanderSize, ExpanderSize);
 			if (hilight)
-				ctx.SetSourceColor (Style.Background (Gtk.StateType.Normal).ToCairoColor ());
+				ctx.SetSourceColor (this.GetStyleBackgroundColor (Gtk.StateType.Normal).ToCairoColor ());
 			else
 				ctx.SetSourceColor (Style.White.ToCairoColor ());
 			ctx.FillPreserve ();
-			ctx.SetSourceColor (Style.Foreground (Gtk.StateType.Normal).ToCairoColor ());
+			ctx.SetSourceColor (this.GetStyleColor (Gtk.StateType.Normal).ToCairoColor ());
 			ctx.Stroke ();
 			ctx.NewPath ();
 			ctx.MoveTo (ex + 2, ey + (ExpanderSize/2));

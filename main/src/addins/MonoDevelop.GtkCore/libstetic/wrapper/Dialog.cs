@@ -16,7 +16,6 @@ namespace Stetic.Wrapper {
 			actionArea.SetActionDialog (this);
 
 			if (!initialized) {
-				dialog.HasSeparator = false;
 				if (!initialized && dialog.VBox.Children.Length == 1) {
 					Container vbox = Container.Lookup (dialog.VBox);
 					Placeholder ph = vbox.AddPlaceholder ();
@@ -56,18 +55,19 @@ namespace Stetic.Wrapper {
 			}
 		}
 
-		public Gtk.HButtonBox ActionArea {
+		public Gtk.ButtonBox ActionArea {
 			get { return dialog.ActionArea; }
 		}
 
-		public Gtk.VBox VBox
+		public Gtk.Box VBox
 		{
 			get { return dialog.VBox; }
 		}
 
+		bool hasSeparator;
 		public bool HasSeparator {
-			get { return dialog.HasSeparator; }
-			set { dialog.HasSeparator = value; EmitNotify ("HasSeparator"); }
+			get { return hasSeparator; }
+			set { hasSeparator = value; EmitNotify ("HasSeparator"); }
 		}
 
 		public int Buttons
@@ -98,7 +98,7 @@ namespace Stetic.Wrapper {
 					return;
 
 				if (value) {
-					helpButton = AddButton (Gtk.Stock.Help, Gtk.ResponseType.Help, false);
+					helpButton = AddButton (StockCompat.Help, Gtk.ResponseType.Help, false);
 					// Make it the first child, so that decreasing
 					// Buttons won't delete it
 					dialog.ActionArea.ReorderChild (helpButton, 0);
@@ -115,7 +115,7 @@ namespace Stetic.Wrapper {
 		bool ButtonIsHelp (Gtk.Button button)
 		{
 			return (button.UseStock &&
-				button.Label == Gtk.Stock.Help &&
+				button.Label == StockCompat.Help &&
 				dialog.ActionArea.GetChildSecondary (button));
 		}
 
@@ -141,7 +141,7 @@ namespace Stetic.Wrapper {
 			button.CanDefault = true;
 			wrapper.HasDefault = hasDefault;
 
-			if (stockId == Gtk.Stock.Help)
+			if (stockId == StockCompat.Help)
 				((Gtk.ButtonBox)actionArea.Wrapped).SetChildSecondary (button, true);
 
 			return button;

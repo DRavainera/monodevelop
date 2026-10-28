@@ -64,9 +64,9 @@ namespace MonoDevelop.Startup
 		{
 			string baseName = GetNativeBaseName (dllName);
 			if (dllName == "libgtk-win32-2.0-0.dll")
-				baseName = "libgtk-x11-2.0";
+				baseName = "libgtk-3";
 			else if (dllName == "libgdk-win32-2.0-0.dll")
-				baseName = "libgdk-x11-2.0";
+				baseName = "libgdk-3";
 			else if (dllName.StartsWith ("lib", StringComparison.Ordinal)) {
 				int dash = baseName.LastIndexOf ('-');
 				if (dash > 3) {

@@ -115,27 +115,28 @@ namespace MonoDevelop.Components.Theming
 					Gdk.Color color = Gdk.Color.Zero;
 					
 					if (widget != null && widget.IsRealized) {
+						var state = (StateType)s;
 						switch ((GtkColorClass)c) {
 						case GtkColorClass.Light:
-							color = widget.Style.LightColors[s];
+							color = widget.GetStyleBackgroundColor (state).ToGdkColor ().AddLight (0.1);
 							break;
 						case GtkColorClass.Mid:
-							color = widget.Style.MidColors[s];
+							color = widget.GetStyleBackgroundColor (state).ToGdkColor ().AddLight (0.05);
 							break;
 						case GtkColorClass.Dark:
-							color = widget.Style.DarkColors[s];
+							color = widget.GetStyleBackgroundColor (state).ToGdkColor ().AddLight (-0.15);
 							break;
 						case GtkColorClass.Base:
-							color = widget.Style.BaseColors[s];
+							color = widget.GetStyleBackgroundColor (state).ToGdkColor ();
 							break;
 						case GtkColorClass.Text:
-							color = widget.Style.TextColors[s];
+							color = widget.GetStyleColor (state).ToGdkColor ();
 							break;
 						case GtkColorClass.Background:
-							color = widget.Style.Backgrounds[s];
+							color = widget.GetStyleBackgroundColor (state).ToGdkColor ();
 							break;
 						case GtkColorClass.Foreground:
-							color = widget.Style.Foregrounds[s];
+							color = widget.GetStyleColor (state).ToGdkColor ();
 							break;
 						}
 					} else {

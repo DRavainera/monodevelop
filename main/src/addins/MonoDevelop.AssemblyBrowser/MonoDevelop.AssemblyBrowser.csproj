@@ -19,6 +19,7 @@
     <ProjectGuid>{0EA3AD14-404A-4D3F-979B-F087E2E70C82}</ProjectGuid>
     <TargetFrameworkVersion>$(MDFrameworkVersion)</TargetFrameworkVersion>
     <OutputPath>..\..\..\build\AddIns\DisplayBindings\AssemblyBrowser</OutputPath>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <AllowUnsafeBlocks>True</AllowUnsafeBlocks>
     <!--
     This needs to be ported to the new editor, and currently makes use of many deprecated APIs.
@@ -41,7 +42,7 @@
       <HintPath>$(NuGetPackageRoot)system.reflection.metadata/7.0.0/lib/netstandard2.0/System.Reflection.Metadata.dll</HintPath>
     </Reference>
     <Reference Include="MonoRoslynCompat">
-      <HintPath>..\..\..\build\bin\MonoRoslynCompat.dll</HintPath>
+      <HintPath>..\..\..\build\MonoRoslynCompat.dll</HintPath>
     </Reference>
     <Reference Include="System.Collections.Immutable">
       <HintPath>$(NuGetPackageRoot)system.collections.immutable/10.0.1/lib/netstandard2.0/System.Collections.Immutable.dll</HintPath>

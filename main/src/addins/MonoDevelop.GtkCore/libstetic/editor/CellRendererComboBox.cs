@@ -42,7 +42,8 @@ namespace Stetic.Editor
 		{
 			Mode |= Gtk.CellRendererMode.Editable;
 			Entry dummyEntry = new Gtk.Entry ();
-			rowHeight = dummyEntry.SizeRequest ().Height;
+			dummyEntry.GetPreferredHeight (out int minH, out int natH);
+			rowHeight = natH;
 		}
 
 		public string[] Values {
@@ -50,18 +51,18 @@ namespace Stetic.Editor
 			set { values = value; }
 		}
 		
-		public override void GetSize (Widget widget, ref Rectangle cell_area, out int x_offset, out int y_offset, out int width, out int height)
+		protected override void OnGetSize (Widget widget, ref Rectangle cell_area, out int x_offset, out int y_offset, out int width, out int height)
 		{
-			base.GetSize (widget, ref cell_area, out x_offset, out y_offset, out width, out height);
+			base.OnGetSize (widget, ref cell_area, out x_offset, out y_offset, out width, out height);
 			if (height < rowHeight)
 				height = rowHeight;
 		}
 		
-		public override CellEditable StartEditing (Gdk.Event ev, Widget widget, string path, Gdk.Rectangle background_area, Gdk.Rectangle cell_area, CellRendererState flags)
+		protected override ICellEditable OnStartEditing (Gdk.Event ev, Widget widget, string path, Gdk.Rectangle background_area, Gdk.Rectangle cell_area, CellRendererState flags)
 		{
 			this.path = path;
 
-			Gtk.ComboBox combo = Gtk.ComboBox.NewText ();
+			Gtk.ComboBoxText combo = new Gtk.ComboBoxText ();
 			foreach (string s in values)
 				combo.AppendText (s);
 			

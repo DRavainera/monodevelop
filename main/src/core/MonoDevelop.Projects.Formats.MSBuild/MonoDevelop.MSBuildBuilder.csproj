@@ -5,7 +5,7 @@
     <RootNamespace>MonoDevelop.Projects.MSBuild</RootNamespace>
     <AssemblyName>MonoDevelop.MSBuildBuilder</AssemblyName>
     <StartupObject>MonoDevelop.Projects.MSBuild.MainClass</StartupObject>
-    <OutputPath>..\..\..\build\bin</OutputPath>
+    <OutputPath>..\..\..\build</OutputPath>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
     <EnableDefaultEmbeddedResourceItems>false</EnableDefaultEmbeddedResourceItems>

@@ -161,21 +161,22 @@ namespace MonoDevelop.Ide
 		}
 		
 		const int upperGradientHeight = 16;
-		protected override bool OnExposeEvent (Gdk.EventExpose e)
+		protected override bool OnDrawn (Cairo.Context cr)
 		{
-			
-			using (Cairo.Context cr = Gdk.CairoHelper.Create (e.Window)) {
+			{
 				double xPos = padding, yPos = padding;
 				var layout = PangoUtil.CreateLayout (this);
 				int w, h;
 				layout.SetText (new string ('X', maxLength));
 				layout.GetPixelSize (out w, out h);
+				var textColor = this.GetStyleColor (StateType.Normal).ToCairoColor ();
+				var selectedColor = this.GetStyleBackgroundColor (StateType.Selected).ToCairoColor ();
 				
 				foreach (Category cat in categories) {
 					yPos = padding;
 					cr.MoveTo (xPos, yPos);
 					layout.SetMarkup ("<b>" + cat.Title + "</b>");
-					cr.SetSourceColor (Style.Text (StateType.Normal).ToCairoColor ());
+					cr.SetSourceColor (textColor);
 					cr.ShowLayout (layout);
 					
 					if (cat.Items.Count == 0)
@@ -191,16 +192,7 @@ namespace MonoDevelop.Ide
 					int row = 0;
 					var iconHeight = Math.Max (h, cat.Items [0].Icon.Height + 2) + itemPadding * 2;
 					if (cat.FirstVisibleItem > 0) {
-						Gtk.Style.PaintArrow (Style, e.Window, State, ShadowType.None, 
-								new Rectangle ((int)xPos, (int)yPos, w, h), 
-								this, 
-								"", 
-								ArrowType.Up, 
-								true, 
-								(int)xPos, 
-								(int)yPos, 
-								w, 
-								h);
+						DrawIndicatorArrow (cr, xPos, yPos, w, h, true);
 						yPos += iconHeight;
 						curItem++;
 					}
@@ -209,16 +201,7 @@ namespace MonoDevelop.Ide
 						var item = cat.Items [i];
 						
 						if (curItem + 1 >= maxItems && row + 1 >= maxRows && i + 1 < cat.Items.Count) {
-							Gtk.Style.PaintArrow (Style, e.Window, State, ShadowType.None, 
-								new Rectangle ((int)xPos, (int)yPos, w, h), 
-								this, 
-								"", 
-								ArrowType.Down, 
-								true, 
-								(int)xPos, 
-								(int)yPos, 
-								w, 
-								h);
+							DrawIndicatorArrow (cr, xPos, yPos, w, h, false);
 							break;
 						}
 						
@@ -226,16 +209,16 @@ namespace MonoDevelop.Ide
 							int itemWidth = w + (int)item.Icon.Width + 2 + itemPadding * 2;
 							cr.Rectangle (xPos, yPos, itemWidth, iconHeight);
 							cr.LineWidth = 1;
-							cr.SetSourceColor (Style.Base (StateType.Selected).ToCairoColor ());
+							cr.SetSourceColor (selectedColor);
 							cr.Fill ();
 						} else if (item == hoverItem) {
 							int itemWidth = w + (int)item.Icon.Width + 2 + itemPadding * 2;
 							cr.Rectangle (xPos + 0.5, yPos + 0.5, itemWidth - 1, iconHeight);
 							cr.LineWidth = 1;
-							cr.SetSourceColor (Style.Base (StateType.Selected).ToCairoColor ());
+							cr.SetSourceColor (selectedColor);
 							cr.Stroke ();
 						}
-						cr.SetSourceColor (Style.Text (item == ActiveItem? StateType.Selected : StateType.Normal).ToCairoColor ());
+						cr.SetSourceColor (item == ActiveItem ? this.GetStyleColor (StateType.Selected).ToCairoColor () : textColor);
 						cr.MoveTo (xPos + item.Icon.Width + 2 + itemPadding, yPos + (iconHeight - h) / 2);
 						layout.SetText (Ellipsize (item.ListTitle ?? item.Title, maxLength));
 						cr.ShowLayout (layout);
@@ -256,6 +239,24 @@ namespace MonoDevelop.Ide
 				layout.Dispose ();
 			}
 			return true;
+		}
+
+		void DrawIndicatorArrow (Cairo.Context cr, double x, double y, double w, double h, bool up)
+		{
+			cr.Save ();
+			cr.SetSourceColor (this.GetStyleColor (StateType.Normal).ToCairoColor ());
+			if (up) {
+				cr.MoveTo (x + w / 2, y);
+				cr.LineTo (x + w, y + h);
+				cr.LineTo (x, y + h);
+			} else {
+				cr.MoveTo (x + w / 2, y + h);
+				cr.LineTo (x + w, y);
+				cr.LineTo (x, y);
+			}
+			cr.ClosePath ();
+			cr.Fill ();
+			cr.Restore ();
 		}
 		
 		protected override bool OnKeyPressEvent (EventKey evnt)
@@ -497,7 +498,21 @@ namespace MonoDevelop.Ide
 			return cat;
 		}
 		
-		protected override void OnSizeRequested (ref Requisition req)
+		protected override void OnGetPreferredWidth (out int minimum, out int natural)
+		{
+			base.OnGetPreferredWidth (out minimum, out natural);
+			GetSwitcherSizeRequest (out int width, out int height);
+			minimum = natural = width;
+		}
+
+		protected override void OnGetPreferredHeight (out int minimum, out int natural)
+		{
+			base.OnGetPreferredHeight (out minimum, out natural);
+			GetSwitcherSizeRequest (out int width, out int height);
+			minimum = natural = height;
+		}
+
+		void GetSwitcherSizeRequest (out int totalWidth, out int totalHeight)
 		{
 			maxLength = 15;
 			foreach (var cat in categories) {
@@ -505,29 +520,32 @@ namespace MonoDevelop.Ide
 					maxLength = Math.Min (30, Math.Max (maxLength, (item.ListTitle ?? item.Title).Length));
 				}
 			}
-			
+
 			var layout = PangoUtil.CreateLayout (this);
 			int w, h;
 			layout.SetText (new string ('X', maxLength));
 			layout.GetPixelSize (out w, out h);
 			layout.Dispose ();
-			int totalWidth = 0;
-			int totalHeight = 0;
+			int tw = 0;
+			int th = 0;
 
 			var firstNonEmptyCat = categories.FirstOrDefault (c => c.Items.Count > 0);
-			if (firstNonEmptyCat == null)
+			if (firstNonEmptyCat == null) {
+				totalWidth = 0;
+				totalHeight = 0;
 				return;
+			}
 			var icon = firstNonEmptyCat.Items[0].Icon;
 			var iconHeight = Math.Max (h, (int)icon.Height + 2) + itemPadding * 2;
-			var iconWidth = (int) icon.Width + 2 + w  + itemPadding * 2;
-				
+			var iconWidth = (int) icon.Width + 2 + w + itemPadding * 2;
+
 			foreach (var cat in categories) {
 				var headerHeight = h + headerDistance;
-				totalHeight = Math.Max (totalHeight, headerHeight + (Math.Min (cat.Items.Count, maxItems)) * iconHeight);
-				totalWidth += (1 + Math.Min (maxRows - 1, cat.Items.Count / maxItems)) * iconWidth;
+				th = Math.Max (th, headerHeight + (Math.Min (cat.Items.Count, maxItems)) * iconHeight);
+				tw += (1 + Math.Min (maxRows - 1, cat.Items.Count / maxItems)) * iconWidth;
 			}
-			req.Width = totalWidth + padding * 2 + (categories.Count - 1) * padding;
-			req.Height = totalHeight + padding * 2;
+			totalWidth = tw + padding * 2 + (categories.Count - 1) * padding;
+			totalHeight = th + padding * 2;
 		}
 		
 		public class Item
@@ -775,14 +793,17 @@ namespace MonoDevelop.Ide
 			IdeApp.CommandService.IsEnabled = true;
 		}
 		
-		protected override bool OnExposeEvent (EventExpose evnt)
+		protected override bool OnDrawn (Cairo.Context cr)
 		{
-			base.OnExposeEvent (evnt);
+			base.OnDrawn (cr);
 			
 			int winWidth, winHeight;
-			this.GetSize (out winWidth, out winHeight);
+			GetSizeRequest (out winWidth, out winHeight);
 			
-			this.GdkWindow.DrawRectangle (this.Style.ForegroundGC (StateType.Insensitive), false, 0, 0, winWidth - 1, winHeight - 1);
+			cr.Rectangle (0.5, 0.5, winWidth - 1, winHeight - 1);
+			cr.LineWidth = 1;
+			cr.SetSourceColor (this.GetStyleColor (StateType.Insensitive).ToCairoColor ());
+			cr.Stroke ();
 			return false;
 		}
 	}

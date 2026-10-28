@@ -103,10 +103,19 @@ namespace MonoDevelop.Ide.Gui
 			return rect;
 		}
 		
-		protected override void OnSizeRequested (ref Gtk.Requisition requisition)
+		protected override void OnGetPreferredWidth (out int minimum, out int natural)
 		{
-			base.OnSizeRequested (ref requisition);
-			
+			base.OnGetPreferredWidth (out minimum, out natural);
+
+			// Ignore the size of top levels. They are supposed to fit the available space
+			foreach (TopLevelChild tchild in topLevels)
+				tchild.Child.SizeRequest ();
+		}
+
+		protected override void OnGetPreferredHeight (out int minimum, out int natural)
+		{
+			base.OnGetPreferredHeight (out minimum, out natural);
+
 			// Ignore the size of top levels. They are supposed to fit the available space
 			foreach (TopLevelChild tchild in topLevels)
 				tchild.Child.SizeRequest ();

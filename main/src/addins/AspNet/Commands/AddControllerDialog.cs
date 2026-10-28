@@ -41,7 +41,7 @@ namespace MonoDevelop.AspNet.Commands
 		Button buttonCancel;
 		Button buttonOk;
 		Entry nameEntry;
-		ComboBox templateCombo;
+		ComboBoxText templateCombo;
 
 		public string ControllerName {
 			get	{
@@ -101,7 +101,7 @@ namespace MonoDevelop.AspNet.Commands
 			AddActionWidget (buttonOk, ResponseType.Ok);
 
 			nameEntry = new Entry ();
-			templateCombo = ComboBox.NewText ();
+			templateCombo = new ComboBoxText ();
 
 			var nameLabel = new Label {
 				TextWithMnemonic = GettextCatalog.GetString ("_Name:"),
@@ -123,7 +123,8 @@ namespace MonoDevelop.AspNet.Commands
 			table.Attach (nameEntry, 1, 2, 0, 1, AttachOptions.Fill | AttachOptions.Expand, 0, 0, 0);
 			table.Attach (templateLabel, 0, 1, 1, 2, AttachOptions.Fill, 0, 0, 0);
 			table.Attach (templateCombo, 1, 2, 1, 2, AttachOptions.Fill | AttachOptions.Expand, 0, 0, 0);
-			VBox.PackStart (table);
+			ContentArea.Spacing = 6;
+			ContentArea.PackStart (table, false, true, 0);
 
 			Child.ShowAll ();
 		}

@@ -17,7 +17,7 @@ namespace Stetic.Editor {
 			Add (textview);
 
 			Pango.Context ctx = textview.PangoContext;
-			Pango.FontMetrics metrics = ctx.GetMetrics (textview.Style.FontDescription,
+			Pango.FontMetrics metrics = ctx.GetMetrics (textview.Style.FontDesc,
 								    ctx.Language);
 			int lineHeight = (metrics.Ascent + metrics.Descent) / (int)Pango.Scale.PangoScale;
 			SetSizeRequest (-1, lineHeight * nlines);

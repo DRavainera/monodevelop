@@ -28,6 +28,7 @@
 
 using System;
 using Gtk;
+using MonoDevelop.Components;
 
 namespace MonoDevelop.Gettext.Editor
 {
@@ -149,13 +150,13 @@ namespace MonoDevelop.Gettext.Editor
 				}
 			
 				Gdk.Color background = wellFormed ? new Gdk.Color (138, 226,52) : new Gdk.Color (204, 0, 0);
-				entryPluralsForms.ModifyBase (StateType.Normal, background); //from tango palete - 8ae234 green, cc0000 red
+				entryPluralsForms.OverrideBackgroundColor (Gtk.StateFlags.Normal, background.ToRgba ()); //from tango palete - 8ae234 green, cc0000 red
 				if (wellFormed) {
 					headers.SetHeaderNotEmpty ("Plural-Forms", entryPluralsForms.Text);
 					OnPluralDefinitionChanged ();
 				}
 			} else {
-				entryPluralsForms.ModifyBase (StateType.Normal);
+				entryPluralsForms.OverrideColor (Gtk.StateFlags.Normal, entryPluralsForms.GetStyleBackgroundColor (StateType.Normal));
 				headers.SetHeaderNotEmpty ("Plural-Forms", entryPluralsForms.Text);
 				OnPluralDefinitionChanged ();
 			}

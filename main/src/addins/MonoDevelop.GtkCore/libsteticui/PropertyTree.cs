@@ -3,6 +3,7 @@ using System;
 using System.Collections;
 using Gtk;
 using Gdk;
+using Cairo;
 using Mono.Unix;
 
 namespace Stetic
@@ -178,7 +179,7 @@ namespace Stetic
 			OnObjectChanged ();
 		}
 		
-		void PropertyData (Gtk.TreeViewColumn tree_column, Gtk.CellRenderer cell, Gtk.TreeModel model, Gtk.TreeIter iter)
+		void PropertyData (Gtk.TreeViewColumn tree_column, Gtk.CellRenderer cell, Gtk.ITreeModel model, Gtk.TreeIter iter)
 		{
 			CellRendererProperty rc = (CellRendererProperty) cell;
 			bool group = (bool) model.GetValue (iter, 2);
@@ -193,7 +194,7 @@ namespace Stetic
 			}
 		}
 		
-		void GroupData (Gtk.TreeViewColumn tree_column, Gtk.CellRenderer cell, Gtk.TreeModel model, Gtk.TreeIter iter)
+		void GroupData (Gtk.TreeViewColumn tree_column, Gtk.CellRenderer cell, Gtk.ITreeModel model, Gtk.TreeIter iter)
 		{
 			CellRendererPropertyGroup rc = (CellRendererPropertyGroup) cell;
 			rc.IsGroup = (bool) model.GetValue (iter, 2);
@@ -208,6 +209,31 @@ namespace Stetic
 		}
 	}
 	
+	internal static class Gdk2Compat
+	{
+		public static Cairo.Color ToCairo (Gdk.RGBA rgba)
+		{
+			return new Cairo.Color ((float)rgba.Red, (float)rgba.Green, (float)rgba.Blue);
+		}
+
+		public static Gdk.Color ToGdk (Gdk.RGBA rgba)
+		{
+			return new Gdk.Color ((byte)(rgba.Red * 255), (byte)(rgba.Green * 255), (byte)(rgba.Blue * 255));
+		}
+
+		public static StateFlags ToFlags (StateType state)
+		{
+			if (state == StateType.Selected)
+				return StateFlags.Selected;
+			if (state == StateType.Insensitive)
+				return StateFlags.Insensitive;
+			if (state == StateType.Prelight)
+				return StateFlags.Prelight;
+			return StateFlags.Normal;
+		}
+	}
+
+
 	class InternalTree: TreeView
 	{
 		internal ArrayList Groups = new ArrayList ();
@@ -218,12 +244,12 @@ namespace Stetic
 		int dragPos;
 		Gdk.Cursor resizeCursor = new Gdk.Cursor (CursorType.SbHDoubleArrow);
 		
-		public InternalTree (PropertyTree tree, TreeModel model): base (model)
+		public InternalTree (PropertyTree tree, ITreeModel model): base (model)
 		{
 			this.tree = tree;
 			layout = new Pango.Layout (this.PangoContext);
 			layout.Wrap = Pango.WrapMode.Char;
-			Pango.FontDescription des = this.Style.FontDescription.Copy();
+			Pango.FontDescription des = this.Style.FontDesc.Copy();
 			des.Size = 10 * (int) Pango.Scale.PangoScale;
 			layout.FontDescription = des;
 		}
@@ -233,17 +259,19 @@ namespace Stetic
 			set { editing = value; Update (); tree.NotifyChanged (); }
 		}
 		
-		protected override bool OnExposeEvent (Gdk.EventExpose e)
+		protected override bool OnDrawn (Cairo.Context cr)
 		{
 			Groups.Clear ();
-			
-			bool res = base.OnExposeEvent (e);
-			
+
+			bool res = base.OnDrawn (cr);
+
 			foreach (TreeGroup grp in Groups) {
 				layout.SetMarkup ("<b>" + GLib.Markup.EscapeText (grp.Group) + "</b>");
-				e.Window.DrawLayout (this.Style.TextGC (grp.State), grp.X, grp.Y, layout);
+				cr.SetSourceColor (Gdk2Compat.ToCairo (this.StyleContext.GetColor (Gdk2Compat.ToFlags (grp.State))));
+				cr.MoveTo (grp.X, grp.Y);
+				Pango.CairoHelper.ShowLayout (cr, layout);
 			}
-			
+
 			return res;
 		}
 		
@@ -343,7 +371,7 @@ namespace Stetic
 			this.instance = instance;
 			this.property = property;
 			if (property == null)
-				this.CellBackgroundGdk = tree.Style.MidColors [(int)Gtk.StateType.Normal];
+				this.CellBackgroundGdk = Gdk2Compat.ToGdk (tree.StyleContext.GetBackgroundColor (Gtk.StateFlags.Normal));
 			else
 				this.CellBackground = null;
 			
@@ -352,7 +380,7 @@ namespace Stetic
 			editorCell = editor;
 		}
 
-		public override void GetSize (Widget widget, ref Rectangle cell_area, out int x_offset, out int y_offset, out int width, out int height)
+		protected override void OnGetSize (Widget widget, ref Gdk.Rectangle cell_area, out int x_offset, out int y_offset, out int width, out int height)
 		{
 			if (editorCell != null)
 				editorCell.GetSize ((int)(cell_area.Width - this.Xpad * 2), out width, out height);
@@ -370,7 +398,7 @@ namespace Stetic
 				height = rowHeight;
 		}
 
-		protected override void Render (Drawable window, Widget widget, Rectangle background_area, Rectangle cell_area, Rectangle expose_area, CellRendererState flags)
+		protected override void OnRender (Cairo.Context cr, Widget widget, Gdk.Rectangle background_area, Gdk.Rectangle cell_area, CellRendererState flags)
 		{
 			if (instance == null || !visible)
 				return;
@@ -380,7 +408,7 @@ namespace Stetic
 			if (editorCell != null)
 				editorCell.GetSize ((int)(cell_area.Width - this.Xpad * 2), out width, out height);
 
-			Rectangle bounds = new Rectangle ();
+			Gdk.Rectangle bounds = new Gdk.Rectangle ();
 			bounds.Width = width > iwidth ? iwidth : width;
 			bounds.Height = height;
 			bounds.X = (int) (cell_area.X + this.Xpad);
@@ -389,10 +417,10 @@ namespace Stetic
 			StateType state = GetState (flags);
 				
 			if (editorCell != null)
-				editorCell.Render (window, bounds, state);
+				editorCell.Render (cr, bounds, state);
 		}
 		
-		public override CellEditable StartEditing (Gdk.Event ev, Widget widget, string path, Gdk.Rectangle background_area, Gdk.Rectangle cell_area, CellRendererState flags)
+		protected override ICellEditable OnStartEditing (Gdk.Event ev, Widget widget, string path, Gdk.Rectangle cell_area, Gdk.Rectangle background_area, CellRendererState flags)
 		{
 			if (property == null || editorCell == null || !sensitive)
 				return null;
@@ -431,7 +459,7 @@ namespace Stetic
 			set { 
 				isGroup = value;
 				if (value)
-					this.CellBackgroundGdk = tree.Style.MidColors [(int)Gtk.StateType.Normal];
+					this.CellBackgroundGdk = Gdk2Compat.ToGdk (tree.StyleContext.GetBackgroundColor (Gtk.StateFlags.Normal));
 				else
 					this.CellBackground = null;
 			}
@@ -448,7 +476,7 @@ namespace Stetic
 			layout = new Pango.Layout (tree.PangoContext);
 			layout.Wrap = Pango.WrapMode.Char;
 			
-			Pango.FontDescription des = tree.Style.FontDescription.Copy();
+			Pango.FontDescription des = tree.Style.FontDesc.Copy();
 			des.Size = 10 * (int) Pango.Scale.PangoScale;
 			layout.FontDescription = des;
 		}
@@ -460,7 +488,7 @@ namespace Stetic
 			layout.GetPixelSize (out width, out height);
 		}
 		
-		public override void GetSize (Widget widget, ref Rectangle cell_area, out int x_offset, out int y_offset, out int width, out int height)
+		protected override void OnGetSize (Widget widget, ref Gdk.Rectangle cell_area, out int x_offset, out int y_offset, out int width, out int height)
 		{
 			GetCellSize (widget, (int)(cell_area.Width - this.Xpad * 2), out width, out height);
 			width += (int) this.Xpad * 2;
@@ -472,7 +500,7 @@ namespace Stetic
 				width = 0;
 		}
 
-		protected override void Render (Drawable window, Widget widget, Rectangle background_area, Rectangle cell_area, Rectangle expose_area, CellRendererState flags)
+		protected override void OnRender (Cairo.Context cr, Widget widget, Gdk.Rectangle background_area, Gdk.Rectangle cell_area, CellRendererState flags)
 		{
 			int width, height;
 			GetCellSize (widget, (int)(cell_area.Width - this.Xpad * 2), out width, out height);
@@ -497,22 +525,24 @@ namespace Stetic
 				InternalTree tree = (InternalTree) widget;
 				tree.Groups.Add (grp);
 			} else {
-				window.DrawLayout (widget.Style.TextGC (state), x, y, layout);
+				cr.SetSourceColor (Gdk2Compat.ToCairo (widget.StyleContext.GetColor (Gdk2Compat.ToFlags (state))));
+				cr.MoveTo (x, y);
+				Pango.CairoHelper.ShowLayout (cr, layout);
 				int bx = background_area.X + background_area.Width - 1;
-				using (Gdk.GC gc = new Gdk.GC (window)) {
-					gc.RgbFgColor = tree.Style.MidColors [(int)Gtk.StateType.Normal];
-					window.DrawLine (gc, bx, background_area.Y, bx, background_area.Y + background_area.Height);
-				}
+				cr.SetSourceColor (Gdk2Compat.ToCairo (tree.StyleContext.GetBackgroundColor (Gtk.StateFlags.Normal)));
+				cr.MoveTo (bx, background_area.Y);
+				cr.LineTo (bx, background_area.Y + background_area.Height);
+				cr.Stroke ();
 			}
 		}
 
-		protected override void OnDestroyed ()
+		protected override void Dispose (bool disposing)
 		{
 			if (layout != null) {
 				layout.Dispose ();
 				layout = null;
 			}
-			base.OnDestroyed ();
+			base.Dispose (disposing);
 		}
 	}
 
@@ -566,7 +596,7 @@ namespace Stetic
 		{
 			base.OnSizeAllocated (allocation);
 			box.SizeRequest ();
-			box.Allocation = allocation;
+			box.SetAllocation (allocation);
 		}
 	}
 	

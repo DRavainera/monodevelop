@@ -300,11 +300,15 @@ namespace MonoDevelop.Components
 			}
 		}
 		
-		protected override void OnSizeRequested (ref Requisition requisition)
+		protected override void OnGetPreferredWidth (out int minimum, out int natural)
 		{
 			EnsureWidths ();
-			requisition.Width = Math.Max (WidthRequest, 0);
-			requisition.Height = height + topPadding + bottomPadding;
+			minimum = natural = Math.Max (WidthRequest, 0);
+		}
+
+		protected override void OnGetPreferredHeight (out int minimum, out int natural)
+		{
+			minimum = natural = height + topPadding + bottomPadding;
 		}
 
 		int[] GetCurrentWidths (out bool widthReduced)
@@ -336,11 +340,11 @@ namespace MonoDevelop.Components
 			entry.Accessible.FrameInParent = rect;
 		}
 
-		protected override bool OnExposeEvent (EventExpose evnt)
+		protected override bool OnDrawn (Cairo.Context ctx)
 		{
 			Gdk.Rectangle focusRect = new Gdk.Rectangle (0, 0, 0, 0);
 
-			using (var ctx = Gdk.CairoHelper.Create (GdkWindow)) {
+			{
 				int index = 0;
 				ctx.Rectangle (0, 0, Allocation.Width, Allocation.Height);
 				ctx.SetSourceColor (Styles.BreadcrumbBackgroundColor.ToCairoColor ());
@@ -411,7 +415,11 @@ namespace MonoDevelop.Components
 					if (!last) {
 						xpos += arrowLeftPadding;
 						if (leftPath [i].IsPathEnd) {
-							Style.PaintVline (Style, GdkWindow, State, evnt.Area, this, "", ypos, ypos + height, xpos - arrowSize / 2);
+							ctx.SetSourceColor (this.GetStyleColor (State).ToCairoColor ());
+							ctx.LineWidth = 1;
+							ctx.MoveTo (xpos - arrowSize / 2, ypos);
+							ctx.LineTo (xpos - arrowSize / 2, ypos + height);
+							ctx.Stroke ();
 						} else {
 							int arrowH = Math.Min (height, arrowSize);
 							int arrowY = ypos + (height - arrowH) / 2;
@@ -486,7 +494,7 @@ namespace MonoDevelop.Components
 					int focusY = topPadding - buttonPadding;
 					int focusHeight = Allocation.Height - topPadding - bottomPadding + buttonPadding * 2;
 
-					Gtk.Style.PaintFocus (Style, GdkWindow, State, Allocation, this, "label", focusRect.X, focusY, focusRect.Width, focusHeight);
+					StyleContext.RenderFocus (ctx, focusRect.X, focusY, focusRect.Width, focusHeight);
 				}
 			}
 			return true;
@@ -709,8 +717,8 @@ namespace MonoDevelop.Components
 			y += rect.Height;
 			x += GetHoverXPosition (out w);
 			//if the menu would be off the bottom of the screen, "drop" it upwards
-			if (y + mn.Requisition.Height > this.Screen.Height) {
-				y -= mn.Requisition.Height;
+			if (y + mn.SizeRequest ().Height > this.Screen.Height) {
+				y -= mn.SizeRequest ().Height;
 				y -= rect.Height;
 			}
 			

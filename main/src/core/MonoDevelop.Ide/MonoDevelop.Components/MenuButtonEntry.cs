@@ -87,7 +87,7 @@ namespace MonoDevelop.Components
 		{
 			//while the menu's open, make sure the button looks depressed
 			if (isOpen && button.State != Gtk.StateType.Active)
-				button.State = Gtk.StateType.Active;
+				button.SetStateFlags (Gtk.StateType.Active.ToStateFlags (), true);
 		}
 		
 		public void AddOption (string name, string value)
@@ -133,7 +133,7 @@ namespace MonoDevelop.Components
 			menu.Hidden += delegate {
 				button.Relief = oldRelief ;
 				isOpen = false;
-				button.State = Gtk.StateType.Normal;
+				button.SetStateFlags (Gtk.StateType.Normal.ToStateFlags (), true);
 				
 				//FIXME: for some reason the menu's children don't get activated if we destroy 
 				//directly here, so use a timeout to delay it
@@ -182,8 +182,8 @@ namespace MonoDevelop.Components
 			y += rect.Y + rect.Height;
 			
 			//if the menu would be off the bottom of the screen, "drop" it upwards
-			if (y + mn.Requisition.Height > button.Screen.Height) {
-				y -= mn.Requisition.Height;
+			if (y + mn.SizeRequest ().Height > button.Screen.Height) {
+				y -= mn.SizeRequest ().Height;
 				y -= rect.Height;
 			}
 			

@@ -10,7 +10,7 @@ namespace MonoDevelop.DesignerSupport.Toolbox
 		
 		private global::Gtk.Label label1;
 		
-		private global::Gtk.ComboBox comboType;
+		private global::Gtk.ComboBoxText comboType;
 		
 		private global::Gtk.VSeparator vseparator1;
 		
@@ -40,7 +40,7 @@ namespace MonoDevelop.DesignerSupport.Toolbox
 			this.Title = global::Mono.Unix.Catalog.GetString ("Toolbox Item Selector");
 			this.WindowPosition = ((global::Gtk.WindowPosition)(4));
 			// Internal child MonoDevelop.DesignerSupport.Toolbox.ComponentSelectorDialog.VBox
-			global::Gtk.VBox w1 = this.VBox;
+			global::Gtk.Box w1 = this.ContentArea;
 			w1.Name = "dialog1_VBox";
 			w1.BorderWidth = ((uint)(2));
 			// Container child dialog1_VBox.Gtk.Box+BoxChild
@@ -63,7 +63,7 @@ namespace MonoDevelop.DesignerSupport.Toolbox
 			w2.Expand = false;
 			w2.Fill = false;
 			// Container child hbox1.Gtk.Box+BoxChild
-			this.comboType = global::Gtk.ComboBox.NewText ();
+			this.comboType = new global::Gtk.ComboBoxText ();
 			this.comboType.Name = "comboType";
 			this.hbox1.Add (this.comboType);
 			global::Gtk.Box.BoxChild w3 = ((global::Gtk.Box.BoxChild)(this.hbox1 [this.comboType]));
@@ -143,7 +143,7 @@ namespace MonoDevelop.DesignerSupport.Toolbox
 			global::Gtk.Box.BoxChild w13 = ((global::Gtk.Box.BoxChild)(w1 [this.vbox2]));
 			w13.Position = 0;
 			// Internal child MonoDevelop.DesignerSupport.Toolbox.ComponentSelectorDialog.ActionArea
-			global::Gtk.HButtonBox w14 = this.ActionArea;
+			global::Gtk.ButtonBox w14 = this.ActionArea;
 			w14.Name = "dialog1_ActionArea";
 			w14.Spacing = 10;
 			w14.BorderWidth = ((uint)(5));

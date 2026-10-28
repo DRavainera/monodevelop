@@ -81,30 +81,29 @@ namespace Stetic.Editor {
 
 		public ThemedIconBrowser (Gtk.Window parent) :
 			base ("Select a Themed Icon", parent, Gtk.DialogFlags.Modal,
-			      Gtk.Stock.Cancel, Gtk.ResponseType.Cancel,
-			      Gtk.Stock.Ok, Gtk.ResponseType.Ok)
+			      StockCompat.Cancel, Gtk.ResponseType.Cancel,
+			      StockCompat.Ok, Gtk.ResponseType.Ok)
 		{
-			HasSeparator = false;
 			BorderWidth = 12;
-			VBox.Spacing = 18;
-			VBox.BorderWidth = 0;
+			ContentArea.Spacing = 18;
+			ContentArea.BorderWidth = 0;
 
 			DefaultResponse = Gtk.ResponseType.Ok;
 
 			Gtk.HBox hbox = new Gtk.HBox (false, 12);
-			VBox.PackStart (hbox, false, false, 0);
+			ContentArea.PackStart (hbox, false, false, 0);
 
 			entry = new Gtk.Entry ();
 			entry.Activated += DoFind;
-			hbox.PackStart (entry);
+			hbox.PackStart (entry, true, true, 0);
 
-			Gtk.Button button = new Gtk.Button (Gtk.Stock.Find);
+			Gtk.Button button = new Gtk.Button (StockCompat.Find);
 			button.Clicked += DoFind;
 			hbox.PackStart (button, false, false, 0);
 
 			ScrolledWindow scwin = new Gtk.ScrolledWindow ();
-			scwin.SizeRequested += ScrolledWindowSizeRequested;
-			VBox.PackStart (scwin, true, true, 0);
+			scwin.Realized += ScrolledWindowRealized;
+			ContentArea.PackStart (scwin, true, true, 0);
 			scwin.SetPolicy (Gtk.PolicyType.Never, Gtk.PolicyType.Automatic);
 			scwin.ShadowType = Gtk.ShadowType.In;
 
@@ -114,7 +113,7 @@ namespace Stetic.Editor {
 			list.Activated += ListActivated;
 			SetResponseSensitive (Gtk.ResponseType.Ok, false);
 
-			VBox.ShowAll ();
+			ContentArea.ShowAll ();
 		}
 
 		public static string Browse (Gtk.Window parent, string selection)
@@ -131,15 +130,15 @@ namespace Stetic.Editor {
 		Gtk.Entry entry;
 		ThemedIconList list;
 
-		void ScrolledWindowSizeRequested (object obj, SizeRequestedArgs args)
+		void ScrolledWindowRealized (object obj, EventArgs args)
 		{
-			Gtk.Requisition req = list.SizeRequest ();
-			if (req.Width <= 0)
+			list.GetPreferredWidth (out int minW, out int natW);
+			if (natW <= 0)
 				return;
 
 			Gtk.ScrolledWindow scwin = ((Gtk.ScrolledWindow)obj);
-			scwin.SizeRequested -= ScrolledWindowSizeRequested;
-			scwin.SetSizeRequest (req.Width, req.Width * 2 / 3);
+			scwin.Realized -= ScrolledWindowRealized;
+			scwin.SetSizeRequest (natW, natW * 2 / 3);
 			ActionArea.BorderWidth = 0; // has to happen post-realize
 		}
 

@@ -146,7 +146,7 @@ namespace MonoDevelop.Components.Docking
 				if (VisualStyle.TabStyle == DockTabStyle.Normal)
 					ModifyBg (StateType.Normal, VisualStyle.PadBackgroundColor.Value.ToGdkColor ());
 				else 
-					ModifyBg (StateType.Normal, Style.Background(StateType.Normal));
+					ModifyBg (StateType.Normal, this.GetStyleBackgroundColor (StateType.Normal).ToGdkColor ());
 			}
 		}
 
@@ -171,23 +171,22 @@ namespace MonoDevelop.Components.Docking
 		{
 			var w = (Gtk.TreeView)sender;
 			if (VisualStyle.TreeBackgroundColor != null) {
-				w.ModifyBase (StateType.Normal, VisualStyle.TreeBackgroundColor.Value.ToGdkColor ());
-				w.ModifyBase (StateType.Insensitive, VisualStyle.TreeBackgroundColor.Value.ToGdkColor ());
+				w.OverrideBackgroundColor (Gtk.StateFlags.Normal, VisualStyle.TreeBackgroundColor.Value.ToGdkColor ().ToRgba ());
+				w.OverrideBackgroundColor (Gtk.StateFlags.Insensitive, VisualStyle.TreeBackgroundColor.Value.ToGdkColor ().ToRgba ());
 			} else {
-				w.ModifyBase (StateType.Normal, Parent.Style.Base (StateType.Normal));
-				w.ModifyBase (StateType.Insensitive, Parent.Style.Base (StateType.Insensitive));
+				w.OverrideBackgroundColor (Gtk.StateFlags.Normal, Parent.GetStyleBackgroundColor (StateType.Normal));
+				w.OverrideBackgroundColor (Gtk.StateFlags.Insensitive, Parent.GetStyleBackgroundColor (StateType.Insensitive));
 			}
 		}
 		
-		protected override bool OnExposeEvent (Gdk.EventExpose evnt)
+		protected override bool OnDrawn (Cairo.Context cr)
 		{
 			if (VisualStyle.TabStyle == DockTabStyle.Normal) {
-				Gdk.GC gc = new Gdk.GC (GdkWindow);
-				gc.RgbFgColor = VisualStyle.PadBackgroundColor.Value.ToGdkColor ();
-				evnt.Window.DrawRectangle (gc, true, Allocation);
-				gc.Dispose ();
+				cr.Rectangle (0, 0, Allocation.Width, Allocation.Height);
+				cr.SetSourceColor (VisualStyle.PadBackgroundColor.Value.ToCairoColor ());
+				cr.Fill ();
 			}
-			return base.OnExposeEvent (evnt);
+			return base.OnDrawn (cr);
 		}
 	}
 
@@ -221,7 +220,7 @@ namespace MonoDevelop.Components.Docking
 		{
 			base.OnStyleSet (previous_style);
 			if (!borderColorSet)
-				borderColor = Style.Dark (Gtk.StateType.Normal);
+				borderColor = this.GetStyleBackgroundColor (Gtk.StateType.Normal).ToGdkColor ().AddLight (-0.15);
 		}
 		
 		public void SetMargins (int topMargin, int bottomMargin, int leftMargin, int rightMargin)
@@ -264,15 +263,23 @@ namespace MonoDevelop.Components.Docking
 			child = null;
 		}
 
-		protected override void OnSizeRequested (ref Requisition requisition)
+		protected override void OnGetPreferredWidth (out int minimum, out int natural)
 		{
 			if (child != null) {
-				requisition = child.SizeRequest ();
-				requisition.Width += leftMargin + rightMargin + leftPadding + rightPadding;
-				requisition.Height += topMargin + bottomMargin + topPadding + bottomPadding;
+				var r = child.SizeRequest ();
+				minimum = natural = r.Width + leftMargin + rightMargin + leftPadding + rightPadding;
 			} else {
-				requisition.Width = 0;
-				requisition.Height = 0;
+				minimum = natural = 0;
+			}
+		}
+
+		protected override void OnGetPreferredHeight (out int minimum, out int natural)
+		{
+			if (child != null) {
+				var r = child.SizeRequest ();
+				minimum = natural = r.Height + topMargin + bottomMargin + topPadding + bottomPadding;
+			} else {
+				minimum = natural = 0;
 			}
 		}
 
@@ -291,73 +298,68 @@ namespace MonoDevelop.Components.Docking
 				child.SizeAllocate (allocation);
 		}
 
-		protected override bool OnExposeEvent (Gdk.EventExpose evnt)
+		protected override bool OnDrawn (Cairo.Context cr)
 		{
-			Gdk.Rectangle rect = Allocation;
-			
+			Gdk.Rectangle rect = new Gdk.Rectangle (0, 0, Allocation.Width, Allocation.Height);
+
 			//Gdk.Rectangle.Right and Bottom are inconsistent
-			int right = rect.X + rect.Width, bottom = rect.Y + rect.Height;
+			int right = rect.Width, bottom = rect.Height;
 
-			var bcolor = backgroundColorSet ? BackgroundColor : Style.Background (Gtk.StateType.Normal);
-			using (Cairo.Context cr = Gdk.CairoHelper.Create (evnt.Window)) {
+			var bcolor = backgroundColorSet ? BackgroundColor : this.GetStyleBackgroundColor (Gtk.StateType.Normal).ToGdkColor ();
 			
-				if (GradientBackround) {
-					cr.NewPath ();
-					cr.MoveTo (rect.X, rect.Y);
-					cr.RelLineTo (rect.Width, 0);
-					cr.RelLineTo (0, rect.Height);
-					cr.RelLineTo (-rect.Width, 0);
-					cr.RelLineTo (0, -rect.Height);
-					cr.ClosePath ();
+			if (GradientBackround) {
+				cr.NewPath ();
+				cr.MoveTo (rect.X, rect.Y);
+				cr.RelLineTo (rect.Width, 0);
+				cr.RelLineTo (0, rect.Height);
+				cr.RelLineTo (-rect.Width, 0);
+				cr.RelLineTo (0, -rect.Height);
+				cr.ClosePath ();
 
-					// FIXME: VV: Remove gradient features
-					using (Cairo.Gradient pat = new Cairo.LinearGradient (rect.X, rect.Y, rect.X, bottom)) {
-						pat.AddColorStop (0, bcolor.ToCairoColor ());
-						Xwt.Drawing.Color gcol = bcolor.ToXwtColor ();
-						gcol.Light -= 0.1;
-						if (gcol.Light < 0)
-							gcol.Light = 0;
-						pat.AddColorStop (1, gcol.ToCairoColor ());
-						cr.SetSource (pat);
-						cr.Fill ();
-					}
-				} else {
-					if (backgroundColorSet) {
-						Gdk.GC gc = new Gdk.GC (GdkWindow);
-						gc.RgbFgColor = bcolor;
-						evnt.Window.DrawRectangle (gc, true, rect.X, rect.Y, rect.Width, rect.Height);
-						gc.Dispose ();
-					}
+				// FIXME: VV: Remove gradient features
+				using (Cairo.Gradient pat = new Cairo.LinearGradient (rect.X, rect.Y, rect.X, bottom)) {
+					pat.AddColorStop (0, bcolor.ToCairoColor ());
+					Xwt.Drawing.Color gcol = bcolor.ToXwtColor ();
+					gcol.Light -= 0.1;
+					if (gcol.Light < 0)
+						gcol.Light = 0;
+					pat.AddColorStop (1, gcol.ToCairoColor ());
+					cr.SetSource (pat);
+					cr.Fill ();
 				}
+			} else {
+				if (backgroundColorSet) {
+					cr.Rectangle (rect.X, rect.Y, rect.Width, rect.Height);
+					cr.SetSourceColor (bcolor.ToCairoColor ());
+					cr.Fill ();
+				}
+			}
 			
-			}
-			base.OnExposeEvent (evnt);
+			base.OnDrawn (cr);
 
-			using (Cairo.Context cr = Gdk.CairoHelper.Create (evnt.Window)) {
-				cr.SetSourceColor (BorderColor.ToCairoColor ());
-				
-				double y = rect.Y + topMargin / 2d;
-				cr.LineWidth = topMargin;
-				cr.Line (rect.X, y, right, y);
-				cr.Stroke ();
-				
-				y = bottom - bottomMargin / 2d;
-				cr.LineWidth = bottomMargin;
-				cr.Line (rect.X, y, right, y);
-				cr.Stroke ();
-				
-				double x = rect.X + leftMargin / 2d;
-				cr.LineWidth = leftMargin;
-				cr.Line (x, rect.Y, x, bottom);
-				cr.Stroke ();
-				
-				x = right - rightMargin / 2d;
-				cr.LineWidth = rightMargin;
-				cr.Line (x, rect.Y, x, bottom);
-				cr.Stroke ();
+			cr.SetSourceColor (BorderColor.ToCairoColor ());
+			
+			double y = topMargin / 2d;
+			cr.LineWidth = topMargin;
+			cr.Line (rect.X, y, right, y);
+			cr.Stroke ();
+			
+			y = bottom - bottomMargin / 2d;
+			cr.LineWidth = bottomMargin;
+			cr.Line (rect.X, y, right, y);
+			cr.Stroke ();
+			
+			double x = leftMargin / 2d;
+			cr.LineWidth = leftMargin;
+			cr.Line (x, rect.Y, x, bottom);
+			cr.Stroke ();
+			
+			x = right - rightMargin / 2d;
+			cr.LineWidth = rightMargin;
+			cr.Line (x, rect.Y, x, bottom);
+			cr.Stroke ();
 
-				return false;
-			}
+			return false;
 		}
 	}
 }

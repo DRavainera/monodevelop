@@ -21,6 +21,7 @@
     <TemplatesVersion1x>1.0.0-beta2-20170430-208</TemplatesVersion1x>
     <TemplatesVersion20>1.0.0-beta2-20170727-301</TemplatesVersion20>
     <OutputPath>..\..\..\build\AddIns\AspNetCore</OutputPath>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' " />
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' " />

@@ -101,10 +101,16 @@ namespace MonoDevelop.Components.Commands
 			EnsurePopulated ();
 		}
 		
-		protected override void OnSizeRequested (ref Gtk.Requisition requisition)
+		protected override void OnGetPreferredWidth (out int minimum, out int natural)
 		{
 			EnsurePopulated ();
-			base.OnSizeRequested (ref requisition);
+			base.OnGetPreferredWidth (out minimum, out natural);
+		}
+
+		protected override void OnGetPreferredHeight (out int minimum, out int natural)
+		{
+			EnsurePopulated ();
+			base.OnGetPreferredHeight (out minimum, out natural);
 		}
 
 		internal void Update ()

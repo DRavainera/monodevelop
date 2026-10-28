@@ -89,10 +89,10 @@ namespace Stetic.Editor
 		{
 		}
 		
-		public override void Dispose ()
+		protected override void Dispose (bool disposing)
 		{
 			disposed = true;
-			base.Dispose ();
+			base.Dispose (disposing);
 		}
 
 

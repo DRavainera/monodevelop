@@ -27,6 +27,7 @@
 //
 
 using Gtk;
+using MonoDevelop.Components;
 
 namespace MonoDevelop.Components.Commands
 {
@@ -43,15 +44,12 @@ namespace MonoDevelop.Components.Commands
 			get { return manager; }
 		}
 
-		protected override bool OnExposeEvent (Gdk.EventExpose evnt)
+		protected override bool OnDrawn (Cairo.Context cr)
 		{
-			using (var context = Gdk.CairoHelper.Create (evnt.Window)) {
-				context.SetSourceColor (Style.Light (StateType.Normal).ToCairoColor ());
-				context.Paint ();
-			}
+			cr.Rectangle (0, 0, Allocation.Width, Allocation.Height);
+			cr.SetSourceColor (this.GetStyleBackgroundColor (StateType.Normal).ToCairoColor ().AddLight (0.1));
+			cr.Paint ();
 
-			foreach (Gtk.Widget child in Children)
-				(this as Gtk.Container).PropagateExpose (child, evnt);
 			return false;
 		}
 	}

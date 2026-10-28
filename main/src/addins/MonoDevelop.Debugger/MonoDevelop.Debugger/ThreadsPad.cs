@@ -198,9 +198,9 @@ namespace MonoDevelop.Debugger
 			clipboard.Text = bufferText;
 		}
 
-		public override void Dispose ()
+		protected override void Dispose (bool disposing)
 		{
-			base.Dispose ();
+			base.Dispose (disposing);
 			DebuggingService.CallStackChanged -= OnStackChanged;
 			DebuggingService.PausedEvent -= OnDebuggerPaused;
 			DebuggingService.ResumedEvent -= OnDebuggerResumed;

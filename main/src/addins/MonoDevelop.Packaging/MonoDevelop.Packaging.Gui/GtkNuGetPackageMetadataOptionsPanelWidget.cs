@@ -258,7 +258,15 @@ namespace MonoDevelop.Packaging.Gui
 			}
 
 			// No match for language so just return the combo box text.
-			return packageLanguageComboBox.ActiveText;
+			return GetActiveText (packageLanguageComboBox);
+		}
+
+		static string GetActiveText (ComboBox combo)
+		{
+			TreeIter iter;
+			if (!combo.GetActiveIter (out iter) || combo.Model == null)
+				return string.Empty;
+			return (string) combo.Model.GetValue (iter, 0) ?? string.Empty;
 		}
 
 		void PopulateLanguages ()

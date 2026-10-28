@@ -130,26 +130,31 @@ namespace MonoDevelop.Ide
 			Gdk.Rectangle rect = new Gdk.Rectangle (0, 0, ResizeGripWidth, Allocation.Height);
 			if (rect.Width > Allocation.Width)
 				rect.Width = Allocation.Width;
-			rect.Y = Allocation.Y + Allocation.Height - rect.Height;
+			rect.Y = Allocation.Height - rect.Height;
 			if (Direction == TextDirection.Ltr)
-				rect.X = Allocation.X + Allocation.Width - rect.Width;
+				rect.X = Allocation.Width - rect.Width;
 			else
-				rect.X = Allocation.X + Style.XThickness;
+				rect.X = Style.Xthickness;
 			return rect;
 		}
 		
-		protected override bool OnExposeEvent (Gdk.EventExpose evnt)
+		protected override bool OnDrawn (Cairo.Context cr)
 		{
-			bool ret = base.OnExposeEvent (evnt);
+			bool ret = base.OnDrawn (cr);
 			if (HasResizeGrip) {
 				Gdk.Rectangle rect = GetGripRect ();
-				int w = rect.Width - Style.Xthickness;
-				int h = Allocation.Height - Style.YThickness;
-				if (h < 18 - Style.YThickness) h = 18 - Style.YThickness;
-				Gdk.WindowEdge edge = Direction == TextDirection.Ltr ? Gdk.WindowEdge.SouthEast : Gdk.WindowEdge.SouthWest;
-				Gtk.Style.PaintResizeGrip (Style, GdkWindow, State, evnt.Area, this, "statusbar", edge, rect.X, rect.Y, w, h);
+				cr.Save ();
+				cr.LineWidth = 1;
+				for (int i = 0; i < 3; i++) {
+					int off = 2 + i * 3;
+					cr.MoveTo (rect.Right - off, rect.Bottom - 2);
+					cr.LineTo (rect.Right - 2, rect.Bottom - off);
+				}
+				cr.SetSourceColor (this.GetStyleBackgroundColor (StateType.Normal).ToGdkColor ().AddLight (-0.3).ToCairoColor ());
+				cr.Stroke ();
+				cr.Restore ();
 			}
- 			return ret;
+			return ret;
 		}
 	}
 }

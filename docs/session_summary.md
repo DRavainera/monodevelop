@@ -1991,6 +1991,60 @@ regenera — nota T9); copia rancia de `MonoRoslynCompat.dll` en `main/build/` (
 commiteados y pushed en su rama `net10` (forks DRavainera); punteros actualizados en el commit
 de ola 4 del repo principal.
 
-**Pendiente**: T7 (bloqueado, binding gtk-sharp 3.x; retira residual G1 de Mono.Cairo),
-T8 (reimplementar funcionalidades quitadas, auditoría T3), T9 (higiene de build: outputs de
-`vs-editor-api` desde cero; carrera runtimeconfig entre TFMs sobre `main/build/`).
+**Pendiente**: T8 (reimplementar funcionalidades quitadas, auditoría T3), T9 (higiene de
+build: outputs de `vs-editor-api` desde cero; carrera runtimeconfig entre TFMs sobre
+`main/build/`). T7 → cerrada en la sesión de 2026-10-28 (abajo).
+
+## 2026-10-28 — T7: Gtk# 2.12 → GtkSharp 3.24.24.95, cierre del pipeline Gtk legacy `--old-gui`
+**Qué se hizo**:
+1. **Fix AtkCocoaHelper**: `ActionDelegate.Attach` guarda `g_signal_lookup(name,
+   owner.NativeType.Val) != 0` (P/Invoke `libgobject-2.0`) antes de `AddSignalHandler`
+   (`GLib.Signal.GetSignalId` es `private static` en GtkSharp 3). Las señales Cocoa
+   (`request-actions`, `perform-*`) no existen en Linux → skip. Críticos `g_signal`:
+   128→0.
+2. **Fix `SetData<T>`**: eliminado el P/Invoke legado `gtk_object_set_data` (función GTK2
+   + `FreeHGlobal` sobre el puntero → dangling + criticals ×40). Queda
+   `gtkobject.Data[key] = data` (GtkSharp 3 lo mapea a `g_object_set_data`; no hay reader
+   C del hint en GTK3; el consumidor Mac usa el overload `IntPtr` → `g_object_set_data`
+   directo). Aplicado en `MonoDevelop.Components/GtkWorkarounds.cs` y
+   `xwt/Xwt.Gtk/Xwt.GtkBackend/GtkWorkarounds.cs`. Críticos: 40→0.
+3. **Fix resolver de native libs** (`MonoDevelopMain.cs`): `libgtk-win32-2.0-0.dll` →
+   `libgtk-3` (antes `libgtk-x11-2.0`), `libgdk-win32-2.0-0.dll` → `libgdk-3`. Elimina la
+   carga de GTK2 junto a GTK3 (doble registración de tipos `GtkWidget`/`GdkWindow` en el
+   type system de GLib → `cannot register existing type`, `GTK_IS_WIDGET`/`GDK_IS_WINDOW`
+   fallando entre librerías, cierres prematuros y document-open flaky). Verificado con
+   `nm -D`: GTK3 es superset de los símbolos P/Invocados; los ausentes ya tenían fallback
+   `EntryPointNotFoundException`.
+4. **Staging híbrido** del layout plano: build limpio + `tar --skip-old-files` de los
+   backups `~/opencode/staging_backup{,_addins}_oct26.tgz` + `cp -rn <top>/.
+   AddIns/<top>/` por addin (los csprojs tienen `<Private>False</Private>` → el build
+   solo emite el ensamblado propio de cada addin; sin el gap-fill,
+   `FileNotFoundException` de `Microsoft.Web.XmlTransform.dll` y DotNetCore/AspNetCore/
+   Packaging no cargan).
+
+**Cómo validar**: gate `dotnet build main/Main.sln -c DebugLinux` 0 Errores;
+`~/opencode/qa_t7_smoke3.sh` ×3 → ventana `QaB4 – Program.cs – MonoDevelop` en los 3,
+`g_signal`=0, `gtk_object_set_data`=0, `cannot register existing type`=0, MEF=0,
+fatals=0; `~/opencode/qa_t6_avalonia.sh` → ventana Avalonia + proc vivo + fatals=0.
+
+**QA (§18.5)**: wave `~/opencode/qa_t7/`. Ronda 1: Q2 FALLO (cierre prematuro ~4 s;
+layout AddIns incompleto + doble mundo GTK). Ronda 2 (tras los fixes): **PASS** — Q1
+0 Errores, Q2 3/3, Q3 Avalonia OK.
+
+**Known-issue (no bloqueo)**: ~26-37 `Critical Gtk/Gdk` (`GDK_IS_WINDOW`,
+`WIDGET_REALIZED_FOR_EVENT` ×1) + `losing last reference to undestroyed window` ×7-10
+en `Creating DefaultWorkbench` + 1 NRE capturado en `TextArea.OnMapped()` — familia del
+contenedor-leak BXC #3801 (el workaround de glue Gtk# 2.12 no aplica a GtkSharp 3;
+`FixContainerLeak` quedó stub). La app sobrevive y el documento abre. Riesgo latente:
+identidad dual `IThreadingContext` (stub `MonoRoslynCompat` vs real
+`EditorFeatures`) con 3 versiones de `Microsoft.VisualStudio.Threading.dll` en el árbol —
+sin aparición tras el fix 3; unificación arquitectónica pendiente de decisión del
+operador.
+
+**Cierre**: commit del changeset T7 completo (536 ficheros) + submódulos xwt (24 fich) y
+mono-addins (16 fich) commiteados/pushed en rama `net10` (forks DRavainera), punteros
+actualizados en el commit del repo principal.
+
+**Pendiente**: T8 (reimplementar funcionalidades quitadas, auditoría T3), T9 (higiene de
+build), known-issue del contenedor-leak (dedicado) y unificación Roslyn/Threading
+(decisión del operador).

@@ -47,7 +47,7 @@ namespace MonoDevelop.ChangeLogAddIn
 			this.noneRadioButton.Active = true;
 			this.noneRadioButton.DrawIndicator = true;
 			this.noneRadioButton.UseUnderline = true;
-			this.noneRadioButton.Group = new global::GLib.SList (global::System.IntPtr.Zero);
+			this.noneRadioButton.Group = new global::Gtk.RadioButton[0];
 			this.noneRadioButton.Remove (this.noneRadioButton.Child);
 			// Container child noneRadioButton.Gtk.Container+ContainerChild
 			this.label3 = new global::Gtk.Label ();

@@ -18,7 +18,7 @@ namespace Stetic.Wrapper {
 
 		public static Gtk.ToolButton CreateInstance ()
 		{
-			return new Gtk.ToolButton (Gtk.Stock.New);
+			return new Gtk.ToolButton (StockCompat.New);
 		}
 
 		public override void Wrap (object obj, bool initialized)

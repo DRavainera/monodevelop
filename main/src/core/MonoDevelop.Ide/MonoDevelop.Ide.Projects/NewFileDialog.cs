@@ -75,7 +75,6 @@ namespace MonoDevelop.Ide.Projects
 			this.basePath = basePath;
 
 			BorderWidth = 6;
-			HasSeparator = false;
 
 			InitializeComponents ();
 
@@ -169,7 +168,7 @@ namespace MonoDevelop.Ide.Projects
 
 		void CategoryChange (object sender, EventArgs e)
 		{
-			TreeModel treeModel;
+			ITreeModel treeModel;
 			TreeIter treeIter;
 
 			if (catView.Selection.GetSelected (out treeModel, out treeIter)) {

@@ -165,7 +165,7 @@ namespace MonoDevelop.Ide.CodeCompletion
 			Theme.ShadowColor = Styles.PopoverWindow.ShadowColor;
 			foreColor = Styles.PopoverWindow.DefaultTextColor.ToCairoColor ();
 
-			headlabel.ModifyFg (StateType.Normal, foreColor.ToGdkColor ());
+			headlabel.OverrideColor (StateFlags.Normal, foreColor.ToGdkColor ().ToRgba ());
 			headlabel.FontDescription = IdeServices.FontService.GetFontDescription ("Editor").CopyModified (Styles.FontScale11);
 
 			//if (this.Visible)

@@ -43,7 +43,6 @@ namespace MonoDevelop.Components.Mac
 
 		protected override void OnRealized ()
 		{
-			WidgetFlags |= WidgetFlags.Realized;
 
 			Gdk.WindowAttr attributes = new Gdk.WindowAttr ();
 			attributes.X = Allocation.X;
@@ -51,10 +50,8 @@ namespace MonoDevelop.Components.Mac
 			attributes.Height = Allocation.Height;
 			attributes.Width = Allocation.Width;
 			attributes.WindowType = Gdk.WindowType.Child;
-			attributes.Wclass = Gdk.WindowClass.InputOutput;
 			attributes.Visual = Visual;
 			attributes.TypeHint = (Gdk.WindowTypeHint)100; // Custom value which means the this gdk window has to use a native window
-			attributes.Colormap = Colormap;
 			attributes.EventMask = (int)(Events |
 				Gdk.EventMask.ExposureMask |
 				Gdk.EventMask.Button1MotionMask |
@@ -66,14 +63,12 @@ namespace MonoDevelop.Components.Mac
 			Gdk.WindowAttributesType attributes_mask =
 				Gdk.WindowAttributesType.X |
 				Gdk.WindowAttributesType.Y |
-				Gdk.WindowAttributesType.Colormap |
 				Gdk.WindowAttributesType.Visual;
 			GdkWindow = new Gdk.Window (ParentWindow, attributes, (int)attributes_mask);
 			GdkWindow.UserData = Handle;
 
 			Style = Style.Attach (GdkWindow);
 			Style.SetBackground (GdkWindow, State);
-			this.WidgetFlags &= ~WidgetFlags.NoWindow;
 
 			// Remove the gdk window from the original location and move it to the GtkEmbed view that contains it
 			var gw = GtkMacInterop.GetNSView (this);

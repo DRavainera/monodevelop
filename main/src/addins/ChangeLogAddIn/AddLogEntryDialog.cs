@@ -53,9 +53,7 @@ namespace MonoDevelop.ChangeLogAddIn
 			Pango.TabArray tabs = new Pango.TabArray (1, true);
 			tabs.SetTab (0, Pango.TabAlign.Left, GetStringWidth (" ") * 4);
 			textview.Tabs = tabs;
-			textview.SizeRequested += delegate {
-				textview.WidthRequest = GetStringWidth (String.Empty.PadRight (80));
-			};
+			textview.WidthRequest = GetStringWidth (String.Empty.PadRight (80));
 			
 			store = new ListStore (typeof(ChangeLogEntry), typeof(Xwt.Drawing.Image), typeof(string));
 			fileList.Model = store;

@@ -288,10 +288,9 @@ namespace MonoDevelop.Ide.WelcomePage
 			}
 		}
 
-		protected override bool OnExposeEvent (Gdk.EventExpose evnt)
+		protected override bool OnDrawn (Cairo.Context context)
 		{
-			using (var context = Gdk.CairoHelper.Create (evnt.Window)) {
-				context.Translate (Allocation.X, Allocation.Y);
+			{
 				Gdk.Rectangle main = new Gdk.Rectangle (0, 0, Allocation.Width, Allocation.Height);
 				context.CachedDraw (ref backgroundSurface, main, 
 				                    opacity: (float)BackgroundOpacity,
@@ -312,7 +311,7 @@ namespace MonoDevelop.Ide.WelcomePage
 				context.CachedDraw (ref buttonSurface, ButtonPosistion, ButtonSize, new { Hovered = ButtonHovered }, (float)ButtonOpacity, (ctx, alpha) => RenderButton (ctx, new Gdk.Point (), alpha, ButtonHovered));
 				RenderPreview (context, RenderIconPosition, IconOpacity);
 			}
-			return base.OnExposeEvent (evnt);
+			return base.OnDrawn (context);
 		}
 
 		protected override bool OnButtonReleaseEvent (Gdk.EventButton evnt)

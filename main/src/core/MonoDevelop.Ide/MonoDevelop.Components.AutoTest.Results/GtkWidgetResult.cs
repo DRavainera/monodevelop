@@ -106,7 +106,7 @@ namespace MonoDevelop.Components.AutoTest.Results
 
 			// Check for the combobox first and try to use the active text.
 			// If the active text fails then
-			ComboBox cb = resultWidget as ComboBox;
+			ComboBoxText cb = resultWidget as ComboBoxText;
 			if (cb != null) {
 				string activeText = cb.ActiveText;
 				if (activeText == null) {
@@ -152,7 +152,7 @@ namespace MonoDevelop.Components.AutoTest.Results
 			return null;
 		}
 
-		protected TreeModel ModelFromWidget (Widget widget)
+		protected ITreeModel ModelFromWidget (Widget widget)
 		{
 			TreeView tv = widget as TreeView;
 			if (tv != null) {
@@ -169,7 +169,7 @@ namespace MonoDevelop.Components.AutoTest.Results
 
 		public override AppResult Model (string column)
 		{
-			TreeModel model = ModelFromWidget (resultWidget);
+			ITreeModel model = ModelFromWidget (resultWidget);
 			if (model == null) {
 				return null;
 			}
@@ -183,7 +183,7 @@ namespace MonoDevelop.Components.AutoTest.Results
 			return columnNumber == -1 ? null : DisposeWithResult (new GtkTreeModelResult (resultWidget, model, columnNumber) { SourceQuery = this.SourceQuery });
 		}
 
-		protected int GetColumnNumber (string column, TreeModel model)
+		protected int GetColumnNumber (string column, ITreeModel model)
 		{
 			Type modelType = model.GetType ();
 			SemanticModelAttribute attr = modelType.GetCustomAttribute<SemanticModelAttribute> ();
@@ -489,41 +489,39 @@ namespace MonoDevelop.Components.AutoTest.Results
 		}
 
 		bool flashState;
+		int flashCount;
 
-		void OnFlashWidget (object o, ExposeEventArgs args)
+		bool FlashTick ()
 		{
+			flashCount--;
+
+			if (flashCount == 0) {
+				return false;
+			}
+
 			flashState = !flashState;
 
 			if (flashState) {
-				return;
+				return true;
 			}
 
 			using (var cr = Gdk.CairoHelper.Create (resultWidget.GdkWindow)) {
 				cr.SetSourceRGB (1.0, 0.0, 0.0);
+				cr.LineWidth = 1;
 
 				Gdk.Rectangle allocation = resultWidget.Allocation;
 				Gdk.CairoHelper.Rectangle (cr, allocation);
 				cr.Stroke ();
 			}
+			return true;
 		}
 
 		public override void Flash ()
 		{
-			int flashCount = 10;
-
+			flashCount = 10;
 			flashState = true;
-			resultWidget.ExposeEvent += OnFlashWidget;
 
-			GLib.Timeout.Add (1000, () => {
-				resultWidget.QueueDraw ();
-				flashCount--;
-
-				if (flashCount == 0) {
-					resultWidget.ExposeEvent -= OnFlashWidget;
-					return false;
-				}
-				return true;
-			});
+			GLib.Timeout.Add (1000, FlashTick);
 		}
 
 		public override void SetProperty (string propertyName, object value)

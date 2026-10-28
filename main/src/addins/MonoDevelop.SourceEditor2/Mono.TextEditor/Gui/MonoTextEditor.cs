@@ -46,7 +46,7 @@ namespace Mono.TextEditor
 {
 	[System.ComponentModel.Category("Mono.TextEditor")]
 	[System.ComponentModel.ToolboxItem(true)]
-	partial class MonoTextEditor : Container
+	partial class MonoTextEditor : Container, Gtk.IScrollable
 	{
 		readonly TextArea textArea;
 
@@ -85,7 +85,7 @@ namespace Mono.TextEditor
 			this.Direction = TextDirection.Ltr;
 			uiThread = Thread.CurrentThread;
 			GtkWorkarounds.FixContainerLeak (this);
-			WidgetFlags |= WidgetFlags.NoWindow;
+			this.HasWindow = false;
 			LayoutCache = new LayoutCache (this);
 			this.textArea = new TextArea (doc, options, initialMode);
 			this.textArea.Initialize (this, doc, options, initialMode);
@@ -146,12 +146,11 @@ namespace Mono.TextEditor
 
 		Adjustment hAdjustement;
 		Adjustment vAdjustement;
-		protected override void OnSetScrollAdjustments (Adjustment hAdjustement, Adjustment vAdjustement)
+		public void SetScrollAdjustments (Adjustment hAdjustement, Adjustment vAdjustement)
 		{
 			UnregisterAdjustments ();
 			this.vAdjustement = vAdjustement;
 			this.hAdjustement = hAdjustement;
-			base.OnSetScrollAdjustments (hAdjustement, vAdjustement);
 			textArea.SetTextEditorScrollAdjustments (hAdjustement, vAdjustement);
 			if (hAdjustement != null) {
 				hAdjustement.ValueChanged += HandleAdjustmentValueChange;
@@ -161,6 +160,21 @@ namespace Mono.TextEditor
 				vAdjustement.ValueChanged += HandleAdjustmentValueChange;
 			}
 			OnScrollAdjustmentsSet ();
+		}
+		Gtk.Adjustment Gtk.IScrollable.Hadjustment {
+			get { return hAdjustement; }
+			set { SetScrollAdjustments (value, vAdjustement); }
+		}
+		Gtk.Adjustment Gtk.IScrollable.Vadjustment {
+			get { return vAdjustement; }
+			set { SetScrollAdjustments (hAdjustement, value); }
+		}
+		Gtk.ScrollablePolicy Gtk.IScrollable.HscrollPolicy { get; set; }
+		Gtk.ScrollablePolicy Gtk.IScrollable.VscrollPolicy { get; set; }
+		bool Gtk.IScrollable.GetBorder (out Gtk.Border border)
+		{
+			border = default;
+			return false;
 		}
 
 		void HandleAdjustmentValueChange (object sender, EventArgs e)
@@ -179,10 +193,15 @@ namespace Mono.TextEditor
 			SetChildrenPositions (allocation);
 		}
 
-		protected override void OnSizeRequested (ref Requisition requisition)
+		protected override void OnGetPreferredWidth (out int minimumSize, out int naturalSize)
 		{
-			base.OnSizeRequested (ref requisition);
+			base.OnGetPreferredWidth (out minimumSize, out naturalSize);
 			containerChildren.ForEach (c => c.Child.SizeRequest ());
+		}
+
+		protected override void OnGetPreferredHeight (out int minimumSize, out int naturalSize)
+		{
+			base.OnGetPreferredHeight (out minimumSize, out naturalSize);
 		}
 
 		internal protected virtual string GetIdeColorStyleName ()

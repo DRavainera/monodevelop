@@ -257,7 +257,7 @@ namespace MonoDevelop.Ide.WelcomePage
 
 		protected override bool OnMotionNotifyEvent (Gdk.EventMotion evnt)
 		{
-			var so = starRect.Contains (Allocation.X + (int)evnt.X, Allocation.Y + (int)evnt.Y);
+			var so = starRect.Contains ((int)evnt.X, (int)evnt.Y);
 			if (so != mouseOverStar) {
 				mouseOverStar = so;
 				QueueDraw ();
@@ -274,27 +274,27 @@ namespace MonoDevelop.Ide.WelcomePage
 		protected virtual void DrawHoverBackground (Cairo.Context ctx)
 		{
 			if (BorderPadding <= 0) {
-				ctx.Rectangle (Allocation.X, Allocation.Y, Allocation.Width, Allocation.Height);
+				ctx.Rectangle (0, 0, Allocation.Width, Allocation.Height);
 				ctx.SetSourceColor (CairoExtensions.ParseColor (HoverBackgroundColor));
 				ctx.Fill ();
-				ctx.MoveTo (Allocation.X, Allocation.Y + 0.5);
+				ctx.MoveTo (0, 0.5);
 				ctx.RelLineTo (Allocation.Width, 0);
-				ctx.MoveTo (Allocation.X, Allocation.Y + Allocation.Height - 0.5);
+				ctx.MoveTo (0, Allocation.Height - 0.5);
 				ctx.RelLineTo (Allocation.Width, 0);
 				if (DrawRightBorder) {
-					ctx.MoveTo (Allocation.Right + 0.5, Allocation.Y + 0.5);
-					ctx.LineTo (Allocation.Right + 0.5, Allocation.Bottom - 0.5);
+					ctx.MoveTo (Allocation.Width + 0.5, 0.5);
+					ctx.LineTo (Allocation.Width + 0.5, Allocation.Height - 0.5);
 				}
 				if (DrawLeftBorder) {
-					ctx.MoveTo (Allocation.Left + 0.5, Allocation.Y + 0.5);
-					ctx.LineTo (Allocation.Left + 0.5, Allocation.Bottom - 0.5);
+					ctx.MoveTo (0.5, 0.5);
+					ctx.LineTo (0.5, Allocation.Height - 0.5);
 				}
 				ctx.LineWidth = 1;
 				ctx.SetSourceColor (CairoExtensions.ParseColor (HoverBorderColor));
 				ctx.Stroke ();
 			}
 			else {
-				Gdk.Rectangle region = Allocation;
+				Gdk.Rectangle region = new Gdk.Rectangle (0, 0, Allocation.Width, Allocation.Height);
 				region.Inflate (-BorderPadding, -BorderPadding);
 				ctx.RoundedRectangle (region.X + 0.5, region.Y + 0.5, region.Width - 1, region.Height - 1, 3);
 				ctx.SetSourceColor (CairoExtensions.ParseColor (HoverBackgroundColor));
@@ -307,8 +307,8 @@ namespace MonoDevelop.Ide.WelcomePage
 
 		protected virtual void DrawIcon (Cairo.Context ctx)
 		{
-			int x = Allocation.X + InternalPadding;
-			int y = Allocation.Y + (Allocation.Height - (int)icon.Height) / 2;
+			int x = InternalPadding;
+			int y = (Allocation.Height - (int)icon.Height) / 2;
 			ctx.DrawImage (this, icon, x, y);
 			if (AllowPinning && (mouseOver || pinned)) {
 				Xwt.Drawing.Image star;
@@ -331,9 +331,9 @@ namespace MonoDevelop.Ide.WelcomePage
 			}
 		}
 
-		protected override bool OnExposeEvent (Gdk.EventExpose evnt)
+		protected override bool OnDrawn (Cairo.Context ctx)
 		{
-			using (var ctx = Gdk.CairoHelper.Create (evnt.Window)) {
+			{
 				if (mouseOver)
 					DrawHoverBackground (ctx);
 
@@ -372,8 +372,8 @@ namespace MonoDevelop.Ide.WelcomePage
 						height += h2;
 					}
 
-					int tx = Allocation.X + InternalPadding + LeftTextPadding;
-					int ty = Allocation.Y + (Allocation.Height - height) / 2;
+					int tx = InternalPadding + LeftTextPadding;
+					int ty = (Allocation.Height - height) / 2;
 					DrawLayout (ctx, titleLayout, TitleFontFace, TitleFontSize, Pango.Weight.Bold, MediumTitleColor, tx, ty);
 
 					if (subtitleLayout != null)

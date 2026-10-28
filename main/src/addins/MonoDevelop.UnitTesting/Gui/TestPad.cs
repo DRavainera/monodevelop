@@ -145,10 +145,10 @@ namespace MonoDevelop.UnitTesting
 			header.PackEnd (hb, false, false, 0);
 			
 			header.Add (detailLabel);
-			Gdk.Color hcol = eb.Style.Background (StateType.Normal);
-			hcol.Red = (ushort) (((double)hcol.Red) * 0.9);
-			hcol.Green = (ushort) (((double)hcol.Green) * 0.9);
-			hcol.Blue = (ushort) (((double)hcol.Blue) * 0.9);
+			Gdk.RGBA hcol = eb.GetStyleBackgroundColor (StateType.Normal);
+			hcol.Red = (float) (hcol.Red * 0.9);
+			hcol.Green = (float) (hcol.Green * 0.9);
+			hcol.Blue = (float) (hcol.Blue * 0.9);
 		//	eb.ModifyBg (StateType.Normal, hcol);
 			
 			detailsPad.PackStart (eb, false, false, 0);
@@ -958,7 +958,7 @@ namespace MonoDevelop.UnitTesting
 			GetNthPage (n).Hide ();
 		}
 		
-		protected override void OnSwitchPage (NotebookPage page, uint n)
+		protected override void OnSwitchPage (Widget page, uint n)
 		{
 			base.OnSwitchPage (page, n);
 			if (!loadedPages.Contains (Page))
@@ -983,7 +983,6 @@ namespace MonoDevelop.UnitTesting
 		
 		public HeaderLabel ()
 		{
-			WidgetFlags |= WidgetFlags.NoWindow;
 			layout = new Pango.Layout (this.PangoContext);
 		}
 		
@@ -1001,12 +1000,15 @@ namespace MonoDevelop.UnitTesting
 			set { padding = value; }
 		}
 		
-		protected override bool OnExposeEvent (Gdk.EventExpose args)
+		protected override bool OnDrawn (Cairo.Context cr)
 		{
-			using (Gdk.GC gc = new Gdk.GC (GdkWindow)) {
-				gc.ClipRectangle = Allocation;
-				GdkWindow.DrawLayout (gc, padding, padding, layout);
-			}
+			cr.Save ();
+			cr.Rectangle (0, 0, Allocation.Width, Allocation.Height);
+			cr.Clip ();
+			cr.Translate (padding, padding);
+			cr.SetSourceColor (this.GetStyleColor (StateType.Normal).ToCairoColor ());
+			Pango.CairoHelper.ShowLayout (cr, layout);
+			cr.Restore ();
 			return true;
 		}
 		protected override void OnDestroyed ()

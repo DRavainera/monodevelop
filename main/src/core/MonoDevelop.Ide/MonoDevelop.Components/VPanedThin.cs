@@ -24,6 +24,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 using System;
+using Cairo;
 using MonoDevelop.Ide.Gui;
 
 namespace MonoDevelop.Components
@@ -38,6 +39,18 @@ namespace MonoDevelop.Components
 			handle = new CustomGtkPanedHandle (this);
 		}
 
+		protected override void OnGetPreferredWidth (out int minimum, out int natural)
+		{
+			handle?.OnParentSizeRequested ();
+			base.OnGetPreferredWidth (out minimum, out natural);
+		}
+		
+		protected override void OnGetPreferredHeight (out int minimum, out int natural)
+		{
+			handle?.OnParentSizeRequested ();
+			base.OnGetPreferredHeight (out minimum, out natural);
+		}
+		
 		public int GrabAreaSize {
 			get { return handle.GrabAreaSize; }
 			set {
@@ -58,16 +71,17 @@ namespace MonoDevelop.Components
 				callback (handle);
 		}
 
-		protected override bool OnExposeEvent (Gdk.EventExpose evnt)
+		protected override bool OnDrawn (Cairo.Context cr)
 		{
-			base.OnExposeEvent (evnt);
+			base.OnDrawn (cr);
 			
 			if (Child1 != null && Child1.Visible && Child2 != null && Child2.Visible) {
-				var gc = new Gdk.GC (evnt.Window);
-				gc.RgbFgColor = Styles.ThinSplitterColor.ToGdkColor ();
+				cr.SetSourceColor (Styles.ThinSplitterColor.ToCairoColor ());
+				cr.LineWidth = 1;
 				var y = Child1.Allocation.Y + Child1.Allocation.Height;
-				evnt.Window.DrawLine (gc, Allocation.X, y, Allocation.X + Allocation.Width, y);
-				gc.Dispose ();
+				cr.MoveTo (0, y);
+				cr.LineTo (Allocation.Width, y);
+				cr.Stroke ();
 			}
 			
 			return true;

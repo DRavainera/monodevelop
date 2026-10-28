@@ -60,7 +60,7 @@ namespace MonoDevelop.Ide.Gui
 				boxTabs = new VBox (false, 0);
 			} else {
 				mainBox = new HBox ();
-				PackStart (mainBox);
+				PackStart (mainBox, false, false, 0);
 				boxTabs = new HBox (false, 0);
 			}
 			this.workbench = workbench;
@@ -195,11 +195,11 @@ namespace MonoDevelop.Ide.Gui
 		void UpdateColor ()
 		{
 			if (isActive)
-				slabel.ModifyFg (StateType.Normal, normalColor);
+				slabel.OverrideColor (StateFlags.Normal, normalColor.ToRgba ());
 			else {
 				HslColor c = normalColor;
 				c.L += 0.3;
-				slabel.ModifyFg (StateType.Normal, c);
+				slabel.OverrideColor (StateFlags.Normal, c.ToRgba ());
 			}
 		}
 		
@@ -286,35 +286,29 @@ namespace MonoDevelop.Ide.Gui
 			Add (align);
 		}
 		
-		protected override bool OnExposeEvent (Gdk.EventExpose evnt)
+		protected override bool OnDrawn (Cairo.Context cr)
 		{
 			if (isActive || hilight) {
-				double x = Allocation.Left, y = Allocation.Top;
 				int w = Allocation.Width, h = Allocation.Height;
-				using (Cairo.Context ctx = Gdk.CairoHelper.Create (GdkWindow)) {
-					HslColor c1 = new HslColor (Style.Background (Gtk.StateType.Normal));
-					HslColor c2 = c1;
-					if (isActive)
-						c2.L *= 0.8;
-					else
-						c2.L *= 0.9;
-					Cairo.Gradient pat;
+				HslColor c1 = new HslColor (GetStyleBackgroundColor (Gtk.StateType.Normal).ToGdkColor ());
+				HslColor c2 = c1;
+				if (isActive)
+					c2.L *= 0.8;
+				else
+					c2.L *= 0.9;
 
-					// FIXME: VV: Remove gradient features
-					pat = new Cairo.LinearGradient (x, y, x+w-2, y);
+				// FIXME: VV: Remove gradient features
+				using (var pat = new Cairo.LinearGradient (0, 0, w - 2, 0)) {
 					pat.AddColorStop (0, c2);
 					pat.AddColorStop (1, c1);
-					ctx.Pattern = pat;
-					ctx.NewPath ();
-					ctx.Rectangle (x, y, w, h);
-					ctx.Fill ();
+					cr.SetSource (pat);
+					cr.NewPath ();
+					cr.Rectangle (0, 0, w, h);
+					cr.Fill ();
 				}
 			}
 			
-//			Gtk.Style.PaintBox (Style, GdkWindow, StateType.Normal, ShadowType.Out, evnt.Area, this, isWindows? "button" : "",
-//			                    Allocation.Left, Allocation.Top, Allocation.Width, Allocation.Height);
-			
-			bool res = base.OnExposeEvent (evnt);
+			bool res = base.OnDrawn (cr);
 			return res;
 		}
 		
@@ -323,7 +317,7 @@ namespace MonoDevelop.Ide.Gui
 		protected override void OnRealized ()
 		{
 			base.OnRealized ();
-			normalColor = Style.Foreground (Gtk.StateType.Normal);
+			normalColor = GetStyleColor (Gtk.StateType.Normal).ToGdkColor ();
 			UpdateColor ();
 		}
 

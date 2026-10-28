@@ -14,7 +14,7 @@ namespace Stetic.Wrapper {
 		protected override void ReplaceChild (Gtk.Widget oldChild, Gtk.Widget newChild)
 		{
 			Widget ww = Widget.Lookup (oldChild);
-			if ((oldChild is Placeholder) && (ParentWrapper is ScrolledWindow) && newChild.SetScrollAdjustments (null, null)) {
+			if ((oldChild is Placeholder) && (ParentWrapper is ScrolledWindow) && (newChild is Gtk.IScrollable)) {
 				Widget wrapper = Widget.Lookup (newChild);
 				wrapper.ShowScrollbars = false;
 				ParentWrapper.ReplaceChild (Wrapped, newChild, false);

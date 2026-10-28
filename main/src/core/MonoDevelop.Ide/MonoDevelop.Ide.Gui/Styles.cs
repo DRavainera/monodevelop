@@ -350,17 +350,24 @@ namespace MonoDevelop.Ide.Gui
 				defaultStyle = Gtk.Rc.GetStyle (styledWidget);
 			}
 
-			BackgroundColor = defaultStyle.Background (Gtk.StateType.Normal).ToXwtColor ();	// must be the bg color from Gtkrc
-			BaseBackgroundColor = defaultStyle.Base (Gtk.StateType.Normal).ToXwtColor ();	// must be the base color from Gtkrc
-			BaseForegroundColor = defaultStyle.Foreground (Gtk.StateType.Normal).ToXwtColor ();	// must be the text color from Gtkrc
-			BaseSelectionBackgroundColor = defaultStyle.Base (Gtk.StateType.Selected).ToXwtColor ();
-			BaseSelectionTextColor = defaultStyle.Text (Gtk.StateType.Selected).ToXwtColor ();
+			BackgroundColor = styledWidget.GetStyleBackgroundColor (Gtk.StateType.Normal).ToGdkColor ().ToXwtColor ();	// must be the bg color from Gtkrc
+			BaseBackgroundColor = styledWidget.GetStyleBackgroundColor (Gtk.StateType.Normal).ToGdkColor ().ToXwtColor ();	// must be the base color from Gtkrc
+			BaseForegroundColor = styledWidget.GetStyleColor (Gtk.StateType.Normal).ToGdkColor ().ToXwtColor ();	// must be the text color from Gtkrc
+			BaseSelectionBackgroundColor = styledWidget.GetStyleBackgroundColor (Gtk.StateType.Selected).ToGdkColor ().ToXwtColor ();
+			BaseSelectionTextColor = styledWidget.GetStyleColor (Gtk.StateType.Selected).ToGdkColor ().ToXwtColor ();
 
-			LinkForegroundColor = ((Gdk.Color)styledWidget.StyleGetProperty ("link-color")).ToXwtColor ();
-			if (LinkForegroundColor == Colors.Black) // the style returs black when not initialized
-				LinkForegroundColor = Colors.Blue;   // set the link color to generic blue until initialization is finished
+			// "link-color" was a gtkrc-2.x style property; GTK3 style contexts do
+			// not expose it, so fall back to the generic blue used until the
+			// theme is fully initialized.
+			if (styledWidget.StyleGetProperty ("link-color") is Gdk.Color linkColor) {
+				LinkForegroundColor = linkColor.ToXwtColor ();
+				if (LinkForegroundColor == Colors.Black) // the style returs black when not initialized
+					LinkForegroundColor = Colors.Blue;   // set the link color to generic blue until initialization is finished
+			} else {
+				LinkForegroundColor = Colors.Blue;
+			}
 
-			DefaultFont = defaultStyle.FontDescription.Copy ();
+			DefaultFont = defaultStyle.FontDesc.Copy ();
 			DefaultFontName = DefaultFont.ToString ();
 
 			if (IdeApp.Preferences == null || IdeApp.Preferences.UserInterfaceTheme == Theme.Light)

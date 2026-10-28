@@ -26,6 +26,7 @@
 // THE SOFTWARE.
 
 using System;
+using SearchEntry = MonoDevelop.Components.SearchEntry;
 using System.Linq;
 
 using MonoDevelop.Projects;
@@ -340,7 +341,7 @@ namespace MonoDevelop.Ide.Projects
 		protected void RemoveReference (object sender, EventArgs e)
 		{
 			TreeIter iter;
-			TreeModel mdl;
+			ITreeModel mdl;
 			if (ReferencesTreeView.Selection.GetSelected (out mdl, out iter)) {
 				ProjectReference pref = (ProjectReference)refTreeStore.GetValue (iter, ProjectReferenceColumn);
 				foreach (var p in panels)
@@ -538,12 +539,22 @@ namespace MonoDevelop.Ide.Projects
 			RepositionFilter ();
 		}
 
-		protected override void OnSizeRequested (ref Requisition requisition)
+		protected override void OnGetPreferredWidth (out int minimum, out int natural)
 		{
-			requisition = Child?.SizeRequest () ?? Requisition.Zero;
+			base.OnGetPreferredWidth (out minimum, out natural);
+			var childReq = Child?.SizeRequest ();
 			var entryRequest = filterEntry.SizeRequest ();
-			requisition.Width += entryRequest.Width;
-			requisition.Height = Math.Max (requisition.Height, entryRequest.Height);
+			int w = (childReq?.Width ?? 0) + entryRequest.Width;
+			minimum = natural = w;
+		}
+
+		protected override void OnGetPreferredHeight (out int minimum, out int natural)
+		{
+			base.OnGetPreferredHeight (out minimum, out natural);
+			var childReq = Child?.SizeRequest ();
+			var entryRequest = filterEntry.SizeRequest ();
+			int h = Math.Max (childReq?.Height ?? 0, entryRequest.Height);
+			minimum = natural = h;
 		}
 		
 		void RepositionFilter ()
@@ -584,7 +595,7 @@ namespace MonoDevelop.Ide.Projects
 			}
 		}
 
-		protected override void Render (Gdk.Drawable window, Widget widget, Gdk.Rectangle background_area, Gdk.Rectangle cell_area, Gdk.Rectangle expose_area, CellRendererState flags)
+		protected override void OnRender (Cairo.Context cr, Widget widget, Gdk.Rectangle background_area, Gdk.Rectangle cell_area, CellRendererState flags)
 		{
 			StateType st = StateType.Normal;
 			if ((flags & CellRendererState.Prelit) != 0)
@@ -608,12 +619,26 @@ namespace MonoDevelop.Ide.Projects
 			int textPixelWidth = cell_area.Width - ((int)Xpad * 2) ;
 			layout.Width = (int)(textPixelWidth * Pango.Scale.PangoScale);
 
-			window.DrawLayout (widget.Style.TextGC (st), tx, ty, layout);
+			Gdk.RGBA fg = widget.StyleContext.GetColor (ToStateFlags (st));
+			cr.SetSourceColor (new Cairo.Color ((float) fg.Red, (float) fg.Green, (float) fg.Blue));
+			cr.MoveTo (tx, ty);
+			Pango.CairoHelper.ShowLayout (cr, layout);
 		}
 
-		public override void GetSize (Widget widget, ref Gdk.Rectangle cell_area, out int x_offset, out int y_offset, out int width, out int height)
+		static Gtk.StateFlags ToStateFlags (StateType state)
 		{
-			base.GetSize (widget, ref cell_area, out x_offset, out y_offset, out width, out height);
+			switch (state) {
+				case StateType.Selected: return Gtk.StateFlags.Selected;
+				case StateType.Active: return Gtk.StateFlags.Active;
+				case StateType.Prelight: return Gtk.StateFlags.Prelight;
+				case StateType.Insensitive: return Gtk.StateFlags.Insensitive;
+				default: return Gtk.StateFlags.Normal;
+			}
+		}
+
+		protected override void OnGetSize (Widget widget, ref Gdk.Rectangle cell_area, out int x_offset, out int y_offset, out int width, out int height)
+		{
+			base.OnGetSize (widget, ref cell_area, out x_offset, out y_offset, out width, out height);
 			SetupLayout (widget);
 
 			int layoutWidth = 0;
@@ -640,11 +665,11 @@ namespace MonoDevelop.Ide.Projects
 			layout.SetMarkup (newmarkup);
 		}
 
-		protected override void OnDestroyed ()
+		protected override void Dispose (bool disposing)
 		{
-			base.OnDestroyed ();
-			if (layout != null)
+			if (disposing && layout != null)
 				layout.Dispose ();
+			base.Dispose (disposing);
 		}
 	}
 }

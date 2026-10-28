@@ -23,23 +23,17 @@ namespace Stetic
 		public static BinContainer Attach (Gtk.Bin bin)
 		{
 			BinContainer bc = new BinContainer ();
-			bin.SizeRequested += new Gtk.SizeRequestedHandler (bc.OnSizeRequested);
 			bin.SizeAllocated += new Gtk.SizeAllocatedHandler (bc.OnSizeAllocated);
 			bin.Added += new Gtk.AddedHandler (bc.OnAdded);
 			return bc;
 		}
 
-		private void OnSizeRequested (object sender, Gtk.SizeRequestedArgs args)
-		{
-			if ((this.child != null)) {
-				args.Requisition = this.child.SizeRequest ();
-			}
-		}
+
 
 		private void OnSizeAllocated (object sender, Gtk.SizeAllocatedArgs args)
 		{
 			if ((this.child != null)) {
-				this.child.Allocation = args.Allocation;
+				this.child.SetSizeRequest (args.Allocation.Width, args.Allocation.Height);
 			}
 		}
 
@@ -85,21 +79,26 @@ namespace Stetic
 					if ((name != "gtk-missing-image")) {
 						return Stetic.IconLoader.LoadIcon (widget, "gtk-missing-image", size);
 					} else {
-						Gdk.Pixmap pmap = new Gdk.Pixmap (Gdk.Screen.Default.RootWindow, sz, sz);
-						Gdk.GC gc = new Gdk.GC (pmap);
-						gc.RgbFgColor = new Gdk.Color (255, 255, 255);
-						pmap.DrawRectangle (gc, true, 0, 0, sz, sz);
-						gc.RgbFgColor = new Gdk.Color (0, 0, 0);
-						pmap.DrawRectangle (gc, false, 0, 0, (sz - 1), (sz - 1));
-						gc.SetLineAttributes (3, Gdk.LineStyle.Solid, Gdk.CapStyle.Round, Gdk.JoinStyle.Round);
-						gc.RgbFgColor = new Gdk.Color (255, 0, 0);
-						pmap.DrawLine (gc, (sz / 4), (sz / 4), ((sz - 1)
-										- (sz / 4)), ((sz - 1)
-										- (sz / 4)));
-						pmap.DrawLine (gc, ((sz - 1)
-										- (sz / 4)), (sz / 4), (sz / 4), ((sz - 1)
-										- (sz / 4)));
-						return Gdk.Pixbuf.FromDrawable (pmap, pmap.Colormap, 0, 0, 0, 0, sz, sz);
+												Cairo.ImageSurface surface = new Cairo.ImageSurface (Cairo.Format.Argb32, sz, sz);
+						using (var icoCr = new Cairo.Context (surface)) {
+							icoCr.SetSourceRGB (1, 1, 1);
+							icoCr.Rectangle (0, 0, sz, sz);
+							icoCr.Fill ();
+							icoCr.SetSourceRGB (0, 0, 0);
+							icoCr.LineWidth = 1;
+							icoCr.Rectangle (0.5, 0.5, sz - 1, sz - 1);
+							icoCr.Stroke ();
+							icoCr.LineCap = Cairo.LineCap.Round;
+							icoCr.LineJoin = Cairo.LineJoin.Round;
+							icoCr.LineWidth = 3;
+							icoCr.SetSourceRGB (1, 0, 0);
+							icoCr.MoveTo (sz / 4, sz / 4);
+							icoCr.LineTo ((sz - 1) - (sz / 4), (sz - 1) - (sz / 4));
+							icoCr.MoveTo ((sz - 1) - (sz / 4), sz / 4);
+							icoCr.LineTo (sz / 4, (sz - 1) - (sz / 4));
+							icoCr.Stroke ();
+						}
+						return new Gdk.Pixbuf (surface, 0, 0, sz, sz);
 					}
 				}
 			}

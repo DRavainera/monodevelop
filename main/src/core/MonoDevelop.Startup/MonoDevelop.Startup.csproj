@@ -18,7 +18,8 @@
     <ApplicationIcon>..\..\..\theme-icons\Windows\monodevelop.ico</ApplicationIcon>
     <TargetFrameworkVersion>$(MDFrameworkVersion)</TargetFrameworkVersion>
     <Commandlineparameters>-no-redirect</Commandlineparameters>
-    <OutputPath>..\..\..\build\bin</OutputPath>
+    <OutputPath>..\..\..\build</OutputPath>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <EnvironmentVariables>
       <EnvironmentVariables>
         <Variable name="MONODEVELOP_LOCALE_PATH" value="../locale" />

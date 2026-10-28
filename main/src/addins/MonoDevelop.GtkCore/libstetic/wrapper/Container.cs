@@ -845,7 +845,7 @@ namespace Stetic.Wrapper
 		void PlaceholderDrop (Placeholder ph, Stetic.Wrapper.Widget wrapper)
 		{
 			Gtk.Dialog parentDialog = Wrapped.Parent as Gtk.Dialog;
-			if (showNonContainerWarning && (IsTopLevel || (parentDialog != null && parentDialog.VBox == Wrapped))) {
+			if (showNonContainerWarning && (IsTopLevel || (parentDialog != null && parentDialog.ContentArea == Wrapped))) {
 				if (nonContainers.Contains (wrapper.Wrapped.GetType ().ToString ())) {
 					using (NonContainerWarningDialog dlg = new NonContainerWarningDialog ()) {
 						int res = dlg.Run ();
@@ -1417,8 +1417,10 @@ namespace Stetic.Wrapper
 			
 			protected virtual void ChildNotifyHandler (object obj, Gtk.ChildNotifiedArgs args)
 			{
-				ParamSpec pspec = new ParamSpec (args.Pspec);
-				EmitNotify (pspec.Name);
+				GLib.ParamSpec p = args.Args != null && args.Args.Length > 0 ? args.Args [0] as GLib.ParamSpec : null;
+				if (p == null)
+					return;
+				EmitNotify (p.Name);
 			}
 
 			protected override void EmitNotify (string propertyName)

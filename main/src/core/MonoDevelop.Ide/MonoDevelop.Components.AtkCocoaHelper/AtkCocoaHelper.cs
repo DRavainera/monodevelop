@@ -170,34 +170,39 @@ namespace MonoDevelop.Components.AtkCocoaHelper
 
 		Atk.Object owner;
 
-		void HandleSignalAttachment (Action<GLib.Signal, EventHandler<GLib.SignalArgs>> action)
+		void HandleSignalAttachment (Action<string, EventHandler<GLib.SignalArgs>> action)
 		{
-			var signal = GLib.Signal.Lookup (owner, "request-actions", typeof (GLib.SignalArgs));
-			action (signal, new EventHandler<GLib.SignalArgs> (RequestActionsHandler));
-
-			signal = GLib.Signal.Lookup (owner, "perform-cancel", typeof (GLib.SignalArgs));
-			action (signal, new EventHandler<GLib.SignalArgs> (PerformCancelHandler));
-			signal = GLib.Signal.Lookup (owner, "perform-confirm", typeof (GLib.SignalArgs));
-			action (signal, new EventHandler<GLib.SignalArgs> (PerformConfirmHandler));
-			signal = GLib.Signal.Lookup (owner, "perform-decrement", typeof (GLib.SignalArgs));
-			action (signal, new EventHandler<GLib.SignalArgs> (PerformDecrementHandler));
-			signal = GLib.Signal.Lookup (owner, "perform-delete", typeof (GLib.SignalArgs));
-			action (signal, new EventHandler<GLib.SignalArgs> (PerformDeleteHandler));
-			signal = GLib.Signal.Lookup (owner, "perform-increment", typeof (GLib.SignalArgs));
-			action (signal, new EventHandler<GLib.SignalArgs> (PerformIncrementHandler));
-			signal = GLib.Signal.Lookup (owner, "perform-pick", typeof (GLib.SignalArgs));
-			action (signal, new EventHandler<GLib.SignalArgs> (PerformPickHandler));
-			signal = GLib.Signal.Lookup (owner, "perform-press", typeof (GLib.SignalArgs));
-			action (signal, new EventHandler<GLib.SignalArgs> (PerformPressHandler));
-			signal = GLib.Signal.Lookup (owner, "perform-raise", typeof (GLib.SignalArgs));
-			action (signal, new EventHandler<GLib.SignalArgs> (PerformRaiseHandler));
-			signal = GLib.Signal.Lookup (owner, "perform-show-alternate-ui", typeof (GLib.SignalArgs));
-			action (signal, new EventHandler<GLib.SignalArgs> (PerformShowAlternateUIHandler));
-			signal = GLib.Signal.Lookup (owner, "perform-show-default-ui", typeof (GLib.SignalArgs));
-			action (signal, new EventHandler<GLib.SignalArgs> (PerformShowDefaultUIHandler));
-			signal = GLib.Signal.Lookup (owner, "perform-show-menu", typeof (GLib.SignalArgs));
-			action (signal, new EventHandler<GLib.SignalArgs> (PerformShowMenuHandler));
+			Attach (action, "request-actions", RequestActionsHandler);
+			Attach (action, "perform-cancel", PerformCancelHandler);
+			Attach (action, "perform-confirm", PerformConfirmHandler);
+			Attach (action, "perform-decrement", PerformDecrementHandler);
+			Attach (action, "perform-delete", PerformDeleteHandler);
+			Attach (action, "perform-increment", PerformIncrementHandler);
+			Attach (action, "perform-pick", PerformPickHandler);
+			Attach (action, "perform-press", PerformPressHandler);
+			Attach (action, "perform-raise", PerformRaiseHandler);
+			Attach (action, "perform-show-alternate-ui", PerformShowAlternateUIHandler);
+			Attach (action, "perform-show-default-ui", PerformShowDefaultUIHandler);
+			Attach (action, "perform-show-menu", PerformShowMenuHandler);
 		}
+
+		void Attach (Action<string, EventHandler<GLib.SignalArgs>> action, string name, EventHandler<GLib.SignalArgs> handler)
+		{
+			// Estas señales solo existen en la bridge de accesibilidad de Cocoa (macOS);
+			// en otros sistemas no estan registradas y g_signal_connect emitiria un critical.
+			if (g_signal_lookup (name, owner.NativeType.Val) == 0) {
+				return;
+			}
+			action (name, new EventHandler<GLib.SignalArgs> (handler));
+		}
+
+#if MAC
+		[DllImport ("libgobject-2.0.0.dylib", CallingConvention = CallingConvention.Cdecl)]
+		static extern uint g_signal_lookup (string name, IntPtr itype);
+#else
+		[DllImport ("libgobject-2.0.so.0", CallingConvention = CallingConvention.Cdecl)]
+		static extern uint g_signal_lookup (string name, IntPtr itype);
+#endif
 
 		public ActionDelegate (Gtk.Widget widget)
 		{
@@ -209,14 +214,14 @@ namespace MonoDevelop.Components.AtkCocoaHelper
 				return;
 			}
 
-			HandleSignalAttachment ((signal, handler) => signal.AddDelegate (handler));
+			HandleSignalAttachment ((name, handler) => owner.AddSignalHandler (name, handler, typeof (GLib.SignalArgs)));
 		}
 
 		void WidgetDestroyed (object sender, EventArgs e)
 		{
 			FreeActions ();
 
-			HandleSignalAttachment ((signal, handler) => signal.RemoveDelegate (handler));
+			HandleSignalAttachment ((name, handler) => owner.RemoveSignalHandler (name, handler));
 			owner = null;
 		}
 

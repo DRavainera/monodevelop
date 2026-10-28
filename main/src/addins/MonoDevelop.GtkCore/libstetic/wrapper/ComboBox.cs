@@ -9,7 +9,7 @@ namespace Stetic.Wrapper {
 
 		public static Gtk.ComboBox CreateInstance ()
 		{
-			Gtk.ComboBox c = Gtk.ComboBox.NewText ();
+			Gtk.ComboBox c = new Gtk.ComboBoxText ();
 			// Make sure all children are created, so the mouse events can be
 			// bound and the widget can be selected.
 			c.EnsureStyle ();
@@ -34,7 +34,7 @@ namespace Stetic.Wrapper {
 		public string[] Items {
 			get { return items; }
 			set {
-				Gtk.ComboBox combobox = (Gtk.ComboBox)Wrapped;
+				Gtk.ComboBoxText combobox = (Gtk.ComboBoxText)Wrapped;
 				int active = combobox.Active;
 
 				int row = 0, oi = 0, ni = 0;
@@ -49,7 +49,7 @@ namespace Stetic.Wrapper {
 						if (active > row)
 							active++;
 					} else {
-						combobox.RemoveText (row);
+					combobox.Remove (row);
 						if (active > row)
 							active--;
 						oi++;
@@ -57,7 +57,7 @@ namespace Stetic.Wrapper {
 				}
 
 				while (oi < items.Length) {
-					combobox.RemoveText (row);
+					combobox.Remove (row);
 					oi++;
 				}
 

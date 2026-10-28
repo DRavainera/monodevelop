@@ -237,7 +237,7 @@ namespace MonoDevelop.Ide.Tasks
 		void CopyUserTaskClicked (object o, EventArgs args)
 		{
 			TaskListEntry task;
-			TreeModel model;
+			ITreeModel model;
 			TreeIter iter;
 
 			if (view.Selection.GetSelected (out model, out iter))

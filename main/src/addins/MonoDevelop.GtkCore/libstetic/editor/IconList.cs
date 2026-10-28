@@ -8,7 +8,7 @@ namespace Stetic.Editor
 	// This is the internal class the represents the actual two-column
 	// icon list. This can't just be handled as an HBox inside the main
 	// window, because we need to override SetScrollAdjustments.
-	class IconList : Gtk.HBox 
+	class IconList : Gtk.HBox, Gtk.IScrollable
 	{
 		ThemedIconColumn left, right;
 		ArrayList IconNames = new ArrayList ();
@@ -18,9 +18,9 @@ namespace Stetic.Editor
 		protected IconList ()
 		{
 			left = new ThemedIconColumn ();
-			PackStart (left);
+			PackStart (left, true, true, 0);
 			right = new ThemedIconColumn ();
-			PackStart (right);
+			PackStart (right, true, true, 0);
 
 			left.Selection.Changed += LeftSelectionChanged;
 			right.Selection.Changed += RightSelectionChanged;
@@ -142,10 +142,37 @@ namespace Stetic.Editor
 			}
 		}
 
-		protected override void OnSetScrollAdjustments (Gtk.Adjustment hadj, Gtk.Adjustment vadj)
+		Gtk.Adjustment hscrollAdj, vscrollAdj;
+		Gtk.ScrollablePolicy hscrollPol, vscrollPol;
+		
+		Gtk.Adjustment Gtk.IScrollable.Hadjustment {
+			get { return hscrollAdj; }
+			set { hscrollAdj = value; }
+		}
+		
+		Gtk.Adjustment Gtk.IScrollable.Vadjustment {
+			get { return vscrollAdj; }
+			set {
+				vscrollAdj = value;
+				left.Vadjustment = value;
+				right.Vadjustment = value;
+			}
+		}
+		
+		Gtk.ScrollablePolicy Gtk.IScrollable.HscrollPolicy {
+			get { return hscrollPol; }
+			set { hscrollPol = value; }
+		}
+		
+		Gtk.ScrollablePolicy Gtk.IScrollable.VscrollPolicy {
+			get { return vscrollPol; }
+			set { vscrollPol = value; }
+		}
+		
+		bool Gtk.IScrollable.GetBorder (out Gtk.Border border)
 		{
-			left.SetScrollAdjustments (null, vadj);
-			right.SetScrollAdjustments (null, vadj);
+			border = default;
+			return false;
 		}
 	}
 	

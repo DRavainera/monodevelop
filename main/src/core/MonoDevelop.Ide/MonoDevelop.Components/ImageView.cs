@@ -24,6 +24,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 using System;
+using Cairo;
 using Gdk;
 
 namespace MonoDevelop.Components
@@ -38,7 +39,8 @@ namespace MonoDevelop.Components
 		public ImageView ()
 		{
 			Accessible.Role = Atk.Role.Image;
-			WidgetFlags |= Gtk.WidgetFlags.AppPaintable | Gtk.WidgetFlags.NoWindow;
+			AppPaintable = true;
+			HasWindow = false;
 		}
 
 		public ImageView (Xwt.Drawing.Image image): this ()
@@ -91,14 +93,20 @@ namespace MonoDevelop.Components
 			}
 		}
 
-		protected override void OnSizeRequested (ref Gtk.Requisition requisition)
+		protected override void OnGetPreferredWidth (out int minimum, out int natural)
 		{
-			requisition.Width = Xpad * 2;
-			requisition.Height = Ypad * 2;
-			if (image != null) {
-				requisition.Width += (int)(image.Width);
-				requisition.Height += (int)(image.Height);
-			}
+			int w = Xpad * 2;
+			if (image != null)
+				w += (int)(image.Width);
+			minimum = natural = w;
+		}
+
+		protected override void OnGetPreferredHeight (out int minimum, out int natural)
+		{
+			int h = Ypad * 2;
+			if (image != null)
+				h += (int)(image.Height);
+			minimum = natural = h;
 		}
 
 		bool IsParentDisabled ()
@@ -116,18 +124,16 @@ namespace MonoDevelop.Components
 			return false;
 		}
 
-		protected override bool OnExposeEvent (Gdk.EventExpose evnt)
+		protected override bool OnDrawn (Cairo.Context cr)
 		{
 			if (image != null) {
 				var alloc = Allocation;
 				alloc.Inflate (-Xpad, -Ypad);
-				using (var ctx = CairoHelper.Create (evnt.Window)) {
-					var x = Math.Round (alloc.X + (alloc.Width - image.Width) * Xalign);
-					var y = Math.Round (alloc.Y + (alloc.Height - image.Height) * Yalign);
-					ctx.Save ();
-					ctx.DrawImage (this, IsParentDisabled () ? image.WithAlpha (0.4) : image, x, y);
-					ctx.Restore ();
-				}
+				var x = Math.Round (alloc.X + (alloc.Width - image.Width) * Xalign);
+				var y = Math.Round (alloc.Y + (alloc.Height - image.Height) * Yalign);
+				cr.Save ();
+				cr.DrawImage (this, IsParentDisabled () ? image.WithAlpha (0.4) : image, x, y);
+				cr.Restore ();
 			}
 			return true;
 		}

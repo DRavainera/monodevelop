@@ -119,11 +119,14 @@ namespace MonoDevelop.VersionControl.Views
 			QueueResize ();
 		}
 
-		protected override void OnSizeRequested (ref Requisition requisition)
+		protected override void OnGetPreferredWidth (out int minimumWidth, out int naturalWidth)
 		{
-			base.OnSizeRequested (ref requisition);
-			requisition.Width = width;
-			requisition.Height = height;
+			minimumWidth = naturalWidth = width;
+		}
+
+		protected override void OnGetPreferredHeight (out int minimumHeight, out int naturalHeight)
+		{
+			minimumHeight = naturalHeight = height;
 		}
 
 		int px, py;
@@ -160,154 +163,146 @@ namespace MonoDevelop.VersionControl.Views
 			return layout;
 		}
 
-		protected override bool OnExposeEvent (Gdk.EventExpose e)
+		protected override bool OnDrawn (Cairo.Context cr)
 		{
-			var window = e.Window;
 			var widget = this;
 			ClearAccessibleLines ();
-			using (Cairo.Context cr = Gdk.CairoHelper.Create (e.Window)) {
-				int w, maxy;
-				window.GetSize (out w, out maxy);
-				var cell_area = Allocation;
-//				if (DrawLeft) {
-//					cell_area.Width += cell_area.X - leftSpace;
-//					cell_area.X = leftSpace;
-//				}
+			int w, maxy;
+			w = widget.Allocation.Width;
+			maxy = widget.Allocation.Height;
+			var cell_area = Allocation;
+		//		if (DrawLeft) {
+		//			cell_area.Width += cell_area.X - leftSpace;
+		//			cell_area.X = leftSpace;
+		//		}
 
-				cell_area.Width -= RightPadding;
+			cell_area.Width -= RightPadding;
 
-				window.DrawRectangle (widget.Style.BaseGC (Gtk.StateType.Normal), true, cell_area.X, cell_area.Y, cell_area.Width - 1, cell_area.Height);
-				if (lines == null)
-					return true;
-				Gdk.GC normalGC = widget.Style.TextGC (StateType.Normal);
-				Gdk.GC removedGC = new Gdk.GC (window);
-				removedGC.Copy (normalGC);
-				removedGC.RgbFgColor = Styles.LogView.DiffRemoveBackgroundColor.AddLight (-0.3).ToGdkColor ();
-				Gdk.GC addedGC = new Gdk.GC (window);
-				addedGC.Copy (normalGC);
-				addedGC.RgbFgColor = Styles.LogView.DiffAddBackgroundColor.AddLight (-0.3).ToGdkColor ();
-				Gdk.GC infoGC = new Gdk.GC (window);
-				infoGC.Copy (normalGC);
-				infoGC.RgbFgColor = widget.Style.Text (StateType.Normal).AddLight (0.2);
+			cr.Rectangle (cell_area.X, cell_area.Y, cell_area.Width - 1, cell_area.Height);
+			cr.SetSourceColor (widget.GetStyleBackgroundColor (Gtk.StateType.Normal).ToCairoColor ());
+			cr.Fill ();
+			if (lines == null)
+				return true;
+			var normalColor = widget.GetStyleColor (StateType.Normal).ToCairoColor ();
+			var removedColor = Styles.LogView.DiffRemoveBackgroundColor.AddLight (-0.3).ToCairoColor ();
+			var addedColor = Styles.LogView.DiffAddBackgroundColor.AddLight (-0.3).ToCairoColor ();
+			var infoColor = widget.GetStyleColor (StateType.Normal).ToGdkColor ().AddLight (0.2).ToCairoColor ();
 
-				Cairo.Context ctx = CairoHelper.Create (window);
+			// Rendering is done in two steps:
+			// 1) Get a list of blocks to render
+			// 2) render the blocks
 
-				// Rendering is done in two steps:
-				// 1) Get a list of blocks to render
-				// 2) render the blocks
+			var blocks = CalculateBlocks (maxy, cell_area.Y + 2);
 
-				var blocks = CalculateBlocks (maxy, cell_area.Y + 2);
+			// Now render the blocks
 
-				// Now render the blocks
+			// The y position of the highlighted line
+			int selectedLineRowTop = -1;
 
-				// The y position of the highlighted line
-				int selectedLineRowTop = -1;
+			BlockInfo lastCodeSegmentStart = null;
+			BlockInfo lastCodeSegmentEnd = null;
 
-				BlockInfo lastCodeSegmentStart = null;
-				BlockInfo lastCodeSegmentEnd = null;
-
-				foreach (BlockInfo block in blocks) {
-					if (block.Type == BlockType.Info) {
-						// Finished drawing the content of a code segment. Now draw the segment border and label.
-						if (lastCodeSegmentStart != null)
-							DrawCodeSegmentBorder (infoGC, ctx, cell_area.X, cell_area.Width, lastCodeSegmentStart, lastCodeSegmentEnd, lines, widget, window);
-						lastCodeSegmentStart = block;
-					}
-
-					lastCodeSegmentEnd = block;
-
-					if (block.YEnd < 0)
-						continue;
-
-					// Draw the block background
-					DrawBlockBg (ctx, cell_area.X + 1, cell_area.Width - 2, block);
-
-					// Get all text for the current block
-					var sb = new StringBuilder ();
-					bool replaceFirst = false;
-					int subLine = 0;
-					for (int n = block.FirstLine; n <= block.LastLine; n++) {
-						string s = ProcessLine (lines [n]);
-						if (n > block.FirstLine)
-							sb.Append ('\n');
-						if ((block.Type == BlockType.Added || block.Type == BlockType.Removed) && s.Length > 0) {
-							sb.Append (' ');
-							sb.Append (s, 1, s.Length - 1);
-							replaceFirst = true;
-						} else
-							sb.Append (s);
-						int idx = 0, curIdx = 0;
-						while ((idx = s.IndexOf ('\n')) >= 0) {
-							var y1 = block.YStart + subLine * lineHeight;
-							if (y1 < cell_area.Bottom && y1 + lineHeight >= e.Area.Y && y1 < e.Area.Bottom)
-								AddAccessibleLine (cell_area.X + 2 + LeftPaddingBlock, y1, block.Type, block.FirstLine + n + subLine, ref replaceFirst, s.Substring (curIdx, idx));
-							subLine++;
-							curIdx = idx;
-						}
-						var y2 = block.YStart + subLine * lineHeight;
-						if (y2 < cell_area.Bottom && y2 + lineHeight >= e.Area.Y && y2 < e.Area.Bottom)
-							AddAccessibleLine (cell_area.X + 2 + LeftPaddingBlock, y2, block.Type, block.FirstLine + n + subLine, ref replaceFirst, curIdx > 0 ? s.Substring (curIdx) : s);
-						subLine++;
-					}
-
-					// Draw a special background for the selected line
-					if (px < 0) {
-						selectedLine = selectedLineRowTop = -1;
-					} else if (block.Type != BlockType.Info && px >= cell_area.X && py <= cell_area.Right && py >= block.YStart && py <= block.YEnd) {
-						int row = (py - block.YStart) / lineHeight;
-						double yrow = block.YStart + lineHeight * row;
-						double xrow = cell_area.X + LeftPaddingBlock;
-						int wrow = cell_area.Width - 1 - LeftPaddingBlock;
-						if (block.Type == BlockType.Added)
-							ctx.SetSourceColor (Styles.LogView.DiffAddBackgroundColor.AddLight (0.1).ToCairoColor ());
-						else if (block.Type == BlockType.Removed)
-							ctx.SetSourceColor (Styles.LogView.DiffRemoveBackgroundColor.AddLight (0.1).ToCairoColor ());
-						else {
-							ctx.SetSourceColor (Styles.LogView.DiffHighlightColor.ToCairoColor ());
-							xrow -= LeftPaddingBlock;
-							wrow += LeftPaddingBlock;
-						}
-						ctx.Rectangle (xrow, yrow, wrow, lineHeight);
-						ctx.Fill ();
-						selectedLine = block.SourceLineStart + row;
-						//						selctedPath = path;
-						selectedLineRowTop = (int)yrow;
-					}
-
-					// Draw the line text. Ignore header blocks, since they are drawn as labels in DrawCodeSegmentBorder
-
-					if (block.Type != BlockType.Info) {
-						layout.SetMarkup ("");
-						layout.SetText (sb.ToString ());
-						Gdk.GC gc;
-						switch (block.Type) {
-						case BlockType.Removed: gc = removedGC; break;
-						case BlockType.Added: gc = addedGC; break;
-						case BlockType.Info: gc = infoGC; break;
-						default: gc = normalGC; break;
-						}
-						window.DrawLayout (gc, cell_area.X + 2 + LeftPaddingBlock, block.YStart, layout);
-					}
-
-					// Finally draw the change symbol at the left margin
-
-					DrawChangeSymbol (ctx, widget, cell_area.X + 1, cell_area.Width - 2, block);
+			foreach (BlockInfo block in blocks) {
+				if (block.Type == BlockType.Info) {
+					// Finished drawing the content of a code segment. Now draw the segment border and label.
+					if (lastCodeSegmentStart != null)
+						DrawCodeSegmentBorder (infoColor, cr, cell_area.X, cell_area.Width, lastCodeSegmentStart, lastCodeSegmentEnd, lines, widget);
+					lastCodeSegmentStart = block;
 				}
 
-				// Finish the drawing of the code segment
-				if (lastCodeSegmentStart != null)
-					DrawCodeSegmentBorder (infoGC, ctx, cell_area.X, cell_area.Width, lastCodeSegmentStart, lastCodeSegmentEnd, lines, widget, window);
+				lastCodeSegmentEnd = block;
 
-				// Draw the source line number at the current selected line. It must be done at the end because it must
-				// be drawn over the source code text and segment borders.
-				if (selectedLineRowTop != -1)
-					DrawLineBox (normalGC, ctx, Allocation.Right - 4, selectedLineRowTop, selectedLine, widget, window);
+				if (block.YEnd < 0)
+					continue;
 
-				((IDisposable)ctx).Dispose ();
-				removedGC.Dispose ();
-				addedGC.Dispose ();
-				infoGC.Dispose ();
+				// Draw the block background
+				DrawBlockBg (cr, cell_area.X + 1, cell_area.Width - 2, block);
+
+				// Get all text for the current block
+				var sb = new StringBuilder ();
+				bool replaceFirst = false;
+				int subLine = 0;
+				for (int n = block.FirstLine; n <= block.LastLine; n++) {
+					string s = ProcessLine (lines [n]);
+					if (n > block.FirstLine)
+						sb.Append ('\n');
+					if ((block.Type == BlockType.Added || block.Type == BlockType.Removed) && s.Length > 0) {
+						sb.Append (' ');
+						sb.Append (s, 1, s.Length - 1);
+						replaceFirst = true;
+					} else
+						sb.Append (s);
+					int idx = 0, curIdx = 0;
+					while ((idx = s.IndexOf ('\n')) >= 0) {
+						var y1 = block.YStart + subLine * lineHeight;
+						if (y1 < cell_area.Bottom && y1 + lineHeight >= Allocation.Y && y1 < Allocation.Bottom)
+							AddAccessibleLine (cell_area.X + 2 + LeftPaddingBlock, y1, block.Type, block.FirstLine + n + subLine, ref replaceFirst, s.Substring (curIdx, idx));
+						subLine++;
+						curIdx = idx;
+					}
+					var y2 = block.YStart + subLine * lineHeight;
+					if (y2 < cell_area.Bottom && y2 + lineHeight >= Allocation.Y && y2 < Allocation.Bottom)
+						AddAccessibleLine (cell_area.X + 2 + LeftPaddingBlock, y2, block.Type, block.FirstLine + n + subLine, ref replaceFirst, curIdx > 0 ? s.Substring (curIdx) : s);
+					subLine++;
+				}
+
+				// Draw a special background for the selected line
+				if (px < 0) {
+					selectedLine = selectedLineRowTop = -1;
+				} else if (block.Type != BlockType.Info && px >= cell_area.X && py <= cell_area.Right && py >= block.YStart && py <= block.YEnd) {
+					int row = (py - block.YStart) / lineHeight;
+					double yrow = block.YStart + lineHeight * row;
+					double xrow = cell_area.X + LeftPaddingBlock;
+					int wrow = cell_area.Width - 1 - LeftPaddingBlock;
+					if (block.Type == BlockType.Added)
+						cr.SetSourceColor (Styles.LogView.DiffAddBackgroundColor.AddLight (0.1).ToCairoColor ());
+					else if (block.Type == BlockType.Removed)
+						cr.SetSourceColor (Styles.LogView.DiffRemoveBackgroundColor.AddLight (0.1).ToCairoColor ());
+					else {
+						cr.SetSourceColor (Styles.LogView.DiffHighlightColor.ToCairoColor ());
+						xrow -= LeftPaddingBlock;
+						wrow += LeftPaddingBlock;
+					}
+					cr.Rectangle (xrow, yrow, wrow, lineHeight);
+					cr.Fill ();
+					selectedLine = block.SourceLineStart + row;
+					//				selctedPath = path;
+					selectedLineRowTop = (int)yrow;
+				}
+
+				// Draw the line text. Ignore header blocks, since they are drawn as labels in DrawCodeSegmentBorder
+
+				if (block.Type != BlockType.Info) {
+					layout.SetMarkup ("");
+					layout.SetText (sb.ToString ());
+					Cairo.Color textcolor;
+					switch (block.Type) {
+					case BlockType.Removed: textcolor = removedColor; break;
+					case BlockType.Added: textcolor = addedColor; break;
+					case BlockType.Info: textcolor = infoColor; break;
+					default: textcolor = normalColor; break;
+					}
+					cr.Save ();
+					cr.Translate (cell_area.X + 2 + LeftPaddingBlock, block.YStart);
+					cr.SetSourceColor (textcolor);
+					Pango.CairoHelper.ShowLayout (cr, layout);
+					cr.Restore ();
+				}
+
+				// Finally draw the change symbol at the left margin
+
+				DrawChangeSymbol (cr, widget, cell_area.X + 1, cell_area.Width - 2, block);
 			}
+
+			// Finish the drawing of the code segment
+			if (lastCodeSegmentStart != null)
+				DrawCodeSegmentBorder (infoColor, cr, cell_area.X, cell_area.Width, lastCodeSegmentStart, lastCodeSegmentEnd, lines, widget);
+
+			// Draw the source line number at the current selected line. It must be done at the end because it must
+			// be drawn over the source code text and segment borders.
+			if (selectedLineRowTop != -1)
+				DrawLineBox (normalColor, cr, Allocation.Right - 4, selectedLineRowTop, selectedLine, widget);
+
 			Accessible?.SetAccessibleChildren (accessibleLines.Select (l => l.Accessible).ToArray ());
 			return true;
 		}
@@ -431,7 +426,7 @@ namespace MonoDevelop.VersionControl.Views
 			Unchanged
 		}
 
-		void DrawCodeSegmentBorder (Gdk.GC gc, Cairo.Context ctx, double x, int width, BlockInfo firstBlock, BlockInfo lastBlock, string [] lines, Gtk.Widget widget, Gdk.Drawable window)
+		void DrawCodeSegmentBorder (Cairo.Color textcolor, Cairo.Context ctx, double x, int width, BlockInfo firstBlock, BlockInfo lastBlock, string [] lines, Gtk.Widget widget)
 		{
 			int shadowSize = 2;
 			int spacing = 4;
@@ -463,15 +458,19 @@ namespace MonoDevelop.VersionControl.Views
 
 			ctx.Rectangle (x + 2 + LeftPaddingBlock - 1 + 0.5, firstBlock.YStart + dy - 1 + 0.5, tw + 2, th + 2);
 			ctx.LineWidth = 1;
-			ctx.SetSourceColor (widget.Style.Base (StateType.Normal).ToCairoColor ());
+			ctx.SetSourceColor (widget.GetStyleBackgroundColor (StateType.Normal).ToCairoColor ());
 			ctx.FillPreserve ();
 			ctx.SetSourceColor (Styles.LogView.DiffBoxBorderColor.ToCairoColor ());
 			ctx.Stroke ();
 
-			window.DrawLayout (gc, (int)(x + 2 + LeftPaddingBlock), firstBlock.YStart + dy, layout);
+			ctx.Save ();
+			ctx.Translate ((int)(x + 2 + LeftPaddingBlock), firstBlock.YStart + dy);
+			ctx.SetSourceColor (textcolor);
+			Pango.CairoHelper.ShowLayout (ctx, layout);
+			ctx.Restore ();
 		}
 
-		void DrawLineBox (Gdk.GC gc, Cairo.Context ctx, int right, int top, int line, Gtk.Widget widget, Gdk.Drawable window)
+		void DrawLineBox (Cairo.Color textcolor, Cairo.Context ctx, int right, int top, int line, Gtk.Widget widget)
 		{
 			layout.SetText ("");
 			layout.SetMarkup ("<small>" + line.ToString () + "</small>");
@@ -483,12 +482,16 @@ namespace MonoDevelop.VersionControl.Views
 
 			ctx.Rectangle (right - tw - 2 + 0.5, top + dy - 1 + 0.5, tw + 2, th + 2);
 			ctx.LineWidth = 1;
-			ctx.SetSourceColor (widget.Style.Base (Gtk.StateType.Normal).ToCairoColor ());
+			ctx.SetSourceColor (widget.GetStyleBackgroundColor (Gtk.StateType.Normal).ToCairoColor ());
 			ctx.FillPreserve ();
 			ctx.SetSourceColor (Styles.LogView.DiffBoxBorderColor.ToCairoColor ());
 			ctx.Stroke ();
 
-			window.DrawLayout (gc, right - tw - 1, top + dy, layout);
+			ctx.Save ();
+			ctx.Translate (right - tw - 1, top + dy);
+			ctx.SetSourceColor (textcolor);
+			Pango.CairoHelper.ShowLayout (ctx, layout);
+			ctx.Restore ();
 		}
 
 		void DrawBlockBg (Cairo.Context ctx, double x, int width, BlockInfo block)

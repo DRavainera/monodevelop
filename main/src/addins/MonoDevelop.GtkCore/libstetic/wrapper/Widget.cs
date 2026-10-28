@@ -812,7 +812,7 @@ namespace Stetic.Wrapper {
 					scw.ShadowType = Gtk.ShadowType.In;
 					ScrolledWindow wrapper = (ScrolledWindow) ObjectWrapper.Create (Project, scw);
 					ParentWrapper.ReplaceChild (Wrapped, scw, false);
-					if (Wrapped.SetScrollAdjustments (null, null))
+					if (Wrapped is Gtk.IScrollable)
 						scw.Add (Wrapped);
 					else
 						wrapper.AddWithViewport (Wrapped);
@@ -1064,7 +1064,7 @@ namespace Stetic.Wrapper {
 
 			Gdk.WindowAttr attributes = new Gdk.WindowAttr ();
 			attributes.WindowType = Gdk.WindowType.Child;
-			attributes.Wclass = Gdk.WindowClass.InputOnly;
+			attributes.Wclass = Gdk.WindowWindowClass.InputOnly;
 			attributes.Mask = Gdk.EventMask.ButtonPressMask;
 
 			Gdk.Window win = new Gdk.Window (widget.GdkWindow, attributes, 0);

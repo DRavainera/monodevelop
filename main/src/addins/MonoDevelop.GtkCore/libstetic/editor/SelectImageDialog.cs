@@ -53,7 +53,7 @@ namespace Stetic.Editor
 			
 			foreach (IconSize s in Enum.GetValues (typeof(Gtk.IconSize))) {
 				if (s != IconSize.Invalid)
-					iconSizeCombo.AppendText (s.ToString ());
+					((Gtk.ComboBoxText) iconSizeCombo).AppendText (s.ToString ());
 			}
 			iconSizeCombo.Active = 0;
 			
@@ -239,7 +239,7 @@ namespace Stetic.Editor
 		void OnResourceSelectionChanged (object obj, EventArgs args)
 		{
 			Gtk.TreeIter iter;
-			Gtk.TreeModel model;
+			Gtk.ITreeModel model;
 			if (!resourceList.Selection.GetSelected (out model, out iter)) {
 				resourceNameEntry.Text = "";
 			} else {
@@ -264,8 +264,8 @@ namespace Stetic.Editor
 		{
 			FileChooserDialog dialog =
 				new FileChooserDialog ("Open File", null, FileChooserAction.Open,
-						       Gtk.Stock.Cancel, Gtk.ResponseType.Cancel,
-						       Gtk.Stock.Open, Gtk.ResponseType.Ok);
+						       StockCompat.Cancel, Gtk.ResponseType.Cancel,
+						       StockCompat.Open, Gtk.ResponseType.Ok);
 			if (parent != null)
 				dialog.TransientFor = parent.Toplevel as Gtk.Window;
 			int response = dialog.Run ();
@@ -280,7 +280,7 @@ namespace Stetic.Editor
 		protected void OnRemoveResource (object ob, EventArgs args)
 		{
 			Gtk.TreeIter iter;
-			Gtk.TreeModel model;
+			Gtk.ITreeModel model;
 			if (resourceList.Selection.GetSelected (out model, out iter)) {
 				string res = (string) resourceListStore.GetValue (iter, 2);
 				Gtk.MessageDialog msg = new Gtk.MessageDialog (dialog, DialogFlags.Modal, MessageType.Question, ButtonsType.YesNo, "Are you sure you want to delete the resource '{0}'?", res);

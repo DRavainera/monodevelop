@@ -131,11 +131,23 @@ namespace MonoDevelop.Components.Docking
 				layout.StoreAllocation ();
 		}
 		
-		protected override void OnSizeRequested (ref Requisition req)
+		protected override void OnGetPreferredWidth (out int minimum, out int natural)
 		{
+			minimum = natural = 0;
 			if (layout != null) {
 				LayoutWidgets ();
-				req = layout.SizeRequest ();
+				var r = layout.SizeRequest ();
+				minimum = natural = r.Width;
+			}
+		}
+
+		protected override void OnGetPreferredHeight (out int minimum, out int natural)
+		{
+			minimum = natural = 0;
+			if (layout != null) {
+				LayoutWidgets ();
+				var r = layout.SizeRequest ();
+				minimum = natural = r.Height;
 			}
 		}
 		
@@ -156,7 +168,7 @@ namespace MonoDevelop.Components.Docking
 			layout.SizeAllocate (rect);
 
 			usedSplitters = 0;
-			layout.DrawSeparators (Gdk.Rectangle.Zero, null, 0, DrawSeparatorOperation.Allocate, null);
+			layout.DrawSeparators (null, null, 0, DrawSeparatorOperation.Allocate, null);
 		}
 
 		int usedSplitters;
@@ -194,12 +206,12 @@ namespace MonoDevelop.Components.Docking
 					callback (s.Widget);
 		}
 		
-		protected override bool OnExposeEvent (Gdk.EventExpose evnt)
+		protected override bool OnDrawn (Cairo.Context cr)
 		{
-			bool res = base.OnExposeEvent (evnt);
+			bool res = base.OnDrawn (cr);
 			
 			if (layout != null) {
-				layout.Draw (evnt.Area, null, 0);
+				layout.Draw (cr, null, 0);
 			}
 			return res;
 		}
@@ -359,7 +371,6 @@ namespace MonoDevelop.Components.Docking
 		
 		protected override void OnRealized ()
 		{
-			WidgetFlags |= WidgetFlags.Realized;
 			
 			Gdk.WindowAttr attributes = new Gdk.WindowAttr ();
 			attributes.X = Allocation.X;
@@ -367,9 +378,7 @@ namespace MonoDevelop.Components.Docking
 			attributes.Height = Allocation.Height;
 			attributes.Width = Allocation.Width;
 			attributes.WindowType = Gdk.WindowType.Child;
-			attributes.Wclass = Gdk.WindowClass.InputOutput;
 			attributes.Visual = Visual;
-			attributes.Colormap = Colormap;
 			attributes.EventMask = (int)(Events |
 				Gdk.EventMask.ExposureMask |
 				Gdk.EventMask.Button1MotionMask |
@@ -379,18 +388,16 @@ namespace MonoDevelop.Components.Docking
 			Gdk.WindowAttributesType attributes_mask =
 				Gdk.WindowAttributesType.X |
 				Gdk.WindowAttributesType.Y |
-				Gdk.WindowAttributesType.Colormap |
 				Gdk.WindowAttributesType.Visual;
 			GdkWindow = new Gdk.Window (ParentWindow, attributes, (int)attributes_mask);
 			GdkWindow.UserData = Handle;
 
 			Style = Style.Attach (GdkWindow);
 			Style.SetBackground (GdkWindow, State);
-			this.WidgetFlags &= ~WidgetFlags.NoWindow;
 			
 			//GdkWindow.SetBackPixmap (null, true);
 
-			ModifyBase (StateType.Normal, Styles.DockFrameBackground.ToGdkColor ());
+			OverrideBackgroundColor (StateFlags.Normal, Styles.DockFrameBackground.ToGdkColor ().ToRgba ());
 		}
 		
 		protected override void OnUnrealized ()
@@ -398,7 +405,6 @@ namespace MonoDevelop.Components.Docking
 			if (this.GdkWindow != null) {
 				this.GdkWindow.UserData = IntPtr.Zero;
 				this.GdkWindow.Destroy ();
-				this.WidgetFlags |= WidgetFlags.NoWindow;
 			}
 			base.OnUnrealized ();
 		}
@@ -542,8 +548,8 @@ namespace MonoDevelop.Components.Docking
 
 				// For testing purposes. Not being shown while VisibleWindow = false
 				ModifyBg (StateType.Normal, new Gdk.Color (255,0,0));
-				ModifyBase (StateType.Normal, new Gdk.Color (255,0,0));
-				ModifyFg (StateType.Normal, new Gdk.Color (255,0,0));
+				OverrideBackgroundColor (StateFlags.Normal, new Gdk.Color (255,0,0).ToRgba ());
+				OverrideColor (StateFlags.Normal, new Gdk.Color (255,0,0).ToRgba ());
 			}
 
 			protected override bool OnEnterNotifyEvent (EventCrossing evnt)

@@ -141,14 +141,14 @@ namespace MonoDevelop.Components.PropertyGrid
 			layout.GetPixelSize (out width, out height);
 		}
 
-		public virtual void Render (Drawable window, Cairo.Context ctx, Rectangle bounds, StateType state)
+		public virtual void Render (Gtk.Widget window, Cairo.Context ctx, Rectangle bounds, StateType state)
 		{
 			int w, h;
 			layout.GetPixelSize (out w, out h);
 			int dy = (bounds.Height - h) / 2;
 
 			ctx.Save ();
-			ctx.SetSourceColor (container.Style.Text (state).ToCairoColor ());
+			ctx.SetSourceColor (container.GetStyleColor (state).ToCairoColor ());
 			ctx.MoveTo (bounds.X, dy + bounds.Y);
 			Pango.CairoHelper.ShowLayout (ctx, layout);
 			ctx.Restore ();
@@ -341,20 +341,20 @@ namespace MonoDevelop.Components.PropertyGrid
 			this.cell = cell;
 			this.context = context;
 			em = cell.EditorManager;
-			this.ModifyBg (StateType.Normal, this.Style.White);
+			var white = new Gdk.RGBA ();
+			white.Red = white.Green = white.Blue = white.Alpha = 1;
+			this.OverrideBackgroundColor (Gtk.StateFlags.Normal, white);
 		}
 		
-		protected override bool OnExposeEvent (EventExpose evnt)
+		protected override bool OnDrawn (Cairo.Context cr)
 		{
-			bool res = base.OnExposeEvent (evnt);
+			bool res = base.OnDrawn (cr);
 			cell.Initialize (this, em, context);
 			
 			Rectangle rect = Allocation;
 			rect.Inflate (-3, 0);// Add some margin
 
-			using (Cairo.Context ctx = CairoHelper.Create (GdkWindow)) {
-				cell.Render (GdkWindow, ctx, rect, StateType.Normal);
-			}
+			cell.Render (this, cr, rect, StateType.Normal);
 			return res;
 		}
 	}
@@ -375,7 +375,9 @@ namespace MonoDevelop.Components.PropertyGrid
 			Button dialogueButton = new Button (buttonLabel);
 			dialogueButton.Clicked += DialogueButtonClicked;
 			PackStart (dialogueButton, false, false, 0);
-			this.ModifyBg (StateType.Normal, this.Style.White);
+			var white = new Gdk.RGBA ();
+			white.Red = white.Green = white.Blue = white.Alpha = 1;
+			this.OverrideBackgroundColor (Gtk.StateFlags.Normal, white);
 			ShowAll ();
 		}
 		

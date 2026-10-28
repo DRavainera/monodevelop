@@ -52,7 +52,6 @@ namespace Mono.TextEditor.Theatrics
 			DoubleBuffered = true;
 			Decorated = false;
 			BorderWidth = 0;
-			HasFrame = true;
 			this.editor = editor;
 			Events = Gdk.EventMask.ExposureMask;
 			Duration = 500;
@@ -60,10 +59,6 @@ namespace Mono.TextEditor.Theatrics
 			ExpandHeight = 2;
 			BounceEasing = Easing.Sine;
 			
-			var rgbaColormap = Screen.RgbaColormap;
-			if (rgbaColormap == null)
-				return;
-			Colormap = rgbaColormap;
 
 			stage.ActorStep += OnAnimationActorStep;
 			stage.Iteration += OnAnimationIteration;
@@ -239,7 +234,7 @@ namespace Mono.TextEditor.Theatrics
 				throw new InvalidOperationException ("Only works with composited screen. Check Widget.IsComposited.");
 			if (editor == null)
 				throw new ArgumentNullException ("Editor");
-			WidgetFlags |= Gtk.WidgetFlags.NoWindow;
+			HasWindow = false;
 			this.editor = editor;
 			Events = EventMask.ExposureMask;
 			Duration = 500;
@@ -247,10 +242,6 @@ namespace Mono.TextEditor.Theatrics
 			ExpandHeight = 2;
 			BounceEasing = Easing.Sine;
 			
-			var rgbaColormap = Screen.RgbaColormap;
-			if (rgbaColormap == null)
-				return;
-			Colormap = rgbaColormap;
 
 			stage.ActorStep += OnAnimationActorStep;
 			stage.Iteration += OnAnimationIteration;
@@ -337,18 +328,15 @@ namespace Mono.TextEditor.Theatrics
 			return true;
 		}
 
-		protected override bool OnExposeEvent (EventExpose evnt)
+		protected override bool OnDrawn (Cairo.Context cr)
 		{
 			try {
 				var alloc = Allocation;
-				using (var cr = CairoHelper.Create (evnt.Window)) {
-					cr.Translate (alloc.X, alloc.Y);
-					cr.Translate (xExpandedOffset * (1 - scale), yExpandedOffset * (1 - scale));
-					var scaleX = (alloc.Width / userspaceArea.Width - 1) * scale + 1;
-					var scaleY = (alloc.Height / userspaceArea.Height - 1) * scale + 1;
-					cr.Scale (scaleX, scaleY);
-					Draw (cr, userspaceArea);
-				}
+				cr.Translate (xExpandedOffset * (1 - scale), yExpandedOffset * (1 - scale));
+				var scaleX = (alloc.Width / userspaceArea.Width - 1) * scale + 1;
+				var scaleY = (alloc.Height / userspaceArea.Height - 1) * scale + 1;
+				cr.Scale (scaleX, scaleY);
+				Draw (cr, userspaceArea);
 			} catch (Exception e) {
 				LoggingService.LogError ("Exception in animation:", e);
 			}

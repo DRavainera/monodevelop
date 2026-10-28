@@ -80,7 +80,7 @@ namespace Stetic.Wrapper {
 			else
 				scrolled.Remove (scrolled.Child);
 			
-			if (newChild.SetScrollAdjustments (null, null))
+			if (newChild is Gtk.IScrollable)
 				scrolled.Add (newChild);
 			else
 				AddWithViewport (newChild);

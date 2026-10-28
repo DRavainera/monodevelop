@@ -87,13 +87,10 @@ namespace MonoDevelop.Components.PropertyGrid.PropertyEditors {
 			return txt;
 		}
 
-		public override void Render (Gdk.Drawable window, Cairo.Context ctx, Gdk.Rectangle bounds, Gtk.StateType state)
+		public override void Render (Gtk.Widget window, Cairo.Context ctx, Gdk.Rectangle bounds, Gtk.StateType state)
 		{
 			var values = Enum.GetValues (Property.PropertyType);
 			if (values.Length < MaxCheckCount) {
-				if (style == null)
-					InitializeStyle (Container);
-
 				var container = (Widget)Container;
 				using (var layout = new Pango.Layout (container.PangoContext)) {
 					layout.Width = -1;
@@ -103,17 +100,17 @@ namespace MonoDevelop.Components.PropertyGrid.PropertyEditors {
 					int dy = 2;
 					foreach (var val in values) {
 						ulong uintVal = Convert.ToUInt64 (val);
-						Gtk.ShadowType sh = (value & uintVal) != 0 ? Gtk.ShadowType.In : Gtk.ShadowType.Out;
+						bool isChecked = (value & uintVal) != 0;
 						if (value == 0 && uintVal == 0)
-							sh = Gtk.ShadowType.In;
+							isChecked = true;
 						int s = indicatorSize - 1;
-						Gtk.Style.PaintCheck (style, window, state, sh, bounds, Container, "checkbutton", bounds.X + indicatorSpacing - 1, bounds.Y + dy, s, s);
+						ctx.DrawCheckIndicator (window, bounds.X + indicatorSpacing - 1, bounds.Y + dy, s, isChecked);
 
 						layout.SetText (val.ToString ());
 						int tw, th;
 						layout.GetPixelSize (out tw, out th);
 						ctx.Save ();
-						ctx.SetSourceColor (container.Style.Text (state).ToCairoColor ());
+						ctx.SetSourceColor (container.GetStyleColor (state).ToCairoColor ());
 						ctx.MoveTo (bounds.X + indicatorSize + indicatorSpacing, dy + bounds.Y + ((indicatorSize - th) / 2));
 						Pango.CairoHelper.ShowLayout (ctx, layout);
 						ctx.Restore ();

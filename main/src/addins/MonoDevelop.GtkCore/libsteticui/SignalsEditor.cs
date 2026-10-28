@@ -42,7 +42,7 @@ namespace Stetic
 		
 		bool disposed = false;
 
-		public override void Dispose ()
+		protected override void Dispose (bool disposing)
 		{
 			if (disposed)
 				return;
@@ -54,7 +54,7 @@ namespace Stetic
 			#if !NET
 			System.Runtime.Remoting.RemotingServices.Disconnect (frontend);
 			#endif
-			base.Dispose ();
+			base.Dispose (disposing);
 		}
 		
 		internal void NotifySignalActivated ()

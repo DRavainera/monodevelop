@@ -57,8 +57,9 @@ namespace MonoDevelop.AspNet.Commands
 
 		Button buttonCancel, buttonOk, masterButton;
 		Label placeholderLabel;
-		ComboBox viewEngineCombo, templateCombo;
-		ComboBoxEntry placeholderCombo, dataClassCombo;
+		ComboBoxText viewEngineCombo;
+		ComboBox templateCombo;
+		ComboBox placeholderCombo, dataClassCombo;
 		Entry nameEntry;
 		Entry masterEntry;
 		CheckButton partialCheck, stronglyTypedCheck, masterCheck;
@@ -102,7 +103,7 @@ namespace MonoDevelop.AspNet.Commands
 			BorderWidth = 6;
 			Resizable = false;
 
-			VBox.Spacing = 6;
+			ContentArea.Spacing = 6;
 
 			buttonCancel = new Button (Gtk.Stock.Cancel);
 			AddActionWidget (buttonCancel, ResponseType.Cancel);
@@ -112,8 +113,11 @@ namespace MonoDevelop.AspNet.Commands
 			var table = new Table (3, 2, false) { ColumnSpacing = 6, RowSpacing = 6 };
 
 			nameEntry = new Entry { WidthRequest = 350 };
-			viewEngineCombo = ComboBox.NewText ();
-			templateCombo = ComboBox.NewText ();
+			viewEngineCombo = new ComboBoxText ();
+			templateCombo = new ComboBox ();
+			var tmplCr = new CellRendererText ();
+			templateCombo.PackStart (tmplCr, true);
+			templateCombo.AddAttribute (tmplCr, "text", 0);
 
 			var nameLabel = new Label (GettextCatalog.GetString ("_Name")) {
 				MnemonicWidget = nameEntry,
@@ -138,7 +142,7 @@ namespace MonoDevelop.AspNet.Commands
 			table.Attach (engineLabel,     0, 1, 2, 3, fill,       0, 0, 0);
 			table.Attach (viewEngineCombo, 1, 2, 2, 3, expandFill, 0, 0, 0);
 
-			VBox.PackStart (table, false, false, 0);
+			ContentArea.PackStart (table, false, false, 0);
 
 			var frame = new Frame (GettextCatalog.GetString ("Options")) { BorderWidth = 2 };
 			var optionsVBox = new VBox { Spacing = 6 };
@@ -155,16 +159,22 @@ namespace MonoDevelop.AspNet.Commands
 			stronglyTypedCheck = new CheckButton (GettextCatalog.GetString ("_Strongly typed")) { UseUnderline = true };
 			masterCheck = new CheckButton (GettextCatalog.GetString ("Has _master page or layout")) { UseUnderline = true };
 
-			dataClassCombo = ComboBoxEntry.NewText ();
+			dataClassCombo = ComboBox.NewWithEntry ();
+			var dcCr = new CellRendererText ();
+			dataClassCombo.PackStart (dcCr, true);
+			dataClassCombo.AddAttribute (dcCr, "text", 0);
 			masterEntry = new Entry { WidthRequest = 250 };
-			placeholderCombo = ComboBoxEntry.NewText ();
+			placeholderCombo = ComboBox.NewWithEntry ();
+			var ppCr = new CellRendererText ();
+			placeholderCombo.PackStart (ppCr, true);
+			placeholderCombo.AddAttribute (ppCr, "text", 0);
 			masterButton = new Button ("...");
 
-			optionsVBox.PackStart (partialCheck);
-			optionsVBox.PackStart (stronglyTypedCheck);
+			optionsVBox.PackStart (partialCheck, false, true, 0);
+			optionsVBox.PackStart (stronglyTypedCheck, false, true, 0);
 			typePanel = WithLabelAndLeftPadding (dataClassCombo, GettextCatalog.GetString ("_Data class:"), true, 24);
-			optionsVBox.PackStart (typePanel);
-			optionsVBox.PackStart (masterCheck);
+			optionsVBox.PackStart (typePanel, false, true, 0);
+			optionsVBox.PackStart (masterCheck, false, true, 0);
 
 
 			var masterLabel = new Label (GettextCatalog.GetString ("_File:")) {
@@ -188,9 +198,9 @@ namespace MonoDevelop.AspNet.Commands
 			masterTable.Attach (masterButton,     2, 3, 1, 2, fill,       0, 0, 0);
 
 			masterPanel = new Alignment (0.5f, 0.5f, 1f, 1f) { LeftPadding = 24, Child = masterTable };
-			optionsVBox.PackStart (masterPanel);
+			optionsVBox.PackStart (masterPanel, false, true, 0);
 
-			VBox.PackStart (frame, false, false, 0);
+			ContentArea.PackStart (frame, false, false, 0);
 
 			Child.ShowAll ();
 
@@ -216,7 +226,7 @@ namespace MonoDevelop.AspNet.Commands
 			};
 
 			var box = new HBox (false, 6);
-			box.PackStart (label);
+			box.PackStart (label, false, true, 0);
 			box.PackStart (w, true, true, 0);
 
 			return new Alignment (0.5f, 0.5f, 1f, 1f) { LeftPadding = leftPadding, Child = box };
@@ -300,10 +310,12 @@ namespace MonoDevelop.AspNet.Commands
 			Validate ();
 		}
 		
-		public override void Dispose ()
+		protected override void Dispose (bool disposing)
 		{
-			Destroy ();
-			base.Dispose ();
+			if (disposing) {
+				Destroy ();
+			}
+			base.Dispose (disposing);
 		}
 		
 		public bool IsValid ()
@@ -410,13 +422,13 @@ namespace MonoDevelop.AspNet.Commands
 		
 		public Type ViewDataType {
 			get {
-				return dataClassCombo.Active >= 0 ? (Type)classDataProvider.TypesList[dataClassCombo.Active] : System.Type.GetType(dataClassCombo.ActiveText, false);
+				return dataClassCombo.Active >= 0 ? (Type)classDataProvider.TypesList[dataClassCombo.Active] : System.Type.GetType(dataClassCombo.Entry.Text, false);
 			}
 		}
 
 		public string ViewDataTypeString {
 			get {
-				return dataClassCombo.ActiveText;
+				return dataClassCombo.Entry.Text;
 			}
 		}
 		
@@ -434,7 +446,7 @@ namespace MonoDevelop.AspNet.Commands
 		
 		public string PrimaryPlaceHolder {
 			get {
-				return placeholderCombo.ActiveText;
+				return placeholderCombo.Entry.Text;
 			}
 		}
 		

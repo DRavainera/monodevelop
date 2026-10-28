@@ -110,30 +110,45 @@ namespace MonoDevelop.SourceEditor
 
 			readonly int maxTextWidth = (int)(260 * Pango.Scale.PangoScale);
 
-			protected override void OnSizeRequested (ref Gtk.Requisition requisition)
+			void ComputePreferredSize (out int width, out int height)
 			{
-				base.OnSizeRequested (ref requisition);
 				double y = verticalTextBorder * 2 - verticalTextSpace + (MonoDevelop.Core.Platform.IsWindows ? 10 : 2);
-
+				width = 0;
 				using (var drawingLayout = new Pango.Layout (this.PangoContext)) {
 					drawingLayout.FontDescription = cache.tooltipFontDescription;
 
 					foreach (var msg in marker.Errors) {
-						if (marker.Layouts.Count == 1) 
+						if (marker.Layouts.Count == 1)
 							drawingLayout.Width = maxTextWidth;
 						drawingLayout.SetText (msg.FullErrorMessage);
 						int w;
 						int h;
 						drawingLayout.GetPixelSize (out w, out h);
-						if (marker.Layouts.Count > 1) 
+						if (marker.Layouts.Count > 1)
 							w += (int)warningPixbuf.Width + iconTextSpacing;
 
-						requisition.Width = Math.Max (w + textBorder * 2, requisition.Width);
+						width = Math.Max (w + textBorder * 2, width);
 						y += h + verticalTextSpace - 3;
 					}
 				}
 
-				requisition.Height = (int)y;
+				height = (int)y;
+			}
+
+			protected override void OnGetPreferredWidth (out int minimumSize, out int naturalSize)
+			{
+				base.OnGetPreferredWidth (out minimumSize, out naturalSize);
+				int width, height;
+				ComputePreferredSize (out width, out height);
+				minimumSize = naturalSize = System.Math.Max (naturalSize, width);
+			}
+
+			protected override void OnGetPreferredHeight (out int minimumSize, out int naturalSize)
+			{
+				base.OnGetPreferredHeight (out minimumSize, out naturalSize);
+				int width, height;
+				ComputePreferredSize (out width, out height);
+				minimumSize = naturalSize = height;
 			}
 
 			protected override bool OnEnterNotifyEvent (Gdk.EventCrossing evnt)
@@ -142,7 +157,7 @@ namespace MonoDevelop.SourceEditor
 				return base.OnEnterNotifyEvent (evnt);
 			}
 
-			protected override void OnDrawContent (Gdk.EventExpose evnt, Cairo.Context g)
+			protected override void OnDrawContent (Cairo.Context g)
 			{
 				g.Rectangle (0, 0, Allocation.Width, Allocation.Height);
 				g.SetSourceColor (marker.TooltipColor);

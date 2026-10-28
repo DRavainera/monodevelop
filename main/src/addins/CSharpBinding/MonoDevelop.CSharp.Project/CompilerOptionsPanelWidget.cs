@@ -72,7 +72,9 @@ namespace MonoDevelop.CSharp.Project
 			} else {
 				classListStore = new ListStore (typeof(string));
 				mainClassEntry.Model = classListStore;
-				mainClassEntry.TextColumn = 0;
+				var mcCr = new CellRendererText ();
+				mainClassEntry.PackStart (mcCr, false);
+				mainClassEntry.AddAttribute (mcCr, "text", 0);
 				((Entry)mainClassEntry.Child).Text = csproject.MainClass ?? string.Empty;
 			
 				UpdateTarget ();
@@ -88,9 +90,9 @@ namespace MonoDevelop.CSharp.Project
 				codepageEntry.AppendText (e.Id);
 			}
 			if (foundEncoding != null)
-				codepageEntry.Entry.Text = foundEncoding;
+				((Entry)codepageEntry.Child).Text = foundEncoding;
 			else if (csproject.CodePage != 0)
-				codepageEntry.Entry.Text = csproject.CodePage.ToString ();
+				((Entry)codepageEntry.Child).Text = csproject.CodePage.ToString ();
 			
 			iconEntry.Path = csproject.Win32Icon;
 			iconEntry.DefaultPath = project.BaseDirectory;
@@ -125,6 +127,9 @@ namespace MonoDevelop.CSharp.Project
 			}
 
 			langVerCombo.Model = langVerStore;
+			var langCr = new CellRendererText ();
+			langVerCombo.PackStart (langCr, true);
+			langVerCombo.AddAttribute (langCr, "text", 0);
 
 			if (badVersion != null) {
 				var badIter = langVerStore.AppendValues (GettextCatalog.GetString ("{0} (Unknown Version)", badVersion), LanguageVersion.Default, true);
@@ -175,7 +180,7 @@ namespace MonoDevelop.CSharp.Project
 
 		public bool ValidateChanges ()
 		{
-			if (codepageEntry.Entry.Text.Length > 0) {
+			if (((Entry)codepageEntry.Child).Text.Length > 0) {
 				// Get the codepage. If the user specified an encoding name, find it.
 				int trialCodePage = -1;
 				foreach (TextEncoding e in TextEncoding.SupportedEncodings) {
@@ -207,7 +212,7 @@ namespace MonoDevelop.CSharp.Project
 				isBadVersion = (bool)langVerCombo.Model.GetValue (iter, 2);
 			}
 
-			if (codepageEntry.Entry.Text.Length > 0) {
+			if (((Entry)codepageEntry.Child).Text.Length > 0) {
 				// Get the codepage. If the user specified an encoding name, find it.
 				int trialCodePage = -1;
 				foreach (TextEncoding e in TextEncoding.SupportedEncodings) {

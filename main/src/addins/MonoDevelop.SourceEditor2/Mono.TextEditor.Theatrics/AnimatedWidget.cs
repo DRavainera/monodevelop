@@ -63,7 +63,7 @@ namespace Mono.TextEditor.Theatrics
 		private readonly bool horizontal;
 		private double percent;
 		private Rectangle widget_alloc;
-		private Pixmap canvas;
+		private Cairo.ImageSurface canvas;
 
 		public AnimatedWidget (Widget widget, uint duration, Easing easing, Blocking blocking, bool horizontal)
 		{
@@ -94,15 +94,21 @@ namespace Mono.TextEditor.Theatrics
 			if (!IsRealized) {
 				return;
 			}
-			
-			canvas = new Pixmap (GdkWindow, widget_alloc.Width, widget_alloc.Height);
-			if (Platform.IsMac) {
-				//FIXME: quick hack to make less ugly on Mac, because Mac GTK doesn't yet support offscreen drawing
-				canvas.DrawRectangle (Style.BackgroundGC (State), true, 0, 0, widget_alloc.Width, widget_alloc.Height);
-			} else {
-				canvas.DrawDrawable (Style.BackgroundGC (State), GdkWindow, widget_alloc.X, widget_alloc.Y, 0, 0, widget_alloc.Width, widget_alloc.Height);
+
+			canvas = new Cairo.ImageSurface (Cairo.Format.Argb32, widget_alloc.Width, widget_alloc.Height);
+			using (var c = new Cairo.Context (canvas)) {
+				if (Platform.IsMac || GdkWindow == null) {
+					//FIXME: quick hack to make less ugly on Mac, because Mac GTK doesn't yet support offscreen drawing
+					c.SetSourceColor (this.GetStyleBackgroundColor (StateType.Normal).ToCairoColor ());
+					c.Paint ();
+				} else {
+					using (var pix = new Gdk.Pixbuf (GdkWindow, widget_alloc.X, widget_alloc.Y, widget_alloc.Width, widget_alloc.Height)) {
+						Gdk.CairoHelper.SetSourcePixbuf (c, pix, 0, 0);
+						c.Paint ();
+					}
+				}
 			}
-			
+
 			if (AnimationState != AnimationState.Going) {
 				WidgetDestroyed (this, args);
 			}
@@ -118,38 +124,41 @@ namespace Mono.TextEditor.Theatrics
 			}
 		}
 
-		protected override void OnRealized ()
-		{
-			WidgetFlags |= WidgetFlags.Realized;
-			
-			Gdk.WindowAttr attributes = new Gdk.WindowAttr ();
-			attributes.WindowType = Gdk.WindowType.Child;
-			attributes.Wclass = Gdk.WindowClass.InputOutput;
-			attributes.EventMask = (int)Gdk.EventMask.ExposureMask;
-			GdkWindow = new Gdk.Window (Parent.GdkWindow, attributes, 0);
-			GdkWindow.UserData = Handle;
-			GdkWindow.Background = Style.Background (State);
-			Style.Attach (GdkWindow);
-		}
 
-		protected override void OnSizeRequested (ref Requisition requisition)
+
+		void ComputePrefSize (out int width, out int height)
 		{
 			if (Widget != null) {
 				Requisition req = Widget.SizeRequest ();
 				widget_alloc.Width = req.Width;
 				widget_alloc.Height = req.Height;
 			}
-			
+
 			if (horizontal) {
-				Width = Choreographer.PixelCompose (percent, widget_alloc.Width + StartPadding + EndPadding, Easing);
-				Height = widget_alloc.Height;
+				width = Choreographer.PixelCompose (percent, widget_alloc.Width + StartPadding + EndPadding, Easing);
+				height = widget_alloc.Height;
 			} else {
-				Width = widget_alloc.Width;
-				Height = Choreographer.PixelCompose (percent, widget_alloc.Height + StartPadding + EndPadding, Easing);
+				width = widget_alloc.Width;
+				height = Choreographer.PixelCompose (percent, widget_alloc.Height + StartPadding + EndPadding, Easing);
 			}
-			
-			requisition.Width = Width;
-			requisition.Height = Height;
+		}
+
+		protected override void OnGetPreferredWidth (out int minimumSize, out int naturalSize)
+		{
+			base.OnGetPreferredWidth (out minimumSize, out naturalSize);
+			int width, height;
+			ComputePrefSize (out width, out height);
+			WidthRequest = width;
+			HeightRequest = height;
+			minimumSize = naturalSize = width;
+		}
+
+		protected override void OnGetPreferredHeight (out int minimumSize, out int naturalSize)
+		{
+			base.OnGetPreferredHeight (out minimumSize, out naturalSize);
+			int width, height;
+			ComputePrefSize (out width, out height);
+			minimumSize = naturalSize = height;
 		}
 
 		protected override void OnSizeAllocated (Rectangle allocation)
@@ -176,14 +185,15 @@ namespace Mono.TextEditor.Theatrics
 			}
 		}
 
-		protected override bool OnExposeEvent (EventExpose evnt)
+		protected override bool OnDrawn (Cairo.Context cr)
 		{
 			if (canvas != null) {
-				GdkWindow.DrawDrawable (Style.BackgroundGC (State), canvas, 0, 0, widget_alloc.X, widget_alloc.Y, widget_alloc.Width, widget_alloc.Height);
+				cr.SetSourceSurface (canvas, widget_alloc.X, widget_alloc.Y);
+				cr.Paint ();
 				return true;
 			}
 
-			return base.OnExposeEvent (evnt);
+			return base.OnDrawn (cr);
 		}
 
 		protected override void ForAll (bool include_internals, Callback callback)

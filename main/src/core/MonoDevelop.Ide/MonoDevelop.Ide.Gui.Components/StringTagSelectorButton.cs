@@ -25,6 +25,7 @@
 // THE SOFTWARE.
 
 using System;
+using MenuButton = MonoDevelop.Components.MenuButton;
 using MonoDevelop.Core.StringParsing;
 using Gtk;
 using MonoDevelop.Core;

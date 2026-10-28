@@ -212,17 +212,18 @@ namespace MonoDevelop.Ide.Projects
 			this.AppendColumn ("", new Gtk.CellRendererText (), "text", 0);
 		}
 		
-		protected override bool OnExposeEvent (Gdk.EventExpose evnt)
+		protected override bool OnDrawn (Cairo.Context cr)
 		{
 			if (HasPolicies) {
-				return base.OnExposeEvent (evnt);
+				return base.OnDrawn (cr);
 			}
 			
-			var win = evnt.Window;
-			win.Clear ();
+			cr.Rectangle (0, 0, Allocation.Width, Allocation.Height);
+			cr.SetSourceColor (this.GetStyleBackgroundColor (Gtk.StateType.Normal).ToCairoColor ());
+			cr.Paint ();
 			if (string.IsNullOrEmpty (message)) {
 				if (ShowEmptyItem)
-					return base.OnExposeEvent (evnt);
+					return base.OnDrawn (cr);
 				return true;
 			}
 			
@@ -233,7 +234,9 @@ namespace MonoDevelop.Ide.Projects
 				var a = Allocation;
 				var x = (a.Width - w) / 2;
 				var y = (a.Height - h ) / 2;
-				win.DrawLayout (Style.TextGC (Gtk.StateType.Normal), x, y, layout);
+				cr.SetSourceColor (this.GetStyleColor (Gtk.StateType.Normal).ToCairoColor ());
+				cr.MoveTo (x, y);
+				Pango.CairoHelper.ShowLayout (cr, layout);
 			}
 			return true;
 		}

@@ -9,7 +9,7 @@ namespace Stetic
 	internal class ActionGroupToolbar: Gtk.Toolbar
 	{
 		Wrapper.ActionGroupCollection actionGroups;
-		Gtk.ComboBox combo;
+		Gtk.ComboBoxText combo;
 		bool updating;
 		ActionGroup currentGroup;
 		ArrayList internalButtons = new ArrayList ();
@@ -52,7 +52,7 @@ namespace Stetic
 			Orientation = Gtk.Orientation.Horizontal;
 			ToolbarStyle = Gtk.ToolbarStyle.BothHoriz;
 			
-			combo = Gtk.ComboBox.NewText ();
+			combo = new Gtk.ComboBoxText ();
 			
 			if (!singleGroupMode) {
 				combo.Changed += OnActiveChanged;
@@ -87,7 +87,7 @@ namespace Stetic
 			ShowAll ();
 		}
 		
-		public override void Dispose ()
+		protected override void Dispose (bool disposing)
 		{
 			if (combo == null)
 				return;
@@ -167,7 +167,7 @@ namespace Stetic
 				return;
 
 			while (combo.Model.IterNChildren () > 0)
-				combo.RemoveText (0);
+				combo.Remove (0);
 			if (actionGroups != null) {
 				foreach (ActionGroup group in actionGroups)
 					combo.AppendText (group.Name);

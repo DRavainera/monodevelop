@@ -25,9 +25,8 @@ namespace MonoDevelop.VersionControl.Subversion.Gui
 			this.Title = global::Mono.Unix.Catalog.GetString ("Subversion");
 			this.Modal = true;
 			this.Resizable = false;
-			this.AllowGrow = false;
 			// Internal child MonoDevelop.VersionControl.Subversion.Gui.UserPasswordDialog.VBox
-			global::Gtk.VBox w1 = this.VBox;
+			global::Gtk.Box w1 = this.ContentArea;
 			w1.Events = ((global::Gdk.EventMask)(256));
 			w1.Name = "dialog_VBox";
 			w1.BorderWidth = ((uint)(2));
@@ -127,7 +126,7 @@ namespace MonoDevelop.VersionControl.Subversion.Gui
 			global::Gtk.Box.BoxChild w10 = ((global::Gtk.Box.BoxChild)(w1 [this.vbox2]));
 			w10.Position = 0;
 			// Internal child MonoDevelop.VersionControl.Subversion.Gui.UserPasswordDialog.ActionArea
-			global::Gtk.HButtonBox w11 = this.ActionArea;
+			global::Gtk.ButtonBox w11 = this.ActionArea;
 			w11.Events = ((global::Gdk.EventMask)(256));
 			w11.Name = "MonoDevelop.VersionControl.Subversion.UserPasswordDialog_ActionArea";
 			w11.Spacing = 10;

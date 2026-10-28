@@ -76,22 +76,36 @@ namespace MonoDevelop.Components
 			// Do nothing.
 		}
 
-		protected override void OnSizeRequested (ref Requisition requisition)
+		protected override void OnGetPreferredWidth (out int minimum, out int natural)
 		{
-			base.OnSizeRequested (ref requisition);
+			base.OnGetPreferredWidth (out minimum, out natural);
 			if (box.Child != null) {
-				requisition = box.Child.SizeRequest ();
-				requisition.Height += 2 * box.Child.Style?.YThickness ?? 0;
+				var r = box.Child.SizeRequest ();
+				minimum = natural = r.Width;
 			}
-			else
-				requisition = box.SizeRequest ();
+			else {
+				var r = box.SizeRequest ();
+				minimum = natural = r.Width;
+			}
+		}
+
+		protected override void OnGetPreferredHeight (out int minimum, out int natural)
+		{
+			base.OnGetPreferredHeight (out minimum, out natural);
+			if (box.Child != null) {
+				var r = box.Child.SizeRequest ();
+				minimum = natural = r.Height + 2 * box.Child.Style?.Ythickness ?? 0;
+			}
+			else {
+				var r = box.SizeRequest ();
+				minimum = natural = r.Height;
+			}
 		}
 		
 		protected override void OnSizeAllocated (Gdk.Rectangle allocation)
 		{
 			base.OnSizeAllocated (allocation);
-			box.SizeRequest ();
-			box.Allocation = allocation;
+			box.SetAllocation (allocation);
 		}
 	}
 }

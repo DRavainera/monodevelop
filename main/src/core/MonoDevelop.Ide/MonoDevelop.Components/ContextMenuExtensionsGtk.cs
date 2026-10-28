@@ -71,26 +71,30 @@ namespace MonoDevelop.Components
 		}
 
 		// Gtk.Menu.Popup event seems not to be working correcty 
-		// so doing a work around using the expose event.
+		// so doing a work around using the show event.
 		class PoupHandlerWrapper
 		{
 			ContextMenu menu;
+			Gtk.Menu gtkMenu;
+			EventHandler shownHandler;
 
 			public PoupHandlerWrapper (ContextMenu menu, Gtk.Menu gtkMenu)
 			{
 				this.menu = menu;
-				gtkMenu.ExposeEvent += HandleExposeEvent;
+				this.gtkMenu = gtkMenu;
+				shownHandler = new EventHandler (HandleMenuShown);
+				gtkMenu.AddSignalHandler ("show", shownHandler, typeof (GLib.SignalArgs));
 			}
 
-			void HandleExposeEvent (object o, Gtk.ExposeEventArgs args)
+			void HandleMenuShown (object o, EventArgs args)
 			{
-				var gtkMenu = (Gtk.Menu)o;
-				gtkMenu.ExposeEvent -= HandleExposeEvent;
+				gtkMenu.RemoveSignalHandler ("show", shownHandler);
+				var theMenu = (Gtk.Menu)o;
 				int ox, oy;
-				gtkMenu.ParentWindow.GetOrigin (out ox, out oy);
+				theMenu.ParentWindow.GetOrigin (out ox, out oy);
 				int rx, ry;
 				IdeApp.Workbench.RootWindow.GdkWindow.GetOrigin (out rx, out ry);
-				menu.Items [0].FireSelectedEvent (new Xwt.Rectangle (ox - rx, oy - ry, gtkMenu.Allocation.Width, gtkMenu.Allocation.Height));
+				menu.Items [0].FireSelectedEvent (new Xwt.Rectangle (ox - rx, oy - ry, theMenu.Allocation.Width, theMenu.Allocation.Height));
 			}
 		}
 

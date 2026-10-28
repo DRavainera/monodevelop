@@ -57,24 +57,21 @@ namespace MonoDevelop.Components
 		{
 			if (!isSupported)
 				throw new NotSupportedException ();
-			var signal = GLib.Signal.Lookup (widget, "gesture-magnify-event", typeof(GestureMagnifyEventArgs));
-			signal.AddDelegate (new EventHandler<GestureMagnifyEventArgs> (handler));
+			widget.AddSignalHandler ("gesture-magnify-event", new EventHandler<GestureMagnifyEventArgs> (handler), typeof (GestureMagnifyEventArgs));
 		}
 
 		public static void AddGestureRotateHandler (this Gtk.Widget widget, EventHandler<GestureRotateEventArgs> handler)
 		{
 			if (!isSupported)
 				throw new NotSupportedException ();
-			var signal = GLib.Signal.Lookup (widget, "gesture-rotate-event", typeof(GestureRotateEventArgs));
-			signal.AddDelegate (new EventHandler<GestureRotateEventArgs> (handler));
+			widget.AddSignalHandler ("gesture-rotate-event", new EventHandler<GestureRotateEventArgs> (handler), typeof (GestureRotateEventArgs));
 		}
 
 		public static void AddGestureSwipeHandler (this Gtk.Widget widget, EventHandler<GestureSwipeEventArgs> handler)
 		{
 			if (!isSupported)
 				throw new NotSupportedException ();
-			var signal = GLib.Signal.Lookup (widget, "gesture-swipe-event", typeof(GestureSwipeEventArgs));
-			signal.AddDelegate (new EventHandler<GestureSwipeEventArgs> (handler));
+			widget.AddSignalHandler ("gesture-swipe-event", new EventHandler<GestureSwipeEventArgs> (handler), typeof (GestureSwipeEventArgs));
 		}
 	}
 

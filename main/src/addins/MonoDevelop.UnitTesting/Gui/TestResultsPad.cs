@@ -536,7 +536,7 @@ namespace MonoDevelop.UnitTesting
 				if (last == null)
 					return;
 
-				Gtk.TreeModel foo;
+				Gtk.ITreeModel foo;
 				Gtk.TreeIter iter;
 				if (!failuresTreeView.Selection.GetSelected (out foo, out iter))
 					return;
@@ -560,7 +560,7 @@ namespace MonoDevelop.UnitTesting
 					return;
 				var clipboard = Clipboard.Get (Gdk.Atom.Intern ("CLIPBOARD", false));
 
-				Gtk.TreeModel foo;
+				Gtk.ITreeModel foo;
 				Gtk.TreeIter iter;
 				if (!failuresTreeView.Selection.GetSelected (out foo, out iter))
 					return;
@@ -588,7 +588,7 @@ namespace MonoDevelop.UnitTesting
 			if (test != null) {
 				var last = test.GetLastResult ();
 
-				Gtk.TreeModel foo;
+				Gtk.ITreeModel foo;
 				Gtk.TreeIter iter;
 				if (!failuresTreeView.Selection.GetSelected (out foo, out iter)) {
 					info.Enabled = false;
@@ -671,7 +671,7 @@ namespace MonoDevelop.UnitTesting
 		
 		UnitTest GetSelectedTest ()
 		{
-			Gtk.TreeModel foo;
+			Gtk.ITreeModel foo;
 			Gtk.TreeIter iter;
 			if (!failuresTreeView.Selection.GetSelected (out foo, out iter))
 				return null;

@@ -24,14 +24,15 @@
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
     <ProjectGuid>{7525BB88-6142-4A26-93B9-A30C6983390A}</ProjectGuid>
     <OutputType>Library</OutputType>
-    <BuildInfo>..\..\..\build\bin\buildinfo</BuildInfo>
+    <BuildInfo>..\..\..\build\buildinfo</BuildInfo>
     <VcRevision>..\..\..\vcrevision</VcRevision>
     <ConfigureScript>$(MSBuildProjectDirectory)\..\..\..\..\scripts\configure.cs</ConfigureScript>
     <ConfigureScriptExe>$(MSBuildProjectDirectory)\..\..\..\..\scripts\configure.exe</ConfigureScriptExe>
     <FullBuildInfo>fullbuildinfo</FullBuildInfo>
     <MonoLauncher Condition=" '$(VisualStudioVersion)' == '' ">mono </MonoLauncher>
     <TargetFrameworkVersion>$(MDFrameworkVersion)</TargetFrameworkVersion>
-    <OutputPath>..\..\..\build\bin\</OutputPath>
+    <OutputPath>..\..\..\build\</OutputPath>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
   <Choose>

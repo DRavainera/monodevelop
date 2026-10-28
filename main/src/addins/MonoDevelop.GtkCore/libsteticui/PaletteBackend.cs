@@ -34,7 +34,7 @@ namespace Stetic {
 			ShowGroup ("actions", Catalog.GetString ("Actions"));
 		}
 		
-		public override void Dispose ()
+		protected override void Dispose (bool disposing)
 		{
 			Registry.RegistryChanged -= OnRegistryChanged;
 			
@@ -300,13 +300,13 @@ namespace Stetic {
 			get { return group; }
 		}
 		
-		public override void Dispose ()
+		protected override void Dispose (bool disposing)
 		{
 			group.ActionAdded -= OnActionGroupChanged;
 			group.ActionRemoved -= OnActionGroupChanged;
 			group.ActionChanged -= OnActionGroupChanged;
 			group.ObjectChanged -= OnActionGroupChanged;
-			base.Dispose ();
+			base.Dispose (disposing);
 		}
 		
 		public void Fill ()
@@ -366,11 +366,11 @@ namespace Stetic {
 			Update ();
 		}
 		
-		public override void Dispose ()
+		protected override void Dispose (bool disposing)
 		{
 			foreach (ActionPaletteGroup grp in Children)
 				grp.Destroy ();
-			base.Dispose ();
+			base.Dispose (disposing);
 		}
 		
 		public void Update ()

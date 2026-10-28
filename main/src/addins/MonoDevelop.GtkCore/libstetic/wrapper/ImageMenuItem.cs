@@ -17,7 +17,7 @@ namespace Stetic.Wrapper {
 			bool use_stock = (bool)GladeUtils.ExtractProperty (elem, "use_stock", false);
 			if (use_stock) {
 				string label = (string)GladeUtils.GetProperty (elem, "label", "");
-				stockItem = Gtk.Stock.Lookup (label);
+				stockItem = StockCompat.Lookup (label);
 				if (stockItem.Label != null)
 					GladeUtils.ExtractProperty (elem, "label", "");
 			}
@@ -42,7 +42,7 @@ namespace Stetic.Wrapper {
 				Gtk.StockItem stockItem = Gtk.StockItem.Zero;
 
 				if (image.StartsWith ("stock:"))
-					stockItem = Gtk.Stock.Lookup (image.Substring (6));
+					stockItem = StockCompat.Lookup (image.Substring (6));
 
 				if (stockItem.StockId != null) {
 					icon = new Gtk.Image (stockItem.StockId, Gtk.IconSize.Menu);

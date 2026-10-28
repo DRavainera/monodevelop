@@ -28,6 +28,7 @@
 
 using System;
 using Gtk;
+using Cairo;
 
 using MonoDevelop.Components.Docking;
 using MonoDevelop.Core;
@@ -171,7 +172,7 @@ namespace MonoDevelop.DesignerSupport
 
 			public WrappedCentreLabel ()
 			{
-				WidgetFlags |= Gtk.WidgetFlags.NoWindow;
+				this.HasWindow = false;
 			}
 
 			public WrappedCentreLabel (string text)
@@ -207,14 +208,15 @@ namespace MonoDevelop.DesignerSupport
 				layout.SetText (text);
 			}
 
-			protected override bool OnExposeEvent (Gdk.EventExpose evnt)
+			protected override bool OnDrawn (Cairo.Context cr)
 			{
-				if (evnt.Window != GdkWindow || layout == null) {
-					return base.OnExposeEvent (evnt);
+				if (layout == null) {
+					return base.OnDrawn (cr);
 				}
 				layout.Width = (int)(Allocation.Width * 2 / 3 * Pango.Scale.PangoScale);
-				Gtk.Style.PaintLayout (Style, GdkWindow, State, false, evnt.Area,
-				    this, null, Allocation.Width * 1 / 6 + Allocation.X , 12 + Allocation.Y, layout);
+				cr.SetSourceColor (this.StyleContext.GetColor (this.StateFlags).ToCairoColor ());
+				cr.MoveTo (Allocation.Width * 1 / 6 + Allocation.X, 12 + Allocation.Y);
+				Pango.CairoHelper.ShowLayout (cr, layout);
 				return true;
 			}
 
@@ -225,7 +227,7 @@ namespace MonoDevelop.DesignerSupport
 				base.OnStyleSet (previous_style);
 			}
 
-			public override void Dispose ()
+			protected override void Dispose (bool disposing)
 			{
 				if (layout != null) {
 					layout.Dispose ();

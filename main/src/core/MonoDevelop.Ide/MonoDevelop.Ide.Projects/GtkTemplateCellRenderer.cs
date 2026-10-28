@@ -94,9 +94,9 @@ namespace MonoDevelop.Ide.Projects
 			return Platform.IsMac && (Platform.OSVersion >= MacSystemInformation.Yosemite);
 		}
 
-		public override void GetSize (Widget widget, ref Rectangle cell_area, out int x_offset, out int y_offset, out int width, out int height)
+		protected override void OnGetSize (Widget widget, ref Rectangle cell_area, out int x_offset, out int y_offset, out int width, out int height)
 		{
-			base.GetSize (widget, ref cell_area, out x_offset, out y_offset, out width, out height);
+			base.OnGetSize (widget, ref cell_area, out x_offset, out y_offset, out width, out height);
 			if (TemplateIcon != null) {
 				height = (int)TemplateIcon.Height + ((int)Ypad * 2);
 			} else {
@@ -104,26 +104,26 @@ namespace MonoDevelop.Ide.Projects
 			}
 		}
 
-		protected override void Render (Drawable window, Widget widget, Rectangle background_area, Rectangle cell_area, Rectangle expose_area, CellRendererState flags)
+		protected override void OnRender (Cairo.Context cr, Widget widget, Rectangle background_area, Rectangle cell_area, CellRendererState flags)
 		{
 			if (Template == null) {
-				DrawTemplateCategoryText (window, widget, cell_area, flags);
+				DrawTemplateCategoryText (cr, widget, cell_area, flags);
 				return;
 			}
 
-			using (var ctx = CairoHelper.Create (window)) {
+			{
 				using (var layout = new Pango.Layout (widget.PangoContext)) {
 
-					Rectangle iconRect = DrawIcon (ctx, widget, cell_area, flags);
+					Rectangle iconRect = DrawIcon (cr, widget, cell_area, flags);
 
-					DrawTemplateNameText (window, widget, cell_area, iconRect, flags);
+					DrawTemplateNameText (cr, widget, cell_area, iconRect, flags);
 					if (RenderRecentTemplate)
-						DrawCategoryText (ctx, widget, cell_area, iconRect, flags);
+						DrawCategoryText (cr, widget, cell_area, iconRect, flags);
 				}
 			}
 		}
 
-		void DrawTemplateCategoryText (Drawable window, Widget widget, Rectangle cell_area, CellRendererState flags)
+		void DrawTemplateCategoryText (Cairo.Context cr, Widget widget, Rectangle cell_area, CellRendererState flags)
 		{
 			StateType state = GetState (widget, flags);
 
@@ -140,7 +140,10 @@ namespace MonoDevelop.Ide.Projects
 
 				int textX = cell_area.X + (int)Xpad + categoryTextPaddingX;
 				int textY = cell_area.Y + (cell_area.Height - h) / 2 + groupTemplateHeadingYOffset;
-				window.DrawLayout (widget.Style.TextGC (state), textX, textY, layout);
+				Gdk.RGBA fg = widget.StyleContext.GetColor (ToStateFlags (state));
+				cr.SetSourceColor (new Cairo.Color ((float) fg.Red, (float) fg.Green, (float) fg.Blue));
+				cr.MoveTo (textX, textY);
+				Pango.CairoHelper.ShowLayout (cr, layout);
 			}
 		}
 
@@ -156,7 +159,7 @@ namespace MonoDevelop.Ide.Projects
 			return iconRect;
 		}
 
-		void DrawTemplateNameText (Drawable window, Widget widget, Rectangle cell_area, Rectangle iconRect, CellRendererState flags)
+		void DrawTemplateNameText (Cairo.Context cr, Widget widget, Rectangle cell_area, Rectangle iconRect, CellRendererState flags)
 		{
 			StateType state = GetState (widget, flags);
 
@@ -172,7 +175,10 @@ namespace MonoDevelop.Ide.Projects
 				layout.GetPixelSize (out w, out h);
 				int textY = cell_area.Y + (RenderRecentTemplate ? (2) : (cell_area.Height - h) / 2);
 
-				window.DrawLayout (widget.Style.TextGC (state), iconRect.Right + iconTextPadding, textY, layout);
+				Gdk.RGBA fg = widget.StyleContext.GetColor (ToStateFlags (state));
+				cr.SetSourceColor (new Cairo.Color ((float) fg.Red, (float) fg.Green, (float) fg.Blue));
+				cr.MoveTo (iconRect.Right + iconTextPadding, textY);
+				Pango.CairoHelper.ShowLayout (cr, layout);
 			}
 		}
 
@@ -217,6 +223,17 @@ namespace MonoDevelop.Ide.Projects
 		static string MarkupTopLevelCategoryName (string name)
 		{
 			return "<span font_weight='bold'>" + GLib.Markup.EscapeText (name) + "</span>";
+		}
+
+		static Gtk.StateFlags ToStateFlags (StateType state)
+		{
+			switch (state) {
+				case StateType.Selected: return Gtk.StateFlags.Selected;
+				case StateType.Active: return Gtk.StateFlags.Active;
+				case StateType.Prelight: return Gtk.StateFlags.Prelight;
+				case StateType.Insensitive: return Gtk.StateFlags.Insensitive;
+				default: return Gtk.StateFlags.Normal;
+			}
 		}
 	}
 }

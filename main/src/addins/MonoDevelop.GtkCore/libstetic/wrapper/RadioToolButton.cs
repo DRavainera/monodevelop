@@ -9,7 +9,7 @@ namespace Stetic.Wrapper {
 
 		public static new Gtk.ToolButton CreateInstance ()
 		{
-			return new Gtk.RadioToolButton (new GLib.SList (IntPtr.Zero), Gtk.Stock.SortAscending);
+			return new Gtk.RadioToolButton (new Gtk.RadioToolButton [0], StockCompat.SortAscending);
 		}
 
 		static RadioGroupManager GroupManager = new RadioGroupManager (typeof (Gtk.RadioToolButton));

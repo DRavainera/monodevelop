@@ -13,7 +13,6 @@ namespace Stetic {
 			undoId = WidgetUtils.GetUndoId ();
 			DND.DestSet (this, true);
 			Events |= Gdk.EventMask.ButtonPressMask;
-			WidgetFlags |= WidgetFlags.AppPaintable;
 		}
 		
 		internal string UndoId {
@@ -23,13 +22,22 @@ namespace Stetic {
 
 		const int minSize = 10;
 
-		protected override void OnSizeRequested (ref Requisition req)
+		protected override void OnGetPreferredWidth (out int minimum, out int natural)
 		{
-			base.OnSizeRequested (ref req);
-			if (req.Width <= 0)
-				req.Width = minSize;
-			if (req.Height <= 0)
-				req.Height = minSize;
+			base.OnGetPreferredWidth (out minimum, out natural);
+			if (minimum <= 0)
+				minimum = minSize;
+			if (natural <= 0)
+				natural = minSize;
+		}
+		
+		protected override void OnGetPreferredHeight (out int minimum, out int natural)
+		{
+			base.OnGetPreferredHeight (out minimum, out natural);
+			if (minimum <= 0)
+				minimum = minSize;
+			if (natural <= 0)
+				natural = minSize;
 		}
 
 		protected override void OnRealized ()
@@ -37,13 +45,13 @@ namespace Stetic {
 			base.OnRealized ();
 		}
 
-		protected override bool OnExposeEvent (Gdk.EventExpose evt)
+		protected override bool OnDrawn (Cairo.Context cr)
 		{
 			if (!IsDrawable)
 				return false;
 
-			int width, height;
-			GdkWindow.GetSize (out width, out height);
+			int width = GdkWindow.Width;
+			int height = GdkWindow.Height;
 			
 			Gdk.Rectangle a = new Gdk.Rectangle (0,0,width,height);
 			
@@ -60,38 +68,35 @@ namespace Stetic {
 			Cairo.Color back2 = new Cairo.Color (greyb2, greyb2, greyb2);
 			Cairo.Color cdark = new Cairo.Color (grey, grey, grey, 1);
 			Cairo.Color clight = new Cairo.Color (grey, grey, grey, 0);
-			using (Cairo.Context cr = Gdk.CairoHelper.Create (evt.Window)) {
 			
-				DrawGradient (cr, rect, 0, 0, 1, 1, back1, back2);
-				
-				rect.X = a.X;
-				rect.Y = a.Y;
-				rect.Height = ssLT;
-				rect.Width = a.Width;
-				DrawGradient (cr, rect, 0, 0, 0, 1, cdark, clight);
+			DrawGradient (cr, rect, 0, 0, 1, 1, back1, back2);
+			
+			rect.X = a.X;
+			rect.Y = a.Y;
+			rect.Height = ssLT;
+			rect.Width = a.Width;
+			DrawGradient (cr, rect, 0, 0, 0, 1, cdark, clight);
 
-				rect.Y = a.Bottom - ssRB;
-				rect.Height = ssRB;
-				DrawGradient (cr, rect, 0, 0, 0, 1, clight, cdark);
+			rect.Y = a.Bottom - ssRB;
+			rect.Height = ssRB;
+			DrawGradient (cr, rect, 0, 0, 0, 1, clight, cdark);
 
-				rect.X = a.X;
-				rect.Y = a.Y;
-				rect.Width = ssLT;
-				rect.Height = a.Height;
-				DrawGradient (cr, rect, 0, 0, 1, 0, cdark, clight);
+			rect.X = a.X;
+			rect.Y = a.Y;
+			rect.Width = ssLT;
+			rect.Height = a.Height;
+			DrawGradient (cr, rect, 0, 0, 1, 0, cdark, clight);
 
-				rect.X = a.Right - ssRB;
-				rect.Width = ssRB;
-				DrawGradient (cr, rect, 0, 0, 1, 0, clight, cdark);
-				
-				Gdk.GC gc = new Gdk.GC (GdkWindow);
-				gc.RgbBgColor = new Gdk.Color (b2,b2,b2);
-				gc.RgbFgColor = new Gdk.Color (b2,b2,b2);
-				GdkWindow.DrawRectangle (gc, false, a.X, a.Y, a.Width, a.Height);
-				gc.Dispose ();
-			}
+			rect.X = a.Right - ssRB;
+			rect.Width = ssRB;
+			DrawGradient (cr, rect, 1, 0, 1, 1, clight, cdark);
+			
+			Cairo.Color center = new Cairo.Color ((float) b2 / 255f, (float) b2 / 255f, (float) b2 / 255f);
+			cr.SetSourceColor (center);
+			cr.Rectangle (a.X, a.Y, a.Width, a.Height);
+			cr.Fill ();
 
-			return base.OnExposeEvent (evt);
+			return base.OnDrawn (cr);
 		}
 		
 		void DrawGradient (Cairo.Context cr, Gdk.Rectangle rect, int fx, int fy, int fw, int fh, Cairo.Color c1, Cairo.Color c2)

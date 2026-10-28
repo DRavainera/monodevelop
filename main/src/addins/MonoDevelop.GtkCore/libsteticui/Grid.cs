@@ -11,7 +11,7 @@ namespace Stetic {
 			Stetic.Editor.GtkWorkarounds.FixContainerLeak (this);
 			
 			BorderWidth = 2;
-			WidgetFlags |= WidgetFlags.NoWindow;
+			this.HasWindow = false;
 			lines = new ArrayList ();
 			group = null;
 		}
@@ -92,7 +92,7 @@ namespace Stetic {
 
 		public void Append (Widget w, string description)
 		{
-			if ((w.WidgetFlags & WidgetFlags.NoWindow) != 0) {
+			if (!w.HasWindow) {
 				Gtk.EventBox ebox = new Gtk.EventBox ();
 				ebox.Add (w);
 				ebox.Show ();
@@ -261,8 +261,21 @@ namespace Stetic {
 			req.Width += 2 * (int)BorderWidth;
 		}
 
-		protected override void OnSizeRequested (ref Gtk.Requisition req)
+		protected override void OnGetPreferredWidth (out int minimum, out int natural)
 		{
+			Gtk.Requisition req = ComputeSizeRequest ();
+			minimum = natural = req.Width;
+		}
+
+		protected override void OnGetPreferredHeight (out int minimum, out int natural)
+		{
+			Gtk.Requisition req = ComputeSizeRequest ();
+			minimum = natural = req.Height;
+		}
+
+		Gtk.Requisition ComputeSizeRequest ()
+		{
+			Gtk.Requisition req = new Gtk.Requisition ();
 			lwidth = ewidth = 0;
 
 			if (group != null) {
@@ -271,6 +284,7 @@ namespace Stetic {
 			}
 
 			SizeRequestGrid (this, ref req);
+			return req;
 		}
 
 		protected override void OnSizeAllocated (Gdk.Rectangle alloc)

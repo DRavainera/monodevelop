@@ -96,16 +96,6 @@ namespace MonoDevelop.Ide.Editor.Highlighting
 			}
 		}
 
-		internal Gdk.GC CreateBgGC (Gdk.Drawable drawable)
-		{
-			return new Gdk.GC (drawable) { RgbBgColor = (HslColor)Foreground, RgbFgColor = (HslColor)Background };
-		}
-		
-		internal Gdk.GC CreateFgGC (Gdk.Drawable drawable)
-		{
-			return new Gdk.GC (drawable) { RgbBgColor = (HslColor)Background, RgbFgColor = (HslColor)Foreground };
-		}
-
 		public override string ToString ()
 		{
 			return string.Format ("[ChunkStyle: ScopeStack={0}, CairoColor={1}, CairoBackgroundColor={2}, FontWeight={3}, FontStyle={4}]", ScopeStack, Foreground, Background, FontWeight, FontStyle);

@@ -96,7 +96,7 @@ namespace MonoDevelop.Ide.Gui.Dialogs
 			sc.ShadowType = ShadowType.In;
 
 			sc.BorderWidth = 6;
-			this.VBox.PackStart (sc, true, true, 6);
+			this.ContentArea.PackStart (sc, true, true, 6);
 
 			btnSaveAndQuit = new Button (closeWorkspace ? GettextCatalog.GetString ("_Save and Quit") : GettextCatalog.GetString ("_Save and Close"));
 			btnSaveAndQuit.Accessible.Name = "Dialog.DirtyFiles.SaveAndQuit";
@@ -130,9 +130,9 @@ namespace MonoDevelop.Ide.Gui.Dialogs
 			btnQuit.Clicked += Quit;
 			btnCancel.Clicked += Cancel;
 
-			this.ActionArea.PackStart (btnCancel);
-			this.ActionArea.PackStart (btnQuit);
-			this.ActionArea.PackStart (btnSaveAndQuit);
+			this.ActionArea.PackStart (btnCancel, false, false, 0);
+			this.ActionArea.PackStart (btnQuit, false, false, 0);
+			this.ActionArea.PackStart (btnSaveAndQuit, false, false, 0);
 			this.SetDefaultSize (300, 200);
 			this.Child.ShowAll ();
 		}
@@ -144,11 +144,11 @@ namespace MonoDevelop.Ide.Gui.Dialogs
 			btnCancel.Clicked -= Cancel;
 			if (togRender != null) {
 				togRender.Toggled -= toggled;
-				togRender.Destroy ();
+				togRender.Dispose ();
 				togRender = null;
 			}
 			if (textRender != null) {
-				textRender.Destroy ();
+				textRender.Dispose ();
 				textRender = null;
 			}
 			base.OnDestroyed ();
@@ -159,7 +159,7 @@ namespace MonoDevelop.Ide.Gui.Dialogs
 			Sensitive = false;
 
 			List<Task> saveTasks = new List<Task> ();
-			tsFiles.Foreach (delegate (TreeModel model, TreePath path, TreeIter iter) {
+			tsFiles.Foreach (delegate (ITreeModel model, TreePath path, TreeIter iter) {
 				var doc = tsFiles.GetValue (iter, 2) as Document;
 				if (doc == null)
 					return false;

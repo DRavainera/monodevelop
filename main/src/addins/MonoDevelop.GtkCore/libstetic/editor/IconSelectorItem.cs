@@ -37,20 +37,31 @@ namespace Stetic.Editor
 			this.Events |= Gdk.EventMask.PointerMotionMask;
 		}
 		
-		protected override void OnSizeRequested (ref Gtk.Requisition req)
+		protected override void OnGetPreferredWidth (out int minimum, out int natural)
 		{
 			if (!inited) {
 				CreateIcons ();
 				inited = true;
 			}
 			
-			base.OnSizeRequested (ref req);
+			base.OnGetPreferredWidth (out minimum, out natural);
 			CalcSize ();
 			
-			Gtk.Requisition nr = new Gtk.Requisition ();
-			nr.Width = xmax;
-			nr.Height = ymax;
-			req = nr;
+			minimum = xmax;
+			natural = xmax;
+		}
+		
+		protected override void OnGetPreferredHeight (out int minimum, out int natural)
+		{
+			if (!inited) {
+				CreateIcons ();
+				inited = true;
+			}
+			
+			base.OnGetPreferredHeight (out minimum, out natural);
+			
+			minimum = ymax;
+			natural = ymax;
 		}
 		
 		protected virtual void CreateIcons ()
@@ -138,10 +149,11 @@ namespace Stetic.Editor
 			}
 		}
 		
-		public override void Dispose ()
+		protected override void Dispose (bool disposing)
 		{
-			HideTip ();
-			base.Dispose ();
+			if (disposing)
+				HideTip ();
+			base.Dispose (disposing);
 		}
 		
 		protected override bool OnLeaveNotifyEvent (Gdk.EventCrossing ev)
@@ -155,48 +167,54 @@ namespace Stetic.Editor
 			HideTip ();
 		}
 		
-		protected override bool OnExposeEvent (Gdk.EventExpose ev)
+		protected override bool OnDrawn (Cairo.Context cr)
 		{
-			Draw ();
-			return true;
+			Draw (cr);
+			return base.OnDrawn (cr);
 		}
 		
-		void Draw ()
+		void Draw (Cairo.Context cr)
 		{
 			int a,b;
-			Expose  (true, -1, -1, out a, out b);
+			Expose  (true, -1, -1, cr, out a, out b);
 		}
 		
 		void CalcSize ()
 		{
 			int a,b;
-			Expose (false, -1, -1, out a, out b);
+			Expose (false, -1, -1, null, out a, out b);
 		}
 		
 		void GetIconIndex (int x, int y, out int index, out int ix, out int iy)
 		{
-			index = Expose (false, x, y, out ix, out iy);
+			index = Expose (false, x, y, null, out ix, out iy);
 		}
 		
-		int Expose (bool draw, int testx, int testy, out int ix, out int iy)
+		int Expose (bool draw, int testx, int testy, Cairo.Context cr, out int ix, out int iy)
 		{
 			int x = spacing;
 			int y = spacing;
 			int sx = spacing;
 			int maxx = columns * (iconSize + spacing) + spacing;
 			bool calcSize = (testx == -1);
-			int w, h, tborder = 1;
-			using (var layout = new Pango.Layout (this.PangoContext)) {
-				Pango.FontDescription des = this.Style.FontDescription.Copy ();
+			int w, h, tborder = 1;
+			using (var layout = new Pango.Layout (this.PangoContext)) { 
+				Pango.FontDescription des = this.PangoContext.FontDescription.Copy ();
 				des.Size = 10 * (int)Pango.Scale.PangoScale;
 				layout.FontDescription = des;
 				layout.SetMarkup (title);
 				layout.Width = -1;
 				layout.GetPixelSize (out w, out h);
-				if (draw) {
-					GdkWindow.DrawRectangle (this.Style.DarkGC (Gtk.StateType.Normal), true, x, y, Allocation.Width + tborder * 2, h + tborder * 2);
-					GdkWindow.DrawLayout (this.Style.ForegroundGC (Gtk.StateType.Normal), x + tborder + 2, y + tborder, layout);
-			}
+				if (cr != null) {
+					Gdk.RGBA dark = StyleContext.GetColor (Gtk.StateFlags.Normal);
+					cr.SetSourceColor (new Cairo.Color ((float) dark.Red, (float) dark.Green, (float) dark.Blue));
+					cr.Rectangle (x, y, Allocation.Width + tborder * 2, h + tborder * 2);
+					cr.Fill ();
+					Gdk.RGBA fg = StyleContext.GetColor (Gtk.StateFlags.Normal);
+					cr.SetSourceColor (new Cairo.Color ((float) fg.Red, (float) fg.Green, (float) fg.Blue));
+					cr.MoveTo (x + tborder + 2, y + tborder);
+					Pango.CairoHelper.ShowLayout (cr, layout);
+				}
 			}
 			
 			if (calcSize)
@@ -214,9 +232,13 @@ namespace Stetic.Editor
 					}
 					x = sx;
 					y -= spacing;
-					if (draw) {
-						Gdk.Rectangle rect = new Gdk.Rectangle (0, y+(sectionGap/2), Allocation.Width - x, 1);
-						Gtk.Style.PaintHline (this.Style, this.GdkWindow, Gtk.StateType.Normal, rect, this, "", rect.X, rect.Right, rect.Y);
+					if (cr != null) {
+						Gdk.RGBA c = StyleContext.GetColor (Gtk.StateFlags.Normal);
+						cr.SetSourceColor (new Cairo.Color ((float) c.Red, (float) c.Green, (float) c.Blue));
+						cr.LineWidth = 1;
+						cr.MoveTo (x + 0.5, y + (sectionGap / 2) + 0.5);
+						cr.LineTo (Allocation.Width + 0.5, y + (sectionGap / 2) + 0.5);
+						cr.Stroke ();
 					}
 					y += sectionGap;
 					continue;
@@ -226,9 +248,13 @@ namespace Stetic.Editor
 					if (x == sx)
 						continue;
 					x += spacing;
-					if (draw) {
-						Gdk.Rectangle rect = new Gdk.Rectangle (x, y, 1, iconSize);
-						Gtk.Style.PaintVline (this.Style, this.GdkWindow, Gtk.StateType.Normal, rect, this, "", rect.Y, rect.Bottom, rect.X);
+					if (cr != null) {
+						Gdk.RGBA c = StyleContext.GetColor (Gtk.StateFlags.Normal);
+						cr.SetSourceColor (new Cairo.Color ((float) c.Red, (float) c.Green, (float) c.Blue));
+						cr.LineWidth = 1;
+						cr.MoveTo (x + 0.5, y);
+						cr.LineTo (x + 0.5, y + iconSize);
+						cr.Stroke ();
 					}
 					x += spacing*2;
 					continue;
@@ -240,11 +266,14 @@ namespace Stetic.Editor
 					return n;
 				}
 					
-				if (draw) {
-					Gtk.StateType state = (n == selIndex) ? Gtk.StateType.Selected : Gtk.StateType.Normal;
-					if (n == selIndex)
-						GdkWindow.DrawRectangle (this.Style.BackgroundGC (state), true, x-spacing, y-spacing, iconSize + spacing*2, iconSize + spacing*2);
-					GdkWindow.DrawPixbuf (this.Style.ForegroundGC (state), pix, 0, 0, x, y, pix.Width, pix.Height, Gdk.RgbDither.None, 0, 0);
+				if (cr != null) {
+					if (n == selIndex) {
+						Gdk.RGBA selbg = StyleContext.GetBackgroundColor (Gtk.StateFlags.Selected);
+						cr.SetSourceColor (new Cairo.Color ((float) selbg.Red, (float) selbg.Green, (float) selbg.Blue));
+						cr.Rectangle (x - spacing, y - spacing, iconSize + spacing*2, iconSize + spacing*2);
+						cr.Fill ();
+					}
+					DrawPixbuf (cr, pix, x, y);
 				}
 				
 				x += (iconSize + spacing);
@@ -265,6 +294,25 @@ namespace Stetic.Editor
 			ix = iy = 0;
 			return -1;
 		}
+		
+		internal static void DrawPixbuf (Cairo.Context cr, Gdk.Pixbuf pix, int dx, int dy)
+		{
+			if (pix == null || pix.Width <= 0 || pix.Height <= 0)
+				return;
+			
+			int stride = pix.Rowstride;
+			byte[] data = new byte [stride * pix.Height];
+			System.Runtime.InteropServices.Marshal.Copy (pix.Pixels, data, 0, data.Length);
+			
+			Cairo.Format fmt = pix.HasAlpha ? Cairo.Format.Argb32 : Cairo.Format.Rgb24;
+			using (var surface = new Cairo.ImageSurface (data, fmt, pix.Width, pix.Height, stride)) {
+				cr.Save ();
+				cr.Translate (dx, dy);
+				cr.SetSource (surface);
+				cr.Paint ();
+				cr.Restore ();
+			}
+		}
 	}
 	
 	class TipWindow: Gtk.Window
@@ -273,12 +321,25 @@ namespace Stetic.Editor
 		{
 		}
 		
-		protected override bool OnExposeEvent (Gdk.EventExpose ev)
+		protected override bool OnDrawn (Cairo.Context cr)
 		{
-			base.OnExposeEvent (ev);
-			Gtk.Requisition req = SizeRequest ();
-			Gtk.Style.PaintFlatBox (this.Style, this.GdkWindow, Gtk.StateType.Normal, Gtk.ShadowType.Out, Gdk.Rectangle.Zero, this, "tooltip", 0, 0, req.Width, req.Height);
-			return true;
+			bool r = base.OnDrawn (cr);
+			
+			int w = Allocation.Width;
+			int h = Allocation.Height;
+			
+			Gdk.RGBA bg = StyleContext.GetBackgroundColor (Gtk.StateFlags.Normal);
+			cr.SetSourceColor (new Cairo.Color ((float) bg.Red, (float) bg.Green, (float) bg.Blue));
+			cr.Rectangle (0, 0, w, h);
+			cr.Fill ();
+			
+			Gdk.RGBA fg = StyleContext.GetColor (Gtk.StateFlags.Normal);
+			cr.SetSourceColor (new Cairo.Color ((float) fg.Red, (float) fg.Green, (float) fg.Blue));
+			cr.LineWidth = 1;
+			cr.Rectangle (0.5, 0.5, w - 1, h - 1);
+			cr.Stroke ();
+			
+			return r;
 		}
 	}
 }
