@@ -56,6 +56,11 @@ namespace MonoDevelop.Components.Docking
 		
 		public DockContainer (DockFrame frame)
 		{
+			// GTK3: this container draws on the parent window and must declare itself
+			// windowless, otherwise the default realize vfunc aborts (gtk_widget_real_realize
+			// asserts the widget has no window of its own).
+			HasWindow = false;
+
 			GtkWorkarounds.FixContainerLeak (this);
 
 			Accessible.SetRole (AtkCocoa.Roles.AXSplitGroup);
@@ -157,12 +162,8 @@ namespace MonoDevelop.Components.Docking
 			if (layout == null)
 				return;
 			
-			if (this.GdkWindow != null)
-				this.GdkWindow.MoveResize (rect);
-			
-			// This container has its own window, so allocation of children
-			// is relative to 0,0
-			rect.X = rect.Y = 0;
+			// GTK3: this is a windowless container, so child allocations are expressed
+			// in the parent window coordinate space (rect keeps its absolute origin).
 			LayoutWidgets ();
 			layout.Size = -1;
 			layout.SizeAllocate (rect);
@@ -211,7 +212,12 @@ namespace MonoDevelop.Components.Docking
 			bool res = base.OnDrawn (cr);
 			
 			if (layout != null) {
+				// layout.Draw draws in window-absolute coordinates, while the draw
+				// signal context has its origin at the widget top-left corner.
+				cr.Save ();
+				cr.Translate (-Allocation.X, -Allocation.Y);
 				layout.Draw (cr, null, 0);
+				cr.Restore ();
 			}
 			return res;
 		}
@@ -369,46 +375,10 @@ namespace MonoDevelop.Components.Docking
 			}
 		}
 		
-		protected override void OnRealized ()
-		{
-			
-			Gdk.WindowAttr attributes = new Gdk.WindowAttr ();
-			attributes.X = Allocation.X;
-			attributes.Y = Allocation.Y;
-			attributes.Height = Allocation.Height;
-			attributes.Width = Allocation.Width;
-			attributes.WindowType = Gdk.WindowType.Child;
-			attributes.Visual = Visual;
-			attributes.EventMask = (int)(Events |
-				Gdk.EventMask.ExposureMask |
-				Gdk.EventMask.Button1MotionMask |
-				Gdk.EventMask.ButtonPressMask |
-				Gdk.EventMask.ButtonReleaseMask);
-		
-			Gdk.WindowAttributesType attributes_mask =
-				Gdk.WindowAttributesType.X |
-				Gdk.WindowAttributesType.Y |
-				Gdk.WindowAttributesType.Visual;
-			GdkWindow = new Gdk.Window (ParentWindow, attributes, (int)attributes_mask);
-			GdkWindow.UserData = Handle;
+		// GTK3: the container is windowless; the default realize/unrealize vfuncs
+		// link it to the parent window. The former GTK2 child GdkWindow creation is
+		// removed: with a destroyed parent it produced orphan top-level X windows.
 
-			Style = Style.Attach (GdkWindow);
-			Style.SetBackground (GdkWindow, State);
-			
-			//GdkWindow.SetBackPixmap (null, true);
-
-			OverrideBackgroundColor (StateFlags.Normal, Styles.DockFrameBackground.ToGdkColor ().ToRgba ());
-		}
-		
-		protected override void OnUnrealized ()
-		{
-			if (this.GdkWindow != null) {
-				this.GdkWindow.UserData = IntPtr.Zero;
-				this.GdkWindow.Destroy ();
-			}
-			base.OnUnrealized ();
-		}
-		
 		internal void ShowPlaceholder (DockItem draggedItem)
 		{
 			padTitleWindow = new PadTitleWindow (frame, draggedItem);
@@ -431,8 +401,10 @@ namespace MonoDevelop.Components.Docking
 
 				placeholderWindow.AllowDocking = allowDocking;
 
-				int ox, oy;
-				GdkWindow.GetOrigin (out ox, out oy);
+				int ox = 0, oy = 0;
+				var originWindow = GdkWindow;
+				if (originWindow != null)
+					originWindow.GetOrigin (out ox, out oy);
 
 				int tw, th;
 				padTitleWindow.GetSize (out tw, out th);

@@ -43,14 +43,5 @@ namespace MonoDevelop.Components.Commands
 		internal CommandManager CommandManager {
 			get { return manager; }
 		}
-
-		protected override bool OnDrawn (Cairo.Context cr)
-		{
-			cr.Rectangle (0, 0, Allocation.Width, Allocation.Height);
-			cr.SetSourceColor (this.GetStyleBackgroundColor (StateType.Normal).ToCairoColor ().AddLight (0.1));
-			cr.Paint ();
-
-			return false;
-		}
 	}
 }

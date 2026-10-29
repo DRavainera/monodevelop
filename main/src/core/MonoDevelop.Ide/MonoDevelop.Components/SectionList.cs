@@ -90,6 +90,10 @@ namespace MonoDevelop.Components
 		
 		public SectionList ()
 		{
+			// GTK3: windowless container; declare it so the default realize vfunc
+			// doesn't abort (it asserts the widget has no window of its own).
+			HasWindow = false;
+
 			GtkWorkarounds.FixContainerLeak (this);
 			
 			WidthRequest = 100;

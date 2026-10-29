@@ -133,9 +133,10 @@ namespace MonoDevelop.Core
 						prefix = Path.GetFullPath (Path.Combine (prefix, "..", "MacOS"));
 					//catalogue is installed to "$prefix/share/locale" by default
 					candidates.Add (Path.Combine (Path.Combine (prefix, "share"), "locale"));
-					// Development/build layout: the runtime is in <build>/net10run while the
-					// catalogues are built to <build>/locale (one level up from the binaries).
-					candidates.Add (Path.GetFullPath (Path.Combine (location, "..", "locale")));
+					// Development/build layout: the runtime binaries and the built
+					// catalogues live side by side under <build> (e.g.
+					// <build>/MonoDevelop.Core.dll next to <build>/locale).
+					candidates.Add (Path.Combine (location, "locale"));
 				}
 				catalog = candidates.FirstOrDefault (Directory.Exists) ?? candidates [0];
 			}

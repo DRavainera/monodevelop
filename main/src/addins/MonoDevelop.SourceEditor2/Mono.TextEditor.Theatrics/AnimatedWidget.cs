@@ -67,6 +67,10 @@ namespace Mono.TextEditor.Theatrics
 
 		public AnimatedWidget (Widget widget, uint duration, Easing easing, Blocking blocking, bool horizontal)
 		{
+			// GTK3: windowless container; declare it so the default realize vfunc
+			// doesn't abort (it asserts the widget has no window of its own).
+			HasWindow = false;
+
 			GtkWorkarounds.FixContainerLeak (this);
 			
 			this.horizontal = horizontal;

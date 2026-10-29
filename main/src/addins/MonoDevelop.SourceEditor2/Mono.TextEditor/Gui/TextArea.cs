@@ -308,6 +308,10 @@ namespace Mono.TextEditor
 
 		internal TextArea (TextDocument doc, ITextEditorOptions options, EditMode initialMode)
 		{
+			// GTK3: windowless container; declare it so the default realize vfunc
+			// doesn't abort (it asserts the widget has no window of its own).
+			HasWindow = false;
+
 			keyPressTimings = new TextEditorKeyPressTimings (doc);
 
 			GtkWorkarounds.FixContainerLeak (this);
@@ -906,11 +910,15 @@ namespace Mono.TextEditor
 
 		protected override void OnRealized ()
 		{
+			// GTK3: run the default realize first so the widget links to the
+			// parent window; without it the widget stays unrealized and undrawn.
+			base.OnRealized ();
+
 			imContext.ClientWindow = this.GdkWindow;
 			Caret.PositionChanged += CaretPositionChanged;
 
 			SetWidgetBgFromStyle ();
-		}	
+		}
 
 		protected override void OnUnrealized ()
 		{
@@ -2226,7 +2234,7 @@ namespace Mono.TextEditor
 			}
 		}
 		
-		void RenderMargins (Cairo.Context cr, Cairo.Context textViewCr, Cairo.Rectangle cairoRectangle)
+		void RenderMargins (Cairo.Context cr, Cairo.Rectangle cairoRectangle)
 		{
 			this.TextViewMargin.rulerX = Options.RulerColumn * this.TextViewMargin.CharWidth - this.textEditorData.HAdjustment.Value;
 			int startLine = YToLine (cairoRectangle.Y + this.textEditorData.VAdjustment.Value);
@@ -2255,7 +2263,11 @@ namespace Mono.TextEditor
 					if (!margin.IsVisible)
 						continue;
 					try {
-						margin.Draw (margin == textViewMargin ? textViewCr : cr, cairoRectangle, line, logicalLineNumber, margin.XOffset, curY, lineHeight);
+						// GTK3: draw every margin on the main draw context. A second
+						// context created on cr.Target does not composite reliably to
+						// the window, so the text margin (which sets its own clip) is
+						// isolated with Save/Restore inside its Draw instead.
+						margin.Draw (cr, cairoRectangle, line, logicalLineNumber, margin.XOffset, curY, lineHeight);
 					} catch (Exception e) {
 						LoggingService.LogError ("Error while drawing margin " + margin, e);
 					}
@@ -2272,7 +2284,6 @@ namespace Mono.TextEditor
 				if (curY >= cairoRectangle.Y + cairoRectangle.Height)
 					break;
 			}
-			
 			foreach (var margin in this.margins) {
 				if (!margin.IsVisible)
 					continue;
@@ -2292,7 +2303,7 @@ namespace Mono.TextEditor
 		}*/
 		
 		double oldVadjustment = 0;
-		
+
 		void UpdateAdjustments ()
 		{
 			int lastVisibleLine = textEditorData.LogicalToVisualLine (Document.LineCount);
@@ -2326,35 +2337,35 @@ namespace Mono.TextEditor
 			UpdateAdjustments ();
 
 			var area = Allocation;
-			var cairoArea = new Cairo.Rectangle (area.X, area.Y, area.Width, area.Height);
-			using (Cairo.Context textViewCr = new Cairo.Context (cr.Target)) {
-				UpdateMarginXOffsets ();
-				
-				cr.LineWidth = Options.Zoom;
-				textViewCr.LineWidth = Options.Zoom;
+			// GTK3: Allocation.X/Y are absolute (toplevel-relative) but the draw
+			// cr is widget-local (origin = top-left). Build the visible area in
+			// local coordinates; using the absolute X/Y offsets the rendered text.
+			var cairoArea = new Cairo.Rectangle (0, 0, area.Width, area.Height);
+			UpdateMarginXOffsets ();
 
-				timingsWatch.Restart ();
-				RenderMargins (cr, textViewCr, cairoArea);
-				keyPressTimings.AddMarginDrawingTime (timingsWatch.Elapsed);
-							
+			cr.LineWidth = Options.Zoom;
+
+			timingsWatch.Restart ();
+			RenderMargins (cr, cairoArea);
+			keyPressTimings.AddMarginDrawingTime (timingsWatch.Elapsed);
+
 #if DEBUG_EXPOSE
-				Console.WriteLine ("{0} expose {1},{2} {3}x{4}", (long)(DateTime.Now - started).TotalMilliseconds,
-					area.X, area.Y, area.Width, area.Height);
+			Console.WriteLine ("{0} expose {1},{2} {3}x{4}", (long)(DateTime.Now - started).TotalMilliseconds,
+				area.X, area.Y, area.Width, area.Height);
 #endif
-				if (requestResetCaretBlink && HasFocus) {
-					textViewMargin.ResetCaretBlink (200);
-					requestResetCaretBlink = false;
-				}
-
-				timingsWatch.Restart ();
-				foreach (Animation animation in actors) {
-					animation.Drawer.Draw (cr);
-				}
-				keyPressTimings.AddAnimationDrawingTime (timingsWatch.Elapsed);
-
-
-				OnPainted (new PaintEventArgs (cr, cairoArea));
+			if (requestResetCaretBlink && HasFocus) {
+				textViewMargin.ResetCaretBlink (200);
+				requestResetCaretBlink = false;
 			}
+
+			timingsWatch.Restart ();
+			foreach (Animation animation in actors) {
+				animation.Drawer.Draw (cr);
+			}
+			keyPressTimings.AddAnimationDrawingTime (timingsWatch.Elapsed);
+
+
+			OnPainted (new PaintEventArgs (cr, cairoArea));
 
 			if (Caret.IsVisible) {
 				timingsWatch.Restart ();
@@ -3735,6 +3746,10 @@ namespace Mono.TextEditor
 		
 		protected override void OnMapped ()
 		{
+			// GTK3: run the default map first so the mapped flag is set and the
+			// widget becomes drawable; without it the editor is never painted.
+			base.OnMapped ();
+
 			// Note: SourceEditorWidget.ShowAutoSaveWarning() might have set TextEditor.Visible to false,
 			// in which case we want to not map it (would cause a gtk+ critical error).
 			containerChildren.ForEach (child => { if (child.Child.Visible) child.Child.Map (); });
@@ -3743,10 +3758,13 @@ namespace Mono.TextEditor
 		
 		protected override void OnUnmapped ()
 		{
-			
+			// GTK3: run the default unmap so the mapped flag is cleared and the
+			// children are unmapped consistently.
+			base.OnUnmapped ();
+
 			// We hide the window first so that the user doesn't see widgets disappearing one by one.
 			GdkWindow.Hide ();
-			
+
 			containerChildren.ForEach (child => child.Child.Unmap ());
 		}
 

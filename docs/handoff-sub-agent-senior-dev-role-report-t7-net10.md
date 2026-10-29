@@ -93,10 +93,10 @@ arranque.
   `grep -c g_signal`=0 · `grep -c gtk_object_set_data`=0 ·
   `grep -c 'cannot register existing type'`=0 ·
   `grep -c 'not assignable'`=0 · `grep -cE 'FATAL|Unhandled exception'`=0.
-  Fixture: `/home/daniel/opencode/qa_in3/proj/QaB4.sln`. Entorno del smoke: `env -i`
+  Fixture: `~/opencode/qa_in3/proj/QaB4.sln`. Entorno del smoke: `env -i`
   con `DISPLAY=:0`, `XAUTHORITY=$(ls /run/user/1000/.mutter-Xwaylandauth.* | head -1)`,
-  `FONTCONFIG_FILE=/home/daniel/opencode/fontconfig/c_only.conf`,
-  `DOTNET_ROOT=/home/daniel/.dotnet`.
+  `FONTCONFIG_FILE=~/opencode/fontconfig/c_only.conf`,
+  `DOTNET_ROOT=~/.dotnet`.
 - **Smoke Avalonia**: `bash ~/opencode/qa_t6_avalonia.sh` → ventana `MonoDevelop —
   Avalonia Shell`, proc vivo, fatals=0.
 - **Matar procesos IDE**: NUNCA `pkill -f MonoDevelop` (mata la propia shell del agente).

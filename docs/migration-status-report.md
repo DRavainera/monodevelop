@@ -947,7 +947,7 @@ Directrices del operador para esta tarea: (1) los cambios en `MonoDevelop.Ide.*`
 
 **Cómo validar** (artefactos en `~/opencode/qa_unittests/`):
 - Fixture `QaFixture.sln` (formato `.sln` clásico — `dotnet new sln --format sln`): **QaXunit** (xUnit 2.9.2; 5 nodos: AddPasses pasa, SubFails falla, NotYet `[Fact(Skip)]` skipped, CasesWork `[Theory]+[InlineData]` ×2 pasan), **QaNunit** (NUnit 4.3.2; 7 nodos: AddWorks pasa, SubFails falla, NotYet `[Ignore]` skipped, ExplicitOnly `[Explicit]` no se ejecuta en run completo, CasesWork `[TestCase]` ×2 pasan, FromSource `[TestCaseSource]` pasa), **QaConsole** (proyecto de consola, debe ser ausente del pad).
-- Lanzador: `SHELL_LOG=<log> ~/opencode/launch_shell.sh --sln=/home/daniel/opencode/qa_unittests/QaFixture.sln --unittests-run`; kill `pkill -9 -f "[A]valoniaShell.dll"`.
+- Lanzador: `SHELL_LOG=<log> ~/opencode/launch_shell.sh --sln=~/opencode/qa_unittests/QaFixture.sln --unittests-run`; kill `pkill -9 -f "[A]valoniaShell.dll"`.
 - Números esperados (verificados R5, 2/2 ejecuciones): `2 test project(s), 12 test(s) discovered`; run lines `QaNunit.csproj (6 test(s), config Debug)` (7−1 Explicit) y `QaXunit.csproj (5 test(s), config Debug)`; `run finished: 11 test(s)`; `totals: 8 passed, 2 failed, 2 skipped, 12 total`; exactamente 1 bloque `SetPadVisible unittests=True`; la pestaña `unittests` queda visible al final (0 restores de layout en el flujo).
 
 **QA (§18.5)**: 5 rounds del Tester QA Senior (ciclo dev→QA→revalidación; el subagente no toca el repositorio):
@@ -996,7 +996,7 @@ Directrices del operador para esta tarea: (1) los cambios en `MonoDevelop.Ide.*`
 **Cómo validar** (artefactos en `~/opencode/qa_help/`, `~/opencode/qa_toolbox/`, `~/opencode/qa_help_toolbox/`):
 - Fixture help `~/opencode/qa_help/MonodocDocs/`: `monodoc.xml` (Guides → Getting started `url=getting-started.html`; Reference → API `file=api.xml` lazy), `api.xml` (Overview `url=api/overview.html`, Types `url=api/types.html`) y las 3 páginas HTML con marcadores `QA-HELP-*`.
 - Fixture toolbox `~/opencode/qa_toolbox/snippets/user.xml`: `qasay` (grupo `_Group`="QA Group", código `Console.WriteLine("QA-TOOLBOX-$end$");`) + override del builtin `cw` (`using $selected$;`).
-- Lanzadores: `SHELL_LOG=<log> ~/opencode/launch_shell.sh --helptree --helpsrc=/home/daniel/opencode/qa_help/MonodocDocs` y `… --toolbox --toolboxsnippets=/home/daniel/opencode/qa_toolbox/snippets`; kill `pkill -9 -f "[A]valoniaShell.dll"`.
+- Lanzadores: `SHELL_LOG=<log> ~/opencode/launch_shell.sh --helptree --helpsrc=~/opencode/qa_help/MonodocDocs` y `… --toolbox --toolboxsnippets=~/opencode/qa_toolbox/snippets`; kill `pkill -9 -f "[A]valoniaShell.dll"`.
 - Números esperados (verificados R2, 1/1 por escenario): `[help] documentation tree loaded (5 nodes)` + dump `Mono Documentation / Guides / Getting started -> getting-started.html / Reference / API (lazy api.xml)`; expansión UI `Guides→(Getting started, Reference)`, `Reference→API`, `API→(Overview, Types)` (lazy); doble clic `Getting started` → `[help] opened getting-started.html` (documento con `QA-HELP-GETTING-STARTED`); `[toolbox] 7 item(s)` + `QA Group: qasay` + 6 `Text Snippets: …`; filtro `qas` → solo qasay; checkbox off → lista plana; activación `qasay` → `[toolbox] used qasay at caret (line N)` + `Console.WriteLine("QA-TOOLBOX-");` en el documento sin literal `$end$`; sin documento → `[toolbox] open a text document first`; help sin fixture → `[help] no monodoc.xml in: …` + estado vacío con rutas.
 
 **QA (§18.5)**: 2 rounds del Tester QA Senior (el subagente no toca el repositorio; artefactos `~/opencode/qa_help_toolbox/`):
@@ -1022,7 +1022,7 @@ Directrices del operador para esta tarea: (1) los cambios en `MonoDevelop.Ide.*`
 
 **Desviaciones documentadas**: el viewer interno Monodoc sigue sin portarse como tal — la página se renderiza con el adapter WebView del sistema (WebKitGTK en Linux) en lugar de un control propio; las URLs absolutas http(s) abren en la pestaña web interna (antes: navegador externo); sin adapter disponible, las páginas locales caen al editor de código (el markup) con log explícito.
 
-**Cómo validar** (artefactos en `~/opencode/qa_help_toolbox/`, prefijo `webtab_`): `SHELL_LOG=<log> ~/opencode/launch_shell.sh --helptree --helpsrc=/home/daniel/opencode/qa_help/MonodocDocs` → log `[help] opened getting-started.html (web tab)` + `[help] web tab loaded file:///…/getting-started.html`; UI: pestaña "getting-started.html" con el HTML **renderizado** (marcador `QA-HELP-GETTING-STARTED` como texto, sin markup); doble clic en `Overview` → segunda pestaña con `QA-HELP-API-OVERVIEW`; re-doble clic en la ya abierta → reactiva sin duplicar; ✕ cierra sin crash; sin fixture → estado vacío y sin web tabs; arranque default → 0 `Exception`/`Unhandled`.
+**Cómo validar** (artefactos en `~/opencode/qa_help_toolbox/`, prefijo `webtab_`): `SHELL_LOG=<log> ~/opencode/launch_shell.sh --helptree --helpsrc=~/opencode/qa_help/MonodocDocs` → log `[help] opened getting-started.html (web tab)` + `[help] web tab loaded file:///…/getting-started.html`; UI: pestaña "getting-started.html" con el HTML **renderizado** (marcador `QA-HELP-GETTING-STARTED` como texto, sin markup); doble clic en `Overview` → segunda pestaña con `QA-HELP-API-OVERVIEW`; re-doble clic en la ya abierta → reactiva sin duplicar; ✕ cierra sin crash; sin fixture → estado vacío y sin web tabs; arranque default → 0 `Exception`/`Unhandled`.
 
 **QA (§18.5)**: 1 round del Tester QA Senior — **PASS, 0 hallazgos funcionales** (W-S1 suite 103/103; W-S2 web tab completo con OCR del render — texto renderizado verificado, no markup —, dedupe de pestañas, cierre; W-S3 sin fixture; W-S4 arranque default). 1 observación menor no bloqueante (la reactivación re-emite `NavigationCompleted` y añadía una línea extra de log) → corregida por el dev como cambio de log (primer evento `loaded`, siguientes `reloaded`), re-verificada en smoke (`webtab_*` + `smoke_webtab_r3.log`). Layout persistido restaurado (diff limpio).
 
@@ -1114,3 +1114,63 @@ actualizados en el commit de ola 4 del repo principal.
 - T9: higiene de build — regeneración de outputs de `vs-editor-api` en build desde cero;
   carrera de `runtimeconfig.json` entre TFMs net10.0/net10.0-windows sobre `main/build/`
   (lock MSB4018 transitorio; relanzar el gate si reaparece).
+
+### UI legacy Gtk (`--old-gui`): corrección de defectos de editor, diálogo, NRE e iconos (2026-10-29)
+
+Auditoría de la interfaz Gtk legacy tras T7. Se abrieron 5 frentes (editor, diálogo
+"Nueva solución", NRE en enrutado de comandos, iconos de pads, PathBar); se corrigieron 3
+defectos reales y se verificó que 2 no son defectos en el build actual.
+
+**Qué se hizo / por qué / archivos** (todo en `main/`, rama `agents/sub-agent-senior-dev-role-report`):
+
+1. **Editor no pintaba el código** (`--old-gui`). Dos causas acumuladas tras el port a
+   GtkSharp 3.24:
+   - `TextArea` es un contenedor *windowless* en GTK3 pero no lo declaraba ni llamaba a los
+     vfunc por defecto → el widget quedaba unrealizado/invisible. Fix: `HasWindow = false`
+     en el ctor y `base.OnRealized()` / `base.OnMapped()` / `base.OnUnmapped()`. Mismo patrón
+     ya aplicado en `DockContainer.cs`, `SectionList.cs`, `AnimatedWidget.cs` (windowless).
+   - `ExposeEventInternal` creaba un segundo `Cairo.Context` sobre `cr.Target` para el margen
+     de texto; ese contexto no compita de forma fiable a la ventana (empíricamente: de 22
+     rectángulos de prueba sobre `textViewCr` solo quedaban 3, frente a los 22 sobre `cr`).
+     Fix: `RenderMargins` pinta **todos** los márgenes sobre el contexto principal `cr`; el
+     margen de texto aísla su propio clip con `cr.Save()`/`cr.Restore()` dentro de `Draw`.
+     Además `cairoArea` pasa a `(0,0,w,h)` (el `cr` de `draw` es local al widget, no
+     toplevel). Archivos: `Mono.TextEditor/Gui/TextArea.cs`, `Mono.TextEditor/Gui/TextViewMargin.cs`.
+2. **Diálogo "Nueva solución" con ancho 1507 px** (banda en blanco a la derecha). En GTK3 el
+   ancho *natural* de un `Gtk.Label` con `Wrap=true` es el texto completo sin envolver
+   (~843 px en `templateNameLabel`/`templateDescriptionLabel`), lo que inflaba
+   `contentArea` y saltaba `DefaultWidth`. Fix: `MaxWidthChars = 25` en ambas etiquetas → el
+   diálogo vuelve a 908×632 (verificado con `xwininfo` + PIL: contenido hasta x=907/908).
+   Archivo: `MonoDevelop.Ide.Projects/GtkNewProjectDialogBackend.UI.cs`.
+3. **NRE en `HasToplevelFocus`** al enrutar comandos. El binding GtkSharp precompilado hace
+   `(bool)GetProperty("has-toplevel-focus")`; cuando el `GLib.Value` está vacío el unbox lanza
+   NRE y abortaba el enrutado (p. ej. "Nueva solución…"). No se puede parchear el binding
+   (DLL precompilada). Fix: helper `SafeHasToplevelFocus(Gtk.Window)` (try/catch → `false`)
+   usado en `Window.HasFocus` y `Window.HasTopLevelFocus`. Archivo: `MonoDevelop.Components/Window.cs`.
+4. **Iconos de pads — VERIFICADO que NO es un defecto** en el build actual. Investigación con
+   diagnóstico temporal en `Xwt.Gtk`/`ImageHandler.cs` (añadido y retirado; `git status` de
+   `xwt` limpio): los iconos de mime se resuelven bien del tema (`gnome-fs-regular` carga 16×16,
+   `Gtk.IconTheme.Default.HasIcon`/`LoadIcon` OK) y **todas** las filas del árbol (solución,
+   proyectos, carpetas, archivos) pintan su icono en su posición de sangría (x=6/24/42/58/94).
+   El análisis previo por columnas fijas fallaba por la sangría variable del árbol. Sin cambio.
+5. **PathBar / breadcrumb — observación, sin defecto de render confirmado**. La banda oscura
+   superior del editor (`(28,30,31)`) coincide con el área del editor (el fixture abre
+   `data.json` de 8 bytes → editor casi vacío) o con un PathBar sin entradas; `OnDrawn` pinta
+   fondo y, si `leftPath` está vacío, no dibuja texto (correcto). No se evidencia un fallo de
+   render análogo al del editor. Pendiente de confirmación con un documento largo si se reclama.
+
+**Cómo validar**:
+- Build: `cd main && dotnet build src/core/MonoDevelop.Startup.Avalonia/MonoDevelop.Startup.Avalonia.csproj`
+  (0 errores); copiar `Xwt.Gtk.dll` a `main/build/` si se toca `xwt`.
+- Smoke `--old-gui`: `dotnet main/build/MonoDevelop.AvaloniaShell.dll --old-gui
+  ~/opencode/qa_in3/proj/QaB4.sln` → (1) editor con el código pintado (no solo nº de línea),
+  (2) "Archivo → Nueva solución…" abre a ~908 px sin banda en blanco, (3) 0 `NullReferenceException`
+  en el log al navegar el menú, (4) pads con iconos en todas las filas del árbol.
+
+**QA (§18.5)**: verificación por capturas (PIL) + diagnóstico in-app; los 3 defectos corregidos
+quedaron validados sin hallazgos abiertos en sus frentes. Iconos y PathBar documentados como
+no-defecto/observación (punto 4 y 5).
+
+**Pendiente**: (a) confirmar PathBar con un documento largo si se considera defecto;
+(b) líneas con solo llaves `{`/`}` del editor aún sin píxeles (layout de ancho 0 en glyph
+único) — bajo impacto, no bloqueante.

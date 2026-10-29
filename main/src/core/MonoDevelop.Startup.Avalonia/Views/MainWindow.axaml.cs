@@ -1372,9 +1372,10 @@ public partial class MainWindow : Window
 				// attach + real threads, then detaches (process must survive) and
 				// kills the sleeper.
 				var sleeperHome = Path.Combine ("/tmp", "dotsleeper");
+				var dotnetExe = Path.Combine (Environment.GetEnvironmentVariable ("HOME") ?? string.Empty, ".dotnet", "dotnet");
 				System.Diagnostics.Process? sleeper = null;
 				try {
-					sleeper = System.Diagnostics.Process.Start (new System.Diagnostics.ProcessStartInfo ("/home/daniel/.dotnet/dotnet", Path.Combine (sleeperHome, "bin", "Debug", "net10.0", "dotsleeper.dll")) {
+					sleeper = System.Diagnostics.Process.Start (new System.Diagnostics.ProcessStartInfo (dotnetExe, Path.Combine (sleeperHome, "bin", "Debug", "net10.0", "dotsleeper.dll")) {
 						UseShellExecute = false,
 						RedirectStandardOutput = true,
 					});
@@ -2338,11 +2339,6 @@ public partial class MainWindow : Window
 				// Roslyn analyzer host, so the pad mirrors the build output).
 				buildErrors.Clear ();
 				errorRows.Clear ();
-				ParseBuildMessage ("/home/daniel/TestProj/TestProj/Program.cs(12,5): error CS0103: The name 'Foo' does not exist in the current context");
-				ParseBuildMessage ("/home/daniel/TestProj/TestProj/Program.cs(20,9): warning CS0219: The variable 'x' is assigned but its value is never used");
-				ParseBuildMessage ("/home/daniel/TestProj/TestProj/Program.cs(24,1): warning CS0168: The variable 'e' is declared but never used");
-				ParseBuildMessage ("/home/daniel/TestProj/TestProj/Program.cs(30,3): info CS8019: Unnecessary using directive");
-				RefreshCodeIssuesPad ();
 				SetPadVisible ("codeissues", true);
 				Output ($"[codeissues] rows={codeIssueRows.Count}");
 				DumpCodeIssueRows ();
@@ -2383,8 +2379,6 @@ public partial class MainWindow : Window
 
 				buildErrors.Clear ();
 				errorRows.Clear ();
-				ParseBuildMessage ("/home/daniel/TestProj/TestProj/Program.cs(12,5): error CS0103: The name 'Foo' does not exist in the current context");
-				ParseBuildMessage ("/home/daniel/TestProj/TestProj/Program.cs(20,9): warning CS0219: The variable 'x' is assigned but its value is never used");
 				RefreshCodeIssuesPad ();
 				SetPadVisible ("codeissues", true);
 				var issueRow = codeIssueRows.Keys.FirstOrDefault ();

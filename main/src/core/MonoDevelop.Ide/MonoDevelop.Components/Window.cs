@@ -74,7 +74,7 @@ namespace MonoDevelop.Components
 		public override bool HasFocus {
 			get {
 				if (nativeWidget is Gtk.Window)
-					return ((Gtk.Window)nativeWidget).HasToplevelFocus;
+					return SafeHasToplevelFocus ((Gtk.Window)nativeWidget);
 #if MAC
 				if (nativeWidget is AppKit.NSWindow)
 					return nativeWidget == AppKit.NSApplication.SharedApplication.KeyWindow;
@@ -114,12 +114,24 @@ namespace MonoDevelop.Components
 		public bool HasTopLevelFocus {
 			get {
 				if (nativeWidget is Gtk.Window gtkWindow)
-					return gtkWindow.HasToplevelFocus;
+					return SafeHasToplevelFocus (gtkWindow);
 #if MAC
 				if (nativeWidget is AppKit.NSWindow nsWindow)
 					return AppKit.NSApplication.SharedApplication.KeyWindow == nsWindow;
 #endif
 
+				return false;
+			}
+		}
+
+		// GTK3/GtkSharp: the "has-toplevel-focus" property lookup can yield an
+		// empty GLib.Value whose unbox to bool throws NRE (precompiled binding).
+		// Treat that as "no focus" rather than letting it abort command routing.
+		static bool SafeHasToplevelFocus (Gtk.Window window)
+		{
+			try {
+				return window.HasToplevelFocus;
+			} catch (Exception) {
 				return false;
 			}
 		}

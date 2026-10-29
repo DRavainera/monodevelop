@@ -3097,6 +3097,9 @@ namespace Mono.TextEditor
 
 		protected internal override void Draw (Cairo.Context cr, Cairo.Rectangle area, DocumentLine line, int lineNr, double x, double y, double _lineHeight)
 		{
+			// GTK3: this margin now draws on the shared main context, so save/restore
+			// to keep the clip (set below) and other state from leaking to other margins.
+			cr.Save ();
 //			double xStart = System.Math.Max (area.X, XOffset);
 //			xStart = System.Math.Max (0, xStart);
 			cr.Rectangle (XOffset, 0, textEditor.Allocation.Width - XOffset, textEditor.Allocation.Height);
@@ -3143,6 +3146,7 @@ namespace Mono.TextEditor
 			// Check if line is beyond the document length
 			if (line == null) {
 				DrawScrollShadow (cr, x, y, _lineHeight);
+				cr.Restore ();
 				return;
 			}
 
@@ -3333,6 +3337,7 @@ namespace Mono.TextEditor
 			DrawScrollShadow (cr, x, y, _lineHeight);
 			if (wrapper != null && wrapper.IsUncached)
 				wrapper.Dispose ();
+			cr.Restore ();
 		}
 
 		void DrawScrollShadow (Cairo.Context cr, double x, double y, double _lineHeight)

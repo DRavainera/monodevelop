@@ -245,6 +245,10 @@ namespace MonoDevelop.Ide.Projects
 			templateNameLabel.Accessible.Description = GettextCatalog.GetString ("The name of the selected template");
 			templateNameLabel.WidthRequest = 240;
 			templateNameLabel.Wrap = true;
+			// GTK3: a wrapped label's natural width is the full (unwrapped) text,
+			// which blew the dialog out to ~1507px. Cap the natural width so the
+			// detail panel stays ~240px and the dialog honours DefaultWidth.
+			templateNameLabel.MaxWidthChars = 25;
 			templateNameLabel.Xalign = 0;
 			templateNameLabel.Markup = MarkupTemplateName ("TemplateName");
 			templateVBox.PackStart (templateNameLabel, false, false, 0);
@@ -254,6 +258,7 @@ namespace MonoDevelop.Ide.Projects
 			templateDescriptionLabel.Accessible.SetLabel (GettextCatalog.GetString ("The description of the selected template"));
 			templateDescriptionLabel.WidthRequest = 240;
 			templateDescriptionLabel.Wrap = true;
+			templateDescriptionLabel.MaxWidthChars = 25;
 			templateDescriptionLabel.Xalign = 0;
 			templateVBox.PackStart (templateDescriptionLabel, false, false, 0);
 
