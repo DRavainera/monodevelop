@@ -146,6 +146,66 @@ arranque.
 5. **T9**: higiene de build (outputs de `vs-editor-api` desde cero; carrera
    `runtimeconfig.json` entre TFMs sobre `main/build/`).
 
+## 2026-10-29 — Corrección de defectos de UI legacy Gtk (post-T7)
+Sesión posterior al cierre T7: auditoría de la interfaz `--old-gui`. 3 defectos corregidos
+y 2 frentes verificados como no-defecto. Commit `5d50a87880` (pushed a
+`agents/sub-agent-senior-dev-role-report`).
+
+**Qué se hizo**:
+1. **Editor no pintaba el código** — dos causas:
+   - `TextArea` es contenedor *windowless* en GTK3: `HasWindow = false` en el ctor +
+     `base.OnRealized()/OnMapped()/OnUnmapped()` (mismo patrón que `DockContainer`,
+     `SectionList`, `AnimatedWidget`). Ataca directamente el **NRE de `TextArea.OnMapped()`**
+     del known-issue 1 de arriba (widget que quedaba unrealizado/invisible).
+   - `ExposeEventInternal` creaba un 2.º `Cairo.Context(cr.Target)` para el margen de texto
+     que **no compita fiable a la ventana** (empírico: 22 rect. de prueba → solo 3 sobre
+     `textViewCr`, 22/22 sobre `cr`). Fix: `RenderMargins` pinta **todos** los márgenes sobre
+     `cr`; el margen de texto aísla su clip con `cr.Save()/Restore()`; `cairoArea=(0,0,w,h)`.
+     [TextArea.cs, TextViewMargin.cs]
+2. **Diálogo "Nueva solución" a 1507 px** (banda en blanco): label `Wrap=true` cuyo ancho
+   *natural* en GTK3 es el texto completo sin envolver (~843 px). Fix: `MaxWidthChars = 25`
+   en `templateNameLabel`/`templateDescriptionLabel` → 908×632. [GtkNewProjectDialogBackend.UI.cs]
+3. **NRE en `HasToplevelFocus`** al enrutar comandos: binding precompilado
+   `(bool)GetProperty("has-toplevel-focus")` con `GLib.Value` vacío → NRE que abortaba el
+   enrutado. Fix: `SafeHasToplevelFocus(Gtk.Window)` try/catch→false en
+   `Window.HasFocus`/`HasTopLevelFocus`. [Window.cs]
+4. **Iconos de pads — VERIFICADO no-defecto**: diagnóstico temporal en
+   `Xwt.Gtk/ImageHandler.cs` (añadido y retirado; `xwt` queda limpio, puntero invariado)
+   confirmó que los iconos de mime se resuelven del tema (`gnome-fs-regular` 16×16;
+   `HasIcon`/`LoadIcon` OK) y **todas** las filas del árbol (17/17) pintan su icono en su
+   sangría (x=6/24/42/58/94). El análisis previo por columnas fijas fallaba por la sangría
+   variable. Sin cambio.
+5. **PathBar/breadcrumb — observación**: la banda oscura superior (`(28,30,31)`) es el área
+   del editor (fixture abre `data.json` de 8 bytes → casi vacío) o un PathBar sin entradas
+   (`OnDrawn` pinta fondo y nada si `leftPath` vacío, correcto). Sin defecto de render
+   confirmado.
+
+**Ficheros tocados (esta sesión, en el commit `5d50a87880`)**:
+- `main/src/addins/MonoDevelop.SourceEditor2/Mono.TextEditor/Gui/TextArea.cs`
+- `main/src/addins/MonoDevelop.SourceEditor2/Mono.TextEditor/Gui/TextViewMargin.cs`
+- `main/src/core/MonoDevelop.Ide/MonoDevelop.Ide.Projects/GtkNewProjectDialogBackend.UI.cs`
+- `main/src/core/MonoDevelop.Ide/MonoDevelop.Components/Window.cs`
+- Ya en árbol (refuerzos GTK3 windowless / limpieza): `MonoDevelop.Components.Docking/DockContainer.cs`,
+  `MonoDevelop.Components/SectionList.cs`, `Mono.TextEditor.Theatrics/AnimatedWidget.cs`
+  (`HasWindow=false` + coords), `MonoDevelop.Core/Gettext.cs` (ruta locale del layout de
+  build), `MonoDevelop.Components.Commands/CommandMenuBar.cs` (quita `OnDrawn`),
+  `MonoDevelop.Startup.Avalonia/Views/MainWindow.axaml.cs` (quita rutas `/home/daniel/…`
+  absolutas del operador + borra líneas de test `ParseBuildMessage`).
+- Docs: `docs/migration-status-report.md`, `docs/session_summary.md`, este handoff.
+
+**Cómo validar**: build 0 errores; smoke `--old-gui` con `~/opencode/qa_in3/proj/QaB4.sln` →
+(1) editor con el código pintado, (2) "Archivo → Nueva solución…" a ~908 px sin banda,
+(3) 0 `NullReferenceException` en el log al navegar el menú, (4) pads con iconos en todas
+las filas.
+
+**QA (§18.5)**: verificación por capturas (PIL) + log IDE + diagnóstico in-app. Build final:
+0 `NullReferenceException`, 0 FATAL/Unhandled, 0 warnings de iconos. Iconos y PathBar
+documentados como no-defecto/observación (puntos 4 y 5).
+
+**Pendiente (de esta sesión)**: (a) confirmar PathBar con un documento largo si se considera
+defecto; (b) líneas del editor con solo llaves `{`/`}` aún sin píxeles (layout de ancho 0 en
+glyph único) — bajo impacto, no bloqueante.
+
 ## Convenciones recordatorio (AGENTS.md §18)
 - Cierre de tarea: documentar → commitear (main + submódulos, ficheros por nombre, sin
   secretos ni artefactos de build) → pushear (main + submódulos a su rama).

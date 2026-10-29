@@ -2048,3 +2048,54 @@ actualizados en el commit del repo principal.
 **Pendiente**: T8 (reimplementar funcionalidades quitadas, auditoría T3), T9 (higiene de
 build), known-issue del contenedor-leak (dedicado) y unificación Roslyn/Threading
 (decisión del operador).
+
+## 2026-10-29 — UI legacy Gtk (`--old-gui`): corrección de defectos de editor, diálogo, NRE e iconos
+Auditoría de la interfaz Gtk legacy tras T7. **Qué se hizo** (3 defectos corregidos; 2
+frentes verificados como no-defecto en el build actual):
+1. **Editor no pintaba el código** — dos causas:
+   - `TextArea` es contenedor *windowless* en GTK3: `HasWindow = false` en el ctor +
+     `base.OnRealized()/OnMapped()/OnUnmapped()` (mismo patrón que `DockContainer`,
+     `SectionList`, `AnimatedWidget`). Sin esto el widget quedaba unrealizado/invisible y
+     el NRE de `TextArea.OnMapped()` (known-issue T7) persistía.
+   - `ExposeEventInternal` creaba un 2.º `Cairo.Context(cr.Target)` para el margen de texto
+     que **no compita fiable a la ventana** (empírico: 22 rect. de prueba → solo 3 sobre
+     `textViewCr`, 22/22 sobre `cr`). Fix: `RenderMargins` pinta **todos** los márgenes sobre
+     `cr`; el margen de texto aísla su clip con `cr.Save()/Restore()`; `cairoArea=(0,0,w,h)`
+     (el `cr` de `draw` es local al widget, no toplevel). [TextArea.cs, TextViewMargin.cs]
+2. **Diálogo "Nueva solución" a 1507 px** (banda en blanco a la derecha): label `Wrap=true`
+   cuyo ancho *natural* en GTK3 es el texto completo sin envolver (~843 px). Fix:
+   `MaxWidthChars = 25` en `templateNameLabel`/`templateDescriptionLabel` → 908×632.
+   [GtkNewProjectDialogBackend.UI.cs]
+3. **NRE en `HasToplevelFocus`** al enrutar comandos: el binding precompilado hace
+   `(bool)GetProperty("has-toplevel-focus")`; con `GLib.Value` vacío el unbox lanza NRE y
+   abortaba el enrutado (p. ej. "Nueva solución…"). Fix: `SafeHasToplevelFocus(Gtk.Window)`
+   try/catch→false en `Window.HasFocus`/`HasTopLevelFocus`. [Window.cs]
+4. **Iconos de pads — VERIFICADO no-defecto**: diagnóstico temporal en
+   `Xwt.Gtk/ImageHandler.cs` (añadido/retirado, submódulo `xwt` queda limpio) confirmó que
+   los iconos de mime se resuelven del tema (`gnome-fs-regular` 16×16; `HasIcon`/`LoadIcon`
+   OK) y **todas** las filas del árbol (17/17) pintan su icono en su sangría (x=6/24/42/58/94).
+   El análisis previo por columnas fijas fallaba por la sangría variable del árbol. Sin cambio.
+5. **PathBar/breadcrumb — observación**: la banda oscura superior (`(28,30,31)`) es el área
+   del editor (el fixture abre `data.json` de 8 bytes → casi vacío) o un PathBar sin entradas
+   (`OnDrawn` pinta fondo y nada si `leftPath` está vacío, que es el comportamiento correcto).
+   Sin defecto de render confirmado.
+
+**Cómo validar**: build 0 errores; smoke `--old-gui` con `~/opencode/qa_in3/proj/QaB4.sln` →
+(1) editor con el código pintado (no solo nº de línea), (2) "Archivo → Nueva solución…" a
+~908 px sin banda en blanco, (3) 0 `NullReferenceException` en el log al navegar el menú,
+(4) pads con iconos en todas las filas del árbol.
+
+**QA (§18.5)**: verificación por capturas (PIL) + log IDE (`~/.cache/.../Ide.*.log`) +
+diagnóstico in-app. Build final: 0 `NullReferenceException`, 0 FATAL/Unhandled, 0 warnings
+de iconos ("Unknown icon"/"Can't lookup icon"). Iconos y PathBar documentados como
+no-defecto/observación (puntos 4 y 5).
+
+**Cierre**: commit `5d50a87880` (13 ficheros: 3 fixes UI + refuerzos GTK3 windowless ya en
+árbol `DockContainer`/`SectionList`/`AnimatedWidget` con `HasWindow=false`, `Gettext` ruta
+locale del layout de build, `MainWindow.axaml.cs` que quita las rutas `/home/daniel/…`
+absolutas del operador + docs) pushed a `agents/sub-agent-senior-dev-role-report`.
+Submódulo `xwt` sin cambio (puntero invariado; el diagnóstico se añadió y retiró).
+
+**Pendiente**: (a) confirmar PathBar con un documento largo si se considera defecto;
+(b) líneas del editor con solo llaves `{`/`}` aún sin píxeles (layout de ancho 0 en glyph
+único) — bajo impacto, no bloqueante.
