@@ -1174,3 +1174,65 @@ no-defecto/observación (punto 4 y 5).
 **Pendiente**: (a) confirmar PathBar con un documento largo si se considera defecto;
 (b) líneas con solo llaves `{`/`}` del editor aún sin píxeles (layout de ancho 0 en glyph
 único) — bajo impacto, no bloqueante.
+
+### UI legacy Gtk (`--old-gui`): fix del doble scroll de rueda (GtkViewport) y QA de scroll (2026-11-01)
+Auditoría del scroll por rueda del editor Gtk legacy sobre el fixture de 266 líneas
+(`~/opencode/qa_scroll/LongDoc.cs`, ventana 1820×930 en Xvfb 1280×900).
+
+1. **Doble scroll de rueda corregido (90 px → 45 px por notch).** Causa raíz: la cadena
+   `ScrolledWindow` → `Gtk.Viewport` → `MonoTextEditor` (IScrollable *windowless*) →
+   `TextArea` (`HasWindow = false`). Aunque `MonoTextEditor` implementa `Gtk.IScrollable`
+   a nivel C#, el binding GtkSharp 3.24 precompilado falla la comprobación nativa
+   `GTK_IS_SCROLLABLE` y GTK3 envuelve al editor en un `Gtk.Viewport`. El `GtkViewport`
+   de GTK3 dibuja al hijo **trasladado por `(-hadj.value, -vadj.value)`**, y `TextArea`
+   además desplaza sus líneas por la **misma** adjustment (empieza a pintar en la línea
+   calculada con `vadj`): las dos aplicaciones del mismo delta movían el contenido dos
+   veces por cada paso. Evidencia con diagnóstico temporal (ya retirado): 1 notch =
+   exactamente 1 `ScrollEvent` (entregado al Viewport) + 1 cambio de adjustment de 45 px;
+   el render de `TextArea` con `vadj=45` arranca en la línea 4 (offset propio correcto);
+   en pantalla el contenido se movía 90 px; el allocation de `TextArea` permanece (0,0)
+   siempre, sin otros intermediarios. Fix en `DecoratedScrolledWindow.SetTextEditor`
+   (`MonoDevelop.SourceEditor/SourceEditorWidget.cs`): las adjustments del Viewport se
+   clavan a cero (nuevos `Adjustment(0,0,0,0,0,0)`), de modo que el Viewport no traslada
+   al hijo y el offset de líneas del editor es la única fuente de scroll; las adjustments
+   del `ScrolledWindow` (compartidas con el editor y las barras) no se tocan.
+   `Mono.TextEditor/Gui/TextArea.cs` además suelta las referencias a adjustments
+   obsoletas al desvincular (`SetAdjustments` con null).
+2. **"Regresión de arranque a 5 líneas" = falsa alarma.** Ese estado era el InfoBar de
+   `ShowAutoSaveWarning` con el editor oculto (`TextEditor.Visible = false`), disparado
+   por un autosave (`~/.cache/MonoDevelop/9.0/AutoSave/*.sav`) dejado por un `kill -9`
+   de una instancia con cambios sin guardar. Sus botones (VButtonBox a la derecha)
+   quedaban fuera de la zona visible y XTest clampa el puntero al borde de la pantalla
+   (verificado: pedir (1444,196) deja el puntero en (1279,196)); con `XMoveWindow` se
+   trajo el botón a zona visible y el click en "_Use original file" (que elimina el
+   autosave) devolvió el render sano de 35 líneas (verificado por OCR).
+3. **Trampa de entorno**: lanzar con el entorno de shell heredado
+   (`WAYLAND_DISPLAY=wayland-0` y `gnome-shell` vivo) hace que GTK elija Wayland en vez
+   de Xvfb :99 (sin ventana, aparente colgado). Receta obligatoria: `env -i … DISPLAY=:99
+   GDK_BACKEND=x11 WAYLAND_DISPLAY= FONTCONFIG_FILE=~/opencode/fontconfig/c_only.conf`.
+
+**Cómo validar**:
+- Build: `dotnet build main/src/addins/MonoDevelop.SourceEditor2/MonoDevelop.SourceEditor.csproj
+  -c DebugLinux` (0 errores); solution completo `dotnet build main/Main.sln -c DebugLinux`
+  (0 errores).
+- Arranque `--old-gui` con `~/opencode/qa_scroll/LongDoc.cs` (receta `env -i` arriba).
+- `bash ~/opencode/qa_scroll/qa_scroll_check.sh` (T-secuencia, reversibilidad, repro
+  blank) y `bash ~/opencode/qa_scroll/qa_marathon.sh` (20/20 notches y clamps 90/90).
+  Medición de offset entre screenshots: `~/opencode/probe_sw/py_offset.py antes.png
+  despues.png` (s>0 = scroll abajo; sano: 45 px por notch).
+
+**QA (§18.5)** — 0 hallazgos: 1 notch = 45 px netos (antes 90); 20 notches abajo/arriba →
+retorno al origen exacto (mse 0.000); repro de blank (drag + 4 abajo + 1 arriba) sin blank
+(mean 0.2058 ≈ línea base) y offset neto exacto 135 px; 90 notches abajo → clamp en
+`upper-page = 3716 px` pintando el final del documento (OCR: Method240-259 + líneas
+266/267) y 90 arriba → clamp en 0; la secuencia de adjustment cuadra 1:1 con el offset
+medido en pantalla. Sanity final con binario limpio (sin diagnósticos): 45 px/notch,
+mse 0.000 en retorno, 0 líneas de diagnóstico en el log.
+
+**Pendiente**: (a) el "flood" de smooth-scroll emulado (un notch como ráfaga de eventos
+Smooth en Xvfb/XTEST) no se reprodujo en las últimas sesiones (220/220 notches llegaron
+discretos); el burst-cap defensivo (3 líneas / 120 ms en `ClampSmoothBurst`,
+`SourceEditorWidget.cs`) se mantiene; (b) XRecord sigue inutilizable en este Xvfb
+(`XRecord_BadCategory` 154/146.5) — el origen de eventos se trazó con interceptor XCB y
+diagnóstico in-app; (c) pendiente heredada de 2026-10-29: líneas con una sola llave
+`{`/`}` sin píxeles (bajo impacto).
