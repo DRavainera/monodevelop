@@ -61,17 +61,26 @@ namespace MonoDevelop.Ide.Projects
 			Styles.Changed += (sender, e) => UpdateStyles ();
 		}
 
+		static Gtk.CssProvider previewCssProvider;
+
 		static void UpdateStyles ()
 		{
+			var screen = Gdk.Screen.Default;
+			if (screen == null)
+				return;
+
 			var bgColorHex = Styles.ColorGetHex (Styles.NewProjectDialog.ProjectConfigurationRightHandBackgroundColor);
 
-			string rcstyle = "style \"projectFolderPreviewWidget\"\r\n{\r\n" +
-				"    base[NORMAL] = \"" + bgColorHex + "\"\r\n" +
-				"    GtkTreeView::even-row-color = \"" + bgColorHex + "\"\r\n" +
-				"}\r\n";
-			rcstyle += "widget \"*projectFolderPreviewWidget*\" style \"projectFolderPreviewWidget\"\r\n";
+			// Gtk3 renders via CSS and ignores the Gtk2-era gtkrc styles
+			// (Rc.ParseString): without this, the folder tree area below the
+			// last row shows the theme base color instead of the panel color.
+			string css = "#projectFolderPreviewWidget { background-color: " + bgColorHex + "; }\n";
 
-			Rc.ParseString (rcstyle);
+			if (previewCssProvider == null) {
+				previewCssProvider = new Gtk.CssProvider ();
+				StyleContext.AddProviderForScreen (screen, previewCssProvider, StyleProviderPriority.Application);
+			}
+			previewCssProvider.LoadFromData (css);
 		}
 
 		public GtkProjectFolderPreviewWidget ()

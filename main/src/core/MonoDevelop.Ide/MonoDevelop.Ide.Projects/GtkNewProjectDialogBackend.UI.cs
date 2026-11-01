@@ -86,24 +86,28 @@ namespace MonoDevelop.Ide.Projects
 			Styles.Changed += (sender, e) => UpdateStyles ();
 		}
 
+		static Gtk.CssProvider dialogCssProvider;
+
 		static void UpdateStyles ()
 		{
+			var screen = Gdk.Screen.Default;
+			if (screen == null)
+				return;
+
 			var categoriesBackgroundColorHex = Styles.ColorGetHex (Styles.NewProjectDialog.CategoriesBackgroundColor);
 			var templateListBackgroundColorHex = Styles.ColorGetHex (Styles.NewProjectDialog.TemplateListBackgroundColor);
 
-			string rcstyle = "style \"templateCategoriesTreeView\"\r\n{\r\n" +
-				"    base[NORMAL] = \"" + categoriesBackgroundColorHex + "\"\r\n" +
-				"    GtkTreeView::even-row-color = \"" + categoriesBackgroundColorHex + "\"\r\n" +
-				"}\r\n";
-			rcstyle += "style \"templatesTreeView\"\r\n{\r\n" +
-				"    base[NORMAL] = \"" + templateListBackgroundColorHex + "\"\r\n" +
-				"    GtkTreeView::even-row-color = \"" + templateListBackgroundColorHex + "\"" +
-				"\r\n}";
+			// Gtk3 renders via CSS and ignores the Gtk2-era gtkrc styles
+			// (Rc.ParseString): without this, the tree area below the last row
+			// shows the theme base color instead of the dialog panel colors.
+			string css = "#templateCategoriesTreeView { background-color: " + categoriesBackgroundColorHex + "; }\n" +
+				"#templatesTreeView { background-color: " + templateListBackgroundColorHex + "; }\n";
 
-			rcstyle += "widget \"*templateCategoriesTreeView*\" style \"templateCategoriesTreeView\"\r\n";
-			rcstyle += "widget \"*templatesTreeView*\" style \"templatesTreeView\"\r\n";
-
-			Rc.ParseString (rcstyle);
+			if (dialogCssProvider == null) {
+				dialogCssProvider = new Gtk.CssProvider ();
+				StyleContext.AddProviderForScreen (screen, dialogCssProvider, StyleProviderPriority.Application);
+			}
+			dialogCssProvider.LoadFromData (css);
 		}
 
 		void Build ()

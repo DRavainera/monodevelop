@@ -80,6 +80,12 @@ namespace MonoDevelop.Components.Commands
 		List<object> commandUpdateErrors = new List<object> ();
 		List<ICommandTargetVisitor> visitors = new List<ICommandTargetVisitor> ();
 		LinkedList<Window> topLevelWindows = new LinkedList<Window> ();
+		// GTK3/GtkSharp: the handlers that run before TopLevelDestroyed on the
+		// "destroyed" signal (Control.Dispose / auto-dispose chain) release the
+		// native window and clear the native->wrapper cache, so a wrapper can be
+		// left in topLevelWindows with a dead native. Track the dead wrappers
+		// explicitly so the command routing paths never touch their native.
+		HashSet<Window> deadTopLevelWindows = new HashSet<Window> ();
 		Stack delegatorStack = new Stack ();
 
 		HashSet<object> visitedTargets = new HashSet<object> ();
@@ -873,14 +879,39 @@ namespace MonoDevelop.Components.Commands
 
 		void TopLevelDestroyed (object o, EventArgs args)
 		{
-			RegisterUserInteraction ();
-
 			Gtk.Window w = (Gtk.Window)o;
-			w.Destroyed -= TopLevelDestroyed;
-			w.KeyPressEvent -= OnKeyPressed;
-			w.KeyReleaseEvent -= OnKeyReleased;
-			w.ButtonPressEvent -= HandleButtonPressEvent;
-			topLevelWindows.Remove (w);
+
+			// The earlier "destroyed" handlers (Control.Dispose / auto-dispose chain)
+			// can already have released the native and removed the wrapper from the
+			// native->wrapper cache, so resolving the wrapper through the implicit
+			// conversion (which uses that cache) would create a fresh, unrelated
+			// wrapper and the removal below would be a no-op. Resolve it from the
+			// list itself and mark it dead before anything that can throw.
+			Window win = null;
+			foreach (var candidate in topLevelWindows) {
+				if (ReferenceEquals (candidate.nativeWidget, w)) {
+					win = candidate;
+					break;
+				}
+			}
+			if (win != null) {
+				MarkTopLevelWindowDead (win);
+			}
+
+			try {
+				w.Destroyed -= TopLevelDestroyed;
+				w.KeyPressEvent -= OnKeyPressed;
+				w.KeyReleaseEvent -= OnKeyReleased;
+				w.ButtonPressEvent -= HandleButtonPressEvent;
+			} catch {
+				// The native may already be gone; nothing left to unsubscribe.
+			}
+
+			try {
+				RegisterUserInteraction ();
+			} catch {
+			}
+
 #if MAC
 			if (topLevelWindows.Count == 0) {
 				if (keyMonitor != null) {
@@ -2207,13 +2238,39 @@ namespace MonoDevelop.Components.Commands
 			return h;
 		}
 
+		void MarkTopLevelWindowDead (Window win)
+		{
+			deadTopLevelWindows.Add (win);
+			topLevelWindows.Remove (win);
+			if (win == lastFocused)
+				lastFocused = null;
+		}
+
 		Window GetCurrentFocusedTopLevelWindow ()
 		{
+			List<Window> dead = null;
+			Window focused = null;
 			foreach (var window in topLevelWindows) {
-				if (window.HasFocus)
-					return window;
+				if (deadTopLevelWindows.Contains (window)) {
+					(dead ??= new List<Window> ()).Add (window);
+					continue;
+				}
+				try {
+					if (window.HasFocus) {
+						focused = window;
+						break;
+					}
+				} catch {
+					// The native can be released between the check and the call
+					// (see deadTopLevelWindows); drop the wrapper instead of
+					// letting the lookup abort command routing.
+					(dead ??= new List<Window> ()).Add (window);
+				}
 			}
-			return rootWidget;
+			if (dead != null)
+				foreach (var window in dead)
+					topLevelWindows.Remove (window);
+			return focused ?? rootWidget;
 		}
 		
 		object GetFirstCommandTarget (CommandTargetRoute targetRoute)
@@ -2560,11 +2617,15 @@ Gtk.Widget GetFocusedChild (Control widget)
 			
 			waitingForUserInteraction = true;
 			toolbarUpdaterRunning = false;
-			foreach (var win in topLevelWindows) {
-				if (!(win.nativeWidget is Gtk.Window gtkWindow))
+			foreach (var win in topLevelWindows.ToList ()) {
+				if (deadTopLevelWindows.Contains (win) || !(win.nativeWidget is Gtk.Window gtkWindow))
 					continue;
-				gtkWindow.MotionNotifyEvent += HandleWinMotionNotifyEvent;
-				gtkWindow.FocusInEvent += HandleFocusInEventHandler;
+				try {
+					gtkWindow.MotionNotifyEvent += HandleWinMotionNotifyEvent;
+					gtkWindow.FocusInEvent += HandleFocusInEventHandler;
+				} catch {
+					MarkTopLevelWindowDead (win);
+				}
 			}
 		}
 		
@@ -2573,11 +2634,15 @@ Gtk.Widget GetFocusedChild (Control widget)
 			if (!waitingForUserInteraction)
 				return;
 			waitingForUserInteraction = false;
-			foreach (var win in topLevelWindows) {
-				if (!(win.nativeWidget is Gtk.Window gtkWindow))
+			foreach (var win in topLevelWindows.ToList ()) {
+				if (deadTopLevelWindows.Contains (win) || !(win.nativeWidget is Gtk.Window gtkWindow))
 					continue;
-				gtkWindow.MotionNotifyEvent -= HandleWinMotionNotifyEvent;
-				gtkWindow.FocusInEvent -= HandleFocusInEventHandler;
+				try {
+					gtkWindow.MotionNotifyEvent -= HandleWinMotionNotifyEvent;
+					gtkWindow.FocusInEvent -= HandleFocusInEventHandler;
+				} catch {
+					MarkTopLevelWindowDead (win);
+				}
 			}
 
 			StartStatusUpdater ();

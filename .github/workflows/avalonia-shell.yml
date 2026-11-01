@@ -35,7 +35,7 @@ jobs:
           nuget-avalonia-shell-${{ runner.os }}-
 
     - name: Build Avalonia shell (net10.0)
-      run: dotnet build main/src/core/MonoDevelop.Startup.Avalonia/MonoDevelop.Startup.Avalonia.csproj -c Release -f net10.0 -v q
+      run: dotnet build main/src/core/MonoDevelop.Startup.Avalonia/MonoDevelop.Startup.Avalonia.csproj -c Debug -f net10.0 -v q
 
     - name: Test Avalonia shell (editor model)
       run: dotnet test main/tests/AvaloniaShell.Editor.Tests/AvaloniaShell.Editor.Tests.csproj -v normal

@@ -4,7 +4,7 @@
 		"displayName": "Linux Platform (Avalonia)",
 		"name": "LinuxPlatform",
 		"publisher": "MonoDevelop",
-		"version": "1.0.0",
+		"version": "9.0.0",
 		"description": "Linux desktop platform support for Avalonia shell.",
 		"preview": false,
 		"language": "en-US"

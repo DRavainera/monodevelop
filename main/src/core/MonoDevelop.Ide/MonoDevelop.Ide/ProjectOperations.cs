@@ -698,7 +698,7 @@ namespace MonoDevelop.Ide
 				}
 			}
 		}
-
+		
 		public async void ShowRunConfiguration (Solution solution, MultiItemSolutionRunConfiguration runConfiguration)
 		{
 			var optionsDialog = new CombineOptionsDialog (IdeApp.Workbench.RootWindow, solution);

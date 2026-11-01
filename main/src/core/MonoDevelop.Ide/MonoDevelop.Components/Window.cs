@@ -124,11 +124,24 @@ namespace MonoDevelop.Components
 			}
 		}
 
+		static readonly System.Reflection.FieldInfo glibObjectDisposedField =
+			typeof (GLib.Object).GetField ("disposed", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+
+		static bool IsNativeDisposed (GLib.Object obj)
+		{
+			return glibObjectDisposedField != null && glibObjectDisposedField.GetValue (obj) is true;
+		}
+
 		// GTK3/GtkSharp: the "has-toplevel-focus" property lookup can yield an
-		// empty GLib.Value whose unbox to bool throws NRE (precompiled binding).
-		// Treat that as "no focus" rather than letting it abort command routing.
+		// empty GLib.Value whose unbox to bool throws NRE (precompiled binding),
+		// and calling it on an already disposed window dereferences freed memory
+		// inside gtk (AccessViolationException, not catchable). Check the binding
+		// disposal state before touching the native and treat either case as
+		// "no focus" rather than letting it abort command routing.
 		static bool SafeHasToplevelFocus (Gtk.Window window)
 		{
+			if (window == null || IsNativeDisposed (window))
+				return false;
 			try {
 				return window.HasToplevelFocus;
 			} catch (Exception) {

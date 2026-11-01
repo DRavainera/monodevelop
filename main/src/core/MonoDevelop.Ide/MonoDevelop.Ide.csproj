@@ -10,8 +10,8 @@
     <EnableDefaultItems>false</EnableDefaultItems>
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
     <AssemblyTitle>MonoDevelop Ide</AssemblyTitle>
-    <AssemblyVersion>12.1.2.0</AssemblyVersion>
-    <Version>12.1.2.0</Version>
+    <AssemblyVersion>9.0.0.0</AssemblyVersion>
+    <Version>9.0.0.0</Version>
     <NoWarn>$(NoWarn);SYSLIB0011</NoWarn>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
   </PropertyGroup>
@@ -6119,6 +6119,7 @@
     </Compile>
     <Compile Include="MonoDevelop.Components\WindowTransparencyDecorator.cs" />
     <Compile Include="MonoDevelop.Components\GtkWorkarounds.cs" />
+    <Compile Include="MonoDevelop.Components\GtkNativeLifetimeGuard.cs" />
     <Compile Include="MonoDevelop.Components\PangoUtil.cs" />
     <Compile Include="MonoDevelop.Components\HslColor.cs" />
     <Compile Include="MonoDevelop.Components\HelperMethods.cs" />

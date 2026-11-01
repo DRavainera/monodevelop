@@ -144,6 +144,8 @@ namespace MonoDevelop.Startup
 				return null;
 			};
 			ctx.ResolvingUnmanagedDll += ResolveNativeLibrary;
+			// Must run before any GLib.Object wrapper exists (before IdeStartup/Gtk.Init)
+			MonoDevelop.Components.GtkNativeLifetimeGuard.Install ();
 			return IdeStartup.Main (args);
 		}
 	}

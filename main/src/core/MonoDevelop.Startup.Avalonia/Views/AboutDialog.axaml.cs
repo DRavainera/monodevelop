@@ -28,9 +28,10 @@ public partial class AboutDialog : Window
 	{
 		VersionText.Text = typeof (AboutDialog).Assembly.GetName ().Version?.ToString () ?? "?";
 
-		Copyright1.Text = "© 2016–" + DateTime.Now.Year + " Microsoft Corp.";
-		Copyright2.Text = "© 2004–" + DateTime.Now.Year + " Xamarin Inc.";
-		Copyright3.Text = "© 2004–" + DateTime.Now.Year + " MonoDevelop contributors";
+		Copyright1.Text = "© " + DateTime.Now.Year + " Daniel Ravainera & AI Agents Model";
+		Copyright2.Text = "© 2016–" + DateTime.Now.Year + " Microsoft Corp.";
+		Copyright3.Text = "© 2004–" + DateTime.Now.Year + " Xamarin Inc.";
+		Copyright4.Text = "© 2004–" + DateTime.Now.Year + " MonoDevelop contributors";
 
 		try {
 			var uri = new Uri ("avares://MonoDevelop.AvaloniaShell/branding/AboutImage.png");

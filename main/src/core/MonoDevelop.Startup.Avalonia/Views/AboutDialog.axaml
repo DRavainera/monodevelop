@@ -44,6 +44,7 @@
             <TextBlock x:Name="Copyright1" Margin="12,2,0,0" Foreground="{DynamicResource IdeFgBrush}" />
             <TextBlock x:Name="Copyright2" Margin="12,2,0,0" Foreground="{DynamicResource IdeFgBrush}" />
             <TextBlock x:Name="Copyright3" Margin="12,2,0,0" Foreground="{DynamicResource IdeFgBrush}" />
+            <TextBlock x:Name="Copyright4" Margin="12,2,0,0" Foreground="{DynamicResource IdeFgBrush}" />
           </StackPanel>
         </StackPanel>
       </ScrollViewer>
