@@ -210,6 +210,11 @@ namespace MonoDevelop.SourceEditor
 			SourceEditorWidget parent;
 			ScrolledWindow scrolledWindow;
 			EventBox scrolledBackground;
+			Viewport viewport;
+			
+			// Burst-cap state for smooth scroll (see ClampSmoothBurst).
+			double _burstX, _burstY;
+			uint _burstWindowStart;
 			
 			QuickTaskStrip strip;
 			
@@ -241,6 +246,11 @@ namespace MonoDevelop.SourceEditor
 				scrolledWindow = new CompactScrolledWindow ();
 				scrolledWindow.CanFocus = false;
 				scrolledWindow.ButtonPressEvent += PrepareEvent;
+				scrolledWindow.ButtonReleaseEvent += PrepareEvent;
+				scrolledWindow.MotionNotifyEvent += PrepareEvent;
+				scrolledWindow.EnterNotifyEvent += PrepareEvent;
+				scrolledWindow.LeaveNotifyEvent += PrepareEvent;
+				scrolledWindow.ScrollEvent += PrepareScrollEvent;
 				scrolledWindow.Accessible.SetShouldIgnore (true);
 				scrolledBackground.Add (scrolledWindow);
 				PackStart (scrolledBackground, true, true, 0);
@@ -317,6 +327,18 @@ namespace MonoDevelop.SourceEditor
 				SetSuppressScrollbar (false);
 				QuickTaskStrip.EnableFancyFeatures.Changed -= FancyFeaturesChanged;
 				scrolledWindow.ButtonPressEvent -= PrepareEvent;
+				scrolledWindow.ButtonReleaseEvent -= PrepareEvent;
+				scrolledWindow.MotionNotifyEvent -= PrepareEvent;
+				scrolledWindow.EnterNotifyEvent -= PrepareEvent;
+				scrolledWindow.LeaveNotifyEvent -= PrepareEvent;
+				scrolledWindow.ScrollEvent -= PrepareScrollEvent;
+				UnhookViewport ();
+				// Detach the editor from this window's adjustments while the native
+				// objects are still alive; disposing them below (and the editor's own
+				// teardown) must not unhook or read disposed adjustments.
+				var editor = GetEditor ();
+				if (editor != null)
+					editor.SetScrollAdjustments (null, null);
 				scrolledWindow.Vadjustment.Dispose ();
 				scrolledWindow.Hadjustment.Dispose ();
 				scrolledWindow.Destroy ();
@@ -326,14 +348,238 @@ namespace MonoDevelop.SourceEditor
 				base.OnDestroyed ();
 			}
 			
-			void PrepareEvent (object sender, ButtonPressEventArgs args) 
+			// GTK3 dispatches pointer events to the widget owning the event's
+			// GdkWindow. The editor stack (MonoTextEditor, TextArea) is
+			// windowless, so events inside the text area land on this scrolled
+			// window and used to be swallowed here, leaving the editor
+			// unresponsive to the mouse. Re-emit them on the TextArea, which
+			// owns the caret, selection and margin handlers.
+			void PrepareEvent (object sender, ButtonPressEventArgs args)
 			{
 				args.RetVal = true;
+				ForwardToTextArea (args.Event);
 			}
-		
+
+			void PrepareEvent (object sender, ButtonReleaseEventArgs args)
+			{
+				args.RetVal = true;
+				ForwardToTextArea (args.Event);
+			}
+
+			void PrepareEvent (object sender, MotionNotifyEventArgs args)
+			{
+				args.RetVal = true;
+				ForwardToTextArea (args.Event);
+			}
+
+			void PrepareEvent (object sender, EnterNotifyEventArgs args)
+			{
+				args.RetVal = true;
+				ForwardToTextArea (args.Event);
+			}
+
+			void PrepareEvent (object sender, LeaveNotifyEventArgs args)
+			{
+				args.RetVal = true;
+				ForwardToTextArea (args.Event);
+			}
+
+			void ForwardToTextArea (Gdk.Event evt)
+			{
+				if (evt == null || evt.Handle == IntPtr.Zero)
+					return;
+				var container = GetEditor ();
+				if (container == null)
+					return;
+				var textArea = container.TextArea;
+				if (textArea == null || textArea.Handle == IntPtr.Zero || !textArea.IsRealized)
+					return;
+				var eventWindow = evt.Window;
+				var textWindow = textArea.GdkWindow;
+				if (eventWindow != null && textWindow != null && eventWindow != textWindow) {
+					// Event delivered from a sub-window; rebase the coordinates
+					// on the text area's window (same pattern as Xwt
+					// CheckPointerCoordinates).
+					int px, py;
+					textArea.GetPointer (out px, out py);
+					SetEventCoordinates (evt, px, py);
+				}
+				textArea.ProcessEvent (evt);
+			}
+
+			static void SetEventCoordinates (Gdk.Event evt, int x, int y)
+			{
+				var button = evt as Gdk.EventButton;
+				if (button != null) {
+					button.X = x;
+					button.Y = y;
+					return;
+				}
+				var motion = evt as Gdk.EventMotion;
+				if (motion != null) {
+					motion.X = x;
+					motion.Y = y;
+					return;
+				}
+				var crossing = evt as Gdk.EventCrossing;
+				if (crossing != null) {
+					crossing.X = x;
+					crossing.Y = y;
+				}
+			}
+
+			// The editor (MonoTextEditor) is a windowless IScrollable, so GTK3
+			// wraps it in a Viewport: scrolledWindow.Child is the viewport and
+			// the editor sits under it.
+			Mono.TextEditor.MonoTextEditor GetEditor ()
+			{
+				var sw = scrolledWindow;
+				if (sw == null || sw.Child == null)
+					return null;
+				var editor = sw.Child as Mono.TextEditor.MonoTextEditor;
+				if (editor != null)
+					return editor;
+				var vp = sw.Child as Viewport;
+				return vp != null ? vp.Child as Mono.TextEditor.MonoTextEditor : null;
+			}
+
+			void UnhookViewport ()
+			{
+				if (viewport != null) {
+					viewport.ScrollEvent -= PrepareScrollEvent;
+					viewport = null;
+				}
+			}
+
+			// GTK3 delivers the wheel's ScrollEvent to the viewport and never
+			// adjusts the scrolled window from it, so wheel scrolling does
+			// nothing to the wrapped editor. Apply the delta to the scrolled
+			// window's adjustments (the viewport shares them) to actually
+			// scroll the content. RetVal stops propagation to the other
+			// hook, so a single wheel tick moves the content exactly once.
+			void PrepareScrollEvent (object sender, ScrollEventArgs args)
+			{
+				var sw = scrolledWindow;
+				var evt = args.Event;
+				if (sw == null || evt == null)
+					return;
+				var editor = GetEditor ();
+				var lineStep = editor != null && editor.TextArea != null && editor.TextArea.LineHeight > 0
+					? (int)System.Math.Ceiling (editor.TextArea.LineHeight)
+					: 16;
+				double dx = 0, dy = 0;
+				switch (evt.Direction) {
+					case Gdk.ScrollDirection.Smooth:
+						dx = evt.DeltaX * lineStep;
+						dy = evt.DeltaY * lineStep;
+						ClampSmoothBurst (ref dx, ref dy, lineStep, evt.Time);
+						break;
+					case Gdk.ScrollDirection.Up:
+						ResetSmoothBurst ();
+						dy = -3 * lineStep;
+						break;
+					case Gdk.ScrollDirection.Down:
+						ResetSmoothBurst ();
+						dy = 3 * lineStep;
+						break;
+					case Gdk.ScrollDirection.Left:
+						ResetSmoothBurst ();
+						dx = -30;
+						break;
+					case Gdk.ScrollDirection.Right:
+						ResetSmoothBurst ();
+						dx = 30;
+						break;
+				}
+				if (dy != 0)
+					MoveAdjustment (sw.Vadjustment, dy);
+				if (dx != 0)
+					MoveAdjustment (sw.Hadjustment, dx);
+				args.RetVal = true;
+			}
+
+			// The precompiled GtkSharp binding's Adjustment.ClampPage is a
+			// no-op (verified empirically), so clamp manually following
+			// gtk_adjustment_clamp_page and set the value directly.
+			static void MoveAdjustment (Adjustment adj, double delta)
+			{
+				if (adj == null || delta == 0)
+					return;
+				double value = adj.Value + delta;
+				double lower = adj.Lower;
+				double upper = adj.Upper;
+				double page = adj.PageSize;
+				if (value < lower)
+					value = lower;
+				else if (page > 0 && value > upper - page)
+					value = upper - page;
+				else if (value > upper)
+					value = upper;
+				if (value != adj.Value)
+					adj.Value = value;
+			}
+
+			// GDK (in the Xvfb/XTEST QA environment) can deliver a single
+			// wheel notch as a burst of many small Smooth events (emulated
+			// smooth scroll). Applying every event in full over-scrolls the
+			// document by an order of magnitude, so cap the smooth scroll
+			// applied within a short window to a few lines. Discrete
+			// notches (Up/Down/Left/Right) are unaffected.
+			const int SmoothBurstMaxLines = 3;
+			const uint SmoothBurstWindowMs = 120;
+
+			void ResetSmoothBurst ()
+			{
+				_burstX = _burstY = 0;
+				_burstWindowStart = 0;
+			}
+
+			void ClampSmoothBurst (ref double dx, ref double dy, double lineStep, uint timeMs)
+			{
+				if (_burstWindowStart == 0 || timeMs - _burstWindowStart >= SmoothBurstWindowMs)
+				{
+					_burstWindowStart = timeMs;
+					_burstX = _burstY = 0;
+				}
+				double cap = SmoothBurstMaxLines * lineStep;
+				double nx = _burstX + dx;
+				double ny = _burstY + dy;
+				if (nx > cap) { dx = cap - _burstX; nx = cap; }
+				else if (nx < -cap) { dx = -cap - _burstX; nx = -cap; }
+				if (ny > cap) { dy = cap - _burstY; ny = cap; }
+				else if (ny < -cap) { dy = -cap - _burstY; ny = -cap; }
+				_burstX = nx;
+				_burstY = ny;
+			}
+
 			public void SetTextEditor (Mono.TextEditor.MonoTextEditor container)
 			{
+				// Wire the adjustments before reparenting so the editor never
+				// renders or realizes with stale/null adjustments (a re-created
+				// editor arrives detached). GTK3 wraps the windowless editor in
+				// a Viewport and leaves its own adjustments unconnected; wheel,
+				// scrollbar and caret visibility must all drive the same
+				// adjustment, so point them at the scrolled window's.
+				container.SetScrollAdjustments (scrolledWindow.Hadjustment, scrolledWindow.Vadjustment);
 				scrolledWindow.Child = container;
+				UnhookViewport ();
+				viewport = scrolledWindow.Child as Viewport;
+				if (viewport != null) {
+					viewport.ScrollEvent += PrepareScrollEvent;
+					// The editor is a windowless IScrollable and offsets its
+					// own lines by the scrolled window's adjustment when
+					// drawing, but GTK3 still wraps it in a Viewport and the
+					// viewport translates the child by its own adjustment
+					// when drawing. Both would apply the same delta, so every
+					// scroll step moved the content twice (90 px per wheel
+					// notch instead of 45). Pin the viewport's adjustments to
+					// zero: it then leaves the child in place and the editor's
+					// own line offset is the single source of scrolling. The
+					// scrolled window's adjustments (shared with the editor and
+					// the scrollbars) stay untouched.
+					viewport.Hadjustment = new Adjustment (0, 0, 0, 0, 0, 0);
+					viewport.Vadjustment = new Adjustment (0, 0, 0, 0, 0, 0);
+				}
 				this.strip.TextEditor = container;
 				container.EditorOptionsChanged += OptionsChanged;
 				container.Caret.ModeChanged += parent.UpdateLineColOnEventHandler;
@@ -351,7 +597,7 @@ namespace MonoDevelop.SourceEditor
 			
 			void RemoveEvents ()
 			{
-				var container = scrolledWindow.Child as Mono.TextEditor.MonoTextEditor;
+				var container = GetEditor ();
 				if (container == null) {
 
 					LoggingService.LogError ("can't remove events from text editor container.");
@@ -365,12 +611,24 @@ namespace MonoDevelop.SourceEditor
 			
 			public Mono.TextEditor.MonoTextEditor RemoveTextEditor ()
 			{
-				var child = scrolledWindow.Child as Mono.TextEditor.MonoTextEditor;
+				var child = GetEditor ();
 				if (child == null)
 					return null;
 				RemoveEvents ();
-				scrolledWindow.Remove (child);
+				// Detach the editor from this scrolled window's adjustments
+				// while the native objects are still alive: the caller may
+				// destroy this window (disposing its adjustments) before the
+				// editor is wired elsewhere.
+				child.SetScrollAdjustments (null, null);
+				var vp = scrolledWindow.Child as Viewport;
+				if (vp != null) {
+					vp.Remove (child);
+					vp.Unparent ();
+				} else {
+					scrolledWindow.Remove (child);
+				}
 				child.Unparent ();
+				UnhookViewport ();
 				return child;
 			}
 		}

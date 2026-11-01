@@ -2099,3 +2099,78 @@ Submódulo `xwt` sin cambio (puntero invariado; el diagnóstico se añadió y re
 **Pendiente**: (a) confirmar PathBar con un documento largo si se considera defecto;
 (b) líneas del editor con solo llaves `{`/`}` aún sin píxeles (layout de ancho 0 en glyph
 único) — bajo impacto, no bloqueante.
+
+## 2026-11-01 — UI legacy Gtk (`--old-gui`): fix del doble scroll de rueda (GtkViewport) y QA de scroll
+
+Auditoría y corrección del scroll por rueda del editor Gtk legacy. **Qué se hizo**:
+
+1. **Doble scroll de rueda corregido (90 → 45 px por notch)**.
+   - Causa raíz: cadena `ScrolledWindow` → `Gtk.Viewport` → `MonoTextEditor`
+     (IScrollable *windowless*) → `TextArea` (`HasWindow = false`). Aunque
+     `MonoTextEditor` implementa `Gtk.IScrollable` a nivel C#, el binding
+     precompilado de GtkSharp 3.24 falla la comprobación nativa
+     `GTK_IS_SCROLLABLE` y GTK3 lo envuelve en un `Gtk.Viewport`. El
+     `GtkViewport` de GTK3 (también windowless) dibuja al hijo **trasladado**
+     por `(-hadj.value, -vadj.value)`, y `TextArea` además desplaza sus líneas
+     por la **misma** adjustment al dibujar (empieza en la línea calculada con
+     `vadj`). Ambas aplicaciones del mismo delta → el contenido se movía dos
+     veces por cada paso de scroll.
+   - Evidencia (diagnóstico `[D]` temporal, ya retirado): 1 notch de rueda =
+     exactamente 1 `ScrollEvent` (entregado al Viewport) + exactamente 1 cambio
+     de adjustment de 45 px; el render de `TextArea` con `vadj=45` arranca en la
+     línea 4 (offset propio correcto); en pantalla el contenido se movía 90 px;
+     el allocation de `TextArea` permanece (0,0) siempre → el segundo 45 px
+     venía de la traslación del Viewport, sin otros intermediarios.
+   - Fix en `DecoratedScrolledWindow.SetTextEditor` [SourceEditorWidget.cs]: las
+     adjustments del Viewport quedan **claveadas a cero** (nuevos objetos
+     `Adjustment(0,0,0,0,0,0)`), de modo que el Viewport no traslada al hijo y
+     el offset de líneas del editor es la única fuente de scroll. Las
+     adjustments del `ScrolledWindow` (compartidas con el editor y las
+     barras de scroll) no se tocan.
+2. **QA de scroll completo (Tester QA Senior, §18.5) — 0 hallazgos**:
+   - T-secuencia: 1 notch = **45 px** netos (antes 90); mse bajo y estable.
+   - Reversibilidad: 20 notches abajo/arriba → retorno al origen exacto
+     (mse 0.000).
+   - Repro de "editor en blanco" (drag + 4 abajo + 1 arriba): **sin blank**
+     (mean de contenido 0.2058 ≈ línea base 0.205); offset neto exacto 135 px
+     (3 notches netos × 45).
+   - Marathon: 90 notches abajo → clamp en `upper-page = 3716 px` pintando el
+     final del documento correctamente (OCR: Method240-259 + líneas 266/267);
+     90 arriba → clamp en 0.
+   - Proporcionalidad: la secuencia de adjustment (log `[D]` durante la QA)
+     cuadra 1:1 con el offset medido en pantalla por screenshot
+     (`py_offset.py`).
+   - Sanity final con binario limpio (sin diagnósticos): 45 px/notch, mse 0.000
+     en retorno, 0 líneas `[D]` en el log.
+3. **Falsa alarma documentada — "regresión de arranque a 5 líneas"**: ese
+   estado era el InfoBar de `ShowAutoSaveWarning` [SourceEditorWidget.cs] con
+   el editor oculto (`TextEditor.Visible = false`), disparado por un archivo de
+   autosave (`~/.cache/MonoDevelop/9.0/AutoSave/*.sav`) dejado por un `kill -9`
+   de una instancia con cambios sin guardar. Sus botones (VButtonBox a la
+   derecha) quedaban **fuera de pantalla** (ventana 1820 px sobre pantalla de
+   1280 px) y XTest clampa el puntero al borde (verificado: pedir (1444,196)
+   deja el puntero en (1279,196)). Con `XMoveWindow` se trajo el botón a zona
+   visible, se clickó "_Use original file" (elimina el autosave) y el editor
+   pintó las 35 líneas de forma sana (verificado por OCR). El autosave ya no
+   existe; los arranques posteriores son limpios (sin asterisco en el título).
+4. **Trampa de entorno documentada**: lanzar la app con el entorno de shell
+   heredado (`WAYLAND_DISPLAY=wayland-0` + `gnome-shell` vivo) hace que GTK se
+   conecte a Wayland en lugar de Xvfb :99 → sin ventana ("colgado"). Receta
+   obligatoria para lanzamientos manuales: `env -i … DISPLAY=:99
+   GDK_BACKEND=x11 WAYLAND_DISPLAY= FONTCONFIG_FILE=~/opencode/fontconfig/c_only.conf
+   dotnet main/build/MonoDevelop.AvaloniaShell.dll --old-gui <doc>`.
+
+**Cómo validar**: build 0 errores (`dotnet build main/src/addins/MonoDevelop.SourceEditor2/MonoDevelop.SourceEditor.csproj -c DebugLinux`);
+arranque `--old-gui` con el fixture `~/opencode/qa_scroll/LongDoc.cs` (266 líneas);
+`bash ~/opencode/qa_scroll/qa_scroll_check.sh` (T-secuencia, reversibilidad, repro
+blank) y `bash ~/opencode/qa_scroll/qa_marathon.sh` (maraton y clamps). Medición de
+offset: `~/opencode/probe_sw/py_offset.py antes.png despues.png` (s>0 = scroll
+abajo; sano: 45 px por notch).
+
+**Pendiente**: (a) el "flood" de smooth-scroll emulado (un notch como ráfaga de
+eventos Smooth en Xvfb/XTEST) no se reprodujo en las últimas sesiones de QA
+(220/220 notches llegaron discretos); el burst-cap defensivo (3 líneas / 120 ms
+en `ClampSmoothBurst`) se mantiene; (b) XRecord sigue inutilizable en este Xvfb
+(`XRecord_BadCategory` 154/146.5) — el origen de eventos se trazó con el
+interceptor XCB (v15) y los diagnósticos in-app; (c) pendiente heredada de
+2026-10-29: líneas con una sola llave `{`/`}` sin píxeles (bajo impacto).

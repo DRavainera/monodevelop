@@ -297,8 +297,13 @@ namespace Mono.TextEditor
 				return;
 			UnregisterAdjustments ();
 			
-			if (hAdjustement == null || vAdjustement == null)
+			if (hAdjustement == null || vAdjustement == null) {
+				// Drop the stale references so a detached editor never touches
+				// adjustments that may have been disposed.
+				textEditorData.HAdjustment = null;
+				textEditorData.VAdjustment = null;
 				return;
+			}
 			this.textEditorData.HAdjustment = hAdjustement;
 			this.textEditorData.VAdjustment = vAdjustement;
 			
