@@ -965,7 +965,11 @@ namespace MonoDevelop.Ide.Gui
 			style.ExpandedTabs = true;
 			style.PadBackgroundColor = Styles.BrowserPadBackground;
 			style.InactivePadBackgroundColor = Styles.InactiveBrowserPadBackground;
-			style.TreeBackgroundColor = Styles.BrowserPadBackground;
+			// En GTK2 el area del arbol (widget con ventana) pinta siempre el color base
+			// del tema; el override de color de fondo no lo cubria. En GTK3 el arbol si
+			// respeta el override, asi que se usa el color base para conservar el aspecto
+			// original (cuerpo del pad = color base, franja de pestanas = color del pad).
+			style.TreeBackgroundColor = Styles.BaseBackgroundColor;
 			dock.SetDockItemStyle ("ProjectPad", style);
 			dock.SetDockItemStyle ("ClassPad", style);
 

@@ -131,9 +131,13 @@ namespace MonoDevelop.Ide.Projects
 			this.hbox4.Add (this.scrolledwindow2);
 			global::Gtk.Box.BoxChild w9 = ((global::Gtk.Box.BoxChild)(this.hbox4 [this.scrolledwindow2]));
 			w9.Position = 0;
+			w9.Expand = true;
+			w9.Fill = true;
 			this.boxRefs.Add (this.hbox4);
 			global::Gtk.Box.BoxChild w10 = ((global::Gtk.Box.BoxChild)(this.boxRefs [this.hbox4]));
 			w10.Position = 1;
+			w10.Expand = true;
+			w10.Fill = true;
 			this.alignment2.Add (this.boxRefs);
 			this.hpaned1.Add (this.alignment2);
 			global::Gtk.Paned.PanedChild w12 = ((global::Gtk.Paned.PanedChild)(this.hpaned1 [this.alignment2]));
@@ -141,9 +145,14 @@ namespace MonoDevelop.Ide.Projects
 			this.vbox5.Add (this.hpaned1);
 			global::Gtk.Box.BoxChild w13 = ((global::Gtk.Box.BoxChild)(this.vbox5 [this.hpaned1]));
 			w13.Position = 0;
+			w13.Expand = true;
+			w13.Fill = true;
 			w1.Add (this.vbox5);
+			// Gtk2 repartia el espacio sobrante entre hijos sin expand; Gtk3 no lo hace.
 			global::Gtk.Box.BoxChild w14 = ((global::Gtk.Box.BoxChild)(w1 [this.vbox5]));
 			w14.Position = 0;
+			w14.Expand = true;
+			w14.Fill = true;
 			// Internal child MonoDevelop.Ide.Projects.SelectReferenceDialog.ActionArea
 			global::Gtk.ButtonBox w15 = this.ActionArea;
 			w15.Name = "dialog-action_area2";

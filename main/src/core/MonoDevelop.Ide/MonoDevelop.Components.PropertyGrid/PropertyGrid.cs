@@ -143,7 +143,10 @@ namespace MonoDevelop.Components.PropertyGrid
 			AddPropertyTab (new DefaultPropertyTab ());
 			AddPropertyTab (new EventPropertyTab ());
 
-			base.PackEnd (vpaned, false, false, 0);
+			// En GTK3 el hijo empaquetado con expand=false solo recibe su tamano
+			// natural (32px sin filas), quedando el cuerpo del pad sin pintar. Con
+			// expand=true la rejilla llena el cuerpo del pad, como en GTK2.
+			base.PackEnd (vpaned, true, true, 0);
 			base.FocusChain = new Gtk.Widget [] { vpaned };
 			
 			Populate (saveEditSession: false);

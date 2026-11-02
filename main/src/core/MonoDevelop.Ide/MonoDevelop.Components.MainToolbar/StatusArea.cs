@@ -266,10 +266,23 @@ namespace MonoDevelop.Components.MainToolbar
 
 		protected override void OnSizeAllocated (Gdk.Rectangle allocation)
 		{
+			Gdk.Rectangle effective = allocation;
 			if (MaxWidth > 0 && allocation.Width > MaxWidth) {
-				allocation = new Gdk.Rectangle (allocation.X + (allocation.Width - MaxWidth) / 2, allocation.Y, MaxWidth, allocation.Height);
+				effective = new Gdk.Rectangle (allocation.X + (allocation.Width - MaxWidth) / 2, allocation.Y, MaxWidth, allocation.Height);
 			}
-			base.OnSizeAllocated (allocation);
+			base.OnSizeAllocated (effective);
+
+			// El area de estado ocupa toda la anchura, pero su contenido (mensaje e
+			// iconos de estado) debe quedar dentro de una ventana centrada de 600px.
+			// En Gtk3 el padding dinamico de un Alignment exterior dejaba de
+			// reasignar el hijo, asi que se reasigna aqui el hijo real (mainAlign)
+			// a la ventana centrada; el tema la pinta en OnDrawn.
+			if (mainAlign == null)
+				return;
+
+			Gdk.Rectangle box = GetStatusWindow ();
+			// SizeAllocate recibe coordenadas relativas al padre (StatusArea).
+			mainAlign.SizeAllocate (new Gdk.Rectangle (box.X - allocation.X, box.Y - allocation.Y, box.Width, box.Height));
 		}
 
 		void TriggerErrorAnimation ()
@@ -401,14 +414,57 @@ namespace MonoDevelop.Components.MainToolbar
 			minimum = natural = 32;
 		}
 
+		// The status area is centered in a 600px wide window located in the middle
+		// of the toplevel. The old approach (dynamic padding on an enclosing
+		// alignment) stopped re-allocating the child in Gtk3, so the window is
+		// applied to the real allocation of the child widgets (message and status
+		// icons) in OnSizeAllocated and painted by the theme in OnDrawn.
+		// Returns the window in parent-relative coordinates.
+		Gdk.Rectangle GetStatusWindow ()
+		{
+			Gdk.Rectangle alloc = Allocation;
+			Gtk.Widget toplevel = Toplevel;
+			if (toplevel != null && toplevel.Allocation.Width > 0) {
+				int center = toplevel.Allocation.Width / 2;
+				int left = Math.Max (center - 300, alloc.X);
+				int right = Math.Min (left + 600, alloc.Right);
+				if (right > left)
+					return new Gdk.Rectangle (left, alloc.Y, right - left, alloc.Height);
+			}
+			return alloc;
+		}
+
 		protected override bool OnDrawn (Cairo.Context cr)
 		{
-			renderArg.Allocation            = Allocation;
-			renderArg.ChildAllocation       = messageBox.Allocation;
+			Gdk.Rectangle alloc = Allocation;
+			Gdk.Rectangle box = GetStatusWindow ();
+
+			// messageBox in window-absolute (draw) coordinates. In Gtk3 each
+			// container accumulates its own Allocation offset into its
+			// children's allocations, so the deepest child's .Allocation is
+			// already expressed in StatusArea coordinates (the manual
+			// SizeAllocate in OnSizeAllocated anchors that space). Adding the
+			// StatusArea's parent-relative allocation yields the position the
+			// theme expects (the draw space, after the translate below, is in
+			// parent coordinates).
+			Gdk.Rectangle child = messageBox.Allocation;
+			Gdk.Rectangle childWindow = new Gdk.Rectangle (
+				alloc.X + child.X,
+				alloc.Y + child.Y,
+				child.Width, child.Height);
+
+			renderArg.Allocation            = box;
+			renderArg.ChildAllocation       = childWindow;
 			renderArg.MousePosition         = tracker.MousePosition;
 			renderArg.Pango                 = PangoContext;
 
+			// The theme renders in window-absolute coordinates, so translate
+			// the context back to window space before delegating to it.
+			cr.Save ();
+			cr.Translate (-alloc.X, -alloc.Y);
 			theme.Render (cr, renderArg, this);
+			cr.Restore ();
+
 			return base.OnDrawn (cr);
 		}
 

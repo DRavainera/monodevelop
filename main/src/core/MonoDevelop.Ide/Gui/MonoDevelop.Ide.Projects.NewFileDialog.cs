@@ -148,6 +148,10 @@ namespace MonoDevelop.Ide.Projects
 			this.vbox2.Add (this.hpaned1);
 			global::Gtk.Box.BoxChild w12 = ((global::Gtk.Box.BoxChild)(this.vbox2 [this.hpaned1]));
 			w12.Position = 0;
+			// Gtk3 does not distribute extra space among non-expanding children
+			// (Gtk2 did), so the central area must expand explicitly.
+			w12.Expand = true;
+			w12.Fill = true;
 			// Container child vbox2.Gtk.Box+BoxChild
 			this.label1 = new global::Gtk.Label ();
 			this.label1.WidthRequest = 1;
@@ -180,6 +184,8 @@ namespace MonoDevelop.Ide.Projects
 			this.hbox2.Add (this.nameEntry);
 			global::Gtk.Box.BoxChild w15 = ((global::Gtk.Box.BoxChild)(this.hbox2 [this.nameEntry]));
 			w15.Position = 1;
+			w15.Expand = true;
+			w15.Fill = true;
 			this.vbox2.Add (this.hbox2);
 			global::Gtk.Box.BoxChild w16 = ((global::Gtk.Box.BoxChild)(this.vbox2 [this.hbox2]));
 			w16.Position = 2;
@@ -249,6 +255,8 @@ namespace MonoDevelop.Ide.Projects
 			w1.Add (this.vbox2);
 			global::Gtk.Box.BoxChild w24 = ((global::Gtk.Box.BoxChild)(w1 [this.vbox2]));
 			w24.Position = 0;
+			w24.Expand = true;
+			w24.Fill = true;
 			// Internal child MonoDevelop.Ide.Projects.NewFileDialog.ActionArea
 			global::Gtk.ButtonBox w25 = this.ActionArea;
 			w25.Name = "dialog1_ActionArea";

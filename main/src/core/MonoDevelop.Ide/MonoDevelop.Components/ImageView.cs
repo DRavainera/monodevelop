@@ -129,8 +129,10 @@ namespace MonoDevelop.Components
 			if (image != null) {
 				var alloc = Allocation;
 				alloc.Inflate (-Xpad, -Ypad);
-				var x = Math.Round (alloc.X + (alloc.Width - image.Width) * Xalign);
-				var y = Math.Round (alloc.Y + (alloc.Height - image.Height) * Yalign);
+				// Gtk3 transla el Cairo.Context al origen local del widget; sumar
+				// Allocation.X/Y (relativos al padre) desplazaria el icono fuera del clip.
+				var x = Math.Round ((alloc.Width - image.Width) * Xalign);
+				var y = Math.Round ((alloc.Height - image.Height) * Yalign);
 				cr.Save ();
 				cr.DrawImage (this, IsParentDisabled () ? image.WithAlpha (0.4) : image, x, y);
 				cr.Restore ();

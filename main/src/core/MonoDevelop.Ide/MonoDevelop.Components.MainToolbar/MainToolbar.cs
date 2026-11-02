@@ -188,26 +188,10 @@ namespace MonoDevelop.Components.MainToolbar
 			statusArea = new StatusArea ();
 			statusArea.ShowMessage (BrandingService.ApplicationName);
 
-			var statusAreaAlign = new Alignment (0, 0, 1, 1);
-			statusAreaAlign.Add (statusArea);
-			contentBox.PackStart (statusAreaAlign, true, true, 0);
+			// The status area computes its centered 600px status window at
+			// draw time, so it can be packed directly as an expanding element.
+			contentBox.PackStart (statusArea, true, true, 0);
 			AddSpace (24);
-
-			statusAreaAlign.SizeAllocated += (object o, SizeAllocatedArgs args) => {
-				Gtk.Widget toplevel = this.Toplevel;
-				if (toplevel == null)
-					return;
-
-				int windowWidth = toplevel.Allocation.Width;
-				int center = windowWidth / 2;
-				int left = Math.Max (center - 300, args.Allocation.Left);
-				int right = Math.Min (left + 600, args.Allocation.Right);
-				uint left_padding = (uint) (left - args.Allocation.Left);
-				uint right_padding = (uint) (args.Allocation.Right - right);
-
-				if (left_padding != statusAreaAlign.LeftPadding || right_padding != statusAreaAlign.RightPadding)
-					statusAreaAlign.SetPadding (0, 0, (uint) left_padding, (uint) right_padding);
-			};
 
 			matchEntry = new SearchEntry ();
 

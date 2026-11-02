@@ -1236,3 +1236,92 @@ discretos); el burst-cap defensivo (3 líneas / 120 ms en `ClampSmoothBurst`,
 (`XRecord_BadCategory` 154/146.5) — el origen de eventos se trazó con interceptor XCB y
 diagnóstico in-app; (c) pendiente heredada de 2026-10-29: líneas con una sola llave
 `{`/`}` sin píxeles (bajo impacto).
+
+### UI legacy Gtk (`--old-gui`): 3 defectos de render vs la referencia Windows (2026-11-02)
+
+Auditoría de render de la interfaz Gtk legacy contra la referencia de Windows
+`~/opencode/ide_win.png` (1920×1009); captura actual 1820×930 en Xvfb :99
+(`~/opencode/qa_b4/proj/QaB4.sln`). Tres defectos nombrados: (a) fondos de body de pads,
+(b) ventana de estado de 600 px centrada en el MainToolbar, (c) barra superior sin
+title bar/botones.
+
+**Qué se hizo / por qué / archivos** (8 ficheros en `main/` + 1 fix por submódulo, rama
+`agents/sub-agent-senior-dev-role-report`):
+
+1. **(a) Fondos de pads (43,43,43) = `#2B2B2B` — CORREGIDO.** El cuerpo del ProjectPad
+   (izq) y del PropertyPad (der) pintaba (82,82,82)/(51,51,51) en vez del color base
+   (43,43,43). Tres causas acumuladas del port GTK2→GTK3:
+   - `Styles.LoadStyle`: en GTK2 `GetStyleBackgroundColor(Normal)` de un widget plano
+     devolvía el color *base* del gtkrc; en GTK3 el fondo de un widget plano es el color
+     de ventana (51,51,51) → `BaseBackgroundColor` = `BackgroundColor`. Fix: leer el
+     color base de un `Gtk.TreeView` (widget de color base). [Styles.cs]
+   - `DefaultWorkbench.LoadDockStyles`: en GTK2 el área del árbol (widget con ventana)
+     pintaba siempre el color base del tema; en GTK3 respeta el override y se pintaba
+     con el color del pad. Fix: `style.TreeBackgroundColor = Styles.BaseBackgroundColor`
+     (ProjectPad/ClassPad). [DefaultWorkbench.cs]
+   - `PropertyGrid`: `PackEnd(vpaned, false, false, 0)` — en GTK3 un hijo con
+     expand=false solo recibe su tamaño natural (32 px sin filas) y el cuerpo del pad
+     quedaba sin pintar. Fix: `PackEnd(vpaned, true, true, 0)`. [PropertyGrid.cs]
+   Resultado: cuerpo izq (43,43,43) 95,56 %; der 99,67 % + divisor vertical
+   (75,75,75) 1 px (x=1642 actual; ref x=1742, mismo color/ancho).
+2. **(b) Ventana de estado 600 px centrada en el MainToolbar — CORREGIDO.** El enfoque
+   anterior (envolver `StatusArea` en `Gtk.Alignment` con padding dinámico en
+   `SizeAllocated`) dejaba de reasignar al hijo en GTK3. Fix: [MainToolbar.cs]
+   empaquetar `StatusArea` directo (`expand/fill`); [StatusArea.cs] `GetStatusWindow()`
+   (ventana de 600 px centrada en el toplevel, coords. relativas al padre),
+   `OnSizeAllocated` reasigna `mainAlign` a esa ventana, y `OnDrawn` calcula
+   `ChildAllocation = StatusArea.Allocation + messageBox.Allocation` (GTK3 acumula el
+   offset de cada contenedor en los allocations de sus hijos) y traduce el contexto con
+   `cr.Translate(-alloc.X,-alloc.Y)` antes de `theme.Render` (el tema pinta en
+   coordenadas absolutas de ventana). Resultado: 600 px exactos, centro 909,5
+   (esperado 910, Δ=0,5), fill (38-39,38-39,38-39) idéntico a la ref (x661-1259,
+   centro 960 = 1920/2), icono + texto dentro.
+3. **(c) Fila superior sin title bar/botones — CERRADO como NO-DEFECTO.** La fila
+   superior de la ref (y0-31) es la **barra de menú** ("Archivo Editar Ver Buscar
+   Proyecto Compilar Ejecutar Herramientas Ventana Ayuda"), no una title bar, y sin
+   botones de ventana. La actual replica exactamente: OCR 10/10, 0 glifos a la derecha,
+   fondo (40,40,40) vs ref (41,41,41). Sin cambio de código.
+4. **Distribución de espacio Gtk3** (familia compartida, necesaria para 1-2 y diálogos):
+   GTK2 repartía el espacio sobrante entre hijos sin expand; GTK3 no. Fix:
+   `Expand/Fill=true` explícitos en `BoxChild` de [NewFileDialog.cs],
+   [SelectReferenceDialog.cs] y [mono-addins AddinManagerDialog.cs].
+5. **ImageView**: en GTK3 el `Cairo.Context` ya está trasladado al origen local del
+   widget; sumar `Allocation.X/Y` sacaba el icono del clip → coords. locales.
+   [ImageView.cs]
+6. **xwt `CanvasBackendGtk3`**: preferred size sobre allocations en caché ((0,0,0,0)
+   antes del primer layout; la rama de ancho usaba `Height` en vez de `Width`). Fix:
+   `CalcPreferredContent` pregunta el preferred size real a cada hijo visible +
+   `OnGetPreferred{Height,Width}For{Width,Height}`.
+
+**Cómo validar**:
+- Build: `dotnet build main/src/core/MonoDevelop.Ide/MonoDevelop.Ide.csproj -c DebugLinux`
+  (0 errores).
+- Arranque `--old-gui` con el fixture QaB4 (receta `env -i … DISPLAY=:99 GDK_BACKEND=x11`
+  de la sección 2026-11-01).
+- Medición PIL: (1) cuerpo de pads dominante (43,43,43) ±2; (2) ventana de estado de
+  600 px centrada en ancho/2; (3) OCR de la barra de menú 10/10 ítems, sin botones a la
+  derecha.
+
+**QA (§18.5)** — Tester QA Senior, 0 hallazgos abiertos: (a) PASS izq 95,56 % / der
+99,67 % (43,43,43) + divisor (75,75,75); (b) PASS 600 px exactos, centro Δ=0,5, fill
+idéntico a la ref (BORDERLINE +2..+3 solo frente al (36,36,36) literal del spec, que la
+ref tampoco alcanza — ref y actual miden igual); (c) PASS 10/10 ítems, 0 glifos de
+botón. Regresiones 4/4 PASS (menú, editor (28,30,31) 99,58 %, dock inferior
+(43,43,43), sin franjas (82,82,82) horizontales extra en pads).
+
+**Diferencias restantes conocidas (documentadas, no defectos de esta tarea)**:
+- Toolbar principal plano (51,51,51) vs gradiente (66,66,66)→(53,53,53) de la ref
+  Windows. Root cause confirmado con probe temporal (retirado):
+  `GetStyleBackgroundColor(Normal)` del `EventBox` devuelve transparente (0,0,0,0) →
+  el gradiente del código se dibuja transparente y se ve el fondo de ventana. El color
+  de la ref no es derivable del tema GTK (paleta Windows) → follow-up: fallback para
+  `topColor.A == 0` (paleta a decidir).
+- Iconos del toolbar monocromos en GTK vs a color en la ref (resolución de iconos
+  distinta entre toolkits) → follow-up.
+- Barra autohide izquierda (27 px, (82,82,82)) solo en la actual: estado de layout de
+  la máquina (ClassPad autohide izquierdo), no código.
+- Mensaje de estado distinto: estado de build, no defecto.
+
+**Pendiente**: (a) gradiente del toolbar (decisión de paleta); (b) iconos a color del
+toolbar; (c) heredadas de 2026-10-29 (líneas con una sola llave `{`/`}`) y 2026-11-01
+(flood de smooth-scroll, XRecord).

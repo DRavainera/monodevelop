@@ -351,7 +351,11 @@ namespace MonoDevelop.Ide.Gui
 			}
 
 			BackgroundColor = styledWidget.GetStyleBackgroundColor (Gtk.StateType.Normal).ToGdkColor ().ToXwtColor ();	// must be the bg color from Gtkrc
-			BaseBackgroundColor = styledWidget.GetStyleBackgroundColor (Gtk.StateType.Normal).ToGdkColor ().ToXwtColor ();	// must be the base color from Gtkrc
+			// En GTK3 el fondo de un widget plano es el color de ventana, no el color de
+			// base; el color de base (fondo de arboles y entradas) se lee de un widget de
+			// color base, como leia el color "base" del gtkrc en GTK2.
+			Gtk.Widget baseColorWidget = new Gtk.TreeView ();
+			BaseBackgroundColor = baseColorWidget.GetStyleBackgroundColor (Gtk.StateType.Normal).ToGdkColor ().ToXwtColor ();	// must be the base color from Gtkrc
 			BaseForegroundColor = styledWidget.GetStyleColor (Gtk.StateType.Normal).ToGdkColor ().ToXwtColor ();	// must be the text color from Gtkrc
 			BaseSelectionBackgroundColor = styledWidget.GetStyleBackgroundColor (Gtk.StateType.Selected).ToGdkColor ().ToXwtColor ();
 			BaseSelectionTextColor = styledWidget.GetStyleColor (Gtk.StateType.Selected).ToGdkColor ().ToXwtColor ();
