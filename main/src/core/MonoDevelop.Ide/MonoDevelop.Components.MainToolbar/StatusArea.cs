@@ -281,8 +281,10 @@ namespace MonoDevelop.Components.MainToolbar
 				return;
 
 			Gdk.Rectangle box = GetStatusWindow ();
-			// SizeAllocate recibe coordenadas relativas al padre (StatusArea).
-			mainAlign.SizeAllocate (new Gdk.Rectangle (box.X - allocation.X, box.Y - allocation.Y, box.Width, box.Height));
+			// SizeAllocate y .Allocation operan en coordenadas absolutas de la
+			// ventana (el GdkWindow del EventBox de la toolbar), no relativas al
+			// padre, asi que se pasa la ventana centrada tal cual.
+			mainAlign.SizeAllocate (box);
 		}
 
 		void TriggerErrorAnimation ()
@@ -439,18 +441,16 @@ namespace MonoDevelop.Components.MainToolbar
 			Gdk.Rectangle alloc = Allocation;
 			Gdk.Rectangle box = GetStatusWindow ();
 
-			// messageBox in window-absolute (draw) coordinates. In Gtk3 each
-			// container accumulates its own Allocation offset into its
-			// children's allocations, so the deepest child's .Allocation is
-			// already expressed in StatusArea coordinates (the manual
-			// SizeAllocate in OnSizeAllocated anchors that space). Adding the
-			// StatusArea's parent-relative allocation yields the position the
-			// theme expects (the draw space, after the translate below, is in
-			// parent coordinates).
+			// messageBox en coordenadas absolutas de la ventana (el GdkWindow de
+			// la toolbar): en Gtk3 cada contenedor sin ventana acumula su offset
+			// en la Allocation de sus hijos, y el SizeAllocate manual de
+			// OnSizeAllocated ancla ese espacio en la ventana 600px centrada.
+			// El frame del theme (tras el translate de abajo) es el mismo, asi
+			// que se usa el valor tal cual.
 			Gdk.Rectangle child = messageBox.Allocation;
 			Gdk.Rectangle childWindow = new Gdk.Rectangle (
-				alloc.X + child.X,
-				alloc.Y + child.Y,
+				child.X,
+				child.Y,
 				child.Width, child.Height);
 
 			renderArg.Allocation            = box;

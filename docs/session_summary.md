@@ -2276,3 +2276,88 @@ DRavainera); punteros de submódulos actualizados en el commit del repo principa
 **Pendiente**: (a) gradiente del toolbar principal (decisión de paleta para el fallback
 transparente); (b) iconos a color del toolbar; (c) heredadas de 2026-10-29 (líneas con
 una sola llave `{`/`}`) y 2026-11-01 (flood de smooth-scroll, XRecord).
+
+## 2026-11-02 (2) — UI legacy Gtk (`--old-gui`): segunda tanda — posición del icono de estado y barra de título (título + botones)
+
+Segunda tanda de la misma auditoría contra `~/opencode/ide_win.png`. Captura de trabajo:
+1826×980 en Xvfb :99 (fixture `~/opencode/qa_b4/proj/QaB4.sln`; WID 0x200008). Dos
+defectos corregidos y verificados: (d) posición del icono púrpura de estado, (e) barra
+de título con título y botones minimizar/maximizar/cerrar.
+
+**Qué se hizo / por qué / archivos** (2 ficheros en `main/`):
+
+1. **(d) Icono púrpura de estado al borde derecho de la ventana 600 px — CORREGIDO y
+   verificado.** El icono se pintaba en el borde derecho del GdkWindow de la toolbar
+   (x~1800) en vez del borde derecho de la ventana de 600 px centrada (x1213). Root
+   cause: en este binding GtkSharp `Widget.SizeAllocate`/`Widget.Allocation` operan en
+   **coordenadas absolutas de la ventana** (el GdkWindow del EventBox de la toolbar),
+   no relativas al padre; el código anterior hacía de menos/de más `alloc.X/Y`
+   (tratándolas como relativas). Fix [StatusArea.cs]: `OnSizeAllocated` pasa
+   `GetStatusWindow()` tal cual a `mainAlign.SizeAllocate(box)`; `OnDrawn` usa
+   `messageBox.Allocation` tal cual para `ChildAllocation` (ya es absoluto) y conserva
+   `cr.Translate(-alloc.X,-alloc.Y)` porque el tema pinta en coordenadas de ventana.
+   Verificado (app35/app44): clúster púrpura x1194-1205, y91-102 = borde derecho de la
+   ventana 600 px (613-1213); 13 px, idéntico app35→app44.
+2. **(e) Barra de título con título + botones — CORREGIDO y verificado.** Sin un WM que
+   pinte decoraciones (Xvfb) la banda superior de la ventana quedaba negra y vacía; y en
+   este binding GTK no genera los botones CSD automáticamente (un HeaderBar con
+   `ShowCloseButton` queda sin hijos). Dos piezas:
+   - [WorkbenchWindow.cs] (ctor): headerbar manual — `ShowCloseButton=false`,
+     `DecorationLayout="minimize,maximize,close"`, título = `Gtk.Label` centrado como
+     `CustomTitle` (sincronizado con `Title` por un poller `GLib.Timeout.Add(300)`: en
+     este binding no existe signal `TitleChanged`, `Title` no es virtual — verificado
+     por reflexión — y `PropertyNotifyEventArgs` no expone la PSpec para filtrar), y
+     tres botones `AddTitleBarButton` (`window-{minimize,maximize,close}-symbolic`,
+     classes `titlebutton`+`flat`, tooltip en español, acciones `Iconify()` /
+     `Maximize()`/`Unmaximize()` / `Close()`; `PackEnd` en orden close→max→min para
+     dejar [min,max,close] izquierda→derecha). `Titlebar=headerbar` +
+     `headerbar.ShowAll()`, porque la ventana se muestra con un simple Show sin cascada
+     (`Workbench.Present()` → `RootWindow.Visible=true`+`Deiconify`).
+   - [WorkbenchWindow.cs] (`ForAll`): **el root cause del "headerbar vacío"**. El
+     override C# (itera `Child`+`topLevels`, nunca llama a base) sustituye el vfunc
+     `for-all` de la ventana; los mecanismos internos de GTK3 (draw/map/size) lo llaman
+     vía `gtk_container_forall` con `include_internals=TRUE`, y el `gtk_window_forall`
+     nativo incluye la `title_box` en esa iteración. Al omitirla, el headerbar quedaba
+     sin mapear ni pintar (probe: visible=TRUE, allocation correcta, título correcto,
+     0 píxeles pintados). Fix: `if (include_internals && Titlebar != null) callback
+     (Titlebar);` (mismas condiciones nativas). Diagnóstico apoyado en la fuente de GTK
+     3.24.43 (`gtk_window_forall`, `gtk_window_draw` — deja la banda del titlebar a
+     pintar por el propio titlebar —, `gtk_container_draw` — itera por el vfunc
+     `for_all` —) y con una sonda CSS de fondo rojo
+     (`CssProvider.LoadFromData`+`StyleContext.AddProviderForScreen`, prioridad 1000):
+     roja en el repro mínimo (sin override) y no roja en el workbench → la causa es la
+     iteración, no el estilo.
+
+Todos los probes temporales (wb_dbg.log, sonda roja, sa_dbg.log) fueron retirados;
+binario verificado limpio con `strings -e l` (0 hits de strings de probe).
+
+**Cómo validar**: build 0 errores (`dotnet build main/src/core/MonoDevelop.Ide/MonoDevelop.Ide.csproj -c DebugLinux`);
+arranque `--old-gui` con el fixture QaB4 (receta env de 2026-11-01/02); captura
+`import -window <WID>` (WID vía `xwininfo -root -tree | grep -i qab4`). En la ventana
+1826×980: (1) banda y1-44 = headerbar pintado: fondo (40,40,40)=#282828, título
+centrado (px brillantes r,g,b>150 en la zona central, ~430; centro x912 = centro de la
+ventana), 3 glyphs a x1709/1747/1785 (min~8, max~28, close~15 px); (2) clúster púrpura
+x1194-1205, y91-102; (3) 0 px rojos en y1-44; (4) diff global vs el baseline anterior
+limitado a y1-44.
+
+**QA (§18.5)**: Tester QA Senior — **APROBADO, 0 hallazgos abiertos** (informe
+`~/opencode/qa_ui4/report_qa_ui4.md`, crops/diffs en `~/opencode/qa_ui4/`): D1 PASS
+(clúster púrpura 13 px idéntico x1194-1205 y91-102); D2 PASS (fondo #282828 79429 px,
+título 433 px centrado en x912, botones [min·línea 8, max·cuadrado 28, close·X 16] en
+orden [1709,1747,1785]; pre-fix app38 = 0 px en título y botones); regresiones R1-R5
+PASS (menubar 806 px, toolbar 53090 px (51,51,51), púrpura idéntico, diff global
+app35→app44 = 902 px 100% en y1-44 y 0 en y45+, nombre WM "QaB4 – types.ts –
+MonoDevelop"). Pendiente opcional (no bloquea): cambio de glyph maximizar↔restore, no
+verificado para no romper el estado capturado.
+
+**Diferencias restantes conocidas**: las de la tanda anterior de 2026-11-02 siguen
+vigentes (toolbar plano vs gradiente, iconos monocromos, barra autohide, mensaje de
+estado).
+
+**Cierre**: 2 ficheros en `main/` (WorkbenchWindow.cs, StatusArea.cs) commiteados y
+pushed en la rama `agents/sub-agent-senior-dev-role-report` (sin cambios de
+submódulos).
+
+**Pendiente**: (a) gradiente del toolbar principal (decisión de paleta); (b) iconos a
+color del toolbar; (c) heredadas de 2026-10-29 y 2026-11-01; (d) glyph maximizar/restore
+no verificado en QA (opcional).

@@ -33,11 +33,54 @@ namespace MonoDevelop.Ide.Gui
 	class WorkbenchWindow: Gtk.Window
 	{
 		List<TopLevelChild> topLevels = new List<TopLevelChild> ();
-		
+
 		public WorkbenchWindow (): base (Gtk.WindowType.Toplevel)
 		{
 			GtkWorkarounds.FixContainerLeak (this);
 			this.Role = "workbench";
+
+			// Sin un WM que dibuja decoraciones server-side (Wayland, Xvfb sin WM)
+			// la ventana queda con una barra de titulo negra sin titulo ni botones.
+			// Con este binding ademas GTK no genera los botones CSD automaticamente
+			// (un HeaderBar con ShowCloseButton queda sin hijos), asi que la barra de
+			// titulo se construye a mano: titulo centrado + botones
+			// minimizar/maximizar/cerrar, con el estilo del tema (Win11-round-Dark).
+			Gtk.HeaderBar headerbar = new Gtk.HeaderBar ();
+			headerbar.ShowCloseButton = false;
+			headerbar.DecorationLayout = "minimize,maximize,close";
+
+			Gtk.Label titleLabel = new Gtk.Label (Title) { Halign = Gtk.Align.Center };
+			headerbar.CustomTitle = titleLabel;
+			// En este binding no existe signal de cambio de titulo ni la
+			// propiedad Title es virtual, asi que el label se sincroniza con
+			// un polling ligero (comparacion de strings cada 300ms).
+			GLib.Timeout.Add (300, delegate {
+				if (Title != titleLabel.Text)
+					titleLabel.Text = Title;
+				return true;
+			});
+
+			AddTitleBarButton (headerbar, "window-close-symbolic", "Cerrar la ventana", delegate { Close (); });
+			AddTitleBarButton (headerbar, "window-maximize-symbolic", "Maximizar/restaurar la ventana", delegate { if (Maximized) Unmaximize (); else Maximize (); });
+			AddTitleBarButton (headerbar, "window-minimize-symbolic", "Minimizar la ventana", delegate { Iconify (); });
+			Titlebar = headerbar;
+			// La ventana se muestra con un simple Show (sin cascada), asi que los
+			// hijos del headerbar (titulo y botones) se muestran aqui explicitamente.
+			headerbar.ShowAll ();
+		}
+
+		void AddTitleBarButton (Gtk.HeaderBar headerbar, string iconName, string tooltip, EventHandler action)
+		{
+			Gtk.Image image = new Gtk.Image ();
+			image.IconName = iconName;
+			Gtk.Button button = new Gtk.Button ();
+			button.Image = image;
+			button.TooltipText = tooltip;
+			button.StyleContext.AddClass ("titlebutton");
+			button.StyleContext.AddClass ("flat");
+			button.Clicked += action;
+			headerbar.PackEnd (button);
+			button.ShowAll ();
 		}
 
 		class TopLevelChild
@@ -137,6 +180,12 @@ namespace MonoDevelop.Ide.Gui
 				callback (Child);
 			foreach (TopLevelChild child in topLevels)
 				callback (child.Child);
+			// El for-all nativo de GtkWindow incluye la Titlebar propia cuando
+			// include_internals es true (los mecanismos internos de draw/map/size
+			// pasan siempre true). Sin esta línea una Titlebar establecida no
+			// llega a mapearse ni a pintarse.
+			if (include_internals && Titlebar != null)
+				callback (Titlebar);
 		}
 	}
 }

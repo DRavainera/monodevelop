@@ -1325,3 +1325,62 @@ botón. Regresiones 4/4 PASS (menú, editor (28,30,31) 99,58 %, dock inferior
 **Pendiente**: (a) gradiente del toolbar (decisión de paleta); (b) iconos a color del
 toolbar; (c) heredadas de 2026-10-29 (líneas con una sola llave `{`/`}`) y 2026-11-01
 (flood de smooth-scroll, XRecord).
+
+### UI legacy Gtk (`--old-gui`): 2 defectos de render, segunda tanda — icono de estado y barra de título (2026-11-02)
+
+Segunda tanda de la auditoría del 2026-11-02 (misma referencia `~/opencode/ide_win.png`,
+captura de trabajo 1826×980 en Xvfb :99 con el fixture QaB4). Dos defectos corregidos y
+verificados: (d) posición del icono púrpura de estado, (e) barra de título con título +
+botones minimizar/maximizar/cerrar.
+
+**Qué se hizo / por qué / archivos** (2 ficheros en `main/`, rama
+`agents/sub-agent-senior-dev-role-report`):
+
+1. **(d) Icono púrpura de estado al borde derecho de la ventana 600 px — CORREGIDO.**
+   Se pintaba en el borde derecho del GdkWindow de la toolbar (x~1800) en vez del borde
+   de la ventana 600 px centrada (x1213). Root cause: en este binding GtkSharp
+   `SizeAllocate`/`.Allocation` operan en **coordenadas absolutas de la ventana** (GdkWindow
+   del EventBox de la toolbar), no relativas al padre; el código anterior sumaba/restaba
+   `alloc.X/Y` como si fueran relativas. Fix [StatusArea.cs]: `OnSizeAllocated` pasa
+   `GetStatusWindow()` tal cual a `mainAlign.SizeAllocate(box)`; `OnDrawn` usa
+   `messageBox.Allocation` tal cual para `ChildAllocation` y conserva
+   `cr.Translate(-alloc.X,-alloc.Y)` (el tema pinta en coordenadas de ventana).
+   Verificado: clúster púrpura x1194-1205, y91-102 (borde derecho de 613-1213).
+2. **(e) Barra de título con título + botones — CORREGIDO.** Sin WM que pinte
+   decoraciones (Xvfb) la banda superior quedaba negra y vacía, y este binding no genera
+   los botones CSD automáticos. Fix en [WorkbenchWindow.cs] (dos piezas):
+   - ctor: headerbar manual — `ShowCloseButton=false`,
+     `DecorationLayout="minimize,maximize,close"`, `Gtk.Label` centrado como
+     `CustomTitle` (sincronizado con `Title` por poller de 300 ms: no hay signal
+     `TitleChanged` en el binding, `Title` no es virtual y `PropertyNotifyEventArgs` no
+     expone la PSpec), y 3 botones `AddTitleBarButton` (icons
+     `window-{minimize,maximize,close}-symbolic`, classes `titlebutton`+`flat`,
+     `Iconify()`/`Maximize()`/`Unmaximize()`/`Close()`). `Titlebar=headerbar` +
+     `headerbar.ShowAll()` (la ventana se muestra con Show sin cascada:
+     `Workbench.Present()`).
+   - `ForAll`: el override C# (itera `Child`+`topLevels`, sin base) sustituye el vfunc
+     `for-all` de la ventana y omite la `Titlebar`; GTK3 lo llama con
+     `include_internals=TRUE` desde draw/map/size (`gtk_container_forall`), y el
+     `gtk_window_forall` nativo incluye la `title_box` ahí → el headerbar quedaba sin
+     mapear ni pintar (visible=TRUE, alloc correcta, 0 px). Fix:
+     `if (include_internals && Titlebar != null) callback (Titlebar);` (condición
+     nativa). Diagnóstico con fuente de GTK 3.24.43 + sonda CSS de fondo rojo
+     (roja en repro sin override, no roja en workbench).
+
+Probes temporales de diagnóstico (wb_dbg.log, sonda roja, sa_dbg.log) retirados;
+binario verificado limpio con `strings -e l` (0 hits).
+
+**Cómo validar**: build 0 errores; arranque `--old-gui` con QaB4 en Xvfb :99;
+`import -window <WID>`. En 1826×980: (1) banda y1-44 headerbar pintado — fondo
+(40,40,40)=#282828, título centrado (~430 px brillantes, centro x912), 3 glyphs a
+x1709/1747/1785 (min~8, max~28, close~15 px); (2) púrpura x1194-1205, y91-102; (3) 0 px
+rojos en y1-44; (4) diff vs baseline anterior limitado a y1-44.
+
+**QA (§18.5)** — Tester QA Senior, 0 hallazgos abiertos: D1 PASS (13 px idénticos
+x1194-1205 y91-102); D2 PASS (fondo #282828, título 433 px centrado x912, botones
+[min 8 / max 28 / close 16] en [1709,1747,1785]; pre-fix = 0 px); regresiones 5/5 PASS
+(menubar 806 px, toolbar 53090 px (51,51,51), púrpura idéntico, diff global 902 px 100%
+en y1-44, nombre WM correcto). Opcional no verificado: glyph maximizar↔restore.
+
+**Pendiente**: los mismos que en la tanda anterior (gradiente del toolbar, iconos a
+color, heredadas 2026-10-29/2026-11-01) + glyph maximizar/restore (opcional).
