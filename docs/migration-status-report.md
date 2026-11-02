@@ -1384,3 +1384,60 @@ en y1-44, nombre WM correcto). Opcional no verificado: glyph maximizar↔restore
 
 **Pendiente**: los mismos que en la tanda anterior (gradiente del toolbar, iconos a
 color, heredadas 2026-10-29/2026-11-01) + glyph maximizar/restore (opcional).
+
+### 2026-11-02 (3) — UI legacy Gtk (`--old-gui`): 7 defectos de diálogos vs ref Windows
+
+**Qué se hizo**: tercera tanda de la auditoría de UI legacy-Gtk. Se corrigieron 7
+defectos de diálogos (10 puntos de validación): (1) Nueva solución — filas/iconos
+recortados + botones Anterior/Siguiente a la derecha; (2) Extensiones → Galería —
+listbox corto; (3) Acerca de — versión de GTK#; (4) Directivas — panel izquierdo;
+(5) NuGet — panel derecho corto; (6) Opciones de solución → Encabezado estándar;
+(7) Preferencias → Depurador / Encabezado estándar / NuGet → Orígenes.
+
+Archivos tocados (7 en `main/` + 1 en el submódulo `main/external/mono-addins`):
+- `main/src/core/MonoDevelop.Ide/MonoDevelop.Ide.Projects/GtkTemplateCellRenderer.cs` —
+  `OnGetPreferredHeight`/`OnGetPreferredHeightForWidth` para que la fila de plantilla no
+  quede a la altura del texto ni recorte el icono de 32 px (1a).
+- `main/src/core/MonoDevelop.Ide/MonoDevelop.Ide.Projects/GtkNewProjectDialogBackend.UI.cs` —
+  `previousNextButtonBox` con `PackEnd` y botones `PackStart`, para que Anterior/Siguiente
+  queden a la derecha y Cancelar a la izquierda (1b).
+- `main/external/mono-addins/Mono.Addins.Gui/Gui/Mono.Addins.Gui.AddinManagerDialog.cs` —
+  `DefaultWidth=920`/`DefaultHeight=640` + `Expand/Fill` en `hbox2[vbox6]`,
+  `boxUpdates[vboxUpdates]` e `hbox8[vboxGallery]` (2).
+- `main/src/core/MonoDevelop.Ide/MonoDevelop.Ide/IdeVersionInfo.cs` — `GetGtkSharpVersion()`
+  y línea `GTK# <ver>` en Acerca de (3).
+- `main/src/addins/MonoDevelop.PackageManagement/MonoDevelop.PackageManagement.Gui/ManagePackagesDialog.UI.cs` —
+  `packageInfoContainerVBox` con `WidgetPlacement.Fill` (vertical y horizontal) (5).
+- `main/src/core/MonoDevelop.Ide/MonoDevelop.Ide.StandardHeader/StandardHeaderPolicyPanel.cs` —
+  `GtkScrolledWindow1.MinContentWidth=200` (en vez de `TreeView.WidthRequest`) +
+  `headerText.WrapMode=WordChar` (6 y 7b).
+- `main/src/addins/MonoDevelop.Debugger/MonoDevelop.Debugger/DebuggerOptionsPanelWidget.cs` —
+  se elimina el `HeightRequest` que recortaba el panel de Depurador (7a).
+- `main/src/addins/MonoDevelop.PackageManagement/Gui/MonoDevelop.PackageManagement.PackageSourcesWidget.cs` —
+  `Expand/Fill` en `mainVBox[packageSourceListHBox]` y `packageSourceListHBox[GtkScrolledWindow]` (7c).
+- (4) Directivas se revalidó sobre el diálogo compartido de opciones con los fixes de
+  paneles de esta tanda; no requirió cambio adicional propio.
+
+**Cómo validar**: build 0 errores (`MonoDevelop.Ide.csproj` y `MonoDevelop.PackageManagement.csproj`
+con `-c DebugLinux`); arranque `--old-gui` con QaB4 en Xvfb :99; capturas + extents Atspi.
+Evidencia: (1a) `newsol4.png` 904x632, md5 estable, iconos sin recorte; (1b) OCR
+Cancelar x40 y580 / Anterior x706 y581 / Siguiente x810 y581; (2) `addins_gallery3.png`
+920x640, `galleryTreeView @524,291 589x473`; (3) About `GTK# 3.24.24.95 (Win11-round-Dark theme)`;
+(4) `directivas2.png` 960x680, categorías `260x581`; (5) `nuget2.png` 886x528, panel derecho
+`355x418`; (6) `solopts4.png` 960x680, `HeaderText 406x418` + `TemplateTree 200x418`;
+(7a) `prefs_debugger2.png` 960x687 md5-ídento; (7b) `prefs_header2.png` 960x687,
+`HeaderText 438x425` + `TemplateTree 200x425`; (7c) `prefs_sources2.png` 960x687, tabla
+de orígenes `646x512`.
+
+**QA (§18.5)**: Tester QA Senior — **APROBADO, 0 hallazgos funcionales abiertos**
+(informe `~/opencode/qa_ui5/report_qa_ui5.md`): 10/10 puntos PASS; builds IDE/PM 0 errores;
+sin regresiones en `--old-gui`. Los hallazgos abiertos eran solo procedimentales
+(cambios sin commitear) y quedan resueltos por este cierre.
+
+**Cierre**: 7 ficheros en `main/` + submódulo `main/external/mono-addins` commiteados y
+pushed (rama `net10` del submódulo + rama `agents/sub-agent-senior-dev-role-report` del
+repo principal, con puntero de submódulo actualizado).
+
+**Pendiente**: gradiente del toolbar principal (decisión de paleta), iconos a color del
+toolbar, barra autohide, heredadas 2026-10-29/2026-11-01 y glyph maximizar/restore
+(opcional) — fuera del alcance de esta tanda.

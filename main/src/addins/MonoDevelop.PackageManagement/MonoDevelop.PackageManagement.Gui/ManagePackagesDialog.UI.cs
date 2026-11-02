@@ -233,6 +233,8 @@ namespace MonoDevelop.PackageManagement
 			packageInfoVBox.Margin = new WidgetSpacing (15, 12, 15, 12);
 			var packageInfoContainerVBox = new VBox ();
 			packageInfoContainerVBox.WidthRequest = 328;
+			packageInfoContainerVBox.VerticalPlacement = WidgetPlacement.Fill;
+			packageInfoContainerVBox.HorizontalPlacement = WidgetPlacement.Fill;
 			packageInfoContainerVBox.PackStart (packageInfoFrame, true, true);
 
 			var packageInfoScrollView = new ScrollView ();

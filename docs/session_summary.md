@@ -2361,3 +2361,94 @@ submódulos).
 **Pendiente**: (a) gradiente del toolbar principal (decisión de paleta); (b) iconos a
 color del toolbar; (c) heredadas de 2026-10-29 y 2026-11-01; (d) glyph maximizar/restore
 no verificado en QA (opcional).
+
+## 2026-11-02 (3) — UI legacy Gtk (`--old-gui`): 7 defectos de diálogos vs ref Windows
+
+Tercera tanda de la auditoría de UI legacy-Gtk. Se corrigieron y verificaron 7 defectos
+de diálogos (10 puntos de validación): Nueva solución (filas/iconos + botones),
+Extensiones → Galería, Acerca de, Directivas, NuGet, Opciones de solución → Encabezado
+estándar y Preferencias (Depurador, Encabezado estándar, NuGet → Orígenes).
+
+**Qué se hizo / por qué / archivos** (7 ficheros en `main/` + 1 fichero en el submódulo
+`main/external/mono-addins`):
+
+1. **Nueva solución — filas pequeñas / iconos recortados (1a) y botones (1b) —
+   CORREGIDO y verificado.**
+   - `main/src/core/MonoDevelop.Ide/MonoDevelop.Ide.Projects/GtkTemplateCellRenderer.cs`:
+     en GTK3 la altura de fila se toma de `get-preferred-height` /
+     `get-preferred-height-for-width`, no solo del vfunc legacy `OnGetSize`. Se añadieron
+     `OnGetPreferredHeight` y `OnGetPreferredHeightForWidth` devolviendo
+     `icono + 2*Ypad` cuando hay icono (o el padding de cabecera de grupo/recente si no
+     hay), de modo que la fila deja de quedar a la altura del texto (~18 px) y recortar
+     los iconos de plantilla de 32 px.
+   - `main/src/core/MonoDevelop.Ide/MonoDevelop.Ide.Projects/GtkNewProjectDialogBackend.UI.cs`:
+     el grupo `previousNextButtonBox` se packea con `PackEnd` en la barra inferior y los
+     botones `Anterior`/`Siguiente` con `PackStart` dentro del grupo, para que queden a
+     la derecha del diálogo (Cancelar a la izquierda). Antes el grupo entero se packeaba
+     con `PackStart` y quedaba pegado a Cancelar.
+2. **Herramientas → Extensiones → Galería: “listbox corto” (2) — CORREGIDO y
+   verificado.**
+   - `main/external/mono-addins/Mono.Addins.Gui/Gui/Mono.Addins.Gui.AddinManagerDialog.cs`:
+     `DefaultWidth=920` / `DefaultHeight=640` (antes 700x550, que dejaba el árbol de la
+     galería corto) y `Expand=true; Fill=true` en los tres paneles lista/info
+     (`hbox2[vbox6]`, `boxUpdates[vboxUpdates]`, `hbox8[vboxGallery]`), porque en GTK3 un
+     hijo de `Gtk.Box` sin `Expand` no recibe el espacio sobrante.
+3. **Ayuda → Acerca de: versión de GTK# (3) — CORREGIDO y verificado.**
+   - `main/src/core/MonoDevelop.Ide/MonoDevelop.Ide/IdeVersionInfo.cs`: nuevo
+     `GetGtkSharpVersion()` (versión del assembly de `Gtk.Global`) y la línea de versión
+     pasa a imprimir `GTK# <ver> (<tema>)` en vez de `GTK+ <ver>`.
+4. **Editar → Directivas...: panel izquierdo (4) — CORREGIDO y verificado.**
+   - Se revalidó el diálogo compartido de opciones (`Dialogs.Options.Categories`) a
+     tamaño completo del panel izquierdo (`260x581` en un diálogo de 960x680). No requirió
+     cambio propio adicional más allá de los fixes de paneles compartidos de esta tanda.
+5. **Proyecto → Administrar paquetes NuGet...: panel derecho corto (5) — CORREGIDO y
+   verificado.**
+   - `main/src/addins/MonoDevelop.PackageManagement/MonoDevelop.PackageManagement.Gui/ManagePackagesDialog.UI.cs`:
+     `packageInfoContainerVBox` pasa a `VerticalPlacement = WidgetPlacement.Fill` y
+     `HorizontalPlacement = WidgetPlacement.Fill` (antes placement `Start`, que dejaba el
+     panel de info colgado arriba sin rellenar el área).
+6. **Proyecto → Opciones de la solución → Encabezado estándar (6) — CORREGIDO y
+   verificado.**
+   - `main/src/core/MonoDevelop.Ide/MonoDevelop.Ide.StandardHeader/StandardHeaderPolicyPanel.cs`:
+     el ancho de 200 px del árbol de plantillas se pone en
+     `GtkScrolledWindow1.MinContentWidth` (no en `TreeView.WidthRequest`, que en un
+     `ScrolledWindow` deja el child a ~0 px) y el `headerText` pasa a
+     `WrapMode.WordChar` para que el editor no fuerce un ancho mínimo excesivo.
+7. **Editar → Preferencias... (7a/7b/7c) — CORREGIDO y verificado.**
+   - `main/src/addins/MonoDevelop.Debugger/MonoDevelop.Debugger/DebuggerOptionsPanelWidget.cs`
+     (7a Depurador): se elimina el `HeightRequest` que forzaba el recorte vertical de
+     checkboxes/labels.
+   - `main/src/core/MonoDevelop.Ide/MonoDevelop.Ide.StandardHeader/StandardHeaderPolicyPanel.cs`
+     (7b Encabezado estándar): mismo fix que en (6), revalidado en su segundo consumidor.
+   - `main/src/addins/MonoDevelop.PackageManagement/Gui/MonoDevelop.PackageManagement.PackageSourcesWidget.cs`
+     (7c NuGet → Orígenes): `packageSourceListHBox[GtkScrolledWindow]` y
+     `mainVBox[packageSourceListHBox]` con `Expand=true; Fill=true`, para que la tabla de
+     fuentes rellene el área vertical.
+
+**Cómo validar**: build 0 errores (`dotnet build main/src/core/MonoDevelop.Ide/MonoDevelop.Ide.csproj -c DebugLinux`
+y `dotnet build main/src/addins/MonoDevelop.PackageManagement/MonoDevelop.PackageManagement.csproj -c DebugLinux`);
+arranque `--old-gui` con QaB4 en Xvfb :99; capturas `import -window <WID>` y extents Atspi.
+En la sesión: (1a) `newsol4.png` 904x632, md5 estable `30ec4b82894004c6fc2a1da9ba7231db`,
+iconos en runs y104-133/138-167/172-201 (~29-32 px); (1b) OCR `newsol5.png`: Cancelar
+x40 y580, Anterior x706 y581, Siguiente x810 y581; (2) `addins_gallery3.png` 920x640,
+`galleryTreeView` `@524,291 589x473`; (3) About muestra `GTK# 3.24.24.95 (Win11-round-Dark theme)`;
+(4) `directivas2.png` 960x680, `Dialogs.Options.Categories @480,249 260x581`; (5)
+`nuget2.png` 886x528, panel derecho `355x418` / scroll `354x366`; (6) `solopts4.png`
+960x680, `StandardHeaderPanel.HeaderText @811,300 406x418` y `TemplateTree @1225,300 200x418`;
+(7a) `prefs_debugger2.png` 960x687, md5-ídento en vivo; (7b) `prefs_header2.png` 960x687,
+`HeaderText 438x425`, `TemplateTree 200x425`; (7c) `prefs_sources2.png` 960x687, tabla de
+orígenes `646x512`.
+
+**QA (§18.5)**: Tester QA Senior — **APROBADO, 0 hallazgos funcionales abiertos**
+(informe `~/opencode/qa_ui5/report_qa_ui5.md`): 10/10 puntos PASS (1a, 1b, 2, 3, 4, 5, 6,
+7a, 7b, 7c); builds IDE/PM 0 errores; sin regresiones en la ruta `--old-gui`. Los únicos
+hallazgos eran procedimentales (cambios sin commitear) y quedan resueltos por este cierre.
+
+**Cierre**: 7 ficheros en `main/` + el submódulo `main/external/mono-addins`
+(`Mono.Addins.Gui/Gui/Mono.Addins.Gui.AddinManagerDialog.cs`) commiteados y pushed (rama
+`net10` del submódulo + rama `agents/sub-agent-senior-dev-role-report` del repo principal,
+con puntero de submódulo actualizado).
+
+**Pendiente**: las diferencias restantes conocidas de las tandas anteriores (gradiente
+del toolbar, iconos a color, barra autohide, glyph maximizar/restore opcional) siguen
+vigentes; no están en el alcance de esta tanda.

@@ -104,6 +104,33 @@ namespace MonoDevelop.Ide.Projects
 			}
 		}
 
+		protected override void OnGetPreferredHeight (Widget widget, out int minimum, out int natural)
+		{
+			base.OnGetPreferredHeight (widget, out minimum, out natural);
+			// GTK3 computes the row height from get-preferred-height, not the
+			// legacy get-size above, so OnGetSize alone left rows at text height
+			// (~18px) and clipped the 32px template icons. Mirror OnGetSize here.
+			int h;
+			if (TemplateIcon != null) {
+				h = (int)TemplateIcon.Height + ((int)Ypad * 2);
+			} else {
+				h = natural + (RenderRecentTemplate ? recentTemplateHeadingTotalYPadding : groupTemplateHeadingTotalYPadding);
+			}
+			minimum = natural = Math.Max (natural, h);
+		}
+
+		protected override void OnGetPreferredHeightForWidth (Widget widget, int width, out int minimum, out int natural)
+		{
+			base.OnGetPreferredHeightForWidth (widget, width, out minimum, out natural);
+			int h;
+			if (TemplateIcon != null) {
+				h = (int)TemplateIcon.Height + ((int)Ypad * 2);
+			} else {
+				h = natural + (RenderRecentTemplate ? recentTemplateHeadingTotalYPadding : groupTemplateHeadingTotalYPadding);
+			}
+			minimum = natural = Math.Max (natural, h);
+		}
+
 		protected override void OnRender (Cairo.Context cr, Widget widget, Rectangle background_area, Rectangle cell_area, CellRendererState flags)
 		{
 			if (Template == null) {

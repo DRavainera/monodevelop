@@ -307,7 +307,9 @@ namespace MonoDevelop.Ide.Projects
 			previousNextButtonBox.Name = "previousNextButtonBox";
 			previousNextButtonBox.BorderWidth = 16;
 			previousNextButtonBox.Spacing = 9;
-			bottomHBox.PackStart (previousNextButtonBox, false, false, 0);
+			// Pack the Previous/Next group at the END of the bottom bar so it sits on the
+			// right of the dialog (Cancel stays on the left). PackStart left it next to Cancel.
+			bottomHBox.PackEnd (previousNextButtonBox, false, false, 0);
 			previousNextButtonBox.Layout = ButtonBoxStyle.End;
 
 			previousButton = new Button ();
@@ -316,7 +318,7 @@ namespace MonoDevelop.Ide.Projects
 			previousButton.Accessible.Description = GettextCatalog.GetString ("Return to the previous page");
 			previousButton.Label = GettextCatalog.GetString ("Previous");
 			previousButton.Sensitive = false;
-			previousNextButtonBox.PackEnd (previousButton, false, false, 0);
+			previousNextButtonBox.PackStart (previousButton, false, false, 0);
 
 			// Next button - bottom right.
 			nextButton = new Button ();
@@ -324,7 +326,7 @@ namespace MonoDevelop.Ide.Projects
 			nextButton.Accessible.Name = "nextButton";
 			nextButton.Accessible.Description = GettextCatalog.GetString ("Move to the next page");
 			nextButton.Label = GettextCatalog.GetString ("Next");
-			previousNextButtonBox.PackEnd (nextButton, false, false, 0);
+			previousNextButtonBox.PackStart (nextButton, false, false, 0);
 
 			// Remove default button action area.
 			ContentArea.Remove (ActionArea);

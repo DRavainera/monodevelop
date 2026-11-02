@@ -68,6 +68,17 @@ namespace MonoDevelop.Ide
 			return v1 +"." + v2 + "."+ v3;
 		}
 		
+		public static string GetGtkSharpVersion ()
+		{
+			try {
+				var ver = typeof (Gtk.Global).Assembly.GetName ().Version;
+				if (ver != null)
+					return ver.ToString ();
+			} catch {
+			}
+			return "unknown";
+		}
+
 		static string GetGtkTheme ()
 		{
 			var settings = Gtk.Settings.Default;
@@ -100,8 +111,8 @@ namespace MonoDevelop.Ide
 				sb.Append ("Installation UUID: ");
 				sb.AppendLine (SystemInformation.InstallationUuid);
 							
-				sb.Append ("\tGTK+ ");
-				sb.Append (GetGtkVersion ());
+				sb.Append ("\tGTK# ");
+				sb.Append (GetGtkSharpVersion ());
 				var gtkTheme = GetGtkTheme ();
 				if (!string.IsNullOrEmpty (gtkTheme))
 					sb.Append (" (").Append (gtkTheme).AppendLine (" theme)");

@@ -102,8 +102,12 @@ namespace MonoDevelop.Ide.StandardHeader
 			treeviewTemplates.RowActivated += TreeviewTemplates_RowActivated;
 			var w4 = ((global::Gtk.Box.BoxChild)(this.hbox2 [this.GtkScrolledWindow1]));
 			w4.Expand = false;
-			treeviewTemplates.WidthRequest = 200;
-			treeviewTemplates.QueueResize ();
+			// The width must be set on the ScrolledWindow (MinContentWidth), not on the
+			// inner TreeView: a scrolled window sizes itself independently of its child,
+			// so the previous WidthRequest left the templates pane at ~0 px (invisible).
+			this.GtkScrolledWindow1.MinContentWidth = 200;
+			// Wrap the header text so the editor does not force a wide minimum width.
+			headerText.WrapMode = Gtk.WrapMode.WordChar;
 
 			SetupAccessibility ();
 		}

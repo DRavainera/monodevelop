@@ -40,9 +40,13 @@ namespace MonoDevelop.PackageManagement
 			this.packageSourceListHBox.Add (this.GtkScrolledWindow);
 			global::Gtk.Box.BoxChild w2 = ((global::Gtk.Box.BoxChild)(this.packageSourceListHBox [this.GtkScrolledWindow]));
 			w2.Position = 0;
+			w2.Expand = true;
+			w2.Fill = true;
 			this.mainVBox.Add (this.packageSourceListHBox);
 			global::Gtk.Box.BoxChild w3 = ((global::Gtk.Box.BoxChild)(this.mainVBox [this.packageSourceListHBox]));
 			w3.Position = 0;
+			w3.Expand = true;
+			w3.Fill = true;
 			// Container child mainVBox.Gtk.Box+BoxChild
 			this.packageSourceHBox = new global::Gtk.HBox ();
 			this.packageSourceHBox.Name = "packageSourceHBox";

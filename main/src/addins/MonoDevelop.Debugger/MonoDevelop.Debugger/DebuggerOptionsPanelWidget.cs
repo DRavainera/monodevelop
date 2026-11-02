@@ -79,8 +79,7 @@ namespace MonoDevelop.Debugger
 			PackStart (checkStepOverPropertiesAndOperators);
 			checkStepIntoExternalCode = new CheckBox (GettextCatalog.GetString ("Step into external code")) {
 				ExpandVertical = false,
-				MarginBottom = 0,
-				HeightRequest = 15
+				MarginBottom = 0
 			};
 			PackStart (checkStepIntoExternalCode);
 
@@ -91,7 +90,6 @@ namespace MonoDevelop.Debugger
 				MarginLeft = 30,
 				Wrap = WrapMode.Word,
 				WidthRequest = 400,
-				HeightRequest = 20,
 				ExpandVertical = false
 			};
 
