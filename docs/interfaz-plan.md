@@ -275,7 +275,16 @@ Port desde `MonoDevelop.Ide.FindInFiles` y `ProjectOperations` del legacy:
 - QA E2E (`--editops`): duplicate→undo→comment→uncomment→redo/undo con aserciones por texto y conteo.
 
 ### M10 — File > New File / Open File / Save As funcionales
-- **NewFile** (legacy AddFileDialog vacío): documento "newN.cs" sin archivo backing, persistible con Save As.
+ - **NewFile** (legacy `MonoDevelop.Ide.Projects.NewFileDialog`): diálogo real "New File" — árbol de
+   categorías (C# → General), lista de templates (Empty File / Assembly Information, icono 32px +
+   lenguaje), panel de info (título bold + descripción), campo `Name:`, caja "Add to project"
+   (checkbox + combo de proyectos + `Path:` + `Browse`) y botones `Cancel`/`New`. Creación del fichero
+   con **BOM UTF8 + standard header** (policy global) + cuerpo del template (sustituciones
+   `$${Tag}`/`$if$`/`$else$`/`$endif$`); Assembly Information → `Properties/AssemblyInfo.cs`;
+   duplicado AssemblyInfo.cs se excluye solo con proyecto. Sin proyecto abierto crea documento en
+   memoria (unsaved, persistible con Save As). Hooks QA: `--newfile`, `--newfile-unsaved`,
+   `--ctxnewfile` (menú contextual), `--newfile-visual` (captura). Ventana 718x524 (pares 192/292/*),
+   idéntica al legacy. QA 17/17 PASS (2026-11-03).
 - **OpenFile** ya no abre solo soluciones: `FilePickerOpenOptions` para cualquier archivo de texto → editor isla.
 - **SaveAs** (legacy FileService.SaveAs): escribe a la ruta elegida, retargetea el editor y re-nombra la pestaña isla.
 - QA: app sin excepciones; los pickers nativos quedan wired al dispatch del menú.
@@ -2988,5 +2997,83 @@ GtkSharp 3.24.24.95 (solución + documento, sin los criticals de señal/set_data
 registración). Cambios de esta sesión: 4 ficheros del núcleo (AtkCocoaHelper.cs,
 GtkWorkarounds.cs, MonoDevelopMain.cs, + docs) + 1 del submódulo xwt (GtkWorkarounds.cs,
 sobre su changeset T7 de 24 ficheros); el changeset T7 completo (536 ficheros) se commitea
-junto. Submódulos con cambios commiteados/pushed en su rama `net10` (forks DRavainera):
+ junto. Submódulos con cambios commiteados/pushed en su rama `net10` (forks DRavainera):
 xwt y mono-addins; punteros actualizados en este commit.
+
+### M10 (cierre) — File > New File: port del diálogo real Gtk legacy → Avalonia (2026-11-03)
+
+**Contexto**: el item M10 describía `NewFile` como un stub "newN.cs" sin archivo backing. Esta
+tanda lo sustituye por el diálogo "New File" **real** del legacy
+(`MonoDevelop.Ide.Projects.NewFileDialog`, 718x524, paneles 192/292/*) construido en Avalonia
+reciclando módulos existentes (regla 18.4), sin crear un módulo nuevo ni separar carpeta.
+
+**Qué se hizo**:
+- **Nuevo** `Views/NewFileDialog.axaml` (+ `.axaml.cs`): réplica del layout legacy — chrome
+  (título `New File` + botón `✕`), árbol de categorías (`FuncTreeDataTemplate<NewFileCategory>`,
+  mismo patrón de los árboles de `MainWindow`), `ListBox` de templates con `DataTemplate`
+  (icono `Image` 32x32 + `Name` + `Language`), panel de info (`TemplateTitle` bold +
+  `TemplateDescription`), fila `Name:` (`NameBox`), caja "Add to project" (`AddToProjectCheck` +
+  `ProjectCombo` + `ProjectPathBox` + `BrowseButton`) y fila de acciones `Cancel`/`New`.
+- **Catálogo** de los 2 `FileTemplate` de `CSharpBinding.addin.xml` (id de nodo = legacy):
+  `CSharpEmptyFile` ("Empty File", icono `md-text-file-icon`) y `CSharpAssemblyInfo`
+  ("Assembly Information", icono `md-file-information`, `FileSubPath=Properties/AssemblyInfo.cs`,
+  exclusión si ya existe `AssemblyInfo.cs` en el directorio de creación — solo con proyecto).
+- **Creación de fichero** (`OnNew`): **BOM UTF8 siempre** + standard header (policy global vía
+  `PreferencesDialog.LoadGlobalPolicy("StandardHeader")`, ahora `internal`) + cuerpo del template
+  (`TemplateText.Parse` — port mínimo de `FileTemplateParser`: `$${Tag}` + `$if$`/`$else$`/
+  `$endif$`). Escritura con `StreamWriter(…, UTF8Encoding(true))` para emitir el BOM
+  (`File.WriteAllBytes(GetBytes)` NO lo emite — bug corregido).
+- **Dos modos**: con proyecto (aísta al proyecto, `Properties/AssemblyInfo.cs` para Assembly
+  Info) y sin proyecto (documento en memoria *unsaved*, `UnsavedFileName`/`UnsavedContent`).
+- **Última categoría** persistida en `PropertyService` (`Dialogs.NewFileDialog.LastSelectedCategory`
+  + sufijo `.C#.C#` si hay proyecto activo). Iconos vía `IconService.GetImage(IconId)` (fallback
+  `md-file-source`).
+- **Cableado** en `Views/MainWindow.axaml.cs`: `OpenNewFileDialog()` (proyecto activo + paths de
+  la solución), `HandleNewFileDialogResult(dlg)` (crea fichero o abre documento unsaved), helper
+  `CreateUnsavedDocument(name, content)` (ya usado también por el hook `--windocs`), y 4 hooks QA
+  (`--newfile`, `--newfile-unsaved`, `--ctxnewfile`, `--newfile-visual`) registrados en el
+  allowlist de `Program.cs`.
+
+**Cómo validar / evidencia** (recipe `env -i … DISPLAY=:0 … timeout -k 5 22 dotnet BIN --sln=… <FLAG>`;
+artefactos en `~/opencode/nfqa/`):
+- `--newfile` → `[newfile] created=True bom=True bytes=3`; el fichero real en disco captura 3
+  bytes `EF BB BF` (BOM UTF8, template vacío).
+- `--newfile-unsaved` → `[newfile] unsavedDoc=True dirEmpty=True` (documento en memoria, sin disco).
+- `--ctxnewfile` → `[ctxnewfile] created=True name=QaCtxFile.cs`.
+- `--newfile-visual` → `[newfile-qa] cat=General tmplCount=2 … title='Empty File'
+  desc='Creates an empty C# file.' okEnabled=True`.
+- Geometría `718x524` (`xwininfo`/`identify`); AT-SPI: frame `New File`, chrome, árbol `C#`→
+  `General` (expansión interactiva), `ListBox` con **2** templates, info, `Name:`, "Add to
+  project" + `TestProj`, `Path:`/`Browse`, `Cancel`/`New`; iconos renderizados (PIL: filas 57/64%
+  tinta vs zona vacía 0%).
+
+**Bugs corregidos en esta tanda**:
+- **`tmplCount=0`** (lista vacía): `CategoryTree.SelectionChanged` no estaba cableado →
+  `OnCategorySelected`→`FillTemplates` nunca corría; y `LastCategoryPath` por defecto `"General"`
+  no resolvía con `FindCategory` (requiere `"C#/General"`). Fix: cablear `SelectionChanged`,
+  defecto→`"C#/General"`, fallback `FindCategory("C#/General") ?? generalCategory`.
+- **NRE al abrir** (`NameBox.Text.Trim()`): en esta versión de Avalonia `TextBox.Text` devuelve
+  `null` antes de inicializar (señal reentrante durante `InitializeView` en `OnOpened`). Fix:
+  deferir `InitializeView`/`UpdateOkStatus`/`NameBox.Focus` al `OnOpened` (one-shot
+  `initialViewDone`) y null-coalescear las lecturas de `NameBox.Text`; null-guards en
+  `OnCategorySelected`/`FillTemplates`/`OnTemplateSelected`.
+- Errores de compilación previos corregidos: `?? return null` (CS1525), `KeyEventArgs`/
+  `ToggleButtonEventArgs` (CS0246 — `IsCheckedChanged` con lambda), `walk` unassigned (CS0165),
+  `LoadGlobalPolicy` no accesible (CS0122 → `internal`), `HierarchicalDataTemplate`→
+  `FuncTreeDataTemplate` en code-behind (AVLN2000).
+
+**QA (§18.5)**: Tester QA Senior — **APROBADO, 17/17 PASS, 0 hallazgos**. Evidencia: 4 hooks
+`exit=124` (sin 134/SIGABRT, 0 `Unhandled/NullReference/TypeLoad/DllNotFound`), bytes reales
+`EF BB BF`, AT-SPI completo (incl. expansión interactiva C#→General), 718x524, iconos OK, build
+`0 Errores`, y regresión `--old-gui` (mismo binario arranca el IDE legacy sin crasheo; 0 archivos
+legacy tocados — el diff solo toca `MonoDevelop.Startup.Avalonia`).
+
+**Cierre**: repo principal commiteado/pushed en `agents/sub-agent-senior-dev-role-report`
+(`Views/NewFileDialog.axaml` + `.cs` nuevos, `Views/MainWindow.axaml.cs`, `Program.cs`,
+`Views/PreferencesDialog.axaml.cs` + docs). Sin submódulos modificados.
+
+**Pendiente**: el *body* completo del template AssemblyInfo con las etiquetas autorales
+(`AuthorCompany`/`CopyrightHolder`/`AssemblyInfoVersion`…) queda por poblar desde el xft cuando el
+operador lo pida (hoy emite el esqueleto con `ProjectName`); y la integración con más lenguajes
+que C# (Java, F#, VB…) cuando se migren sus `xft` (hoy el catálogo es solo C#, igual que la shell
+que no carga el host legacy de add-ins).

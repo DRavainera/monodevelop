@@ -497,6 +497,80 @@ public partial class MainWindow : Window
 					if (created)
 						Directory.Delete (Path.Combine (dir, qaName));
 				}
+			} else if (qa == "--newfile") {
+				// QA: free-mode New File dialog end to end — auto-confirm an Empty
+				// File with "Add to project" on (the default), verify the on-disk
+				// file (BOM) and clean up, like --ctxnewfolder does for folders.
+				var proj = ResolveActiveProject ();
+				if (proj is null) {
+					Output ("[newfile] no project");
+				} else {
+					var dir = Path.GetDirectoryName (proj)!;
+					var qaName = "QaNewFile.cs";
+					var dlg = new NewFileDialog (GetSolutionProjectPaths (), proj) {
+						TemplateForQa = "CSharpEmptyFile",
+						NameForQa = qaName,
+						ConfirmForQa = true,
+					};
+					_ = dlg.ShowDialog (this);
+					HandleNewFileDialogResult (dlg);
+					var created = Path.Combine (dir, qaName);
+					bool exists = File.Exists (created);
+					byte[] bytes = exists ? File.ReadAllBytes (created) : Array.Empty<byte> ();
+					bool bom = bytes.Length >= 3 && bytes [0] == 0xEF && bytes [1] == 0xBB && bytes [2] == 0xBF;
+					Output ("[newfile] created=" + exists + " bom=" + bom + " bytes=" + bytes.Length + " name=" + qaName);
+					if (exists)
+						File.Delete (created);
+					RefreshSolutionTree ();
+				}
+			} else if (qa == "--newfile-unsaved") {
+				// QA: free-mode New File with "Add to project" OFF (legacy
+				// CanCreateUnsavedFiles path): an unsaved document with the
+				// template content, no file on disk.
+				var proj = ResolveActiveProject ();
+				var qaName = "QaUnsaved.cs";
+				var dlg = new NewFileDialog (GetSolutionProjectPaths (), proj) {
+					TemplateForQa = "CSharpEmptyFile",
+					NameForQa = qaName,
+					AddToProjectForQa = false,
+					ConfirmForQa = true,
+				};
+				_ = dlg.ShowDialog (this);
+				HandleNewFileDialogResult (dlg);
+				docs.TryGetValue (qaName, out var ed);
+				Output ("[newfile] unsavedDoc=" + (ed is not null) + " dirEmpty=" + (proj is null || !Directory.EnumerateFiles (Path.GetDirectoryName (proj)!, qaName).Any ()));
+			} else if (qa == "--ctxnewfile") {
+				// QA: the ProjectPad context-menu "New File..." flow (ProjectCommands.
+				// AddNewFiles) end to end: select the project node, run the menu
+				// command, auto-confirm the dialog and verify file + tree, then clean up.
+				var proj = ResolveActiveProject ();
+				if (proj is null) {
+					Output ("[ctxnewfile] no project");
+				} else {
+					var dir = Path.GetDirectoryName (proj)!;
+					var qaName = "QaCtxFile.cs";
+					SelectXwtSolutionRow ("project:" + proj);
+					dialogNewFileQa = (qaName, "CSharpEmptyFile");
+					OnMenuCommand ("MonoDevelop.Ide.Commands.ProjectCommands.AddNewFiles", "project:" + proj);
+					dialogNewFileQa = null;
+					var created = Path.Combine (dir, qaName);
+					bool exists = File.Exists (created);
+					Output ("[ctxnewfile] created=" + exists + " name=" + qaName);
+					if (exists)
+						File.Delete (created);
+					RefreshSolutionTree ();
+				}
+			} else if (qa == "--newfile-visual") {
+				// QA: abre el diálogo New File (free mode) con una template
+				// preseleccionada y LO DEJA ABIERTO (ShowDialog modal bloquea) para
+				// captura visual + volcado AT-SPI (mismo patrón que --ctxmenu-visual).
+				var proj = ResolveActiveProject ();
+				var dlg = new NewFileDialog (GetSolutionProjectPaths (), proj) {
+					TemplateForQa = "CSharpEmptyFile",
+					NameForQa = "MyFile.cs",
+				};
+				_ = dlg.ShowDialog (this);
+				Output ("[newfile-visual] dialog closed by QA");
 			} else if (qa == "--ctxmenu-visual") {
 				// QA: open the ProjectPad flyout and LEAVE IT OPEN for 5s — mutter
 				// blocks automatic X11 grabs (XGetImage fails, x11grab captures black),
@@ -2215,7 +2289,7 @@ public partial class MainWindow : Window
 					"TestProj", "TestProj", "Program.cs");
 				if (File.Exists (file)) {
 					OpenFileDocument (file);
-					OpenNewFileDocument ();
+					CreateUnsavedDocument ("new1.cs", "");
 					Output ($"[win] active before cycle: {DocTabs.SelectedItem}");
 					CycleDocument (1);
 					Output ($"[win] after NextDocument: {(DocTabs.SelectedItem as TabItem)?.Tag}");
@@ -3864,6 +3938,8 @@ public partial class MainWindow : Window
 	// QA: when set, the next NewFolderDialog auto-fills this name and confirms
 	// (the --ctxnewfolder hook exercises the full menu flow headlessly).
 	string? dialogAutoConfirmFolder;
+	// QA: same pattern for the New File dialog (the --ctxnewfile hook).
+	(string Name, string Template)? dialogNewFileQa;
 
 	/// <summary>Project path for build commands: the context node when the command
 	/// came from the Solution pad, else the active project.</summary>
@@ -3973,9 +4049,10 @@ public partial class MainWindow : Window
 		return null;
 	}
 
-	// ProjectCommands.AddNewFiles on a node: create the file inside the node's
-	// directory and open it (legacy runs the New File dialog; the shell creates a
-	// named empty .cs like the dialog's empty class template).
+	// ProjectCommands.AddNewFiles on a node: the real New File dialog pinned to the
+	// node's directory (legacy FolderNodeBuilder/SolutionNodeBuilder →
+	// ProjectOperations.CreateProjectFile: new NewFileDialog(project, basePath) with
+	// the "Add to project" box hidden).
 	void CreateContextNewFile ()
 	{
 		var dir = ContextTargetDirectory ();
@@ -3983,31 +4060,15 @@ public partial class MainWindow : Window
 			Output ("[add] select a project or folder node first");
 			return;
 		}
-		var dlg = new InputDialog ("New File", "File name:", "NewClass.cs");
+		var proj = ResolveCommandProject ();
+		var dlg = new NewFileDialog (dir, proj is null ? null : Path.GetFileNameWithoutExtension (proj));
+		if (dialogNewFileQa is { } qa) {
+			dlg.TemplateForQa = qa.Template;
+			dlg.NameForQa = qa.Name;
+			dlg.ConfirmForQa = true;
+		}
 		_ = dlg.ShowDialog (this);
-		dlg.Closed += (_, _) => {
-			if (!dlg.Confirmed || string.IsNullOrWhiteSpace (dlg.Value))
-				return;
-			var name = dlg.Value;
-			if (!Path.HasExtension (name))
-				name += ".cs";
-			var newFile = Path.Combine (dir, name);
-			try {
-				if (File.Exists (newFile)) {
-					Output ("[add] file already exists: " + name);
-					return;
-				}
-				var className = Path.GetFileNameWithoutExtension (name);
-				var ns = Path.GetFileName (dir);
-				File.WriteAllText (newFile,
-					$"namespace {ns};\n\nclass {className}\n{{\n}}\n");
-				OpenFileDocument (newFile);
-				RefreshSolutionTree ();
-				Output ("[add] created " + name);
-			} catch (Exception ex) {
-				Output ("[add] failed: " + ex.Message);
-			}
-		};
+		HandleNewFileDialogResult (dlg);
 	}
 
 	// ProjectCommands.NewFolder on a node (legacy FolderNodeBuilder: the real
@@ -5793,7 +5854,7 @@ public partial class MainWindow : Window
 			_ = OpenNewSolutionDialogAsync ();
 			return;
 		case "MonoDevelop.Ide.Commands.FileCommands.NewFile":
-			OpenNewFileDocument ();
+			OpenNewFileDialog ();
 			return;
 		// ----- Project pad context menu: Add New Files / New Folder / Open Containing
 		// Folder (legacy AddNewFilesHandler, NewFolderHandler, OpenContainingFolderHandler). -----
@@ -8114,25 +8175,63 @@ public partial class MainWindow : Window
 			Output ("[edit] no active text editor");
 	}
 
-	// FileCommands.NewFile (legacy AddFileDialog with empty template): a new document
-	// with no backing file until saved.
-	void OpenNewFileDocument ()
+	// FileCommands.NewFile (legacy NewFileHandler: new NewFileDialog(null, null)):
+	// the real New File dialog in free mode — the "Add to project" box is offered
+	// when the loaded solution has projects (legacy IdeApp.Workspace.GetAllProjects).
+	void OpenNewFileDialog ()
 	{
-		var name = $"new{newFileCounter}.cs";
-		newFileCounter++;		var editor = new MonoDevelop.Ide.Controls.SkTextEditor {
+		var dlg = new NewFileDialog (GetSolutionProjectPaths (), ResolveActiveProject ());
+		_ = dlg.ShowDialog (this);
+		HandleNewFileDialogResult (dlg);
+	}
+
+	// All the .csproj of the loaded solution (legacy workspace projects).
+	List<string> GetSolutionProjectPaths ()
+	{
+		var sln = loadedSolutionPath;
+		if (string.IsNullOrEmpty (sln) || !File.Exists (sln))
+			return new List<string> ();
+		try {
+			return Directory.GetFiles (Path.GetDirectoryName (sln)!, "*.csproj", SearchOption.AllDirectories)
+				.Where (p => !p.Contains ("obj") && !p.Contains ("bin"))
+				.OrderBy (p => p, StringComparer.OrdinalIgnoreCase)
+				.ToList ();
+		} catch {
+			return new List<string> ();
+		}
+	}
+
+	// Post-OK of the New File dialog (legacy ProjectOperations flow): a file on disk
+	// → refresh the pad tree and open the document; an unsaved name → a document
+	// with the generated content, like the legacy Workbench.NewDocument.
+	void HandleNewFileDialogResult (NewFileDialog dlg)
+	{
+		if (dlg.CreatedFilePath is { } path) {
+			RefreshSolutionTree ();
+			OpenFileDocument (path);
+			Output ("[file] created " + path);
+		} else if (dlg.UnsavedFileName is { } name) {
+			CreateUnsavedDocument (name, dlg.UnsavedContent ?? "");
+			Output ("[file] new unsaved document " + name + " (use Save As to persist)");
+		}
+	}
+
+	// Creates an unsaved in-memory document (SkTextEditor) with the given content —
+	// the legacy Workbench.NewDocument equivalent. Shared by the New File dialog
+	// result and the --windocs QA cycle.
+	void CreateUnsavedDocument (string name, string content)
+	{
+		var editor = new MonoDevelop.Ide.Controls.SkTextEditor {
 			FilePath = "",
 			IsDirty = false,
 			Background = Brushes.Transparent,
 			PopupOwner = this,
 			Cursor = new Avalonia.Input.Cursor (Avalonia.Input.StandardCursorType.Ibeam),
 		};
-		editor.Text = "";
+		editor.Text = content;
 		AttachEditorContextMenu (editor);
 		AddDocument (name, editor);
-		Output ($"[file] new document {name} (use Save As to persist)");
 	}
-
-	int newFileCounter = 1;
 
 	// FileCommands.OpenFile over any text file; .sln/.csproj import the project
 	// (legacy FileService.OpenFile → ProjectOperations switch on the file type).

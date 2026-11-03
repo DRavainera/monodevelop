@@ -2623,6 +2623,63 @@ y pushed en `net10`; repo principal commiteado y pushed en
 `agents/sub-agent-senior-dev-role-report` con los punteros de submódulo actualizados,
 `ManagePackagesDialog.UI.cs` + `ManagePackagesDialog.cs` y la documentación.
 
-**Pendiente**: los mismos que en las tandas anteriores (gradiente del toolbar, iconos
+ **Pendiente**: los mismos que en las tandas anteriores (gradiente del toolbar, iconos
 a color, barra autohide, heredadas 2026-10-29/2026-11-01, glyph maximizar/restore
 opcional) — fuera del alcance de esta tanda.
+
+## 2026-11-03 (2) — UI Avalonia: port del diálogo "New File" (File ▸ New File) desde Gtk legacy
+
+**Contexto**: el item M10 del `interfaz-plan.md` describía `NewFile` como un stub "newN.cs" sin
+archivo backing. Esta tanda lo sustituye por el diálogo "New File" **real** del legacy
+(`MonoDevelop.Ide.Projects.NewFileDialog`, 718x524, paneles 192/292/*), portado a Avalonia
+reciclando módulos existentes (regla 18.4: reutilización obligatoria, sin separación de carpetas).
+
+**Qué se hizo** (archivos):
+- **Nuevo** `main/src/core/MonoDevelop.Startup.Avalonia/Views/NewFileDialog.axaml` (+ `.axaml.cs`):
+  réplica del layout legacy — chrome (título `New File` + `✕`), árbol de categorías
+  (`FuncTreeDataTemplate<NewFileCategory>`), `ListBox` de templates (`DataTemplate` con icono
+  `Image` 32x32 + `Name` + `Language`), panel de info (`TemplateTitle` bold + `TemplateDescription`),
+  fila `Name:`, caja "Add to project" (checkbox + combo + `Path:` + `Browse`), botones `Cancel`/`New`.
+- **Catálogo** de los 2 `FileTemplate` de `CSharpBinding.addin.xml`: `CSharpEmptyFile` ("Empty
+  File") y `CSharpAssemblyInfo` ("Assembly Information" → `Properties/AssemblyInfo.cs`, excluido
+  si ya existe `AssemblyInfo.cs` con proyecto).
+- **Creación** (`OnNew`): BOM UTF8 + standard header (policy global) + cuerpo del template
+  (sustituciones `$${Tag}`/`$if$`/`$else$`/`$endif$`); `StreamWriter(…, UTF8Encoding(true))` para
+  emitir el BOM. Dos modos: con proyecto (aísta) y sin proyecto (documento *unsaved* en memoria).
+- **MOD** `Views/MainWindow.axaml.cs`: `OpenNewFileDialog()`, `HandleNewFileDialogResult(dlg)`,
+  `CreateUnsavedDocument(name, content)` (también usado por `--windocs`), hooks QA
+  `--newfile`/`--newfile-unsaved`/`--ctxnewfile`/`--newfile-visual`.
+- **MOD** `Program.cs`: allowlist +4 flags QA. **MOD** `Views/PreferencesDialog.axaml.cs`:
+  `LoadGlobalPolicy` → `internal static` (para leer la policy del standard header).
+
+**Cómo validar**: recipe `env -i … DISPLAY=:0 XAUTHORITY=… DBUS_SESSION_BUS_ADDRESS=… 
+FONTCONFIG_FILE=~/opencode/fontconfig/c_only.conf timeout -k 5 22 dotnet main/build/MonoDevelop.
+AvaloniaShell.dll --sln=~/opencode/TestProj/TestProj.sln <FLAG>`. Evidencia:
+- `--newfile` → `[newfile] created=True bom=True bytes=3` (fichero real 3 bytes `EF BB BF`).
+- `--newfile-unsaved` → `[newfile] unsavedDoc=True dirEmpty=True`.
+- `--ctxnewfile` → `[ctxnewfile] created=True name=QaCtxFile.cs`.
+- `--newfile-visual` → `tmplCount=2`, título/descripción poblados, `okEnabled=True`.
+- 718x524 (`xwininfo`/`identify`); AT-SPI completo; iconos renderizados (PIL 57/64% vs 0%).
+
+**Bugs corregidos en esta tanda**:
+1. **`tmplCount=0`** — `CategoryTree.SelectionChanged` sin cablear (`FillTemplates` no corría) y
+   `LastCategoryPath` por defecto `"General"` (requiere `"C#/General"`). Fix: cablear señal +
+   defecto/fallback a `"C#/General"`.
+2. **NRE al abrir** — en esta versión de Avalonia `TextBox.Text` devuelve `null` antes de
+   inicializar (señal reentrante durante `InitializeView` en `OnOpened`). Fix: mover la vista
+   inicial a `OnOpened` (one-shot `initialViewDone`) + null-coalescear `NameBox.Text` + null-guards
+   en `OnCategorySelected`/`FillTemplates`/`OnTemplateSelected`.
+3. Errores de compilación previos: `?? return null`, `KeyEventArgs`/`ToggleButtonEventArgs`,
+   `walk` unassigned, `LoadGlobalPolicy` no accesible, `HierarchicalDataTemplate`→`FuncTreeDataTemplate`.
+
+**QA (§18.5)**: Tester QA Senior — **APROBADO, 17/17 PASS, 0 hallazgos**. 4 hooks `exit=124` (sin
+crasheos), bytes reales `EF BB BF`, AT-SPI (incl. expansión interactiva C#→General), 718x524,
+iconos OK, build `0 Errores`, regresión `--old-gui` OK (0 archivos legacy tocados).
+
+**Cierre**: repo principal commiteado y pushed en `agents/sub-agent-senior-dev-role-report`
+(`Views/NewFileDialog.axaml` + `.cs` nuevos, `Views/MainWindow.axaml.cs`, `Program.cs`,
+`Views/PreferencesDialog.axaml.cs` + docs). Sin submódulos modificados.
+
+**Pendiente**: poblar el *body* completo del template AssemblyInfo con etiquetas autoriales y
+extender el catálogo a más lenguajes (Java/F#/VB) cuando se migren sus `xft` — hoy solo C# (igual
+que la shell, que no carga el host legacy de add-ins).

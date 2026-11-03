@@ -1481,7 +1481,7 @@ public partial class PreferencesDialog : Window
 
 	static string GlobalPolicyFile => Path.Combine (UserDataRoot, "Policies", "UserDefault.mdpolicy.xml");
 
-	static XElement? LoadGlobalPolicy (string elementName)
+	internal static XElement? LoadGlobalPolicy (string elementName)
 	{
 		try {
 			if (!File.Exists (GlobalPolicyFile))

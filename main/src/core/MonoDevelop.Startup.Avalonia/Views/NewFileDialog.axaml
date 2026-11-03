@@ -1,0 +1,100 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="using:MonoDevelop.AvaloniaShell.Views"
+        x:Class="MonoDevelop.AvaloniaShell.Views.NewFileDialog"
+        Title="New File"
+        Width="718" Height="524"
+        WindowStartupLocation="CenterOwner"
+        SystemDecorations="None"
+        ExtendClientAreaToDecorationsHint="True"
+        Background="{DynamicResource IdeWindowBgBrush}">
+
+  <!-- Replica of the legacy Gtk NewFileDialog (718x524, panes 192/292/*):
+       categories tree | template list (32px icons) | title + description,
+       then Name:, the "Add to project" box and the Cancel/New action row. -->
+  <Grid RowDefinitions="Auto,*,Auto" Margin="6">
+    <!-- Avalonia chrome -->
+    <Border Grid.Row="0" Classes="dialogchrome" Background="{DynamicResource IdeChromeBgBrush}"
+            BorderBrush="{DynamicResource IdeBorderBrush}" BorderThickness="0,0,0,1">
+      <Grid ColumnDefinitions="*,Auto">
+        <TextBlock Text="New File" Margin="12,6" FontWeight="SemiBold"
+                   Foreground="{DynamicResource IdeFgBrush}" />
+        <Button Grid.Column="1" Classes="caption captionclose" Content="&#x2715;" Click="OnCancel" />
+      </Grid>
+    </Border>
+
+    <Grid Grid.Row="1" Margin="6,8,6,0" RowDefinitions="*,Auto,Auto"
+          ColumnDefinitions="192,3,292,3,*">
+      <!-- Categories (legacy catView, headers hidden, sorted ascending) -->
+      <Border Grid.Row="0" Grid.Column="0" Margin="0,0,0,6"
+              BorderBrush="{DynamicResource IdeBorderBrush}" BorderThickness="1">
+        <TreeView x:Name="CategoryTree" Background="Transparent"
+                  Foreground="{DynamicResource IdeFgBrush}" />
+      </Border>
+      <GridSplitter Grid.Row="0" Grid.Column="1" Width="3" HorizontalAlignment="Stretch"
+                    VerticalAlignment="Stretch" Background="Transparent" />
+
+      <!-- Templates (legacy TemplateView: 32px Dnd icon + name + language in small dark grey) -->
+      <Border Grid.Row="0" Grid.Column="2" Margin="0,0,6,0"
+              BorderBrush="{DynamicResource IdeBorderBrush}" BorderThickness="1">
+        <ListBox x:Name="TemplateList" Background="Transparent"
+                 Foreground="{DynamicResource IdeFgBrush}" SelectionChanged="OnTemplateSelected">
+          <ListBox.ItemTemplate>
+            <DataTemplate DataType="{x:Type local:NewFileTemplate}">
+              <StackPanel Orientation="Horizontal" Spacing="10" Margin="2">
+                <Image Width="32" Height="32" Source="{Binding Icon}" />
+                <StackPanel VerticalAlignment="Center">
+                  <TextBlock Text="{Binding Name}" />
+                  <TextBlock Text="{Binding Language}" FontSize="10" Opacity="0.6" />
+                </StackPanel>
+              </StackPanel>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+      </Border>
+      <GridSplitter Grid.Row="0" Grid.Column="3" Width="3" HorizontalAlignment="Stretch"
+                    VerticalAlignment="Stretch" Background="Transparent" />
+
+      <!-- Info pane (legacy labelTemplateTitle bold + infoLabel, both wrapping) -->
+      <Border Grid.Row="0" Grid.Column="4" Padding="6"
+              BorderBrush="{DynamicResource IdeBorderBrush}" BorderThickness="1">
+        <DockPanel>
+          <TextBlock x:Name="TemplateTitle" DockPanel.Dock="Top" FontWeight="Bold"
+                     TextWrapping="Wrap" Margin="0,0,0,4"
+                     Foreground="{DynamicResource IdeFgBrush}" />
+          <TextBlock x:Name="TemplateDescription" TextWrapping="Wrap" Opacity="0.85"
+                     Foreground="{DynamicResource IdeFgBrush}" />
+        </DockPanel>
+      </Border>
+
+      <!-- Name: row (legacy label2 + nameEntry) -->
+      <StackPanel Grid.Row="1" Grid.ColumnSpan="5" Orientation="Horizontal" Spacing="6" Margin="0,8,0,0">
+        <TextBlock Text="Name:" VerticalAlignment="Center"
+                   Foreground="{DynamicResource IdeFgBrush}" />
+        <TextBox x:Name="NameBox" TextChanged="OnNameChanged" KeyDown="OnNameKeyDown" />
+      </StackPanel>
+
+      <!-- Add to project box (legacy boxProject; hidden when no projects are open) -->
+      <StackPanel x:Name="ProjectBox" Grid.Row="2" Grid.ColumnSpan="5" Spacing="6"
+                  Margin="0,8,0,0" IsVisible="False">
+        <StackPanel Orientation="Horizontal" Spacing="6">
+          <CheckBox x:Name="AddToProjectCheck" Content="Add to project:"
+                    VerticalAlignment="Center" Foreground="{DynamicResource IdeFgBrush}" />
+          <ComboBox x:Name="ProjectCombo" MinWidth="200" />
+        </StackPanel>
+        <StackPanel Orientation="Horizontal" Spacing="6">
+          <TextBlock x:Name="ProjectPathLabel" Text="Path:" VerticalAlignment="Center"
+                     Foreground="{DynamicResource IdeFgBrush}" />
+          <TextBox x:Name="ProjectPathBox" />
+          <Button x:Name="BrowseButton" Content="Browse" Click="OnBrowse" MinWidth="64" />
+        </StackPanel>
+      </StackPanel>
+    </Grid>
+
+    <!-- Action row (legacy Gtk.Dialog action area: [Cancel][New], New is the default) -->
+    <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0">
+      <Button x:Name="CancelButton" Content="Cancel" Click="OnCancel" MinWidth="80" Margin="0,0,6,0" />
+      <Button x:Name="NewButton" Content="New" Click="OnNew" MinWidth="80" />
+    </StackPanel>
+  </Grid>
+</Window>
