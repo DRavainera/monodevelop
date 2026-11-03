@@ -13,9 +13,9 @@
     <Border Grid.Row="0" Classes="dialogchrome" Background="{DynamicResource IdeChromeBgBrush}"
             BorderBrush="{DynamicResource IdeBorderBrush}" BorderThickness="0,0,0,1">
       <Grid ColumnDefinitions="*,Auto">
-        <!-- <TextBlock Text="Create a New Solution" Margin="12,6" FontWeight="SemiBold"
+        <TextBlock Text="New Solution" Margin="12,6" FontWeight="SemiBold"
                    Foreground="{DynamicResource IdeFgBrush}" />
-        <Button Grid.Column="1" Classes="caption captionclose" Content="&#x2715;" Click="OnCancel" /> -->
+        <Button Grid.Column="1" Classes="caption captionclose" Content="&#x2715;" Click="OnCancel" />
       </Grid>
     </Border>
 
@@ -63,7 +63,7 @@
         <TextBlock x:Name="TemplateDescription" TextWrapping="Wrap" FontSize="12"
                    Foreground="{DynamicResource IdeFgBrush}" Opacity="0.9" />
         <TextBlock Text="Solution name" Foreground="{DynamicResource IdeFgBrush}" Margin="0,8,0,0" />
-        <TextBox x:Name="SolutionName" Text="TestProj" />
+        <TextBox x:Name="SolutionName" Text="Solution" />
         <TextBlock Text="Location" Foreground="{DynamicResource IdeFgBrush}" />
         <TextBox x:Name="LocationBox" />
         <CheckBox x:Name="CreateDirectoryCheck" Content="Create a directory for the solution"

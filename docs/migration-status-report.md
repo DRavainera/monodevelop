@@ -1624,3 +1624,42 @@ gutter 6px transparente, arcos 8px anti-aliaseados y sin banda de color-cuerpo; 
 
 **Cierre**: repo principal commiteado y pushed en `agents/sub-agent-senior-dev-role-report`
 (`Views/NewFileDialog.axaml` + docs). Sin submódulos modificados.
+
+### 2026-11-03 (4) — UI Avalonia: diálogo New Solution — chrome real, iconos GTK y revisión de comportamiento
+
+**Contexto**: el diálogo Avalonia `NewSolution` activó su chrome propio (antes comentado), pasó a
+usar los PNG reales de las plantillas GTK y corrigió el estado de *Add to open solution* cuando no
+hay solución abierta.
+
+**Cambios**:
+- `NewSolutionDialog.axaml`: chrome visible (`New Solution` + `✕`) y `SolutionName` por defecto
+  `Solution`.
+- `NewSolutionDialog.axaml.cs`: iconos/preview desde `templates/images` vía
+  `IconService.GetTemplateImage`; fallback `Solution`; *Add to open solution* habilitado solo con
+  solución abierta o `forcedLocation`.
+- `IconService.cs`: `GetTemplateImage` para los base names GTK
+  (`console-project`, `library-project`, `test-project`, `crossplatform-shared-project`), con
+  soporte de variante dark según `ActualThemeVariant`.
+- `Program.cs`: allowlist QA + `--newsolution`.
+- `MainWindow.axaml.cs`: hook `--newproject` escribe en `~/opencode/QAProj/<guid>` (regla 18.6).
+- `MainWindow.axaml`: cambio de operador (`MonoDevelopIcon` → `MonoDevelopLogo` + comentario),
+  commiteado aparte; sin referencias en C#.
+
+**Validación**: build `0 Errores`; `~/opencode/ns_capture.sh` → 920x600 + AT-SPI completo + chrome
+activo; checkbox con solución `CHECKED,ENABLED`, sin solución deshabilitado;
+`~/opencode/ns_run.sh` → console/library/unittest/shared `created=True sln-entry=True mappings=True`;
+`--old-gui` → `exit=124` sin fatal.
+
+**QA (§18.5)**: Tester QA Senior — **APROBADO** (8/8 PASS; informe
+`~/opencode/nsqa_qa/qa_report.md`). Observaciones no bloqueantes: O1 `MainWindow.axaml` (commit
+aparte), O2 variante de icono base correcta porque `ActualThemeVariant` no es Dark en runtime,
+O3 `--old-gui` sin stdout (validado con `wmctrl`/captura).
+
+**Deltas GTK aceptadas**: wizard 2 páginas vs single-page; sin *Project name* separado; sin
+*Folder Layout Preview* en vivo; sin “.gitignore”; sin *Browse*; F#/Other/Recent ausentes/deshabilitados.
+
+**Hallazgo preexistente (no bloqueante)**: `AppendProjectToSolution` puede malformar el `.sln`
+tras múltiples appends sobre el mismo fixture; QA usa fixture fresco por plantilla.
+
+**Cierre**: repo principal commiteado y pushed en `agents/sub-agent-senior-dev-role-report`:
+(1) `MainWindow.axaml` (operador); (2) New Solution + docs. Sin submódulos modificados.

@@ -332,6 +332,46 @@ public static class IconService
 		}
 	}
 
+	/// <summary>
+	/// Loads a New Project/Solution template icon by resource base name from the legacy
+	/// templates images directory (main/src/core/MonoDevelop.Ide/templates/images) — the
+	/// exact PNGs the Gtk GtkNewProjectDialogBackend renders via
+	/// ImageService.GetIcon(template.IconId, IconSize.Dnd) (e.g. "console-project",
+	/// "library-project", "test-project", "crossplatform-shared-project"). Honors the
+	/// current theme variant (dark) like the rest of the service.
+	/// </summary>
+	public static IImage? GetTemplateImage (string baseName, int scale = 1)
+	{
+		var dark = Application.Current?.ActualThemeVariant == ThemeVariant.Dark;
+		var key = ("tpl:" + baseName, dark, false, scale);
+		if (cache.TryGetValue (key, out var cached) && cached is not null)
+			return cached;
+
+		if (iconsDir is null)
+			return null;
+		var dir = Path.GetFullPath (Path.Combine (iconsDir, "..", "templates", "images"));
+		if (!Directory.Exists (dir))
+			return null;
+
+		string? file = null;
+		foreach (var variant in Variants (baseName, dark, false, scale)) {
+			var f = Path.Combine (dir, variant);
+			if (File.Exists (f)) {
+				file = f;
+				break;
+			}
+		}
+		if (file is null)
+			return null;
+		try {
+			var bmp = new Bitmap (file);
+			cache[key] = bmp;
+			return bmp;
+		} catch {
+			return null;
+		}
+	}
+
 	// Parses <StockIcon stockid="..." resource="..."/> entries out of the legacy
 	// StockIcons.addin.xml, mirroring ImageService's extension-point lookup. Windows-
 	// conditioned entries are skipped (this shell ships the !windows resources).

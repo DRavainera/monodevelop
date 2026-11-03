@@ -2708,3 +2708,70 @@ píxel con el sibling `About`. Artefactos en `~/opencode/nfqa/` (`qa_border.png`
 
 **Cierre**: repo principal commiteado y pushed en `agents/sub-agent-senior-dev-role-report`
 (`Views/NewFileDialog.axaml` + docs). Sin submódulos modificados.
+
+## 2026-11-03 (4) — UI Avalonia: diálogo New Solution — chrome real, iconos GTK y revisión de comportamiento
+
+**Contexto**: el diálogo Avalonia `NewSolution` ya existía funcionalmente, pero su chrome estaba
+comentado en XAML, usaba iconos genéricos del set de `IconService` (no los PNG reales de las
+plantillas GTK) y el checkbox *Add to open solution* podía quedar visible activo sin solución
+abierta. Esta tanda alinea el diálogo con el resto de diálogos Avalonia y documenta los deltas
+restantes frente al wizard GTK.
+
+**Qué se hizo** (archivos):
+- `Views/NewSolutionDialog.axaml`: activó el chrome (título `New Solution` + botón `✕`) y cambió
+  el valor inicial de `SolutionName` de `TestProj` a `Solution`.
+- `Views/NewSolutionDialog.axaml.cs`:
+  - catálogo de plantillas con los base names GTK reales (`console-project`, `library-project`,
+    `test-project`, `crossplatform-shared-project`);
+  - carga de iconos y preview vía `IconService.GetTemplateImage(...)`;
+  - fallback de nombre `Solution`;
+  - `Add to open solution` solo se habilita/marca cuando hay solución abierta o `forcedLocation`
+    no nulo.
+- `MonoDevelop.Ide/Services/IconService.cs`: nuevo `GetTemplateImage(baseName, scale)` que carga
+  los PNG de `main/src/core/MonoDevelop.Ide/templates/images` y respeta la variante dark de
+  `ActualThemeVariant`.
+- `Program.cs`: allowlist QA + `--newsolution`.
+- `Views/MainWindow.axaml.cs`: el hook QA `--newproject` crea ahora bajo `~/opencode/QAProj/<guid>`
+  (regla 18.6: artefactos en `~/opencode/`, no en `/tmp`).
+- `Views/MainWindow.axaml`: cambio de operador (renombrado `MonoDevelopIcon` → `MonoDevelopLogo` +
+  comentario); no hay referencias en C# y se commitea aparte.
+
+**Cómo validar**:
+- Build: `dotnet build main/src/core/MonoDevelop.Startup.Avalonia/MonoDevelop.Startup.Avalonia.
+  csproj -c Debug -f net10.0 --nologo` → `0 Errores`.
+- `bash /home/daniel/opencode/ns_capture.sh`: `exit=124`, geometría `920x600`, chrome activo
+  (label `New Solution` + button `✕`), AT-SPI completo (C#/F#/Other, 4 plantillas, description,
+  solution name, location, 3 checkboxes, preview, Create/Cancel), 0 `NullReference|Unhandled|
+  TypeLoad|DllNotFound`.
+- Checkbox *Add to open solution* (AT-SPI states):
+  - con solución: `CHECKED,ENABLED,FOCUSABLE,SENSITIVE,SHOWING,VISIBLE`
+  - sin solución: `FOCUSABLE,SHOWING,VISIBLE`
+- `bash /home/daniel/opencode/ns_run.sh`: `console`, `library`, `unittest`, `shared` →
+  `created=True ... sln-entry=True mappings=True`, `sln-QAAdded-count=1`,
+  `sln-mappings-count=1`, 0 excepciones.
+- Regresión `--old-gui`: `exit=124`, 0 `Fatal|Unhandled|TypeLoad|DllNotFound|NullReference`.
+
+**Deltas GTK aceptadas** (no reportadas como defectos): wizard de 2 páginas GTK vs single-page
+Avalonia; sin campo separado de *Project name* (Avalonia reutiliza *Solution name*); sin *Folder
+Layout Preview* en vivo; sin checkbox “.gitignore”; sin botón *Browse* junto a *Location*;
+F#/Other/Recent ausentes o deshabilitados; validación completa de nombres pendiente.
+
+**QA (§18.5)**: Tester QA Senior — **APROBADO** (8/8 PASS; informe
+`~/opencode/nsqa_qa/qa_report.md`). Observaciones no bloqueantes resueltas/documentadas:
+- **O1**: `MainWindow.axaml` aparecía fuera de la lista esperada; es un cambio de operador
+  (renombrado del `Image` y comentario), sin efecto funcional; se commitea aparte.
+- **O2**: los iconos se renderizan en variante base porque `Application.Current.ActualThemeVariant`
+  no es Dark en runtime (diagnóstico temporal `theme-dark=False`, retirado después de validar);
+  la variante base es la correcta para el theme efectivo. Los brushes oscuros del diálogo son
+  recursos estáticos del diseño y no cambian el `ThemeVariant` de Avalonia.
+- **O3**: `--old-gui` no emite stdout en la ruta Gtk (comportamiento conocido); validado con
+  `exit=124` + `wmctrl`/captura en el informe QA.
+
+**Hallazgo preexistente (no bloqueante)**: `AppendProjectToSolution` puede dejar el `.sln`
+malformado tras múltiples appends sobre el mismo fixture. Las pruebas de esta tanda usan fixture
+fresco por plantilla, por lo que no se trata como defecto de New Solution.
+
+**Cierre**: repo principal commiteado y pushed en `agents/sub-agent-senior-dev-role-report`:
+(1) commit separado para `Views/MainWindow.axaml` (cambio de operador); (2) commit de New Solution
+(`NewSolutionDialog.axaml` + `.axaml.cs`, `IconService.cs`, `Program.cs`, `MainWindow.axaml.cs` +
+docs). Sin submódulos modificados.

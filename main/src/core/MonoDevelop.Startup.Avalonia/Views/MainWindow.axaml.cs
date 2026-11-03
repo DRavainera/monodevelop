@@ -691,7 +691,7 @@ public partial class MainWindow : Window
 				if (loadedSolutionPath is null) {
 					Output ("[newproject] no solution loaded");
 				} else {
-					var tmpDir = Path.Combine (Path.GetTempPath (), "QAProj", Guid.NewGuid ().ToString ("N"));
+					var tmpDir = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile), "opencode", "QAProj", Guid.NewGuid ().ToString ("N"));
 					var dlg = new NewSolutionDialog (newProjTemplate, tmpDir) { AddToOpenSolution = true, AutoCreateForQa = true };
 					dlg.SolutionName!.Text = "QAAdded";
 					await dlg.ShowDialog (this);

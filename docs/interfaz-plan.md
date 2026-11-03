@@ -3119,3 +3119,57 @@ idéntico al sibling About, sin desbordamiento/corte de esquina, render coherent
 
 **Cierre**: repo principal commiteado/pushed en `agents/sub-agent-senior-dev-role-report`
 (`Views/NewFileDialog.axaml` + docs). Sin submódulos modificados.
+
+### New Solution (follow-up) — chrome real, iconos GTK y revisión de comportamiento (2026-11-03)
+
+**Contexto**: el diálogo Avalonia `NewSolution` (ya funcional) tenía el chrome comentado en XAML,
+iconos genéricos de `IconService` en lugar de los PNG GTK reales de plantillas y el checkbox
+*Add to open solution* podía aparecer activo sin solución abierta.
+
+**Cambios**:
+- `Views/NewSolutionDialog.axaml`: chrome activo (título `New Solution` + botón `✕`) y
+  `SolutionName` inicial `Solution`.
+- `Views/NewSolutionDialog.axaml.cs`:
+  - iconos/preview por base name GTK real (`console-project`, `library-project`, `test-project`,
+    `crossplatform-shared-project`);
+  - `IconService.GetTemplateImage(...)` como carga;
+  - fallback de nombre `Solution`;
+  - `Add to open solution` solo enabled/checked si hay solución abierta o `forcedLocation`.
+- `MonoDevelop.Ide/Services/IconService.cs`: `GetTemplateImage(baseName, scale)` carga desde
+  `main/src/core/MonoDevelop.Ide/templates/images` y respeta `ActualThemeVariant` para la variante
+  dark.
+- `Program.cs`: allowlist QA + `--newsolution`.
+- `Views/MainWindow.axaml.cs`: `--newproject` crea en `~/opencode/QAProj/<guid>` (regla 18.6).
+- `Views/MainWindow.axaml`: cambio de operador (`MonoDevelopIcon` → `MonoDevelopLogo` + comentario),
+  sin referencias en C#, commiteado aparte.
+
+**Validación / evidencia**:
+- Build `0 Errores`.
+- `~/opencode/ns_capture.sh`: `exit=124`, `920x600`, AT-SPI completo (frame, chrome, C#/F#/Other,
+  4 plantillas, description, Solution name, Location, 3 checkboxes, Preview, Create/Cancel).
+- Checkbox:
+  - con solución: `CHECKED,ENABLED,FOCUSABLE,SENSITIVE,SHOWING,VISIBLE`;
+  - sin solución: `FOCUSABLE,SHOWING,VISIBLE`.
+- `~/opencode/ns_run.sh`: console/library/unittest/shared → `created=True`, `sln-entry=True`,
+  `mappings=True`, counts 1/1, 0 excepciones.
+- Regresión `--old-gui`: `exit=124`, 0 fatal.
+
+**QA (§18.5)**: Tester QA Senior — **APROBADO** (8/8 PASS; informe
+`~/opencode/nsqa_qa/qa_report.md`). Observaciones no bloqueantes resueltas/documentadas:
+- O1: `MainWindow.axaml` fuera de lista = cambio de operador (renombrado + comentario); commit
+  aparte.
+- O2: variante base de icono correcta: `ActualThemeVariant` no es Dark en runtime
+  (`theme-dark=False` con diagnóstico temporal, retirado); los brushes oscuros son recursos
+  estáticos del diseño.
+- O3: `--old-gui` sin stdout (comportamiento conocido; validado con `wmctrl`/captura).
+
+**Deltas GTK aceptadas**: wizard 2 páginas vs single-page; sin *Project name* separado; sin
+*Folder Layout Preview* en vivo; sin checkbox “.gitignore”; sin botón *Browse*; F#/Other/Recent
+ausentes o deshabilitados; validación completa de nombres pendiente.
+
+**Hallazgo preexistente (no bloqueante)**: `AppendProjectToSolution` puede malformar el `.sln`
+tras múltiples appends sobre el mismo fixture; las pruebas usan fixture fresco por plantilla.
+
+**Cierre**: repo principal commiteado/pushed en `agents/sub-agent-senior-dev-role-report`:
+(1) commit separado para `MainWindow.axaml` (operador); (2) New Solution + docs. Sin submódulos
+modificados.

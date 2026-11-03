@@ -12,21 +12,28 @@ namespace MonoDevelop.AvaloniaShell.Views;
 public partial class NewSolutionDialog : Window
 {
 	// Legacy catalog (NewProjectDialog / dotnet templates core set). Titles mirror
-	// the templates offered by the GTK dialog for the C# category.
+	// the templates offered by the GTK dialog for the C# category. Icon32/PreviewIcon
+	// are the resource base names of the GTK template icons
+	// (main/src/core/MonoDevelop.Ide/templates/images/*.png), the same PNGs the
+	// GtkNewProjectDialogBackend renders via ImageService.GetIcon(template.IconId, Dnd):
+	// Console->md-console-project, Library->md-library-project,
+	// UnitTest->md-test-project, Shared->md-crossplatform-shared-project.
 	static readonly (string Tag, string Title, string Desc, string Icon32, string PreviewIcon) [] Templates = {
 		("console", "Console Application",
 			"A project for creating a command-line application that can run on .NET on Windows, Linux and MacOS.",
-			"project-console-32", "project-console-32"),
+			"console-project", "console-project"),
 		("library", "Class Library",
 			"A project for creating a class library that targets .NET Standard or .NET Core.",
-			"project-library-32", "project-library-32"),
+			"library-project", "library-project"),
 		("unittest", "Unit Test Project",
 			"A project that contains unit tests that can run with NUnit / xUnit test runners.",
-			"file-unit-test-32", "file-unit-test-32"),
+			"test-project", "test-project"),
 		("shared", "Shared Project",
 			"A project for sharing source files between multiple projects via implicit linking.",
-			"solution-32", "solution-32"),
-	};	public string? SelectedTemplateId { get; private set; }
+			"crossplatform-shared-project", "crossplatform-shared-project"),
+	};
+
+	public string? SelectedTemplateId { get; private set; }
 
 	/// <summary>QA hook: --newproject uses a throwaway temp location.</summary>
 	string? forcedLocation;
@@ -36,8 +43,10 @@ public partial class NewSolutionDialog : Window
 	public bool AddToOpenSolution {
 		get => AddToSolutionCheck?.IsChecked == true;
 		set {
-			if (AddToSolutionCheck is not null)
+			if (AddToSolutionCheck is not null) {
 				AddToSolutionCheck.IsChecked = value;
+				AddToSolutionCheck.IsEnabled = value;
+			}
 		}
 	}
 	public string? SolutionNameValue => SolutionName?.Text;
@@ -53,19 +62,21 @@ public partial class NewSolutionDialog : Window
 	{
 		InitializeComponent ();
 		MonoDevelop.AvaloniaShell.Controls.DialogWindow.Apply (this);
-		IconConsole.Source = IconService.GetImage ("project-console-32");
-		IconLibrary.Source = IconService.GetImage ("project-library-32");
-		IconTest.Source = IconService.GetImage ("file-unit-test-32");
-		IconShared.Source = IconService.GetImage ("solution-32");
+		IconConsole.Source = IconService.GetTemplateImage ("console-project");
+		IconLibrary.Source = IconService.GetTemplateImage ("library-project");
+		IconTest.Source = IconService.GetTemplateImage ("test-project");
+		IconShared.Source = IconService.GetTemplateImage ("crossplatform-shared-project");
 
 		this.forcedLocation = forcedLocation;
 		var idx = Array.FindIndex (Templates, t => t.Tag == preselectTemplate);
 		TemplateList.SelectedIndex = idx >= 0 ? idx : 0;
 		LocationBox.Text = forcedLocation ?? Environment.GetFolderPath (Environment.SpecialFolder.UserProfile);
-		// With a solution open, "Add to solution" is the default (like the GTK dialog
-		// radio group 'Add to solution' when a workspace is open).
-		if (AddToSolutionCheck is not null)
+		// "Add to solution" only applies when a solution is actually open (the GTK
+		// dialog offers that target in that context); otherwise the option is inert.
+		if (AddToSolutionCheck is not null) {
 			AddToSolutionCheck.IsChecked = forcedLocation is not null;
+			AddToSolutionCheck.IsEnabled = forcedLocation is not null;
+		}
 	}
 
 	void OnCategorySelected (object? sender, SelectionChangedEventArgs e) { }
@@ -76,7 +87,7 @@ public partial class NewSolutionDialog : Window
 			return;
 		var t = Templates.FirstOrDefault (x => x.Tag == tag);
 		TemplateDescription.Text = t.Desc;
-		PreviewImage.Source = IconService.GetImage (t.PreviewIcon);
+		PreviewImage.Source = IconService.GetTemplateImage (t.PreviewIcon);
 		PreviewLabel.Text = t.Title;
 		SelectedTemplateId = t.Tag;
 	}
@@ -91,7 +102,7 @@ public partial class NewSolutionDialog : Window
 	void OnCreate (object? sender, RoutedEventArgs e)
 	{
 		var template = SelectedTemplateId ?? "console";
-		var name = string.IsNullOrWhiteSpace (SolutionName?.Text) ? "TestProj" : SolutionName.Text!.Trim ();
+		var name = string.IsNullOrWhiteSpace (SolutionName?.Text) ? "Solution" : SolutionName.Text!.Trim ();
 		var location = string.IsNullOrWhiteSpace (LocationBox?.Text)
 			? Environment.GetFolderPath (Environment.SpecialFolder.UserProfile)
 			: LocationBox.Text!.Trim ();
