@@ -1493,3 +1493,69 @@ fix de NuGet y la documentación.
 **Pendiente**: gradiente del toolbar principal (decisión de paleta), iconos a color del
 toolbar, barra autohide, heredadas 2026-10-29/2026-11-01 y glyph maximizar/restore
 (opcional) — fuera del alcance de esta tanda.
+
+### 2026-11-03 — UI legacy Gtk (`--old-gui`): alturas de celdas — texto visible en Addins y NuGet
+
+**Qué se hizo**: cuarta tanda de la auditoría de UI legacy-Gtk. Se corrigieron las
+alturas de celdas restantes para que el texto sea totalmente visible (sin recortes)
+en: el combo "Repositorio:" y el árbol de la pestaña Galería/Instalados del
+Administrador de extensiones, y las filas de metadatos del panel derecho del diálogo
+Administrar paquetes NuGet.
+
+Archivos tocados (3 en el submódulo `main/external/xwt`, 2 en
+`main/external/mono-addins`, 2 en `main/`):
+- `main/external/xwt/Xwt.Gtk/Xwt.GtkBackend/ComboBoxBackend.cs`,
+  `Xwt.Gtk/Xwt.GtkBackend/ListBoxBackend.cs` y
+  `Xwt.Gtk/Xwt.GtkBackend.CellViews/CustomCellRendererText.cs` — `Ypad = 4` en los
+  `Gtk.CellRendererText` de los backends XWT (combo, lista y celdas custom).
+- `main/external/mono-addins/Mono.Addins.Gui/Mono.Addins.Gui/AddinManagerDialog.cs` —
+  `crt.Ypad = 6` en el `CellRendererText` del combo "Repositorio:" de Galería, que es
+  un **GtkComboBox puro** (no pasa por XWT).
+- `main/external/mono-addins/Mono.Addins.Gui/Mono.Addins.Gui/AddinTreeWidget.cs` —
+  `Ypad = 2` → `Ypad = 6` en los 3 renderers del árbol (pixbuf, nombre, versión).
+- `main/src/addins/MonoDevelop.PackageManagement/MonoDevelop.PackageManagement.Gui/ManagePackagesDialog.UI.cs` —
+  `MinHeight = 28` en los 8 HBoxes de metadatos del panel derecho (ID/Autor/Fecha/
+  Descargas/Licencia/Página/Dependencias/Versión actual), `MinHeight = 80` en la lista
+  de dependencias y `MinHeight = 28` en `packageVersionComboBox`.
+- `main/src/addins/MonoDevelop.PackageManagement/MonoDevelop.PackageManagement.Gui/ManagePackagesDialog.cs` —
+  `MinHeight = 60` en `projectsListView` (ListView XWT de la página Consolidate).
+
+**Build/staging**: `Xwt.Gtk.csproj` (con `-t:Rebuild`), `Mono.Addins.Gui.csproj` y
+`MonoDevelop.PackageManagement.csproj` compilan con `dotnet build -c Debug` y 0
+errores. Nota operativa: el output real de Xwt.Gtk es `bin/Debug/net10.0/Xwt.Gtk.dll`
+(targetea net10.0); el `bin/Debug/Xwt.Gtk.dll` es obsoleto y no se stagea.
+- `main/build/Xwt.Gtk.dll` md5 `cd09d564b80233eead0f181c86e64786`.
+- `main/build/Mono.Addins.Gui.dll` md5 `877b541d54d24fc3411ba12b8ff7561e`.
+- `main/build/AddIns/MonoDevelop.PackageManagement/MonoDevelop.PackageManagement.dll`
+  md5 `84508f4c42649247b61cfb7c8285168f`.
+
+**Cómo validar / evidencia final**: arranque `--old-gui` con `QaB4.sln` en Xvfb `:99`
+con Atspi + OCR + perfiles de tinta (log `~/opencode/qa_ui5/app20.log`).
+- Addins (920x640): combo "Repositorio:" 21 → **28 px** (banda de tinta 11 px
+  centrada, sin recorte); celda de mensaje vacío 42 → **50 px**; filas de categoría
+  31 px; fila expandida (Debugging → GDB) 61 px con texto de 2 líneas legible y
+  centrado; búsqueda visible, filtra y limpia.
+- NuGet (980x640): metadatos derecha 20 → **28 px** con OCR legible completo; combo
+  "Nueva versión:" 20 → **32 px** legible ("13.0.4 (última versión estable)"); cadena
+  vertical sin solapes (metadatos → caja deps → combo → barra inferior); lista
+  izquierda 99 px legible; instalada Newtonsoft.Json 13.0.4 vía "Add Package".
+
+**QA (§18.5)**: Tester QA Senior — **APROBADO, 0 hallazgos funcionales abiertos**
+(informe `~/opencode/qa_ui5/report_qa_alturas.md`): 9/10 ítems OK; el 1 minor (fila
+expandida 61 px vs meta estimada 50-55 px) **cerrado como aceptado** (la meta era
+estimación propia del checklist; la spec del operador es "texto visible", cumplida:
+2 líneas legibles y centradas, sin recorte).
+
+**Quirks de entorno (no defectos)**: Galería vacía por repositorio remoto caído
+(`https://lastexitcode.com/monadevelop-addins/9.0/main.mrep`); página Consolidate de
+NuGet en "Cargando" (el `projectsListView` no fue validable visualmente; el mecanismo
+de cell renderers quedó validado en el resto de listas).
+
+**Cierre**: submódulos `main/external/xwt` y `main/external/mono-addins` commiteados y
+pushed en `net10`; repo principal commiteado y pushed en
+`agents/sub-agent-senior-dev-role-report` con los punteros de submódulo actualizados,
+el fix de NuGet y la documentación.
+
+**Pendiente**: gradiente del toolbar principal (decisión de paleta), iconos a color del
+toolbar, barra autohide, heredadas 2026-10-29/2026-11-01 y glyph maximizar/restore
+(opcional) — fuera del alcance de esta tanda.

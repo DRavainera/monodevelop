@@ -281,6 +281,7 @@ namespace MonoDevelop.PackageManagement
 			// Package id.
 			var packageIdHBox = new HBox ();
 			packageIdHBox.MarginTop = 7;
+			packageIdHBox.MinHeight = 28;
 			packageInfoVBox.PackStart (packageIdHBox);
 
 			var packageIdLabel = new Label ();
@@ -303,6 +304,7 @@ namespace MonoDevelop.PackageManagement
 
 			// Package author
 			var packageAuthorHBox = new HBox ();
+			packageAuthorHBox.MinHeight = 28;
 			packageInfoVBox.PackStart (packageAuthorHBox);
 
 			var packageAuthorLabel = new Label ();
@@ -319,6 +321,7 @@ namespace MonoDevelop.PackageManagement
 
 			// Package published
 			var packagePublishedHBox = new HBox ();
+			packagePublishedHBox.MinHeight = 28;
 			packageInfoVBox.PackStart (packagePublishedHBox);
 
 			var packagePublishedLabel = new Label ();
@@ -333,6 +336,7 @@ namespace MonoDevelop.PackageManagement
 
 			// Package downloads
 			var packageDownloadsHBox = new HBox ();
+			packageDownloadsHBox.MinHeight = 28;
 			packageInfoVBox.PackStart (packageDownloadsHBox);
 
 			var packageDownloadsLabel = new Label ();
@@ -347,6 +351,7 @@ namespace MonoDevelop.PackageManagement
 
 			// Package license.
 			var packageLicenseHBox = new HBox ();
+			packageLicenseHBox.MinHeight = 28;
 			packageInfoVBox.PackStart (packageLicenseHBox);
 
 			var packageLicenseLabel = new Label ();
@@ -361,6 +366,7 @@ namespace MonoDevelop.PackageManagement
 
 			// Package project page.
 			var packageProjectPageHBox = new HBox ();
+			packageProjectPageHBox.MinHeight = 28;
 			packageInfoVBox.PackStart (packageProjectPageHBox);
 
 			var packageProjectPageLabel = new Label ();
@@ -376,6 +382,7 @@ namespace MonoDevelop.PackageManagement
 
 			// Package dependencies
 			packageDependenciesHBox = new HBox ();
+			packageDependenciesHBox.MinHeight = 28;
 			packageInfoVBox.PackStart (packageDependenciesHBox);
 
 			var packageDependenciesLabel = new Label ();
@@ -392,6 +399,7 @@ namespace MonoDevelop.PackageManagement
 			// Package dependencies list.
 			packageDependenciesListHBox = new HBox ();
 			packageDependenciesListHBox.Visible = false;
+			packageDependenciesListHBox.MinHeight = 80;
 			packageInfoVBox.PackStart (packageDependenciesListHBox);
 
 			packageDependenciesList = new Label ();
@@ -405,6 +413,7 @@ namespace MonoDevelop.PackageManagement
 			currentPackageVersionHBox = new HBox ();
 			currentPackageVersionHBox.Spacing = 15;
 			currentPackageVersionHBox.Visible = false;
+			currentPackageVersionHBox.MinHeight = 28;
 			currentPackageVersionHBox.BackgroundColor = Styles.PackageInfoBackgroundColor;
 			currentPackageVersionHBox.Margin = new WidgetSpacing (15, 0, 15, 0);
 			currentPackageVersionLabel = new Label ();
@@ -436,6 +445,7 @@ namespace MonoDevelop.PackageManagement
 			packageVersionsHBox.Visible = false;
 			packageVersionsHBox.BackgroundColor = Styles.PackageInfoBackgroundColor;
 			packageVersionsHBox.Margin = new WidgetSpacing (15, 0, 15, 12);
+			packageVersionsHBox.MinHeight = 32;
 			packageVersionsLabel = new Label ();
 			packageVersionsLabel.Font = packageInfoSmallFont;
 			packageVersionsLabel.Text = GettextCatalog.GetString ("New Version:");
@@ -444,6 +454,7 @@ namespace MonoDevelop.PackageManagement
 
 			packageVersionComboBox = new ComboBox ();
 			packageVersionComboBox.Name = "packageVersionComboBox";
+			packageVersionComboBox.MinHeight = 28;
 			packageVersionComboBox.Accessible.LabelWidget = packageVersionsLabel;
 			packageVersionsHBox.Spacing = 15;
 			packageVersionsHBox.PackStart (packageVersionComboBox, true, true);

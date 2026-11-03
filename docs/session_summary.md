@@ -2530,3 +2530,99 @@ prueba; la altura de fila se validó en Instalados, que usa el mismo `AddinTreeW
 **Pendiente**: las diferencias restantes conocidas de las tandas anteriores (gradiente
 del toolbar, iconos a color, barra autohide, glyph maximizar/restore opcional) siguen
 vigentes; no están en el alcance de esta tanda.
+
+## 2026-11-03 — UI legacy Gtk (`--old-gui`): alturas de celdas — texto visible en Addins (Galería/Instalados) y NuGet
+
+Continuación de la auditoría de UI legacy-Gtk. Objetivo del operador: que el texto de
+las celdas/listboxes sea totalmente visible (sin recortes). Esta tanda corrige las
+alturas restantes: renderers de celdas del árbol (XWT + Mono.Addins.Gui), el combo
+"Repositorio:" de Galería (un GtkComboBox puro, no XWT) y las filas de metadatos del
+panel derecho del diálogo NuGet.
+
+**Qué se hizo / por qué / archivos**:
+1. **XWT (submódulo `main/external/xwt`, rama `net10`)** — `Ypad = 4` en los
+   `Gtk.CellRendererText` de los backends, para que las celdas de texto en
+   `GtkTreeView` tengan relleno vertical:
+   - `Xwt.Gtk/Xwt.GtkBackend/ComboBoxBackend.cs`: renderer por defecto del ComboBox.
+   - `Xwt.Gtk/Xwt.GtkBackend/ListBoxBackend.cs`: renderer por defecto de la columna
+     del ListView.
+   - `Xwt.Gtk/Xwt.GtkBackend.CellViews/CustomCellRendererText.cs`: renderer de celdas
+     XWT usado por las cell views custom.
+2. **Mono.Addins.Gui (submódulo `main/external/mono-addins`, rama `net10`)**:
+   - `Mono.Addins.Gui/Mono.Addins.Gui/AddinManagerDialog.cs`: el combo "Repositorio:"
+     de Galería es un **GtkComboBox puro** (no pasa por XWT): se añade `crt.Ypad = 6`
+     a su `CellRendererText` (~línea 100).
+   - `Mono.Addins.Gui/Mono.Addins.Gui/AddinTreeWidget.cs`: `Ypad = 2` → `Ypad = 6`
+     en los 3 renderers del árbol de Addins (pixbuf, nombre, versión).
+3. **PackageManagement (repo principal)** — `MinHeight` en las filas del panel
+   derecho del diálogo NuGet:
+   - `main/src/addins/MonoDevelop.PackageManagement/MonoDevelop.PackageManagement.Gui/ManagePackagesDialog.UI.cs`:
+     `MinHeight = 28` en los 8 HBoxes de metadatos (ID/Autor/Fecha/Descargas/Licencia/
+     Página/Dependencias/Versión actual) y `MinHeight = 80` en la lista de dependencias;
+     `MinHeight = 28` en `packageVersionComboBox`.
+   - `main/src/addins/MonoDevelop.PackageManagement/MonoDevelop.PackageManagement.Gui/ManagePackagesDialog.cs`:
+     `MinHeight = 60` en `projectsListView` (ListView XWT de la página Consolidate).
+
+**Lecciones operativas (pitfalls del build)**:
+- El output real de `Xwt.Gtk` es `Xwt.Gtk/bin/Debug/net10.0/Xwt.Gtk.dll` (targetea
+  net10.0). El `Xwt.Gtk/bin/Debug/Xwt.Gtk.dll` es obsoleto (17 oct, 326144 bytes) y
+  NO debe stagearse.
+- `git diff --check`: los `.UI.cs` generados llevan finales CRLF; al editar se
+  normalizan las líneas tocadas a LF (28 líneas en esta tanda).
+- `AddinManagerDialog.cs` usa tabs de sangría; `ComboBoxBackend.cs` usa 4 tabs.
+
+**Build/staging** (todos con 0 errores, `dotnet build -c Debug`):
+- `main/external/xwt/Xwt.Gtk/Xwt.Gtk.csproj` (rebuild con `-t:Rebuild`).
+- `main/external/mono-addins/Mono.Addins.Gui/Mono.Addins.Gui.csproj`.
+- `main/src/addins/MonoDevelop.PackageManagement/MonoDevelop.PackageManagement.csproj`.
+
+Binarios stageados a `main/build/` (md5 verificados):
+- `main/build/Xwt.Gtk.dll` → `cd09d564b80233eead0f181c86e64786`
+- `main/build/Mono.Addins.Gui.dll` → `877b541d54d24fc3411ba12b8ff7561e`
+- `main/build/AddIns/MonoDevelop.PackageManagement/MonoDevelop.PackageManagement.dll`
+  → `84508f4c42649247b61cfb7c8285168f`
+
+**Cómo validar / evidencia final**: arranque limpio `--old-gui` con `QaB4.sln` en Xvfb
+`:99` con a11y (Atspi + OCR + perfiles de tinta; el modelo no ve imágenes). Log
+`~/opencode/qa_ui5/app20.log`.
+- Addins (ventana 920x640):
+  - Galería: combo "Repositorio:" 21 → **28 px**, banda de tinta 11 px centrada,
+    sin recorte. Celda de mensaje vacío 42 → **50 px** (banda 13 px centrada).
+  - Instalados: filas de categoría 31 px; fila expandida (Debugging → GDB Debugger
+    Support) 61 px con texto de 2 líneas totalmente legible y centrado.
+  - Búsqueda: visible, filtra y limpia correctamente.
+- NuGet (ventana 980x640):
+  - Metadatos derecha: 20 → **28 px**, OCR legible completo (ID/Autor/Fecha/Descargas/
+    Licencia/Página/Dependencias).
+  - Combo "Nueva versión:" 20 → **32 px**, OCR legible: "13.0.4 (última versión
+    estable)".
+  - Sin solapes: metadatos (hasta y≈380) → caja deps (386..526) → combo (537..569) →
+    barra inferior (596..630).
+  - Lista izquierda de paquetes: filas 99 px legibles.
+  - Prueba funcional: se instaló Newtonsoft.Json 13.0.4 en QaB4 vía "Add Package"
+    (el diálogo se cierra solo al terminar).
+
+**QA (§18.5)**: Tester QA Senior — **APROBADO, 0 hallazgos funcionales abiertos**
+(informe `~/opencode/qa_ui5/report_qa_alturas.md`): 9/10 ítems OK; el 1 minor
+(fila expandida 61 px vs meta estimada 50-55 px) **cerrado como aceptado**: el
+50-55 era estimación propia del checklist, no especificación del operador; la spec
+es "texto visible" y se cumple (2 líneas legibles y centradas, sin recorte). El 61 px
+viene de `Ypad=6` + 2 líneas en la fila expandida.
+
+**Quirks de entorno documentados (no defectos)**:
+- Galería vacía: el repositorio remoto
+  `https://lastexitcode.com/monadevelop-addins/9.0/main.mrep` está caído en el
+  entorno de prueba (diálogo de error de red documentado). Las filas reales de
+  Galería no se pudieron ver; se valida con el widget compartido (Instalados).
+- La página Consolidate de NuGet se quedó en "Cargando" (el `projectsListView` XWT
+  no fue validable visualmente; el mecanismo de cell renderers está validado en el
+  resto de listas).
+
+**Cierre**: submódulos `main/external/xwt` y `main/external/mono-addins` commiteados
+y pushed en `net10`; repo principal commiteado y pushed en
+`agents/sub-agent-senior-dev-role-report` con los punteros de submódulo actualizados,
+`ManagePackagesDialog.UI.cs` + `ManagePackagesDialog.cs` y la documentación.
+
+**Pendiente**: los mismos que en las tandas anteriores (gradiente del toolbar, iconos
+a color, barra autohide, heredadas 2026-10-29/2026-11-01, glyph maximizar/restore
+opcional) — fuera del alcance de esta tanda.

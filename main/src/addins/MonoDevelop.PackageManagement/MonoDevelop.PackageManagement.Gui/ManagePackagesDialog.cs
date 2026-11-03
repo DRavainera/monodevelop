@@ -267,6 +267,7 @@ namespace MonoDevelop.PackageManagement
 
 			projectsListView = new ListView ();
 			projectsListView.DataSource = projectStore;
+			projectsListView.MinHeight = 60;
 			projectsListView.Accessible.LabelWidget = projectsListViewLabel;
 
 			// Selected project check box column.
