@@ -2452,3 +2452,81 @@ con puntero de submódulo actualizado).
 **Pendiente**: las diferencias restantes conocidas de las tandas anteriores (gradiente
 del toolbar, iconos a color, barra autohide, glyph maximizar/restore opcional) siguen
 vigentes; no están en el alcance de esta tanda.
+
+## 2026-11-02 (4) — UI legacy Gtk (`--old-gui`): cierre de residuos Addins/NuGet
+
+Cierre de los 3 residuos funcionales/visuales detectados después de la tanda de 7
+defectos: búsqueda de Addins, altura de la fila de paquete en Addins y recorte/solape
+del panel derecho de NuGet.
+
+**Qué se hizo / por qué / archivos**:
+1. **Herramientas → Extensiones: búsqueda arriba a la derecha — CORREGIDO.**
+   - `main/external/mono-addins/Mono.Addins.Gui/Mono.Addins.Gui/AddinManagerDialog.cs`:
+     se elimina el enfoque frágil de `RepositionFilter()` + `filterEntry.SetAllocation()`
+     sobre el `notebook` (inestable en GtkSharp 3.24 y no dejaba el campo visible en la
+     barra superior). Ahora `InsertFilterEntry()` crea un `HBox filterBar`, packea un
+     `Label` expansible a la izquierda y el `SearchEntry` con `PackEnd`, e inserta ese
+     `filterBar` en `vbox93` en la posición 0 (antes del `notebook`/`hbox65`). El
+     `TextChanged` sigue filtrando `tree`, `galleryTree` y `updatesTree` y expandiendo
+     las vistas instaladas/galería.
+2. **Herramientas → Extensiones → Instalados: fila de paquete a altura completa —
+   CORREGIDO.**
+   - `main/external/mono-addins/Mono.Addins.Gui/Mono.Addins.Gui/AddinTreeWidget.cs`:
+     el nombre del paquete pasa a usarse con `Ellipsize = None`, `WrapMode = Word`,
+     `MaxWidthChars = 45` e `YPad = 2` en el `CellRendererText` principal; el icono
+     añade `YPad = 2`; y la columna de versión usa un `CellRendererText` propio
+     (`Ellipsize = End`, `YPad = 2`) para no compartir el renderer envuelto con la
+     columna de nombre. La fila expandida muestra nombre + descripción y mide 53 px.
+3. **Proyecto → Administrar paquetes NuGet: panel derecho sin recorte/solape —
+   CORREGIDO.**
+   - `main/src/addins/MonoDevelop.PackageManagement/MonoDevelop.PackageManagement.Gui/ManagePackagesDialog.UI.cs`:
+     `packageInfoContainerVBox` queda en `VerticalPlacement = Start` y
+     `HorizontalPlacement = Fill`; el `packageInfoScrollView` usa
+     `HorizontalScrollPolicy = Never` y `VerticalScrollPolicy = Automatic`. Con ello el
+     contenido del panel derecho se desplaza dentro de su viewport y no invade la
+     barra de acciones inferior.
+
+**Build/staging**:
+- `dotnet build main/external/mono-addins/Mono.Addins.Gui/Mono.Addins.Gui.csproj -c Debug`
+  → EXIT=0. El build directo de `Mono.Addins.Gui` NO actualiza automáticamente
+  `main/build/Mono.Addins.Gui.dll`; se copió manualmente desde
+  `Mono.Addins.Gui/bin/net10.0/` a `main/build/`.
+  - `main/build/Mono.Addins.Gui.dll` md5 `b0e2f715a12f6b6f3b13753820fd7759`
+  - `main/external/mono-addins/Mono.Addins.Gui/bin/net10.0/Mono.Addins.Gui.dll` md5
+    `b0e2f715a12f6b6f3b13753820fd7759`
+- `dotnet build main/src/addins/MonoDevelop.PackageManagement/MonoDevelop.PackageManagement.csproj -c Debug`
+  → EXIT=0, stageado a `main/build/AddIns/MonoDevelop.PackageManagement/`.
+  - `main/build/AddIns/MonoDevelop.PackageManagement/MonoDevelop.PackageManagement.dll`
+    md5 `eb47b040936a5fc67a004c7d2e2eaa1e`
+
+**Cómo validar / evidencia final**:
+- Limpieza de procesos antigua (el GUI real es un hijo `MonoDevelop.dll`, no solo el
+  padre AvaloniaShell):
+  `pkill -f '[M]onoDevelop.dll'; pkill -f '[M]onoDevelop.MSBuildBuilder.exe'; pkill -f '[M]onoDevelop.AvaloniaShell.dll'`.
+- Arranque final `--old-gui` con `QaB4.sln` en Xvfb `:99` (log `~/opencode/qa_ui5/app16.log`).
+- Addins (ventana `0x200770`, 920x640):
+  - barra superior con búsqueda: `filler @14,14 892x29`, panel de búsqueda
+    `@692,14 208x29`, campo `@694,16 168x25`, iconos `@863,17 16x23` y `@881,17 16x23`.
+  - fila expandida en Instalados: `table cell @82,123 529x53`, texto
+    `GDB Debugger Support` + descripción `@114,123 557x53`.
+- NuGet (ventana `0x2009b7`, 980x640):
+  - viewport derecho `@626,54 354x478` (termina en y≈532);
+  - `Nueva versión:` `@640,545 95x20` y combo `13.0.4 (última versión estable)`
+    `@750,545 215x20`;
+  - barra de acciones `@8,596 958x34` con `Add Package @846,596` y `Cerrar @721,596`;
+    sin solape entre el contenido del panel derecho y la barra inferior.
+
+**QA (§18.5)**: Tester QA Senior — **APROBADO, 0 hallazgos funcionales abiertos** para
+los 3 residuos. Informe local actualizado en `~/opencode/qa_ui5/report_qa_ui5.md`.
+Limitación residual no funcional: la pestaña Galería depende del repositorio remoto
+`https://lastexitcode.com/monadevelop-addins/9.0/main.mrep`, que falla en el entorno de
+prueba; la altura de fila se validó en Instalados, que usa el mismo `AddinTreeWidget`.
+
+**Cierre**: submódulo `main/external/mono-addins` commiteado y pushed en `net10`
+(commit `8f1a15a`); repo principal commiteado y pushed en
+`agents/sub-agent-senior-dev-role-report` con el puntero del submódulo actualizado y
+`ManagePackagesDialog.UI.cs` + docs.
+
+**Pendiente**: las diferencias restantes conocidas de las tandas anteriores (gradiente
+del toolbar, iconos a color, barra autohide, glyph maximizar/restore opcional) siguen
+vigentes; no están en el alcance de esta tanda.

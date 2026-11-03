@@ -1441,3 +1441,55 @@ repo principal, con puntero de submódulo actualizado).
 **Pendiente**: gradiente del toolbar principal (decisión de paleta), iconos a color del
 toolbar, barra autohide, heredadas 2026-10-29/2026-11-01 y glyph maximizar/restore
 (opcional) — fuera del alcance de esta tanda.
+
+### 2026-11-02 (4) — UI legacy Gtk (`--old-gui`): cierre de residuos Addins/NuGet
+
+**Qué se hizo**: cierre de 3 residuos de la auditoría de UI legacy-Gtk. Se corrigió la
+búsqueda del diálogo de Extensiones (arriba a la derecha), la altura de la fila de
+paquete en la pestaña Instalados (nombre + descripción sin quedar a una línea) y el
+recorte/solape del panel derecho del diálogo NuGet sobre la barra de acciones inferior.
+
+Archivos tocados:
+- `main/external/mono-addins/Mono.Addins.Gui/Mono.Addins.Gui/AddinManagerDialog.cs` —
+  la búsqueda se empaqueta en un `filterBar` (`HBox`) insertado en `vbox93` posición 0,
+  con `SearchEntry` a la derecha; se elimina `RepositionFilter()` y el
+  `SetAllocation` manual sobre el `notebook`.
+- `main/external/mono-addins/Mono.Addins.Gui/Mono.Addins.Gui/AddinTreeWidget.cs` —
+  renderer principal de nombre con `Ellipsize=None`, `WrapMode=Word`,
+  `MaxWidthChars=45`, `YPad=2`; renderer independiente para versión con `Ellipsize=End`
+  y `YPad=2`; icono con `YPad=2`.
+- `main/src/addins/MonoDevelop.PackageManagement/MonoDevelop.PackageManagement.Gui/ManagePackagesDialog.UI.cs` —
+  panel derecho en `VerticalPlacement=Start` + `HorizontalPlacement=Fill`, con
+  `ScrollView` horizontal `Never` y vertical `Automatic`, de modo que el contenido se
+  desplaza dentro del viewport sin invadir la barra inferior.
+
+**Build/staging**: `Mono.Addins.Gui.csproj` y `MonoDevelop.PackageManagement.csproj`
+compilan con `dotnet build -c Debug` y 0 errores. Nota operativa: el build directo de
+`Mono.Addins.Gui` no actualiza automáticamente `main/build/Mono.Addins.Gui.dll`; se
+copió desde `bin/net10.0/` a `main/build/` antes de validar.
+- `main/build/Mono.Addins.Gui.dll` md5 `b0e2f715a12f6b6f3b13753820fd7759`.
+- `main/build/AddIns/MonoDevelop.PackageManagement/MonoDevelop.PackageManagement.dll`
+  md5 `eb47b040936a5fc67a004c7d2e2eaa1e`.
+
+**Cómo validar / evidencia final**: arranque `--old-gui` con `QaB4.sln` en Xvfb `:99`
+(log `~/opencode/qa_ui5/app16.log`).
+- Addins `0x200770` (920x640): barra superior `@14,14 892x29`; campo de búsqueda
+  `@694,16 168x25`; iconos `@863,17` y `@881,17`. Fila expandida en Instalados
+  `@82,123 529x53` para `GDB Debugger Support` + descripción.
+- NuGet `0x2009b7` (980x640): viewport derecho `@626,54 354x478`; `Nueva versión:`
+  `@640,545`; combo `@750,545 215x20`; barra de acciones `@8,596 958x34`. Sin solape ni
+  recorte.
+
+**QA (§18.5)**: Tester QA Senior — **APROBADO, 0 hallazgos funcionales abiertos** para
+los 3 residuos. La pestaña Galería queda limitada por el repositorio remoto de addins
+(no disponible en el entorno de prueba); el fix de altura de fila se validó en
+Instalados, que comparte el mismo `AddinTreeWidget`.
+
+**Cierre**: submódulo `main/external/mono-addins` commiteado y pushed en `net10`
+(commit `8f1a15a`); repo principal commiteado y pushed en
+`agents/sub-agent-senior-dev-role-report` con el puntero del submódulo actualizado, el
+fix de NuGet y la documentación.
+
+**Pendiente**: gradiente del toolbar principal (decisión de paleta), iconos a color del
+toolbar, barra autohide, heredadas 2026-10-29/2026-11-01 y glyph maximizar/restore
+(opcional) — fuera del alcance de esta tanda.
