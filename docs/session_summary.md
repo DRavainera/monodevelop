@@ -2683,3 +2683,28 @@ iconos OK, build `0 Errores`, regresión `--old-gui` OK (0 archivos legacy tocad
 **Pendiente**: poblar el *body* completo del template AssemblyInfo con etiquetas autoriales y
 extender el catálogo a más lenguajes (Java/F#/VB) cuando se migren sus `xft` — hoy solo C# (igual
 que la shell, que no carga el host legacy de add-ins).
+
+## 2026-11-03 (3) — UI Avalonia: alinear el borde/chrome del diálogo "New File" con el resto de diálogos
+
+**Contexto**: el New File dialog portado arriba usa `DialogWindow.Apply(this)` (como NewSolution,
+About, Preferences, AddinManager, FindInFiles), pero su Grid raíz llevaba `Margin="6"`. Como
+`Apply` (`Controls/DialogWindow.cs:201`) ya envuelve el contenido en un frame `Border`
+(`Margin=6, CornerRadius=8, BorderThickness=1`), ese margin extra creaba una segunda banda de 6px
+del color-cuerpo que impedía que la barra de título llegara a las esquinas redondeadas superiores.
+El sibling `NewSolutionDialog` (también `Apply`) no tiene margin en el Grid raíz.
+
+**Cambios** (solo 3 margins en `Views/NewFileDialog.axaml`, sin C#):
+1. Grid raíz `Margin="6"` → eliminado (título sellado a las esquinas).
+2. Grid de contenido `Margin="6,8,6,0"` → `Margin="8,8,8,0"` (igualar a NewSolution, 8px).
+3. Fila de acciones `Margin="0,10,0,0"` → `Margin="12,10,12,12"` (botón `New` sin pegarse a la
+   esquina inferior-derecha redondeada; 13px de holgura).
+
+**Cómo validar**: 4 hooks `exit=124` (sin regresión: `tmplCount=2`, `okEnabled=True`, ficheros
+creados); AT-SPI íntegro; chrome (ARGB depth=32) con gutter **6px** transparente (`alpha=0`), arcos
+8px anti-aliaseados, chrome continuo `(45,45,45)` y **sin banda de color-cuerpo**; 1:1 píxel a
+píxel con el sibling `About`. Artefactos en `~/opencode/nfqa/` (`qa_border.png`, `qa_about.png`).
+
+**QA (§18.5)**: Tester QA Senior — **APROBADO, 0 hallazgos** (6/6 PASS).
+
+**Cierre**: repo principal commiteado y pushed en `agents/sub-agent-senior-dev-role-report`
+(`Views/NewFileDialog.axaml` + docs). Sin submódulos modificados.

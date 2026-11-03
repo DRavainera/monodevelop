@@ -12,7 +12,7 @@
   <!-- Replica of the legacy Gtk NewFileDialog (718x524, panes 192/292/*):
        categories tree | template list (32px icons) | title + description,
        then Name:, the "Add to project" box and the Cancel/New action row. -->
-  <Grid RowDefinitions="Auto,*,Auto" Margin="6">
+  <Grid RowDefinitions="Auto,*,Auto">
     <!-- Avalonia chrome -->
     <Border Grid.Row="0" Classes="dialogchrome" Background="{DynamicResource IdeChromeBgBrush}"
             BorderBrush="{DynamicResource IdeBorderBrush}" BorderThickness="0,0,0,1">
@@ -23,7 +23,7 @@
       </Grid>
     </Border>
 
-    <Grid Grid.Row="1" Margin="6,8,6,0" RowDefinitions="*,Auto,Auto"
+    <Grid Grid.Row="1" Margin="8,8,8,0" RowDefinitions="*,Auto,Auto"
           ColumnDefinitions="192,3,292,3,*">
       <!-- Categories (legacy catView, headers hidden, sorted ascending) -->
       <Border Grid.Row="0" Grid.Column="0" Margin="0,0,0,6"
@@ -92,7 +92,7 @@
     </Grid>
 
     <!-- Action row (legacy Gtk.Dialog action area: [Cancel][New], New is the default) -->
-    <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0">
+    <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="12,10,12,12">
       <Button x:Name="CancelButton" Content="Cancel" Click="OnCancel" MinWidth="80" Margin="0,0,6,0" />
       <Button x:Name="NewButton" Content="New" Click="OnNew" MinWidth="80" />
     </StackPanel>

@@ -3077,3 +3077,45 @@ legacy tocados — el diff solo toca `MonoDevelop.Startup.Avalonia`).
 operador lo pida (hoy emite el esqueleto con `ProjectName`); y la integración con más lenguajes
 que C# (Java, F#, VB…) cuando se migren sus `xft` (hoy el catálogo es solo C#, igual que la shell
 que no carga el host legacy de add-ins).
+
+### M10 (follow-up) — Alinear el borde/chrome del diálogo "New File" con el resto de diálogos (2026-11-03)
+
+**Contexto**: el diálogo "New File" portado arriba usaba `DialogWindow.Apply(this)` (igual que el
+resto de diálogos: NewSolution, About, Preferences, AddinManager, FindInFiles), pero su Grid raíz
+en XAML llevaba `Margin="6"`. Como `Apply` ya envuelve el contenido en un `frame` `Border`
+(`Margin=6, CornerRadius=8, BorderThickness=1, Bg=IdeWindowBgBrush` — ver `Controls/DialogWindow.cs:201`),
+ese `Margin="6"` extra creaba una **segunda** banda de 6px del color-cuerpo entre el borde interior
+del frame y la fila de título, de modo que la barra de título **no llegaba a las esquinas
+redondeadas superiores** (se veía una banda de `IdeWindowBgBrush` alrededor del chrome). El sibling
+`NewSolutionDialog` (que también usa `Apply`) **no** tiene margin en el Grid raíz, por lo que su
+chrome queda sellado a las esquinas.
+
+**Qué se hizo** (solo 3 edits de margin en `Views/NewFileDialog.axaml`; sin tocar lógica ni C#):
+1. Grid raíz `<Grid RowDefinitions="Auto,*,Auto">`: `Margin="6"` → **eliminado** (sin margin). La fila
+   de título (`dialogchrome`, que `Apply` marca con `CornerRadius(8,8,0,0)`) ahora llega sellada al
+   borde interior superior del frame, cubriendo las esquinas redondeadas; el contenido se ajusta a
+   los bordes interior izquierdo/derecho/inferior.
+2. Grid de contenido (paneles + Name/Add-to-project): `Margin="6,8,6,0"` → `Margin="8,8,8,0"`
+   (igualar al padding de 8px de `NewSolutionDialog`).
+3. Fila de acciones `Cancel`/`New`: `Margin="0,10,0,0"` → `Margin="12,10,12,12"` (el botón `New`
+   ya no queda pegado a la esquina inferior-derecha redondeada; queda 13px de holgura).
+
+**Cómo validar / evidencia** (artefactos en `~/opencode/nfqa/`):
+- Regresión funcional: los 4 hooks (`--newfile`, `--newfile-unsaved`, `--ctxnewfile`,
+  `--newfile-visual`) siguen verdes tras el cambio (`exit=124`, `tmplCount=2`, `okEnabled=True`,
+  fichero/unsaved/ctx creados; 0 `NullRef/Unhandled`).
+- AT-SPI íntegro (frame, TreeView, 2 templates, Name:, Add to project, combo, Path:/Browse,
+  Cancel/New).
+- Geometría del chrome (análisis ARGB depth=32 sobre `nfqa/qa_border.png`): gutter de **6px**
+  transparente (`alpha=0`) en los 4 lados; arcos de 8px anti-aliaseados (cortes de esquina
+  `alpha=0`); columna central con chrome continuo `(45,45,45)` de y=6 a y=36, línea 1px `(58,58,58)`
+  en y=37 y body `(30,30,30)` desde y=38 → **sin banda de color-cuerpo**.
+- Comparación 1:1 con el sibling `About` (`nfqa/qa_about.png`): depth=32, gutter 6px transparente,
+  mapa de esquina y columna central **idénticos píxel a píxel**.
+
+**QA (§18.5)**: Tester QA Senior — **APROBADO, 0 hallazgos** (6/6 PASS: sin regresión funcional,
+AT-SPI íntegro, chrome con gutter 6px + esquinas transparentes + título sellado sin banda, chrome
+idéntico al sibling About, sin desbordamiento/corte de esquina, render coherente 718x524).
+
+**Cierre**: repo principal commiteado/pushed en `agents/sub-agent-senior-dev-role-report`
+(`Views/NewFileDialog.axaml` + docs). Sin submódulos modificados.
