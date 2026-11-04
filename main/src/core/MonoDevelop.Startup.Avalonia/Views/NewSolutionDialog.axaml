@@ -2,12 +2,15 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="MonoDevelop.AvaloniaShell.Views.NewSolutionDialog"
         Title="Create a New Solution"
-        Width="920" Height="600"
+        Width="760" Height="600"
         WindowStartupLocation="CenterOwner"
         SystemDecorations="None"
         ExtendClientAreaToDecorationsHint="True"
         Background="{DynamicResource IdeWindowBgBrush}">
 
+  <!-- Panel design mirrors NewFileDialog: bordered panes with grid splitters
+       (categories | templates | title + description), then the Solution name,
+       Location (+ Browse) and options rows, and the Create/Cancel action row. -->
   <Grid RowDefinitions="Auto,*,Auto">
     <!-- Avalonia chrome -->
     <Border Grid.Row="0" Classes="dialogchrome" Background="{DynamicResource IdeChromeBgBrush}"
@@ -19,53 +22,84 @@
       </Grid>
     </Border>
 
-    <Grid Grid.Row="1" ColumnDefinitions="170,240,*,230" Margin="8">
+    <Grid Grid.Row="1" Margin="8,8,8,0" RowDefinitions="*,Auto,Auto,Auto"
+          ColumnDefinitions="170,3,240,3,*">
       <!-- Categories -->
-      <ListBox x:Name="CategoryList" Grid.Column="0" Margin="0,0,8,0" Background="Transparent"
-               Foreground="{DynamicResource IdeFgBrush}" SelectionChanged="OnCategorySelected">
-        <ListBoxItem Content="C#" IsSelected="True" />
-        <ListBoxItem Content="F#" IsEnabled="False" />
-        <ListBoxItem Content="Other" IsEnabled="False" />
-      </ListBox>
+      <Border Grid.Row="0" Grid.Column="0" Margin="0,0,0,6"
+              BorderBrush="{DynamicResource IdeBorderBrush}" BorderThickness="1">
+        <ListBox x:Name="CategoryList" Background="Transparent"
+                 Foreground="{DynamicResource IdeFgBrush}" SelectionChanged="OnCategorySelected">
+          <ListBoxItem Content="C#" IsSelected="True" />
+          <ListBoxItem Content="F#" IsEnabled="False" />
+          <ListBoxItem Content="Other" IsEnabled="False" />
+        </ListBox>
+      </Border>
+      <GridSplitter Grid.Row="0" Grid.Column="1" Width="3" HorizontalAlignment="Stretch"
+                    VerticalAlignment="Stretch" Background="Transparent" />
 
       <!-- Templates (32px icons like the legacy DND list) -->
-      <ListBox x:Name="TemplateList" Grid.Column="1" Margin="0,0,8,0" Background="Transparent"
-               Foreground="{DynamicResource IdeFgBrush}" SelectionChanged="OnTemplateSelected">
-        <ListBoxItem Tag="console">
-          <StackPanel Orientation="Horizontal" Spacing="10">
-            <Image x:Name="IconConsole" Width="32" Height="32" />
-            <TextBlock Text="Console Application" VerticalAlignment="Center" />
-          </StackPanel>
-        </ListBoxItem>
-        <ListBoxItem Tag="library">
-          <StackPanel Orientation="Horizontal" Spacing="10">
-            <Image x:Name="IconLibrary" Width="32" Height="32" />
-            <TextBlock Text="Class Library" VerticalAlignment="Center" />
-          </StackPanel>
-        </ListBoxItem>
-        <ListBoxItem Tag="unittest">
-          <StackPanel Orientation="Horizontal" Spacing="10">
-            <Image x:Name="IconTest" Width="32" Height="32" />
-            <TextBlock Text="Unit Test Project" VerticalAlignment="Center" />
-          </StackPanel>
-        </ListBoxItem>
-        <ListBoxItem Tag="shared">
-          <StackPanel Orientation="Horizontal" Spacing="10">
-            <Image x:Name="IconShared" Width="32" Height="32" />
-            <TextBlock Text="Shared Project" VerticalAlignment="Center" />
-          </StackPanel>
-        </ListBoxItem>
-      </ListBox>
+      <Border Grid.Row="0" Grid.Column="2" Margin="0,0,6,0"
+              BorderBrush="{DynamicResource IdeBorderBrush}" BorderThickness="1">
+        <ListBox x:Name="TemplateList" Background="Transparent"
+                 Foreground="{DynamicResource IdeFgBrush}" SelectionChanged="OnTemplateSelected">
+          <ListBoxItem Tag="console">
+            <StackPanel Orientation="Horizontal" Spacing="10">
+              <Image x:Name="IconConsole" Width="32" Height="32" />
+              <TextBlock Text="Console Application" VerticalAlignment="Center" />
+            </StackPanel>
+          </ListBoxItem>
+          <ListBoxItem Tag="library">
+            <StackPanel Orientation="Horizontal" Spacing="10">
+              <Image x:Name="IconLibrary" Width="32" Height="32" />
+              <TextBlock Text="Class Library" VerticalAlignment="Center" />
+            </StackPanel>
+          </ListBoxItem>
+          <ListBoxItem Tag="unittest">
+            <StackPanel Orientation="Horizontal" Spacing="10">
+              <Image x:Name="IconTest" Width="32" Height="32" />
+              <TextBlock Text="Unit Test Project" VerticalAlignment="Center" />
+            </StackPanel>
+          </ListBoxItem>
+          <ListBoxItem Tag="shared">
+            <StackPanel Orientation="Horizontal" Spacing="10">
+              <Image x:Name="IconShared" Width="32" Height="32" />
+              <TextBlock Text="Shared Project" VerticalAlignment="Center" />
+            </StackPanel>
+          </ListBoxItem>
+        </ListBox>
+      </Border>
+      <GridSplitter Grid.Row="0" Grid.Column="3" Width="3" HorizontalAlignment="Stretch"
+                    VerticalAlignment="Stretch" Background="Transparent" />
 
-      <!-- Description + fields -->
-      <StackPanel Grid.Column="2" Margin="0,0,8,0" Spacing="8">
-        <TextBlock Text="Description" FontWeight="SemiBold" Foreground="{DynamicResource IdeFgBrush}" />
-        <TextBlock x:Name="TemplateDescription" TextWrapping="Wrap" FontSize="12"
-                   Foreground="{DynamicResource IdeFgBrush}" Opacity="0.9" />
-        <TextBlock Text="Solution name" Foreground="{DynamicResource IdeFgBrush}" Margin="0,8,0,0" />
+      <!-- Info pane (same as New File: bold title + wrapping description) -->
+      <Border Grid.Row="0" Grid.Column="4" Padding="6"
+              BorderBrush="{DynamicResource IdeBorderBrush}" BorderThickness="1">
+        <DockPanel>
+          <TextBlock x:Name="TemplateTitle" DockPanel.Dock="Top" FontWeight="Bold"
+                     TextWrapping="Wrap" Margin="0,0,0,4"
+                     Foreground="{DynamicResource IdeFgBrush}" />
+          <TextBlock x:Name="TemplateDescription" TextWrapping="Wrap" Opacity="0.85"
+                     Foreground="{DynamicResource IdeFgBrush}" />
+        </DockPanel>
+      </Border>
+
+      <!-- Solution name row -->
+      <StackPanel Grid.Row="1" Grid.ColumnSpan="5" Orientation="Horizontal" Spacing="6" Margin="0,8,0,0">
+        <TextBlock Text="Solution name:" VerticalAlignment="Center"
+                   Foreground="{DynamicResource IdeFgBrush}" />
         <TextBox x:Name="SolutionName" Text="Solution" />
-        <TextBlock Text="Location" Foreground="{DynamicResource IdeFgBrush}" />
+      </StackPanel>
+
+      <!-- Location row with folder browse (legacy FolderEntry "...") -->
+      <StackPanel Grid.Row="2" Grid.ColumnSpan="5" Orientation="Horizontal" Spacing="6" Margin="0,8,0,0">
+        <TextBlock Text="Location:" VerticalAlignment="Center"
+                   Foreground="{DynamicResource IdeFgBrush}" />
         <TextBox x:Name="LocationBox" />
+        <Button x:Name="BrowseButton" Content="Browse" Click="OnBrowseLocation" MinWidth="64" />
+      </StackPanel>
+
+      <!-- Options (legacy checkbox block) -->
+      <StackPanel Grid.Row="3" Grid.ColumnSpan="5" Spacing="6" Margin="0,8,0,0">
         <CheckBox x:Name="CreateDirectoryCheck" Content="Create a directory for the solution"
                   IsChecked="True" Foreground="{DynamicResource IdeFgBrush}" />
         <CheckBox x:Name="AddToSolutionCheck" Content="Add to open solution"
@@ -73,16 +107,6 @@
         <CheckBox x:Name="GitCheck" Content="Use git for version control"
                   Foreground="{DynamicResource IdeFgBrush}" />
       </StackPanel>
-
-      <!-- Template preview (legacy right pane) -->
-      <Border Grid.Column="3" BorderBrush="{DynamicResource IdeBorderBrush}" BorderThickness="1,0,0,0" Margin="8,0,0,0">
-        <StackPanel Margin="10" Spacing="8">
-          <TextBlock Text="Preview" FontWeight="SemiBold" Foreground="{DynamicResource IdeFgBrush}" />
-          <Image x:Name="PreviewImage" Width="96" Height="96" HorizontalAlignment="Left" />
-          <TextBlock x:Name="PreviewLabel" Text="Console Application" TextWrapping="Wrap"
-                     Foreground="{DynamicResource IdeFgBrush}" Opacity="0.8" FontSize="12" />
-        </StackPanel>
-      </Border>
     </Grid>
 
     <!-- OK/Cancel -->

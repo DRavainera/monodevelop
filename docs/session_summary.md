@@ -2844,4 +2844,30 @@ modificados.
 
 **QA (§18.5)**: Tester QA Senior — **APROBADO, PASS, 0 hallazgos abiertos**.
 
+**Cierre**: commit `e786a225c6` pushado a `origin/agents/sub-agent-senior-dev-role-report`.
+
+## 2026-11-04 (2) — UI Avalonia: diálogo New Solution — paneles estilo New File, Browse en Location y sin Preview
+
+**Contexto**: se pidió alinear el diálogo "New Solution" (File ▸ New Solution...) con el diseño de paneles del diálogo "New File", añadir un botón Browse al campo Location (selector de carpeta que escribe la ruta en el TextBox) y eliminar el panel Preview porque no es necesario.
+
+**Qué se hizo** (archivos):
+- `main/src/core/MonoDevelop.Startup.Avalonia/Views/NewSolutionDialog.axaml`:
+  - Layout de la zona central a `Grid RowDefinitions="*,Auto,Auto,Auto" ColumnDefinitions="170,3,240,3,*"` replicando `NewFileDialog.axaml`: tres paneles con `Border` de 1px (`IdeBorderBrush`) separados por `GridSplitter` de 3px — categorías | plantillas (iconos 32px) | pane de info.
+  - Pane de info con el mismo patrón que New File: `DockPanel` con `TemplateTitle` en negrita + `TemplateDescription` con wrap (el título del template que antes vivía en el panel Preview).
+  - Las filas de campos pasan de estar dentro del 3er panel a filas a lo ancho bajo los paneles (estilo de la fila "Name:"): "Solution name:" + `SolutionName`; "Location:" + `LocationBox` + `Button x:Name="BrowseButton" Content="Browse"`; bloque de checkboxes (`CreateDirectoryCheck`, `AddToSolutionCheck`, `GitCheck`).
+  - Se eliminó la columna 4 (panel Preview: `PreviewImage` 96x96 + `PreviewLabel`). Ventana de 920x600 a 760x600.
+- `main/src/core/MonoDevelop.Startup.Avalonia/Views/NewSolutionDialog.axaml.cs`:
+  - `OnTemplateSelected` pinta `TemplateTitle`/`TemplateDescription` (ya no `PreviewImage`/`PreviewLabel`).
+  - Nuevo handler `OnBrowseLocation`: `StorageProvider.OpenFolderPickerAsync(FolderPickerOpenOptions { AllowMultiple=false })` y escribe `folders[0].Path.LocalPath` en `LocationBox` (mismo patrón que `NewFileDialog.OnBrowse`); errores a `Console.WriteLine("[newsolution] folder picker: ...")`.
+  - El tuple `Templates` pierde el campo `PreviewIcon` (sin uso).
+
+**Cómo validar**:
+- Build: `dotnet build main/src/core/MonoDevelop.Startup.Avalonia/MonoDevelop.Startup.Avalonia.csproj -c Debug -f net10.0 --nologo` → `0 Errores`.
+- Captura QA: `bash /home/daniel/opencode/newsolution_dialog_qa/run.sh` (arranca `--newsolution`, captura `dialog.png` por el título "New Solution" y deja `run.log`). Artefactos en `~/opencode/newsolution_dialog_qa/`.
+- OCR (tesseract + PIL 3-4x invertido): presentes "New Solution", "Console Application", "Class Library", "Solution name:", "Location:", "Browse", "Create", "Cancel" y los tres checkboxes; "Preview" NO aparece.
+- PIL: ventana 760x600; bordes verticales #3A3A3A en pares (184/188, 421/431) por splitter + borde derecho x=744 (info pane hasta el borde); fila inferior con dos botones de 88px separados 8px.
+- `run.log`: sin `Unhandled`/`Exception`/`TypeLoad`/`DllNotFound`; `app_exit=124` (timeout esperado del script).
+
+**QA (§18.5)**: Tester QA Senior — **APROBADO, PASS**. 1 hallazgo de severidad baja: la separación plantillas|info es 10px (splitter 3px + `Margin="0,0,6,0"` del pane de plantillas) — réplica fiel de `NewFileDialog.axaml` que usa el mismo margen; se deja como está.
+
 **Cierre**: pendiente de commit y push.

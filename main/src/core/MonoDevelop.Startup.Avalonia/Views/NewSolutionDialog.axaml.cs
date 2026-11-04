@@ -12,25 +12,25 @@ namespace MonoDevelop.AvaloniaShell.Views;
 public partial class NewSolutionDialog : Window
 {
 	// Legacy catalog (NewProjectDialog / dotnet templates core set). Titles mirror
-	// the templates offered by the GTK dialog for the C# category. Icon32/PreviewIcon
-	// are the resource base names of the GTK template icons
-	// (main/src/core/MonoDevelop.Ide/templates/images/*.png), the same PNGs the
+	// the templates offered by the GTK dialog for the C# category. Icon32 is the
+	// resource base name of the GTK template icon
+	// (main/src/core/MonoDevelop.Ide/templates/images/*.png), the same PNG the
 	// GtkNewProjectDialogBackend renders via ImageService.GetIcon(template.IconId, Dnd):
 	// Console->md-console-project, Library->md-library-project,
 	// UnitTest->md-test-project, Shared->md-crossplatform-shared-project.
-	static readonly (string Tag, string Title, string Desc, string Icon32, string PreviewIcon) [] Templates = {
+	static readonly (string Tag, string Title, string Desc, string Icon32) [] Templates = {
 		("console", "Console Application",
 			"A project for creating a command-line application that can run on .NET on Windows, Linux and MacOS.",
-			"console-project", "console-project"),
+			"console-project"),
 		("library", "Class Library",
 			"A project for creating a class library that targets .NET Standard or .NET Core.",
-			"library-project", "library-project"),
+			"library-project"),
 		("unittest", "Unit Test Project",
 			"A project that contains unit tests that can run with NUnit / xUnit test runners.",
-			"test-project", "test-project"),
+			"test-project"),
 		("shared", "Shared Project",
 			"A project for sharing source files between multiple projects via implicit linking.",
-			"crossplatform-shared-project", "crossplatform-shared-project"),
+			"crossplatform-shared-project"),
 	};
 
 	public string? SelectedTemplateId { get; private set; }
@@ -86,10 +86,25 @@ public partial class NewSolutionDialog : Window
 		if (TemplateList.SelectedItem is not ListBoxItem item || item.Tag is not string tag)
 			return;
 		var t = Templates.FirstOrDefault (x => x.Tag == tag);
+		TemplateTitle.Text = t.Title;
 		TemplateDescription.Text = t.Desc;
-		PreviewImage.Source = IconService.GetTemplateImage (t.PreviewIcon);
-		PreviewLabel.Text = t.Title;
 		SelectedTemplateId = t.Tag;
+	}
+
+	// El legacy FolderEntry tiene un botón "..." que abre el selector de carpeta
+	// (mismo patrón que NewFileDialog.OnBrowse).
+	async void OnBrowseLocation (object? sender, RoutedEventArgs e)
+	{
+		try {
+			var folders = await StorageProvider.OpenFolderPickerAsync (new Avalonia.Platform.Storage.FolderPickerOpenOptions {
+				Title = "Select a location for the new solution",
+				AllowMultiple = false,
+			});
+			if (folders.Count > 0)
+				LocationBox.Text = folders [0].Path.LocalPath;
+		} catch (Exception ex) {
+			Console.WriteLine ("[newsolution] folder picker: " + ex.Message);
+		}
 	}
 
 	protected override void OnOpened (EventArgs e)
