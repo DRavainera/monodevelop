@@ -298,7 +298,19 @@ El bucle de migración Gtk → Avalonia continúa por módulos (detalle por hito
   `KeyBinding`, `CommandManager.ToCommandId` + modelo de comandos, `KeyBindingSet`/
   `KeyBindingScheme`/`KeyBindingService`/`SchemeExtensionNode`. Cableado de HotKeys
   (`entry.Shortcut`→`InputGesture`) y panel fiel sobre el backend. Verificado que
-  **la UI GTK no se rompe**. QA §18.5 APROBADO; build 0 errores, 53/53 tests.
+     **la UI GTK no se rompe**. QA §18.5 APROBADO; build 0 errores, 53/53 tests.
+ - **Solution pad — gutter estilo GTK (2026-11-04)**: paridad visual del solution pad
+   con el pad Gtk legacy — (1) expander **triangular** a la izquierda del icono en nodos
+   expandibles (abajo expandido / derecha colapsado), (2) subárbol de dependencias/
+   References igual que GTK, (3) **líneas guía verticales** de indentación entre niveles
+   (1 riel de 1 px por nivel ancestro). Implementado **100 % en Avalonia** (submódulo
+   `main/external/xwt`, backend `Xwt.Avalonia`: `TreeGutter.cs` nuevo + columna gutter en
+   `ListBackends.cs`), sin código GTK — en el backend Gtk el triángulo/líneas los dibuja
+   nativamente `GtkTreeView`, así que la versión Avalonia es una rasterización propia con
+   `DrawRectangle` (fill), alineada a píxel entero y con color por luminancia del fondo
+   efectivo (no por `ActualThemeVariant`, no fiable en esta app). QA §18.5 APROBADO, 5/5
+   PASS; build 0 errores; la ruta `--old-gui` no se toca y sigue compilando. Detalle en
+   `docs/interfaz-plan.md` (follow-up "Solution pad — gutter estilo GTK").
 
 Nota operativa: el árbol de build único es `main/build/` (cualquier otra dirección de build en la documentación es obsoleta). El binario de la UI Avalonia es `main/build/MonoDevelop.AvaloniaShell.dll` y el IDE GTK legacy (`--old-gui`) es `main/build/MonoDevelop.dll`.
 

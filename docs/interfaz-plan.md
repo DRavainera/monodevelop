@@ -3389,3 +3389,67 @@ csproj). Observaciones no bloqueantes: `md-plugin` colgante (cleanup en tarea ap
 `run1_exit=124` (timeout del harness), 128 warnings MSB3277 preexistentes.
 
 **Cierre**: commit `5dbb3196cb` pushado a `origin/agents/sub-agent-senior-dev-role-report`.
+
+### Solution pad (follow-up) — gutter estilo GTK: triángulo expander + líneas guía de indentación (2026-11-04)
+
+**Contexto**: se pidieron 3 mejoras de aspecto en el solution pad de la UI Avalonia para
+equipararlo al pad Gtk legacy: (1) icono expander **triangular** a la izquierda del icono del
+nodo en todos los nodos expandibles (apuntando **abajo** si está expandido, a la **derecha**
+si está colapsado); (2) subárbol de dependencias/References renderizado igual que GTK; (3)
+**líneas guía verticales** de indentación entre niveles. El gutter de la shell Avalonia es 100 %
+código Avalonia: en el backend Gtk el triángulo y las líneas los dibuja nativamente el widget
+`GtkTreeView` (no hay código de "gutter" en `Xwt.Gtk` que reutilizar), así que la versión
+Avalonia es una rasterización propia que emula ese aspecto.
+
+**Cambios** (submódulo `main/external/xwt`, rama `net10`; backend `Xwt.Avalonia`,
+`namespace Xwt.AvaloniaBackend`):
+- `Xwt.Avalonia/TreeGutter.cs` (**nuevo**): control del gutter. `Render` dibuja 1 riel vertical
+  de 1 px por nivel ancestro (nodo de profundidad `d` → `d` rieles) y el triángulo expander en
+  su nivel (`r=4`, scanline: abajo `hw=r*(1-t)`, derecha `hh=r*(1-t)`). Todo con
+  `DrawRectangle` (fill): en este build de Avalonia un trazo de 1 px (`DrawLine`/`DrawGeometry`)
+  se antialiasa a unos pocos % de su alpha, mientras que un relleno compone a brillo completo.
+  El riel se alinea a píxel entero (`x=i*16+8`, ancho 1) para cobertura completa.
+- Color por **luminancia del fondo efectivo**, NO por `Application.ActualThemeVariant` (en esta
+  app la variante lee `Light` aunque la ventana pinta fondo oscuro, y `TryGetResource("IdeFgBrush")`
+  da `#1a1a1a` en ambas variantes): `EffectiveBackground` sube por el visual tree hasta el primer
+  `Grid` con fondo sólido opaco; `dark = 0.299R+0.587G+0.114B < 128`. Oscuro → riel `0x60`/
+  triángulo `0xE6`; claro → `0xB0`/`0x33`. El control es transparente (el resaltado de selección
+  se ve a través de las marcas).
+- `Xwt.Avalonia/ListBackends.cs`: `RowPanelHost` nuevo modo árbol (`IsTree`, `IndentUnit=16`,
+  `ExpanderSlot=16`) y **columna gutter** al inicio de cada fila en `RebuildRows` (la indentación
+  ya no es `Margin` de fila). `TreeViewBackend`: `IsTree=true`; umbral de toggle del expander
+  `p.X < Depth*IndentUnit + ExpanderSlot` (zona de gutter, a la izquierda de la primera celda);
+  fondo `Brushes.Transparent` en filas no seleccionadas para que el click en el gutter sea
+  hit-testeable (la base deja `null`, que Avalonia no hit-testea).
+- APIs Avalonia 12.1.2: `Visual` en `namespace Avalonia` (no `Avalonia.Media`);
+  `GetVisualParent()` es extensión en `Avalonia.VisualTree`; `Background` vive en `Grid` (no
+  `Control`/`Decorator`); los tipos de Avalonia se nombran con aliases de nivel superior
+  (sombreado por `Point`/`Color`/`Rectangle`/`DrawingContext` del frontend Xwt).
+
+**Validación / evidencia** (artefactos en `~/opencode/`):
+- Build (0 errores): `Xwt.Avalonia.csproj` y `MonoDevelop.Startup.Avalonia.csproj`
+  (`-c Debug -f net10.0`); la ruta `--old-gui` (Xwt.Gtk) no se toca y la app (binario de ambas
+  rutas) compila.
+- Captura + forense PIL: `bash /home/daniel/opencode/solpad_avalonia_qa.sh` (arranca con
+  `~/opencode/solpad_deps/Fixture.sln`, captura `solpad_avalonia_1.png`; ventana 320,157 1280x800;
+  origen del panel en captura (7,141); fila 21 px). Rieles en captura-x 15/31/47; centro del
+  triángulo por profundidad `d` en 15/31/47/63.
+- Resultados: nodo profundidad `d` → `d` rieles (lum 96=`0x60`) + triángulo (lum 230=`0xE6`) en
+  su nivel; hoja → solo rieles. Triángulo expandido = base arriba estrechándose abajo (perfil
+  `[8,6,6,4,4,2,2]` por fila-y); colapsado = borde izq vertical estrechándose a la derecha.
+  Jerarquía triángulo(230) ≫ riel(96) > fondo(30).
+- Clic (XTest `python3-xlib`, sin xdotool): un clic en el gutter colapsa (queda 1 fila, triángulo
+  a la derecha) y el siguiente re-expande (gutter idéntico, delta 0 en los 24 puntos de las filas
+  0-5); el toggle funciona también en profundidad >0.
+- `grep -c SOLPAD solpad_avalonia.log` = 0 (sin instrumentación; no existe la cadena `SOLPAD` en
+  fuentes).
+
+**QA (§18.5)**: Tester QA Senior — **APROBADO, 5/5 PASS, SIN ERRORES** (arranque/captura;
+rieles+triángulos por fila; forma del triángulo abajo/derecha; clic colapsa/re-expande; sin
+instrumentación). Nota operativa no bloqueante: el 1er click justo tras el arranque puede perderse
+en la transición de foco del WM sobre XWayland (focus-on-click); con la ventana enfocada, un click
+en el gutter siempre conmuta.
+
+**Cierre**: submódulo `main/external/xwt` commiteado/pushed en rama `net10` (`8b3233b5`:
+`TreeGutter.cs` + `ListBackends.cs`); repos principal `b7e3070125` (gitlink del submódulo) pushado
+a `origin/agents/sub-agent-senior-dev-role-report`. Sin código GTK en la ruta Avalonia.
