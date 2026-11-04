@@ -2889,4 +2889,4 @@ modificados.
 
 **QA (§18.5)**: Tester QA Senior — **APROBADO, PASS, 0 hallazgos abiertos** (el diff contiene solo las 4 adiciones de `Width`).
 
-**Cierre**: pendiente de commit y push.
+**Cierre**: commit `41304635d9` pushado a `origin/agents/sub-agent-senior-dev-role-report`.

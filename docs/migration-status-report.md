@@ -1696,3 +1696,91 @@ quedaban estirados a la misma altura porque compartían un `StackPanel` horizont
 **Cierre**: repo principal commiteado y pushed en `agents/sub-agent-senior-dev-role-report`
 (`IconService.cs`, `WelcomePageView.axaml`, `WelcomePageView.axaml.cs` + docs). Sin submódulos
 modificados.
+
+### 2026-11-04 — UI Avalonia: MainWindow logo monodevelop-22 y NuGet.Configuration 6.11.2
+
+**Contexto**: se solicitó enlazar el `Image x:Name="MonoDevelopLogo"` en `MainWindow.axaml` al
+icono `monodevelop-22.png` y actualizar la referencia de `NuGet.Configuration` de la shell Avalonia
+a la familia 6.11.
+
+**Cambios**:
+- `Views/MainWindow.axaml.cs`: `SetToolbarIcons()` añade
+  `MonoDevelopLogo.Source = IconService.GetResourceImage ("monodevelop-22");`.
+- `Views/MainWindow.axaml`: el `Grid` de la title bar pasa de `ColumnDefinitions="*,Auto"` a
+  `"Auto,*,Auto"`; el `Image` a `Grid.Column="0"` con `Margin="8,0,0,0"`, el `Menu` a
+  `Grid.Column="1"` y `CaptionButtons` a `Grid.Column="2"`.
+- `MonoDevelop.Startup.Avalonia.csproj`: `NuGet.Configuration` de `5.4.0` a
+  `$(NuGetVersionNuGet)` (6.11.2).
+
+**Validación**: build `0 Errores`; `bash ~/opencode/mainwindow_logo_nuget_qa/run.sh`
+(`--prefs=packagesources`) → `[prefs-sources] count=1`, sin excepciones; PIL sobre `main.png`:
+~140 px azules en la región del logo (x0-40, y0-32); `main/build/MonoDevelop.AvaloniaShell.deps.json`:
+`NuGet.Configuration`/`NuGet.Common` en 6.11.2.
+
+**QA (§18.5)**: Tester QA Senior — **APROBADO, PASS, 0 hallazgos abiertos**.
+
+**Cierre**: repo principal commiteado (`e786a225c6`) y pushed en
+`agents/sub-agent-senior-dev-role-report` (`MainWindow.axaml`, `MainWindow.axaml.cs`,
+`MonoDevelop.Startup.Avalonia.csproj` + docs). Sin submódulos modificados.
+
+### 2026-11-04 (2) — UI Avalonia: diálogo New Solution — paneles estilo New File, Browse en Location y sin Preview
+
+**Contexto**: se pidió alinear el diálogo "New Solution" (File ▸ New Solution...) con el diseño de
+paneles del diálogo "New File", añadir un botón Browse al campo Location (selector de carpeta que
+escribe la ruta en el TextBox) y eliminar el panel Preview porque no es necesario.
+
+**Cambios**:
+- `Views/NewSolutionDialog.axaml`: zona central a `Grid RowDefinitions="*,Auto,Auto,Auto"
+  ColumnDefinitions="170,3,240,3,*"` replicando `NewFileDialog.axaml`: tres paneles con `Border` de
+  1px (`IdeBorderBrush`) separados por `GridSplitter` de 3px — categorías | plantillas (iconos
+  32px) | pane de info (`TemplateTitle` negrita + `TemplateDescription`); filas a lo ancho bajo los
+  paneles: "Solution name:", "Location:" + `BrowseButton`, bloque de checkboxes. Se eliminó la
+  columna 4 (Preview: `PreviewImage` 96x96 + `PreviewLabel`). Ventana 920x600 → 760x600.
+- `Views/NewSolutionDialog.axaml.cs`: `OnTemplateSelected` pinta `TemplateTitle`/
+  `TemplateDescription`; nuevo `OnBrowseLocation` (`StorageProvider.OpenFolderPickerAsync`,
+  `AllowMultiple=false` → `folders[0].Path.LocalPath` en `LocationBox`, mismo patrón que
+  `NewFileDialog.OnBrowse`); el tuple `Templates` pierde `PreviewIcon`.
+
+**Validación**: build `0 Errores`; `bash ~/opencode/newsolution_dialog_qa/run.sh` (`--newsolution`)
+→ `dialog.png` 760x600, `app_exit=124`, sin `Unhandled`/`Exception`/`TypeLoad`/`DllNotFound`;
+OCR (tesseract + PIL 3-4x invertido): presentes "Solution name:", "Location:", "Browse", "Create",
+"Cancel" y los 3 checkboxes; "Preview" NO aparece; PIL: bordes verticales `#3A3A3A` en pares
+(184/188, 421/431) por splitter + borde derecho x=744 (info pane hasta el borde); fila inferior con
+dos botones de 88px separados 8px.
+
+**QA (§18.5)**: Tester QA Senior — **APROBADO, PASS**. 1 hallazgo de severidad baja: la separación
+plantillas|info es 10px (splitter 3px + `Margin="0,0,6,0"` del pane de plantillas) — réplica fiel de
+`NewFileDialog.axaml`, que usa el mismo margen; se deja como está.
+
+**Delta GTK resuelta**: la entrada 2026-11-03 (4) listaba "sin botón *Browse*" entre las deltas
+aceptadas; hoy el Browse existe. El panel Preview (deltado como "sin *Folder Layout Preview* en
+vivo") se eliminó por decisión del operador.
+
+**Cierre**: repo principal commiteado (`b1c767bab3`) y pushed en
+`agents/sub-agent-senior-dev-role-report` (`NewSolutionDialog.axaml`, `NewSolutionDialog.axaml.cs`
++ docs). Sin submódulos modificados.
+
+### 2026-11-04 (3) — UI Avalonia: TextBoxes de New File y New Solution con largo fijo
+
+**Contexto**: se pidió quitar el largo dinámico (estirado a lo ancho de la ventana) de los TextBox
+de los diálogos "New File" y "New Solution" y dejarlos con largo fijo.
+
+**Cambios** (solo XAML):
+- `Views/NewFileDialog.axaml`: `NameBox` y `ProjectPathBox` con `Width="360"`.
+- `Views/NewSolutionDialog.axaml`: `SolutionName` con `Width="320"` y `LocationBox` con
+  `Width="460"` (el botón Browse queda a su derecha).
+
+**Validación**: build `0 Errores`; `bash ~/opencode/newfile_newsolution_fixedwidth_qa/run.sh`
+(`--newsolution` + `--newfile-visual`) → `newsolution.png` 760x600, `newfile.png` 718x524,
+`exit=124`, sin excepciones; PIL (fondo `#1e1e1e`, box `#121212`, box enfocado `#000000` + anillo
+`#3584e4`): `SolutionName` x≈115..432 (~320px), `LocationBox` x≈78..535 (~460px) con Browse
+`#4b4b4b` a la derecha, `NameBox` (enfocado) x=62..421 = 360px exactos; ningún box llega al borde
+derecho de la ventana (antes hasta x≈752/710); OCR: "Solution name:", "Location:", "Browse",
+"Name:", "Create" presentes.
+
+**QA (§18.5)**: Tester QA Senior — **APROBADO, PASS, 0 hallazgos abiertos** (el diff contiene solo
+las 4 adiciones de `Width`).
+
+**Cierre**: repo principal commiteado (`41304635d9`) y pushed en
+`agents/sub-agent-senior-dev-role-report` (`NewFileDialog.axaml`, `NewSolutionDialog.axaml` +
+docs). Sin submódulos modificados.
