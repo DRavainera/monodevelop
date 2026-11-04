@@ -2890,3 +2890,31 @@ modificados.
 **QA (§18.5)**: Tester QA Senior — **APROBADO, PASS, 0 hallazgos abiertos** (el diff contiene solo las 4 adiciones de `Width`).
 
 **Cierre**: commit `41304635d9` pushado a `origin/agents/sub-agent-senior-dev-role-report`.
+
+## 2026-11-04 (4) — Iconos Fluent v2: respeto de colores originales + integración en IconService
+
+**Contexto**: el subagente "Diseñador Gráfico Senior" había generado la familia `MonoDevelop.Avalonia.Icons` (4399 PNGs) aplanando TODAS las iconas a la paleta gris/azul Fluent (v1), lo que eliminaba los colores originales (verde "add", rojo "error", azules de file-types, etc.). El operador pidió repetir la tarea exigiendo que **los iconos respeten los colores**.
+
+**Qué se hizo**:
+- `~/opencode/fluent_icons/generate.py` (v2): regla por **base** (archivo sin modificadores):
+  - **Bases coloreadas** (chroma máx de px opacos > 32; 118 bases / 1438 archivos): conservan el RGB **bit a bit** del original en todos sus modificadores (`~dark`, `~disabled`, `~sel`, `~error`, `~contrast`, `@2x`); cada variante legacy ya estaba teñida para su estado.
+  - **Bases mono** (chroma ≤ 32; 272 bases / 2961 archivos): un solo color de paleta Fluent por modificador (dark: base `#F3F2F1`, disabled `#605E5C`, sel `#4CC2FF`, error `#FF6E6E`, contrast `#000000`; light: `#323130`/`#A19F9D`/`#0078D4`/`#C42B1C`/`#FFFFFF`; contrast~disabled `#808080`). Jerarquía: disabled > sel > error > active > tema.
+  - Flood-fill solo en los 2 PNGs sin alpha (`zoom-in/out-16~contrast@2x.png`), como v1.
+  - Verificado: 0 variantes coloreadas de bases mono en el legacy (la regla por base no pisa colores).
+- Regenerados los 4399 PNGs en `main/src/core/MonoDevelop.Ide/MonoDevelop.Avalonia.Icons/` (carpeta vaciada antes). `icons/` legacy intacto.
+- `~/opencode/fluent_icons/verify.py` (v2): contrato de color por tipo (mono = 1 color de paleta; colored = RGB opacos iguales a la entrada); `contact_sheet.py` (37 pares, incluye 4 pares de evidencia de color); `design_report.md` reescrito (v2).
+- Integración en el shell Avalonia:
+  - `main/src/core/MonoDevelop.Ide/Services/IconService.cs`: campo `fluentIconsDir` (sibling de `icons/`); `ResolveFile` busca primero `fluentIconsDir` para stock ids del IDE (fallback a `icons/`); stock ids de addins (`VcStockToResource`) solo resuelven en la carpeta `icons/` de su addin; `GetResourceImage` en orden `fluentIconsDir` → `iconsDir` → `welcomeIconsDir` (iconas de welcome sin colisión de nombres: 0 solapes verificados).
+  - Flag QA `--iconsqa` (`Views/MainWindow.axaml.cs` + allowlist en `Program.cs`): volca la resolución de 21 stock ids representativos.
+  - `--old-gui` (Gtk) no tocada: `ImageService` sigue leyendo `icons/`.
+
+**Cómo validar**:
+- Build: `dotnet build main/src/core/MonoDevelop.Startup.Avalonia/MonoDevelop.Startup.Avalonia.csproj -c Debug -f net10.0 --nologo` → `0 Errores`.
+- `python3 ~/opencode/fluent_icons/verify.py` → `RESULTADO: TODO OK` (4399/4399, dims 1:1, alpha idéntico salvo los 2 flood-fill, color válido v2).
+- `bash ~/opencode/fluent_icons_qa/run.sh` (`--iconsqa`): `[iconsqa] total=21 fluent=20 legacy=0 missing=1` (`md-plugin` es id colgante preexistente, no regresión); `mainwindow.png`; sin excepciones en `run1.log`; `run1_exit=124` (timeout esperado).
+- Píxeles vivos (PIL sobre `mainwindow.png`): colores source exactos en el toolbar `(85,174,126)` ×52 (`execute-16~dark`) y `(33,177,122)` ×14 (`debug-all-16~dark`) — imposibles bajo v1 (todo gris).
+- Artefactos: `~/opencode/fluent_icons/` (scripts v2, `stats.json`, `generate.log`, `design_report.md`, `contact_sheet.png`) y `~/opencode/fluent_icons_qa/` (logs, `mainwindow.png`, reportes del QA).
+
+**QA (§18.5)**: Tester QA Senior — **APROBADO, PASS, 0 hallazgos**. Observaciones no bloqueantes: `md-plugin` id colgante (cleanup en tarea aparte), `run1_exit=124` (timeout del harness), 128 warnings MSB3277 preexistentes.
+
+**Cierre**: pendiente de commit y push.

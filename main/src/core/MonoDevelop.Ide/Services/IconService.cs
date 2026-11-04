@@ -18,6 +18,13 @@ namespace MonoDevelop.Ide.Services;
 public static class IconService
 {
 	static readonly string? iconsDir = FindIconsDir ();
+	// Fluent icon family for the Avalonia shell (same names/variants as the legacy
+	// icons/ directory, restyled per the Fluent design system). The Gtk legacy UI
+	// keeps using ImageService over icons/ untouched; this service prefers the
+	// Fluent files and falls back to the legacy PNGs when a file is missing.
+	static readonly string? fluentIconsDir = iconsDir is null
+		? null
+		: Path.GetFullPath (Path.Combine (iconsDir, "..", "MonoDevelop.Avalonia.Icons"));
 	static readonly string? welcomeIconsDir = iconsDir is null
 		? null
 		: Path.GetFullPath (Path.Combine (iconsDir, "..", "MonoDevelop.Ide.WelcomePage", "icons"));
@@ -239,12 +246,14 @@ public static class IconService
 
 		string resource;
 		string dir = iconsDir;
+		bool isAddinDir = false;
 		if (VcStockToResource.TryGetValue (stockId, out var vc)) {
 			resource = vc.Resource;
 			var addinsRoot = Path.GetFullPath (Path.Combine (iconsDir, "..", "..", "..", "addins", vc.Dir, "icons"));
-			if (Directory.Exists (addinsRoot))
+			if (Directory.Exists (addinsRoot)) {
 				dir = addinsRoot;
-			else
+				isAddinDir = true;
+			} else
 				return null;
 		} else if (!StockToResource.TryGetValue (stockId, out resource) &&
 			   !(ParsedStockMap ?? StockToResource).TryGetValue (stockId, out resource)) {
@@ -253,13 +262,22 @@ public static class IconService
 
 		var name = resource;
 		string? file = null;
+		// Main shell icons prefer the Fluent family; legacy icons/ (and the add-in
+		// dirs, which have no Fluent restyle) stay as fallback for missing files.
+		var searchDirs = isAddinDir ? new[] { dir } : new[] { fluentIconsDir, dir };
 		// Exact variants first (dark/disabled/@2x), then relax, mirroring ImageService fallback.
-		foreach (var variant in Variants (name, dark, disabled, scale)) {
-			var f = Path.Combine (dir, variant);
-			if (File.Exists (f)) {
-				file = f;
-				break;
+		foreach (var searchDir in searchDirs) {
+			if (searchDir is null || !Directory.Exists (searchDir))
+				continue;
+			foreach (var variant in Variants (name, dark, disabled, scale)) {
+				var f = Path.Combine (searchDir, variant);
+				if (File.Exists (f)) {
+					file = f;
+					break;
+				}
 			}
+			if (file is not null)
+				break;
 		}
 
 		if (file is null && name != FallbackIcon)
@@ -317,7 +335,8 @@ public static class IconService
 		if (iconsDir is null)
 			return null;
 		string? file = null;
-		foreach (var dir in new[] { iconsDir, welcomeIconsDir }) {
+		// Fluent family first, then legacy icons/ and the welcome page icons.
+		foreach (var dir in new[] { fluentIconsDir, iconsDir, welcomeIconsDir }) {
 			if (dir is null || !Directory.Exists (dir))
 				continue;
 			foreach (var variant in Variants (name, dark, false, scale)) {

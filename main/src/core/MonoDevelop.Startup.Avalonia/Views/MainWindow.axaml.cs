@@ -343,6 +343,26 @@ public partial class MainWindow : Window
 					perMenu.Add (m.Label + "=" + items + "i/" + cmds + "c");
 				}
 				Output ("[menudump] menus=" + menus.Count + " items=" + allItems + " cmds=" + allCmds + " bindings=" + MenuCommandBindings ().Count + " " + string.Join (" ", perMenu));
+			} else if (qa == "--iconsqa") {
+				// QA: dump IconService resolution (Fluent family preferred, legacy
+				// icons/ fallback) for the shell's main stock ids.
+				var ids = new[] { "gtk-execute", "md-debug-all", "md-file-source", "md-plugin",
+					"gtk-add", "gtk-save", "gtk-cut", "gtk-copy", "gtk-paste", "gtk-undo", "gtk-redo",
+					"gtk-find", "md-breakpoint", "md-project", "md-package", "md-class",
+					"md-empty-file-icon", "gtk-open", "gtk-help", "gtk-close", "gtk-missing-image" };
+				int fluent = 0, legacy = 0, missing = 0;
+				foreach (var id in ids) {
+					var f = MonoDevelop.Ide.Services.IconService.ResolveFilePath (id);
+					if (f is null) {
+						missing++;
+						Output ("[iconsqa] " + id + " = MISSING");
+						continue;
+					}
+					var isFluent = f.Contains ("MonoDevelop.Avalonia.Icons");
+					if (isFluent) fluent++; else legacy++;
+					Output ("[iconsqa] " + id + " = " + (isFluent ? "fluent" : "legacy") + " " + f);
+				}
+				Output ("[iconsqa] total=" + ids.Length + " fluent=" + fluent + " legacy=" + legacy + " missing=" + missing);
 			} else if (qa == "--encodings") {
 				// QA: Select Encodings — dual list populated from the BCL, Add/
 				// Remove/Up/Down and persistence to ConversionEncodings.
