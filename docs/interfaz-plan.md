@@ -3173,3 +3173,50 @@ tras múltiples appends sobre el mismo fixture; las pruebas usan fixture fresco 
 **Cierre**: repo principal commiteado/pushed en `agents/sub-agent-senior-dev-role-report`:
 (1) commit separado para `MainWindow.axaml` (operador); (2) New Solution + docs. Sin submódulos
 modificados.
+
+### M5 (follow-up) — Welcome Page: iconos, tile 32px y alturas independientes de paneles (2026-11-03)
+
+**Contexto**: la Welcome Page Avalonia (anteriormente portada en M5) conservaba tres deltas frente al
+legacy GTK:
+1. Los enlaces `MonoDevelop.com`, `Documentation`, `Support`, `Q&A` y los botones `New...`/`Open...`
+   no mostraban icono.
+2. El tile de solución reciente usaba un icono 16px (`md-solution`) en lugar del 32px del diseño
+   legacy.
+3. Los tres paneles de la fila 2 (`Solutions`, `Xamarin News`, `Did you know?`) se estiraban a la
+   misma altura porque compartían un `StackPanel` horizontal.
+
+**Cambios** (regla 18.4: reutilización obligatoria, sin carpeta nueva):
+- `MonoDevelop.Ide/Services/IconService.cs`: `GetResourceImage` ahora resuelve también desde
+  `MonoDevelop.Ide.WelcomePage/icons` (`welcomeIconsDir`), como fallback tras el directorio principal
+  de iconos, sin shadowear recursos ya resueltos.
+- `MonoDevelop.Startup.Avalonia/Views/WelcomePageView.axaml`: la fila 2 pasa de `StackPanel`
+  horizontal a `Grid` con `ColumnDefinitions="300,30,510,30,300"`; cada `Border` (columnas 0/2/4) usa
+  `VerticalAlignment="Top"` + `Margin="0,0,0,24"` para que la altura vertical sea propia de cada
+  panel. El margen inferior del contenedor se traslada a los pads (`0,30,0,24` → `0,30,0,0`).
+- `MonoDevelop.Startup.Avalonia/Views/WelcomePageView.axaml.cs`: el tile de solución reciente carga
+  `solution-32` / `workspace-32` (según extensión) a 32x32 y el texto pasa a `Margin="6,0,0,0"`,
+  conservando el `TextLeftPadding=38` del legacy (32 + 6).
+
+**Validación / evidencia** (artefactos en `~/opencode/welcomeqa/`):
+- Build de la shell: `0 Errores`.
+- `welcome_capture.sh` (seeda un reciente `TestProj` y restaura `MonoDevelopProperties.xml`):
+  - AT-SPI `tree.txt`: `Grid` de la fila 2 = `1170x195`; `Solutions` `300x171`, `Xamarin News`
+    `510x125`, `Did you know?` `300x165` (sin el patrón estirado a 603).
+  - AT-SPI `atspi.txt`: labels visibles de enlaces, `New...`, `Open...`, `TestProj`,
+    `Xamarin News`, `Did you know?`.
+- PIL sobre `welcome_full.png` (coordenadas client = absolutas AT-SPI − offset de `geom.txt`):
+  iconos de enlace ~64/59/108/137 px grises `#575757`/`#585858`; `New...` 100 px grises;
+  `Open...` 155 px grises; icono 32px del reciente 388 px magenta `#cd43ce`.
+- Regresión `--old-gui`: estable (con `GDK_BACKEND=x11 WAYLAND_DISPLAY= XDG_SESSION_TYPE=x11`;
+  el entorno hereda Wayland y GTK se cuelga si no se fuerzan esas variables).
+
+**Nota de diagnóstico**: durante la validación inicial, un proceso antiguo de
+`MonoDevelop.AvaloniaShell.dll` seguía vivo y `wmctrl`/AT-SPI estaban midiendo su ventana en vez de la
+del build nuevo (falso "paneles aún estirados"). Matando el proceso antiguo, el build nuevo validó
+correcto.
+
+**QA (§18.5)**: Tester QA Senior — **APROBADO, PASS, 0 hallazgos abiertos**.
+
+**Cierre**: repo principal commiteado/pushed en `agents/sub-agent-senior-dev-role-report`
+(`IconService.cs`, `WelcomePageView.axaml`, `WelcomePageView.axaml.cs` + docs). Sin submódulos
+modificados.

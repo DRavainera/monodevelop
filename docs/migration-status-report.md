@@ -1663,3 +1663,36 @@ tras múltiples appends sobre el mismo fixture; QA usa fixture fresco por planti
 
 **Cierre**: repo principal commiteado y pushed en `agents/sub-agent-senior-dev-role-report`:
 (1) `MainWindow.axaml` (operador); (2) New Solution + docs. Sin submódulos modificados.
+
+### 2026-11-03 (5) — UI Avalonia: Welcome Page — iconos, tile 32px y alturas independientes de paneles
+
+**Contexto**: la Welcome Page Avalonia mostraba la barra de enlaces y los botones `New...`/`Open...`
+sin icono, el tile de solución reciente usaba icono 16px en lugar de 32px, y los paneles de la fila 2
+quedaban estirados a la misma altura porque compartían un `StackPanel` horizontal.
+
+**Cambios**:
+- `MonoDevelop.Ide/Services/IconService.cs`: `GetResourceImage` añade fallback a
+  `MonoDevelop.Ide.WelcomePage/icons` (`welcomeIconsDir`) sin alterar la prioridad del directorio
+  principal de iconos.
+- `MonoDevelop.Startup.Avalonia/Views/WelcomePageView.axaml`: fila 2 convertida a `Grid`
+  (`300,30,510,30,300`); los tres `Border` usan `VerticalAlignment="Top"` + `Margin="0,0,0,24"`
+  para que cada panel tenga su propia altura vertical.
+- `MonoDevelop.Startup.Avalonia/Views/WelcomePageView.axaml.cs`: tile reciente con icono 32px
+  (`solution-32` / `workspace-32`) y margen de texto `6` (32px + 6px = `TextLeftPadding=38` del
+  legacy).
+
+**Validación**:
+- Build `0 Errores`.
+- `bash /home/daniel/opencode/welcomeqa/welcome_capture.sh`: AT-SPI muestra `Grid` `1170x195` y
+  Borders independientes (`Solutions` `300x171`, `Xamarin News` `510x125`, `Did you know?`
+  `300x165`); labels de enlaces, `New...`, `Open...`, `TestProj`, `Xamarin News` y `Did you know?`
+  visibles.
+- PIL sobre `welcome_full.png`: iconos de enlace y de `New...`/`Open...` presentes en gris
+  (`#575757`/`#585858`); icono 32px del reciente presente en magenta (`#cd43ce`).
+- Regresión `--old-gui` estable (con `GDK_BACKEND=x11 WAYLAND_DISPLAY= XDG_SESSION_TYPE=x11`).
+
+**QA (§18.5)**: Tester QA Senior — **APROBADO, PASS, 0 hallazgos abiertos**.
+
+**Cierre**: repo principal commiteado y pushed en `agents/sub-agent-senior-dev-role-report`
+(`IconService.cs`, `WelcomePageView.axaml`, `WelcomePageView.axaml.cs` + docs). Sin submódulos
+modificados.

@@ -2775,3 +2775,53 @@ fresco por plantilla, por lo que no se trata como defecto de New Solution.
 (1) commit separado para `Views/MainWindow.axaml` (cambio de operador); (2) commit de New Solution
 (`NewSolutionDialog.axaml` + `.axaml.cs`, `IconService.cs`, `Program.cs`, `MainWindow.axaml.cs` +
 docs). Sin submódulos modificados.
+
+## 2026-11-03 (5) — UI Avalonia: Welcome Page — iconos faltantes, tile 32px y alturas independientes de paneles
+
+**Contexto**: la Welcome Page Avalonia mostraba la barra de enlaces y los botones `New...`/`Open...`
+sin icono, el tile de solución reciente usaba un icono 16px en lugar del 32px del legacy, y la fila 2
+(`Solutions`/`Xamarin News`/`Did you know?`) usaba un `StackPanel` horizontal que dejaba los tres
+`Border` estirados a la misma altura (patrón visual 603px). Durante el diagnóstico hubo un falso fallo:
+un proceso antiguo de `MonoDevelop.AvaloniaShell.dll` seguía vivo y `wmctrl`/AT-SPI estaban midiendo su
+ventana en vez de la del build nuevo; matar el proceso antiguo dejó la validación coherente.
+
+**Qué se hizo** (archivos):
+- `main/src/core/MonoDevelop.Ide/Services/IconService.cs`: `GetResourceImage` ahora busca también en
+  `MonoDevelop.Ide.WelcomePage/icons` (`welcomeIconsDir`) tras el directorio principal de iconos, de
+  modo que `welcome-link-md-16`, `welcome-link-info-16`, `welcome-link-support-16`,
+  `welcome-link-chat-16`, `welcome-new-solution-16` y `welcome-open-solution-16` resuelven sin shadowear
+  iconos del set principal.
+- `main/src/core/MonoDevelop.Startup.Avalonia/Views/WelcomePageView.axaml`: la fila 2 pasó de un
+  `StackPanel` horizontal a un `Grid` con `ColumnDefinitions="300,30,510,30,300"`; cada `Border`
+  (`Solutions`, `Xamarin News`, `Did you know?`) queda en columnas 0/2/4 con
+  `VerticalAlignment="Top"` y `Margin="0,0,0,24"`, por lo que cada panel conserva su altura de
+  contenido. El margen inferior del contenedor pasó de `0,30,0,24` a `0,30,0,0` (ahora lo llevan los
+  pads).
+- `main/src/core/MonoDevelop.Startup.Avalonia/Views/WelcomePageView.axaml.cs`: el tile de solución
+  reciente usa icono 32px (`solution-32`, o `workspace-32` para `.mdw`) vía
+  `IconService.GetResourceImage`; el margen del texto pasa de `38 - 16` a `6`, manteniendo el
+  `TextLeftPadding=38` del legacy (32px de icono + 6px de gap).
+
+**Cómo validar**:
+- Build:
+  `dotnet build main/src/core/MonoDevelop.Startup.Avalonia/MonoDevelop.Startup.Avalonia.csproj -c Debug -f net10.0 --nologo`
+  → `0 Errores` (advertencias preexistentes).
+- Captura QA: `bash /home/daniel/opencode/welcomeqa/welcome_capture.sh` (seeda un reciente `TestProj`
+  en `MonoDevelopProperties.xml`, arranca `--welcome`, captura PNG/AT-SPI y restaura las properties).
+  Artefactos en `~/opencode/welcomeqa/`.
+- AT-SPI (`tree.txt`): fila 2 = `Grid` `1170x195`; `Solutions` Border `300x171`, `Xamarin News`
+  Border `510x125`, `Did you know?` Border `300x165` (no el patrón 603).
+- AT-SPI (`atspi.txt`): visibles `MonoDevelop.com`, `Documentation`, `Support`, `Q&A`, `Solutions`,
+  `New...`, `Open...`, `TestProj`, `Xamarin News`, `Did you know?`.
+- Iconos (PIL sobre `welcome_full.png`, coordenadas client = absolutas AT-SPI − offset de
+  `geom.txt`): iconos de enlace con ~64/59/108/137 px grises `#575757`/`#585858`; `New...` 100 px
+  grises; `Open...` 155 px grises; icono 32px del reciente con 388 px magenta `#cd43ce`.
+- Regresión `--old-gui`: estable. Nota de entorno: en este escritorio hay que forzar
+  `GDK_BACKEND=x11 WAYLAND_DISPLAY= XDG_SESSION_TYPE=x11`; si se hereda `XDG_SESSION_TYPE=wayland`,
+  GTK se cuelga antes de abrir la ventana.
+
+**QA (§18.5)**: Tester QA Senior — **APROBADO, PASS, 0 hallazgos abiertos**.
+
+**Cierre**: repo principal commiteado y pushed en `agents/sub-agent-senior-dev-role-report`
+(`IconService.cs`, `WelcomePageView.axaml`, `WelcomePageView.axaml.cs` + docs). Sin submódulos
+modificados.

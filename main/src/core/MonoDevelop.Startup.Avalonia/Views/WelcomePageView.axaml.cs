@@ -118,9 +118,11 @@ public partial class WelcomePageView : UserControl
 		var dir = Path.GetDirectoryName (path) ?? "";
 
 		var icon = new Image {
-			Width = 16,
-			Height = 16,
-			Source = IconService.GetImage ("md-solution"),
+			Width = 32,
+			Height = 32,
+			Source = IconService.GetResourceImage (Path.GetExtension (path).Equals (".mdw", StringComparison.OrdinalIgnoreCase)
+				? "workspace-32"
+				: "solution-32"),
 			VerticalAlignment = VerticalAlignment.Center,
 		};
 
@@ -137,7 +139,7 @@ public partial class WelcomePageView : UserControl
 		var texts = new StackPanel {
 			Orientation = Orientation.Vertical,
 			VerticalAlignment = VerticalAlignment.Center,
-			Margin = new Thickness (38 - 16, 0, 0, 0), // legacy TextLeftPadding=38 from tile edge
+			Margin = new Thickness (6, 0, 0, 0), // 32px Dnd icon + 6px gap (legacy TextLeftPadding=38)
 			Children = { titleTb, dirTb },
 		};
 

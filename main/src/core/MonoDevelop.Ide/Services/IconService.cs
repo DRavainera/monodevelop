@@ -18,6 +18,9 @@ namespace MonoDevelop.Ide.Services;
 public static class IconService
 {
 	static readonly string? iconsDir = FindIconsDir ();
+	static readonly string? welcomeIconsDir = iconsDir is null
+		? null
+		: Path.GetFullPath (Path.Combine (iconsDir, "..", "MonoDevelop.Ide.WelcomePage", "icons"));
 
 	// Full stock-id → resource map parsed from ExtensionModel/StockIcons.addin.xml
 	// (457 entries in the legacy IDE), falling back to the small hardcoded map above
@@ -314,12 +317,18 @@ public static class IconService
 		if (iconsDir is null)
 			return null;
 		string? file = null;
-		foreach (var variant in Variants (name, dark, false, scale)) {
-			var f = Path.Combine (iconsDir, variant);
-			if (File.Exists (f)) {
-				file = f;
-				break;
+		foreach (var dir in new[] { iconsDir, welcomeIconsDir }) {
+			if (dir is null || !Directory.Exists (dir))
+				continue;
+			foreach (var variant in Variants (name, dark, false, scale)) {
+				var f = Path.Combine (dir, variant);
+				if (File.Exists (f)) {
+					file = f;
+					break;
+				}
 			}
+			if (file is not null)
+				break;
 		}
 		if (file is null)
 			return null;

@@ -57,16 +57,17 @@
       <StackPanel>
         <Image x:Name="LogoImage" Height="72" Width="876" Stretch="Fill"
                HorizontalAlignment="Center" VerticalAlignment="Top" />
-        <StackPanel Margin="0,30,0,24">
+        <StackPanel Margin="0,30,0,0">
           <!-- Row 1: link bar (DefaultWelcomePage row1) -->
           <StackPanel x:Name="LinkBar" Orientation="Horizontal" HorizontalAlignment="Center"
                       Spacing="30" Margin="0,0,0,30" />
 
-          <!-- Row 2: three columns (DefaultWelcomePage row2) -->
-          <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="30">
+          <!-- Row 2: three columns (DefaultWelcomePage row2). A Grid keeps the horizontal
+               30px spacing while letting each pad own its vertical alignment/margin. -->
+          <Grid HorizontalAlignment="Center" ColumnDefinitions="300,30,510,30,300">
 
             <!-- Solutions column (WelcomePageRecentProjectsList) -->
-            <Border Classes="wsection" Width="300">
+            <Border Grid.Column="0" Classes="wsection" VerticalAlignment="Top" Margin="0,0,0,24">
               <StackPanel>
                 <TextBlock Classes="wtitle" Text="Solutions" Margin="0,0,0,14" />
                 <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,0,0,14">
@@ -91,7 +92,7 @@
 
             <!-- News column (WelcomePageNewsFeed: the retired Xamarin feed keeps its
                  slot; shows a note instead of stale content) -->
-            <Border Classes="wsection" Width="510">
+            <Border Grid.Column="2" Classes="wsection" VerticalAlignment="Top" Margin="0,0,0,24">
               <StackPanel>
                 <TextBlock Classes="wtitle" Text="Xamarin News" Margin="0,0,0,14" />
                 <TextBlock x:Name="NewsNote" FontSize="12" TextWrapping="Wrap"
@@ -105,7 +106,7 @@
             </Border>
 
             <!-- Tip of the day column (WelcomePageTipOfTheDaySection) -->
-            <Border Classes="wsection" Width="300">
+            <Border Grid.Column="4" Classes="wsection" VerticalAlignment="Top" Margin="0,0,0,24">
               <StackPanel>
                 <TextBlock Classes="wtitle" Text="Did you know?" Margin="0,0,0,14" />
                 <TextBlock x:Name="TipLabel" FontSize="12" TextWrapping="Wrap"
@@ -117,7 +118,7 @@
               </StackPanel>
             </Border>
 
-          </StackPanel>
+          </Grid>
         </StackPanel>
       </StackPanel>
     </ScrollViewer>
