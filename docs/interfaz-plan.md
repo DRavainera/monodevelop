@@ -3331,3 +3331,61 @@ de los diálogos "New File" y "New Solution" y dejarlos con largo fijo.
 **Cierre**: repo principal commiteado/pushed en `agents/sub-agent-senior-dev-role-report`
 (`41304635d9`: `NewFileDialog.axaml`, `NewSolutionDialog.axaml` + docs). Sin submódulos
 modificados.
+
+### Iconos Fluent (follow-up) — familia MonoDevelop.Avalonia.Icons v2 con respeto de colores (2026-11-04)
+
+**Contexto**: la shell Avalonia consume sus iconos de la familia `MonoDevelop.Avalonia.Icons`
+(4399 PNGs) generada por el subagente "Diseñador Gráfico Senior". La v1 aplanaba todas las iconas
+a la paleta gris/azul Fluent y eliminaba los colores originales (verde "add", rojo "error", azules
+de file-types, logo, etc.). El operador pidió repetir la tarea exigiendo que **los iconos
+respeten los colores**.
+
+**Cambios**:
+- `main/src/core/MonoDevelop.Ide/MonoDevelop.Avalonia.Icons/` (nuevo, 4399 PNGs, v2). Regla por
+  **base** (390 bases, criterio: chroma máx `max-min RGB` de los px opacos del archivo sin
+  modificadores):
+  - **118 bases coloreadas / 1438 archivos** (chroma > 32): RGB **bit a bit** del original en
+    todos los modificadores (`~dark`, `~disabled`, `~sel`, `~error`, `~contrast`, `@2x`); cada
+    variante legacy ya estaba teñida para su estado. Incluye file-types, project-types, estados
+    semánticos (`error-*`, `warning-*`, `done-*`, `build-*`, `status-*`), breakpoints y logos
+    `monodevelop-*`.
+  - **272 bases mono / 2961 archivos** (chroma ≤ 32): un solo color de paleta Fluent por
+    modificador (dark: base `#F3F2F1`, disabled `#605E5C`, sel `#4CC2FF`, error `#FF6E6E`,
+    contrast `#000000`; light: `#323130`/`#A19F9D`/`#0078D4`/`#C42B1C`/`#FFFFFF`;
+    contrast~disabled `#808080`; jerarquía disabled > sel > error > active > tema).
+  - Alpha preservado bit a bit; flood-fill solo en los 2 PNGs sin transparencia
+    (`zoom-in/out-16~contrast@2x.png`). Verificado: 0 variantes coloreadas de bases mono en el
+    legacy (la regla por base no pisa colores).
+- `main/src/core/MonoDevelop.Ide/Services/IconService.cs`:
+  - Campo `fluentIconsDir` (sibling de `icons/`).
+  - `ResolveFile(stockId, dark, disabled, scale)`: stock ids del IDE → primero
+    `fluentIconsDir`, fallback a `icons/`; stock ids de addins (`VcStockToResource`) solo en la
+    carpeta `icons/` de su addin (no tienen variante Fluent).
+  - `GetResourceImage(name, scale)`: `fluentIconsDir` → `iconsDir` → `welcomeIconsDir`
+    (welcome page sin colisión de nombres: 0 solapes verificados).
+- `Views/MainWindow.axaml.cs`: flag QA `--iconsqa` (volca la resolución de 21 stock ids).
+  `Program.cs`: allowlist del flag.
+- La interfaz Gtk legacy (`--old-gui`) no se toca: `ImageService` sigue leyendo `icons/`
+  (intacto; `git diff` de `icons/` vacío).
+
+**Validación / evidencia** (artefactos en `~/opencode/fluent_icons/` y `~/opencode/fluent_icons_qa/`):
+- Build de la shell: `0 Errores`.
+- `verify.py` v2 → `TODO OK`: 4399/4399, dims 1:1, alpha idéntico (salvo 2 flood-fill), color
+  válido (mono = 1 color de paleta; colored = RGB opacos iguales a la entrada).
+- `bash ~/opencode/fluent_icons_qa/run.sh` (`--iconsqa`): `[iconsqa] total=21 fluent=20
+  legacy=0 missing=1` (`md-plugin`: id colgante preexistente, no está en ningún mapa de stock
+  ids; no es regresión); `mainwindow.png`; sin excepciones.
+- Píxeles vivos (PIL sobre `mainwindow.png`): colores source exactos en el toolbar —
+  `(85,174,126)` ×52 (`execute-16~dark`) y `(33,177,122)` ×14 (`debug-all-16~dark`), imposibles
+  bajo v1 (todo gris).
+- Muestreo aleatorio (seed 20261104): 10/10 colored byte-identical RGBA completo; 10/10 mono con
+  un único color de la paleta según modificadores.
+- `design_report.md` v2 + `contact_sheet.png` (37 pares legacy|Fluent, variante `~dark`, x4, con
+  4 pares de evidencia de color).
+
+**QA (§18.5)**: Tester QA Senior — **APROBADO, PASS, 0 hallazgos** (checks A–H: build, contratos
+de archivo, integridad legacy, lógica de resolución, runtime, colores en pantalla, samples,
+csproj). Observaciones no bloqueantes: `md-plugin` colgante (cleanup en tarea aparte),
+`run1_exit=124` (timeout del harness), 128 warnings MSB3277 preexistentes.
+
+**Cierre**: commit `5dbb3196cb` pushado a `origin/agents/sub-agent-senior-dev-role-report`.

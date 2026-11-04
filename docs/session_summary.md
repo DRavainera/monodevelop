@@ -2917,4 +2917,4 @@ modificados.
 
 **QA (§18.5)**: Tester QA Senior — **APROBADO, PASS, 0 hallazgos**. Observaciones no bloqueantes: `md-plugin` id colgante (cleanup en tarea aparte), `run1_exit=124` (timeout del harness), 128 warnings MSB3277 preexistentes.
 
-**Cierre**: pendiente de commit y push.
+**Cierre**: commit `5dbb3196cb` pushado a `origin/agents/sub-agent-senior-dev-role-report`.
