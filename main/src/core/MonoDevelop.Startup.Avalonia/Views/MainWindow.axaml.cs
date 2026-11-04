@@ -5367,6 +5367,7 @@ public partial class MainWindow : Window
 	// theme variant, like the legacy ImageService icons.
 	void SetToolbarIcons ()
 	{
+		MonoDevelopLogo.Source = IconService.GetResourceImage ("monodevelop-22");
 		if (MonoDevelop.Ide.Services.IconService.GetImage ("gtk-execute") is Avalonia.Media.Imaging.Bitmap bmp)
 			RunIcon!.Source = bmp;
 		if (MonoDevelop.Ide.Services.IconService.GetImage ("md-debug-all") is Avalonia.Media.Imaging.Bitmap dbgBmp)

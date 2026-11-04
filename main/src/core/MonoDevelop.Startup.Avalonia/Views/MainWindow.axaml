@@ -37,12 +37,12 @@
          top so the menu bar itself owns the frame corners. -->
     <Border x:Name="TitleBarRow" DockPanel.Dock="Top" Background="{DynamicResource IdeChromeBgBrush}"
             CornerRadius="8,8,0,0">
-      <Grid ColumnDefinitions="*,Auto">
-        <Image x:Name="MonoDevelopLogo" Width="22" Height="22" /><!-- MonoDevelop logo-->
+      <Grid ColumnDefinitions="Auto,*,Auto">
+        <Image x:Name="MonoDevelopLogo" Grid.Column="0" Width="22" Height="22" Margin="8,0,0,0" /><!-- MonoDevelop logo-->
         <!-- Full legacy main menu (structure/labels/icons of MainMenu.addin.xml + addins),
              built by MenuService/MenuBuilder. -->
-        <Menu x:Name="MainMenu" FontSize="12" />
-        <StackPanel Grid.Column="1" Orientation="Horizontal" x:Name="CaptionButtons">
+        <Menu x:Name="MainMenu" Grid.Column="1" FontSize="12" />
+        <StackPanel Grid.Column="2" Orientation="Horizontal" x:Name="CaptionButtons">
           <!-- Win11-style 10px vector glyphs on 44x30 buttons: centered both ways,
                unlike the text glyphs whose baselines sat visually low/left. -->
           <Button Classes="caption" Click="OnMinimize" ToolTip.Tip="Minimize">

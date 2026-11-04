@@ -2825,3 +2825,23 @@ ventana en vez de la del build nuevo; matar el proceso antiguo dejó la validaci
 **Cierre**: repo principal commiteado y pushed en `agents/sub-agent-senior-dev-role-report`
 (`IconService.cs`, `WelcomePageView.axaml`, `WelcomePageView.axaml.cs` + docs). Sin submódulos
 modificados.
+
+## 2026-11-04 — UI Avalonia: MainWindow logo monodevelop-22 y NuGet.Configuration 6.11.2
+
+**Contexto**: se solicitó enlazar el `Image x:Name="MonoDevelopLogo"` en `MainWindow.axaml` al icono `monodevelop-22.png` y actualizar la referencia de `NuGet.Configuration` de la shell Avalonia a la familia 6.11.
+
+**Qué se hizo** (archivos):
+- `main/src/core/MonoDevelop.Startup.Avalonia/Views/MainWindow.axaml.cs`: en `SetToolbarIcons()` se añadió `MonoDevelopLogo.Source = IconService.GetResourceImage ("monodevelop-22");`.
+- `main/src/core/MonoDevelop.Startup.Avalonia/Views/MainWindow.axaml`: se cambió el `Grid` de la title bar de `ColumnDefinitions="*,Auto"` a `"Auto,*,Auto"` para que el logo tenga su propia columna; el `Image` pasa a `Grid.Column="0"` con `Margin="8,0,0,0"`, el `Menu` a `Grid.Column="1"` y los `CaptionButtons` a `Grid.Column="2"`.
+- `main/src/core/MonoDevelop.Startup.Avalonia/MonoDevelop.Startup.Avalonia.csproj`: `PackageReference` de `NuGet.Configuration` actualizado de `5.4.0` a `$(NuGetVersionNuGet)` (6.11.2).
+
+**Cómo validar**:
+- Build: `dotnet build main/src/core/MonoDevelop.Startup.Avalonia/MonoDevelop.Startup.Avalonia.csproj -c Debug -f net10.0 --nologo` → `0 Errores`.
+- Captura QA: `bash /home/daniel/opencode/mainwindow_logo_nuget_qa/run.sh` (arranca `--prefs=packagesources`, captura PNG del main window y del prefs dialog, y deja el log en `run.log`). Artefactos en `~/opencode/mainwindow_logo_nuget_qa/`.
+- Logo: análisis PIL de `main.png` muestra ~140 px azules en la región del logo (x0-40, y0-32), confirmando que `monodevelop-22.png` está renderizado.
+- NuGet Sources: `run.log` contiene `[prefs-sources] count=1` y no hay excepciones.
+- `deps.json`: `NuGet.Configuration` y `NuGet.Common` en `6.11.2`.
+
+**QA (§18.5)**: Tester QA Senior — **APROBADO, PASS, 0 hallazgos abiertos**.
+
+**Cierre**: pendiente de commit y push.
