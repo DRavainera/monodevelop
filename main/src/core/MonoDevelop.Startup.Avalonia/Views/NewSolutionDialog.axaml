@@ -87,14 +87,14 @@
       <StackPanel Grid.Row="1" Grid.ColumnSpan="5" Orientation="Horizontal" Spacing="6" Margin="0,8,0,0">
         <TextBlock Text="Solution name:" VerticalAlignment="Center"
                    Foreground="{DynamicResource IdeFgBrush}" />
-        <TextBox x:Name="SolutionName" Text="Solution" />
+        <TextBox x:Name="SolutionName" Width="320" Text="Solution" />
       </StackPanel>
 
       <!-- Location row with folder browse (legacy FolderEntry "...") -->
       <StackPanel Grid.Row="2" Grid.ColumnSpan="5" Orientation="Horizontal" Spacing="6" Margin="0,8,0,0">
         <TextBlock Text="Location:" VerticalAlignment="Center"
                    Foreground="{DynamicResource IdeFgBrush}" />
-        <TextBox x:Name="LocationBox" />
+        <TextBox x:Name="LocationBox" Width="460" />
         <Button x:Name="BrowseButton" Content="Browse" Click="OnBrowseLocation" MinWidth="64" />
       </StackPanel>
 

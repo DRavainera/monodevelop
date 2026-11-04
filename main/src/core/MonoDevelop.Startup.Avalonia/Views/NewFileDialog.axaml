@@ -71,7 +71,7 @@
       <StackPanel Grid.Row="1" Grid.ColumnSpan="5" Orientation="Horizontal" Spacing="6" Margin="0,8,0,0">
         <TextBlock Text="Name:" VerticalAlignment="Center"
                    Foreground="{DynamicResource IdeFgBrush}" />
-        <TextBox x:Name="NameBox" TextChanged="OnNameChanged" KeyDown="OnNameKeyDown" />
+        <TextBox x:Name="NameBox" Width="360" TextChanged="OnNameChanged" KeyDown="OnNameKeyDown" />
       </StackPanel>
 
       <!-- Add to project box (legacy boxProject; hidden when no projects are open) -->
@@ -85,7 +85,7 @@
         <StackPanel Orientation="Horizontal" Spacing="6">
           <TextBlock x:Name="ProjectPathLabel" Text="Path:" VerticalAlignment="Center"
                      Foreground="{DynamicResource IdeFgBrush}" />
-          <TextBox x:Name="ProjectPathBox" />
+          <TextBox x:Name="ProjectPathBox" Width="360" />
           <Button x:Name="BrowseButton" Content="Browse" Click="OnBrowse" MinWidth="64" />
         </StackPanel>
       </StackPanel>

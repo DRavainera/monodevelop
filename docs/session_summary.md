@@ -2870,4 +2870,23 @@ modificados.
 
 **QA (§18.5)**: Tester QA Senior — **APROBADO, PASS**. 1 hallazgo de severidad baja: la separación plantillas|info es 10px (splitter 3px + `Margin="0,0,6,0"` del pane de plantillas) — réplica fiel de `NewFileDialog.axaml` que usa el mismo margen; se deja como está.
 
+**Cierre**: commit `b1c767bab3` pushado a `origin/agents/sub-agent-senior-dev-role-report`.
+
+## 2026-11-04 (3) — UI Avalonia: TextBoxes de New File y New Solution con largo fijo
+
+**Contexto**: se pidió quitar el largo dinámico (estirado a lo ancho de la ventana) de los TextBox de los diálogos "New File" y "New Solution" y dejarlos con largo fijo.
+
+**Qué se hizo** (archivos, solo XAML):
+- `main/src/core/MonoDevelop.Startup.Avalonia/Views/NewFileDialog.axaml`: `NameBox` y `ProjectPathBox` con `Width="360"`.
+- `main/src/core/MonoDevelop.Startup.Avalonia/Views/NewSolutionDialog.axaml`: `SolutionName` con `Width="320"` y `LocationBox` con `Width="460"` (el botón Browse queda a su derecha, sin estirar la fila).
+
+**Cómo validar**:
+- Build: `dotnet build main/src/core/MonoDevelop.Startup.Avalonia/MonoDevelop.Startup.Avalonia.csproj -c Debug -f net10.0 --nologo` → `0 Errores`.
+- Captura QA: `bash /home/daniel/opencode/newfile_newsolution_fixedwidth_qa/run.sh` (arranca `--newsolution` y `--newfile-visual`; genera `newsolution.png` 760x600, `newfile.png` 718x524 y `run1.log`/`run2.log`).
+- Medición PIL (tema oscuro: fondo `#1e1e1e`, box sin foco `#121212`, box enfocado `#000000` + anillo `#3584e4`): `SolutionName` x≈115..432 (~320px), `LocationBox` x≈78..535 (~460px) con Browse `#4b4b4b` a la derecha; `NameBox` (enfocado) x=62..421 = 360px exactos. Ningún box llega al borde derecho de la ventana (antes sí, hasta x≈752/710).
+- `run1.log`/`run2.log`: sin `Unhandled`/`Exception`/`TypeLoad`/`DllNotFound`; `exit=124` (timeout esperado del script).
+- OCR: "Solution name:", "Location:", "Browse", "Name:", "Create" presentes.
+
+**QA (§18.5)**: Tester QA Senior — **APROBADO, PASS, 0 hallazgos abiertos** (el diff contiene solo las 4 adiciones de `Width`).
+
 **Cierre**: pendiente de commit y push.
