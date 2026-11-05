@@ -346,10 +346,14 @@ El bucle de migración Gtk → Avalonia continúa por módulos (detalle por hito
   en `CommandEntry`/`CommandEntrySet` + registro del `SynchronizationContext`
   de UI en `Runtime.MainSynchronizationContext` (como el `IdeStartup` GTK con
   el main context de Gtk). Catálogo cargado: 461 comandos; menudump invariante
-  (`menus=11 items=225 cmds=0 bindings=205`). QA §18.5 APROBADO (P1–P4):
+  (`menus=11 items=225 cmds=0 bindings=205`). QA §18.5 (subagente Tester QA
+  Senior, ronda 1) **APROBADO (P1–P4), 0 hallazgos de app abiertos**:
   dispatch por menú verificado E2E por teclado (File → New File / New Solution
   abren los diálogos reales sin flags), hotkeys `ctrl+n`/`F8`/`ctrl+q`
-  verificados, sin lado efectos. Build 0 errores; sin submódulos; la ruta
+  verificados, sin lado efectos; los 5 hallazgos del subagente son de
+  entorno/preexistentes/cosméticos (uno: el fixture lleva error de compilación
+  deliberado para ejercitar el pad de problemas). Build 0 errores; sin
+  submódulos; la ruta
   `--old-gui` no se toca (código bajo `#if AVALONIA_SHELL` o aditivo no-GTK).
   Detalle en `docs/interfaz-plan.md` (follow-up "Oleada 1 — backbone de
   comandos del menú") y `docs/session_summary.md` (2026-11-05 (1)).

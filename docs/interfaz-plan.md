@@ -3640,13 +3640,28 @@ fallback hasta que las oleadas siguientes porten los handlers core reales.
   `~/opencode/smoke_oleada1.sh`, `~/opencode/catload_test/`, logs
   `~/opencode/oleada1_final3.log` y compañía.
 
-**QA (§18.5)**: Tester QA Senior — **APROBADO, PASS (P1–P4), 0 hallazgos de app
-abiertos**. Hallazgos no bloqueantes: (1) XTEST mouse no se entrega al cliente
-(Wayland/XWayland; el click solo activa a nivel WM) ⇒ QA de menús por teclado;
-(2) popups de menú mal posicionados arriba-izq (hallazgo previo, no regresión);
-(3) `alt+f` ~50% fiable y teclas en cola ⇒ oracles por conteo de log inestables;
-(4) `NewFileDialog` no cierra con Escape (solo Cancel) — candidata a Oleada 2;
-(5) ImageMagick `import` roba focus/hanguea ⇒ capturas con Xlib `get_image`.
+**QA (§18.5)**: ejecutado por el **subagente Tester QA Senior** (ronda 1; solo
+lectura sobre el repo, artefactos en `~/opencode/oleada1_qa_subagent/`) —
+**APROBADO, PASS (P1–P4), 0 hallazgos de app abiertos** (ciclo §18.5 cerrado en
+ronda 1). Evidencia: P1 build 0 errores, main thread registrado, `catload`
+`Count=461/LoadedCommands=475`, menudump byte-igual a la referencia pre-Oleada 1;
+P2 OCR 11/11 menús + 15 items de File; P3 `alt+f`+`Return` → "New File"
+(`0x01600037`) y `alt+f`+`Down`+`Return` → "Create a New Solution"
+(`0x0160003f`) y Help type-ahead `a` → "About MonoDevelop" (`0x01600047`), todo
+con la app arrancada solo con `--sln` (sin flags) y sin lado efectos (Fixture
+3 proyectos, sin `~/Solution`); P4 `ctrl+n` → New File, `F8` → `[build]` 0→5,
+`ctrl+q` → proceso muere. Hallazgos del subagente (todos no bloqueantes,
+ninguno atribuido a la Oleada 1): 1) [baja·entorno] `alt+f` 5/5 al primer
+intento en la sesión del subagente (variabilidad); 2) [baja·entorno/preexistente]
+el mal posicionamiento de popups arriba-izq no se reprodujo (abrieron bajo su
+etiqueta) — intermitente; 3) [info·entorno] ratón XTEST no llega al cliente ⇒
+QA solo por teclado; 4) [info·app, por diseño] el fixture `Fixture.sln` lleva
+un error de compilación deliberado (CS0103 en `LibA/A.cs`) para ejercitar el pad
+de problemas — F8 lo reporta (`[codeissues] 4 error(s)`) y la mecánica de build
+funciona; 5) [info·app, cosmético] "Save" sin elipsis, fiel al catálogo legacy.
+Observaciones de entorno acumuladas de la sesión de desarrollo: `NewFileDialog`
+no cierra con Escape (solo Cancel) — brecha UX menor, candidata a Oleada 2;
+ImageMagick `import` roba focus/hanguea ⇒ capturas con Xlib `get_image`.
 
 **Cierre**: código en commit `0a3aff4b51` pushado a
 `origin/agents/sub-agent-senior-dev-role-report`. Sin submódulos; la ruta
