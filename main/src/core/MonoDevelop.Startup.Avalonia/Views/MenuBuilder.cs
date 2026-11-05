@@ -16,12 +16,32 @@ namespace MonoDevelop.AvaloniaShell.Views;
 /// </summary>
 public static class MenuBuilder
 {
+	// Oleada 3: the built MenuItems bound to a legacy command id (CommandAction).
+	// RefreshCommandStates mirrors the CommandInfo.Enabled state onto them.
+	static readonly List<Avalonia.Controls.MenuItem> commandItems = new ();
+
 	public static List<Control> BuildItems (IReadOnlyList<MenuService.MenuEntry> entries)
 	{
+		commandItems.Clear (); // the menu is rebuilt: refresh the tracked set
 		var items = new List<Control> ();
 		foreach (var entry in entries)
 			items.Add (BuildItem (entry, topLevel: true));
 		return items;
+	}
+
+	/// <summary>
+	/// Oleada 3: mirrors the current enabled state of every command-bound menu item
+	/// (runs each command's Update handler without dispatching). Called after the
+	/// menu is built and on every document/workspace state change.
+	/// </summary>
+	public static void RefreshCommandStates ()
+	{
+		foreach (var item in commandItems) {
+			if (item.Tag is not string id)
+				continue;
+			var info = MonoDevelop.Components.Commands.CommandService.GetCommandInfo (id);
+			item.IsEnabled = info.Enabled;
+		}
 	}
 
 	// Extracts the legacy command id from a menu action (CommandAction.Target).
@@ -56,6 +76,7 @@ public static class MenuBuilder
 			if (click.Target is CommandAction ca) {
 				item.Tag = ca.Id;
 				KeyboardShortcutRegistry.Register (ca.Id, item);
+				commandItems.Add (item); // Oleada 3: track for state refresh
 			}
 			// Make the legacy shortcut a real accelerator: parse it into a KeyGesture so
 			// KeyboardShortcutRegistry.AttachHotKeys binds it and the menu shows it.

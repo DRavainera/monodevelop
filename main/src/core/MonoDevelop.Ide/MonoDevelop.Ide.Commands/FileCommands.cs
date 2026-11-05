@@ -481,6 +481,13 @@ namespace MonoDevelop.Ide.Commands
 		{
 			ShellCommandHandler.Run (FileCommands.SaveAll);
 		}
+
+		// Oleada 3: enabled only when a document has unsaved changes (legacy
+		// IdeApp.Workbench.Documents.Any(v => v.IsDirty)).
+		protected override void Update (CommandInfo info)
+		{
+			info.Enabled = ShellCommandState.HasDirtyDocuments;
+		}
 	}
 
 	//MonoDevelop.Ide.Commands.FileCommands.NewProject
@@ -508,6 +515,13 @@ namespace MonoDevelop.Ide.Commands
 		{
 			ShellCommandHandler.Run (FileCommands.CloseAllFiles);
 		}
+
+		// Oleada 3: no point in closing all when there are no documents open (legacy
+		// IdeApp.Workbench.Documents.Count != 0).
+		protected override void Update (CommandInfo info)
+		{
+			info.Enabled = ShellCommandState.HasDocuments;
+		}
 	}
 
 	// MonoDevelop.Ide.Commands.FileCommands.CloseFile
@@ -517,6 +531,13 @@ namespace MonoDevelop.Ide.Commands
 		{
 			ShellCommandHandler.Run (FileCommands.CloseFile);
 		}
+
+		// Oleada 3: enabled only when there is an active document (legacy
+		// IdeApp.Workbench.ActiveDocument != null).
+		protected override void Update (CommandInfo info)
+		{
+			info.Enabled = ShellCommandState.HasActiveDocument;
+		}
 	}
 
 	// MonoDevelop.Ide.Commands.FileCommands.CloseWorkspace
@@ -525,6 +546,14 @@ namespace MonoDevelop.Ide.Commands
 		protected override void Run ()
 		{
 			ShellCommandHandler.Run (FileCommands.CloseWorkspace);
+		}
+
+		// Oleada 3: enabled only when a solution/workspace is open (legacy
+		// IdeApp.Workspace != null && Items.Count > 0). The dynamic label (Close
+		// Solution vs Close All Solutions) is deferred to a later slice.
+		protected override void Update (CommandInfo info)
+		{
+			info.Enabled = ShellCommandState.HasWorkspace;
 		}
 	}
 

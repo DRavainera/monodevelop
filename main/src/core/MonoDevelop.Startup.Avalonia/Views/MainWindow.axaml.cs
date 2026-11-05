@@ -1883,6 +1883,24 @@ public partial class MainWindow : Window
 						Avalonia.Threading.Dispatcher.UIThread.Post (LogPadButtons, Avalonia.Threading.DispatcherPriority.Loaded);
 					}
 				};
+			} else if (qa == "--cmdstates") {
+				// QA (Oleada 3): drive the shell through every document/workspace state
+				// transition and dump the command-bound File items' enabled state after
+				// each — verifies the Update→ShellCommandState→IsEnabled loop E2E.
+				Avalonia.Threading.Dispatcher.UIThread.Post (async () => {
+					DumpCmdStates ("initial");
+					OpenDocumentText ("QA Cmd", "x");
+					DumpCmdStates ("opened");
+					if (docs.TryGetValue ("QA Cmd", out var cmdEd)) {
+						cmdEd.IsDirty = true;
+						DumpCmdStates ("dirty");
+						cmdEd.IsDirty = false;
+						DumpCmdStates ("clean");
+					}
+					await CloseDocumentAsync ("QA Cmd");
+					DumpCmdStates ("closed");
+					Output ("[cmdstates] done");
+				}, Avalonia.Threading.DispatcherPriority.Background);
 			} else if (qa == "--viewcmds") {
 				// QA: ViewCommands — find results → ShowNext/ShowPrevious with wrap;
 				// SingleMode hides pads, SideBySideMode restores them.
@@ -2557,6 +2575,7 @@ public partial class MainWindow : Window
 		// Run > Run With mirrors the execution modes (legacy ExecutionModeCommandService
 		// fills the submenu per run target); selection persists in the settings store.
 		FillRunWithMenu ();
+		MenuBuilder.RefreshCommandStates (); // Oleada 3: initial enabled state
 	}
 
 	/// <summary>Run With… (legacy ExecutionModeCommandService.ShowSelector): the
@@ -2729,6 +2748,38 @@ public partial class MainWindow : Window
 				}
 			}
 		}
+	}
+
+	// Oleada 3 QA: dumps the enabled state of the command-bound File menu items
+	// (the four ported Update handlers) plus the underlying shell state, so the
+	// Update→ShellCommandState→IsEnabled loop is verifiable without screenshots.
+	void DumpCmdStates (string when)
+	{
+		MenuBuilder.RefreshCommandStates ();
+		bool? En (string member)
+		{
+			string full = "MonoDevelop.Ide.Commands.FileCommands." + member;
+			bool? Find (Avalonia.Controls.MenuItem mi)
+			{
+				if (mi.Tag is string t && t == full)
+					return mi.IsEnabled;
+				foreach (var c in mi.Items.OfType<Avalonia.Controls.MenuItem> ())
+					if (Find (c) is { } r)
+						return r;
+				return null;
+			}
+			foreach (var top in MainMenu!.Items.OfType<Avalonia.Controls.MenuItem> ())
+				if (Find (top) is { } r)
+					return r;
+			return null;
+		}
+		string B (bool? v) => v is null ? "?" : (v.Value ? "1" : "0");
+		Output ("[cmdstates] (" + when + ") saveAll=" + B (En ("SaveAll"))
+			+ " close=" + B (En ("CloseFile"))
+			+ " closeAll=" + B (En ("CloseAllFiles"))
+			+ " closeWs=" + B (En ("CloseWorkspace"))
+			+ " | hasDocs=" + HasDocuments + " hasActive=" + HasActiveDocument
+			+ " hasDirty=" + HasDirtyDocuments + " hasWs=" + HasWorkspace);
 	}
 
 	void UpdatePadChecks (System.Collections.Generic.IReadOnlyList<MenuService.MenuEntry> entries)
@@ -3317,13 +3368,34 @@ public partial class MainWindow : Window
 	// Open file editors by tab tag (island tabs): used by Save/SaveAll (FileCommands).
 	readonly Dictionary<string, MonoDevelop.Ide.Controls.SkTextEditor> docs = new ();
 
+	// Oleada 3: read-only state the ported command handlers' Update overrides
+	// consult (via ShellCommandState) to enable/disable menu items.
+	internal bool HasDocuments => documents.Count > 0;
+	internal bool HasActiveDocument => DocTabs?.SelectedItem is TabItem;
+	internal bool HasDirtyDocuments => docs.Values.Any (v => v.IsDirty);
+	internal bool HasWorkspace => loadedSolutionPath is not null;
+
+	// Oleada 3: re-evaluates the command-bound menu items' enabled state after a
+	// document/workspace change (cheap: a handful of GetCommandInfo calls).
+	void NotifyCommandStateChanged ()
+	{
+		MonoDevelop.AvaloniaShell.Views.MenuBuilder.RefreshCommandStates ();
+	}
+
 	void AddDocument (string tag, Control content, bool closable = true, bool select = true)
 	{
 		if (documents.Any (d => d.Tag == tag))
 			return;
 		documents.Add ((tag, content));
-		if (content is MonoDevelop.Ide.Controls.SkTextEditor ed && !docs.ContainsKey (tag))
+		if (content is MonoDevelop.Ide.Controls.SkTextEditor ed && !docs.ContainsKey (tag)) {
 			docs.Add (tag, ed);
+			// Oleada 3: any document editor's dirty change re-evaluates the
+			// command-bound menu items (Save All et al.).
+			ed.PropertyChanged += (_, e) => {
+				if (e.Property == MonoDevelop.Ide.Controls.SkTextEditor.IsDirtyProperty)
+					NotifyCommandStateChanged ();
+			};
+		}
 
 		var header = new Panel();
 		// The tab tag is the document key (full path or untitled title); the header
@@ -3377,6 +3449,7 @@ public partial class MainWindow : Window
 			UpdateTabScrollButtons ();
 			UpdateBreadcrumb ();
 		}, Avalonia.Threading.DispatcherPriority.Background);
+		NotifyCommandStateChanged (); // Oleada 3: a document tab was added
 
 		if (select) {
 			DocTabs.SelectedItem = tab; // SelectionChanged mounts the content
@@ -3404,6 +3477,7 @@ public partial class MainWindow : Window
 		} else {
 			ShowEmptyEditorHost (); // legacy: editor pad stays open with no tabs
 		}
+		NotifyCommandStateChanged (); // Oleada 3: active document changed
 	}
 
 	public void SelectDocument (string tag)
@@ -3907,6 +3981,7 @@ public partial class MainWindow : Window
 		docs.Remove (tag);
 		docsClosedCounter.Inc (Path.GetFileName (tag));
 		SelectFirstDocument ();
+		NotifyCommandStateChanged (); // Oleada 3: a document tab was closed
 		return true;
 	}
 
@@ -4181,6 +4256,7 @@ public partial class MainWindow : Window
 			var (title, projects) = loaded.Value;
 			solutionLoaded = true;
 			loadedSolutionPath = path;
+			NotifyCommandStateChanged (); // Oleada 3: a solution was loaded
 			// The solution-open flow must not re-show the welcome overlay afterwards.
 			// HideWelcomePage, not just the flag: the ctor's ShowWelcomePage already
 			// mounted the overlay — leaving it visible keeps it covering the document
@@ -5448,6 +5524,7 @@ public partial class MainWindow : Window
 		PersistWatches (); // last watch state before the solution path goes away
 		loadedSolutionPath = null;
 		solutionLoaded = false;
+		NotifyCommandStateChanged (); // Oleada 3: the workspace was closed
 		// The three symbol pads are solution/document scoped: reset them so a later
 		// solution does not show stale rows (legacy pads cleared on workspace close).
 		lastOutlineTag = null;

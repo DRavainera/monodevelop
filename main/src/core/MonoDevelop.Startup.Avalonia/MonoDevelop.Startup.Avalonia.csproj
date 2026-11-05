@@ -139,6 +139,10 @@
 		     router used). CustomStringTagProvider.cs is NOT a command handler
 		     (GtkTextView tag provider) and stays out of this build. -->
 		<Compile Include="..\MonoDevelop.Ide\MonoDevelop.Ide.Commands\ShellCommandHandler.cs" />
+		<!-- Oleada 3 (menu enabled state): read-only view of the shell's
+		     document/workspace state, consulted by the ported handlers' Update
+		     overrides (see ShellCommandState.cs). -->
+		<Compile Include="..\MonoDevelop.Ide\MonoDevelop.Ide.Commands\ShellCommandState.cs" />
 		<Compile Include="..\MonoDevelop.Ide\MonoDevelop.Ide.Commands\FileCommands.cs" />
 		<Compile Include="..\MonoDevelop.Ide\MonoDevelop.Ide.Commands\EditCommands.cs" />
 		<Compile Include="..\MonoDevelop.Ide\MonoDevelop.Ide.Commands\ProjectCommands.cs" />

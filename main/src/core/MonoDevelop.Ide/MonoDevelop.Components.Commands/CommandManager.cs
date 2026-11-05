@@ -3410,6 +3410,31 @@ Gtk.Widget GetFocusedChild (Control widget)
 			return true;
 		}
 
+		/// <summary>
+		/// Runs the command's update handler without dispatching (Oleada 3): the
+		/// shell uses it to mirror the enabled/visible state on the menu. Mirrors the
+		/// GTK GetCommandInfo path — instantiates the DefaultHandler when needed,
+		/// runs its Update, and returns the resulting CommandInfo. Commands with no
+		/// resolvable handler (routed) come back enabled, as before.
+		/// </summary>
+		public CommandInfo GetCommandInfo (object commandId)
+		{
+			commandId = ToCommandId (commandId);
+			var cmd = GetActionCommand (commandId);
+			var info = cmd != null ? new CommandInfo (cmd) : new CommandInfo ();
+			if (cmd == null)
+				return info;
+			if (cmd.DefaultHandler == null && cmd.DefaultHandlerType != null) {
+				// nonPublic: the catalog handlers are mostly internal classes.
+				cmd.DefaultHandler = (CommandHandler) Activator.CreateInstance (cmd.DefaultHandlerType, true);
+			}
+			if (IsEnabled)
+				cmd.DefaultHandler?.InternalUpdate (info);
+			info.Enabled &= IsEnabled;
+			info.CancelAsyncUpdate ();
+			return info;
+		}
+
 		void OnCommandActivating (object commandId, CommandInfo info, object dataItem, object target, CommandSource source)
 		{
 			CommandActivating?.Invoke (this, new CommandActivationEventArgs (commandId, info, dataItem, target, source));

@@ -46,6 +46,16 @@ namespace MonoDevelop.Components.Commands
 		{
 			return Manager.DispatchCommand (commandId, dataItem, null, source);
 		}
+
+		/// <summary>
+		/// Oleada 3: the command's current CommandInfo (its Update handler run
+		/// without dispatch), so the shell can mirror the enabled/visible state
+		/// on the menu.
+		/// </summary>
+		public static CommandInfo GetCommandInfo (object commandId)
+		{
+			return Manager.GetCommandInfo (commandId);
+		}
 	}
 }
 #endif
