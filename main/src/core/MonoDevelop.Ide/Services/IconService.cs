@@ -201,6 +201,11 @@ public static class IconService
 		// Gettext stock id (MonoDevelop.Gettext.addin.xml): the "Add Translation"
 		// command icon.
 		["md-gettext-locale"] = ("locale-16", "MonoDevelop.Gettext"),
+
+		// Solution pad package dependency icon (MonoDevelop.PackageManagement.addin.xml):
+		// the NuGet / SDK rows of the migrated Dependencies tree use the same PNG the
+		// legacy PackageDependencyNodeBuilder showed (md-package-dependency).
+		["md-package-dependency"] = ("nuget-16", "MonoDevelop.PackageManagement"),
 	};
 
 	static readonly Dictionary<(string Resource, bool Dark, bool Disabled, int Scale), Bitmap?> cache = new ();

@@ -126,6 +126,18 @@ public partial class MainWindow : Window
 		})).WithSize (16, 16); // 1x1 transparent PNG placeholder
 	}
 
+	/// <summary>Stock id → Xwt image through IconService (theme-aware, addin
+	/// stock ids included via its resolution maps). Fallback: file-source.</summary>
+	Xwt.Drawing.Image XwtStockImage (string stockId)
+	{
+		try {
+			var file = IconService.ResolveFilePath (stockId);
+			if (file is not null && File.Exists (file))
+				return Xwt.Drawing.Image.FromFile (file).WithSize (16, 16);
+		} catch { }
+		return XwtStockIcon ("file-source-16.png");
+	}
+
 	public MainWindow ()
 	{
 		InitializeComponent ();
@@ -4052,7 +4064,7 @@ public partial class MainWindow : Window
 		// All the tagged prefixes must come off BEFORE any path work — a bare
 		// "project:/home/…" fed to GetDirectoryName yields a garbage relative
 		// path (the folder landed in a literal "project:/" dir under the CWD).
-		foreach (var prefix in new[] { "folder:", "project:", "solution:", "references:" }) {
+		foreach (var prefix in new[] { "folder:", "project:", "solution:" }) {
 			if (p.StartsWith (prefix, StringComparison.Ordinal)) {
 				p = p [prefix.Length..];
 				break;
@@ -4215,9 +4227,9 @@ public partial class MainWindow : Window
 					var dir = Path.GetDirectoryName (p.ProjectPath);
 					if (!string.IsNullOrEmpty (dir) && Directory.Exists (dir)) {
 						projectFileBeingLoaded = p.ProjectPath;
-						// References node first (ProjectReferenceFolderNodeBuilder), then
-						// folders/files (ProjectFolderNodeBuilder ordering).
-						AddXwtReferencesNode (projPos, p.ProjectPath);
+						// Dependencies (DependenciesNodeBuilder, sort -600), then
+						// folders/files (ProjectFolderNodeBuilder, sort -100).
+						AddXwtDependenciesNode (projPos, p.ProjectPath);
 						BuildXwtFolderChildren (projPos, dir, 0);
 					}
 					xwtSolutionTree.ExpandRow (projPos, false);
@@ -4294,41 +4306,6 @@ public partial class MainWindow : Window
 		return tv;
 	}
 
-	// ProjectReferenceFolderNodeBuilder: the project's first child is a References
-	// node (md-reference-folder) with one md-reference row per assembly.
-	TreeViewItem BuildReferencesNode (string projectPath)
-	{
-		var node = new TreeViewItem {
-			Header = TreeHeader ("md-reference-folder", "References"),
-			Tag = "references:" + projectPath,
-		};
-		try {
-			var doc = System.Xml.Linq.XDocument.Load (projectPath);
-			var ns = doc.Root?.Name.Namespace ?? System.Xml.Linq.XNamespace.None;
-			var refs = new List<string> ();
-			foreach (var el in doc.Descendants (ns + "Reference")) {
-				var name = el.Attribute ("Include")?.Value;
-				if (!string.IsNullOrEmpty (name))
-					refs.Add (name.Split (',') [0]);
-			}
-			foreach (var el in doc.Descendants (ns + "PackageReference")) {
-				var id = el.Attribute ("Include")?.Value;
-				if (!string.IsNullOrEmpty (id))
-					refs.Add (id);
-			}
-			foreach (var r in refs.OrderBy (r => r).Distinct ())
-				node.Items.Add (new TreeViewItem {
-					Header = TreeHeader ("md-reference", r),
-					Tag = "reference:" + r,
-				});
-			if (refs.Count == 0)
-				node.Items.Add (new TreeViewItem { Header = TreeHeader ("md-reference", "(none)"), Tag = "reference:none", IsVisible = false });
-		} catch {
-			// Unreadable project file: leave the References node empty (legacy tolerance).
-		}
-		return node;
-	}
-
 	// ProjectFolderNodeBuilder: folders first (md-closed-folder/md-open-folder by
 	// expansion state), then files with DesktopService.GetIconForFile icons.
 	List<TreeViewItem> BuildFolderChildren (string dir, int depth)
@@ -4371,41 +4348,199 @@ public partial class MainWindow : Window
 
 	// ---- Xwt.TreeView builders (real ProjectPad tree) ----
 
-	// ProjectReferenceFolderNodeBuilder equivalent: References node with one row per
-	// Reference/PackageReference plus ProjectReference (md-reference icons).
-	void AddXwtReferencesNode (Xwt.TreePosition projPos, string projectPath)
+	// DependenciesNode equivalent (MonoDevelop.DotNetCore): the "Dependencies" folder
+	// with one node per target framework ("Platforms"), and under each platform the
+	// reference groups the Gtk UI showed (DependenciesNode.GetChildNodes order):
+	// Frameworks → NuGet → SDK → Assemblies → Projects. TFMs and reference items are
+	// read from the project file (lightweight XML, no MSBuild). The platform level is
+	// ALWAYS shown (no single-TFM collapse), per the requested Dependencies>Platforms
+	// shape. Folder rows use the legacy Stock.OpenReferenceFolder icon.
+	void AddXwtDependenciesNode (Xwt.TreePosition projPos, string projectPath)
 	{
-		var refsNav = xwtSolutionStore!.AddNode (projPos);
-		refsNav.SetValues (xwtSolIconField, XwtStockIcon ("folder-generic-16.png"),
-			xwtSolTextField, "References", xwtSolTagField, "references:" + projectPath);
-		var refsPos = refsNav.CurrentPosition;
+		var tfms = ReadTargetFrameworks (projectPath);
+		if (tfms.Count == 0)
+			return;
+		var refs = ReadProjectReferences (projectPath);
+		var depNav = xwtSolutionStore!.AddNode (projPos);
+		depNav.SetValues (xwtSolIconField, XwtStockIcon ("folder-component-16.png"),
+			xwtSolTextField, "Dependencies", xwtSolTagField, "dependencies:" + projectPath);
+		var depPos = depNav.CurrentPosition;
+		foreach (var tfm in tfms) {
+			var nav = xwtSolutionStore!.AddNode (depPos);
+			nav.SetValues (xwtSolIconField, XwtStockIcon ("framework-16.png"),
+				xwtSolTextField, tfm, xwtSolTagField, "platform:" + projectPath + ":" + tfm);
+			AddXwtTfmReferenceGroups (nav.CurrentPosition, projectPath, tfm, refs);
+		}
+	}
+
+	// One reference-group folder per non-empty item set, in the legacy
+	// DependenciesNode.GetChildNodes order:
+	//  1. Frameworks   — <FrameworkReference> items (only when present; when
+	//                    absent the SDK group is shown instead, like legacy).
+	//  2. NuGet        — <PackageReference> items (PackageDependencyNode label: id,
+	//                    icon md-package-dependency).
+	//  3. SDK          — SdkDependenciesNode.GetDefaultNodes: net* →
+	//                    Microsoft.NETCore.App, netstandard* → NETStandard.Library.
+	//  4. Assemblies   — <Reference> items (ProjectReferenceNodeBuilder:
+	//                    GetFileName, icon md-reference-folder).
+	//  5. Projects     — <ProjectReference> items (ProjectReferenceNodeBuilder:
+	//                    project name, icon md-reference-project). Activating a row
+	//                    opens the referenced project's main file, like the legacy
+	//                    ProjectReferenceNodeCommandHandler.ActivateItem.
+	void AddXwtTfmReferenceGroups (Xwt.TreePosition tfmPos, string projectPath, string tfm, XwtProjectReferences refs)
+	{
+		var dir = Path.GetDirectoryName (projectPath);
+		var hasFrameworks = false;
+		if (refs.Frameworks.Count > 0) {
+			var grp = AddXwtReferenceGroup (tfmPos, "Frameworks", "depgrp:" + projectPath + ":" + tfm + ":frameworks");
+			foreach (var name in refs.Frameworks) {
+				var nav = xwtSolutionStore!.AddNode (grp);
+				nav.SetValues (xwtSolIconField, XwtStockIcon ("reference-16.png"),
+					xwtSolTextField, name, xwtSolTagField, "fwref:" + projectPath + ":" + tfm + ":" + name);
+			}
+			hasFrameworks = true;
+		}
+		if (refs.Packages.Count > 0) {
+			var grp = AddXwtReferenceGroup (tfmPos, "NuGet", "depgrp:" + projectPath + ":" + tfm + ":nuget");
+			foreach (var id in refs.Packages) {
+				var nav = xwtSolutionStore!.AddNode (grp);
+				nav.SetValues (xwtSolIconField, XwtStockImage ("md-package-dependency"),
+					xwtSolTextField, id, xwtSolTagField, "package:" + projectPath + ":" + tfm + ":" + id);
+			}
+		}
+		if (!hasFrameworks) {
+			var sdk = tfm.StartsWith ("netstandard", StringComparison.OrdinalIgnoreCase)
+				? "NETStandard.Library"
+				: tfm.StartsWith ("net", StringComparison.OrdinalIgnoreCase) ? "Microsoft.NETCore.App" : null;
+			if (sdk is not null) {
+				var grp = AddXwtReferenceGroup (tfmPos, "SDK", "depgrp:" + projectPath + ":" + tfm + ":sdk");
+				var nav = xwtSolutionStore!.AddNode (grp);
+				nav.SetValues (xwtSolIconField, XwtStockImage ("md-package-dependency"),
+					xwtSolTextField, sdk, xwtSolTagField, "sdkpkg:" + projectPath + ":" + tfm + ":" + sdk);
+			}
+		}
+		if (refs.Assemblies.Count > 0) {
+			var grp = AddXwtReferenceGroup (tfmPos, "Assemblies", "depgrp:" + projectPath + ":" + tfm + ":assemblies");
+			foreach (var name in refs.Assemblies) {
+				var nav = xwtSolutionStore!.AddNode (grp);
+				nav.SetValues (xwtSolIconField, XwtStockIcon ("reference-assembly-16.png"),
+					xwtSolTextField, Path.GetFileName (name.Replace ('\\', Path.DirectorySeparatorChar)),
+					xwtSolTagField, "asmref:" + projectPath + ":" + tfm + ":" + name);
+			}
+		}
+		if (refs.Projects.Count > 0) {
+			var grp = AddXwtReferenceGroup (tfmPos, "Projects", "depgrp:" + projectPath + ":" + tfm + ":projects");
+			foreach (var inc in refs.Projects) {
+				var name = Path.GetFileNameWithoutExtension (inc.Replace ('\\', Path.DirectorySeparatorChar));
+				var nav = xwtSolutionStore!.AddNode (grp);
+				nav.SetValues (xwtSolIconField, XwtStockIcon ("reference-project-16.png"),
+					xwtSolTextField, name, xwtSolTagField, XwtReferencedProjectFile (dir, inc));
+			}
+		}
+	}
+
+	// Reference-group folder row (Stock.OpenReferenceFolder icon, like legacy).
+	Xwt.TreePosition AddXwtReferenceGroup (Xwt.TreePosition tfmPos, string label, string tag)
+	{
+		var nav = xwtSolutionStore!.AddNode (tfmPos);
+		nav.SetValues (xwtSolIconField, XwtStockIcon ("folder-component-16.png"),
+			xwtSolTextField, label, xwtSolTagField, tag);
+		return nav.CurrentPosition;
+	}
+
+	// Legacy ProjectReferenceNodeCommandHandler.ActivateItem: activating a project
+	// reference opens the referenced project's main source file. Lightweight port:
+	// first .cs file of the referenced project directory. Unresolvable reference →
+	// the raw include (not a file → RowActivated stays a no-op).
+	string XwtReferencedProjectFile (string? projectDir, string include)
+	{
+		try {
+			var inc = include.Replace ('\\', Path.DirectorySeparatorChar);
+			if (projectDir is not null && !Path.IsPathRooted (inc)) {
+				var csproj = Path.GetFullPath (Path.Combine (projectDir, inc));
+				if (File.Exists (csproj)) {
+					var refDir = Path.GetDirectoryName (csproj);
+					if (refDir is not null) {
+						var cs = Directory.GetFiles (refDir, "*.cs").OrderBy (f => f, StringComparer.OrdinalIgnoreCase).FirstOrDefault ();
+						if (cs is not null)
+							return cs;
+					}
+					return csproj;
+				}
+			}
+		} catch {
+		}
+		return include;
+	}
+
+	// TargetFramework set from the project file: <TargetFrameworks> (semicolon list)
+	// or <TargetFramework> (single). Unreadable project → empty (no Dependencies node).
+	static List<string> ReadTargetFrameworks (string projectPath)
+	{
+		var result = new List<string> ();
 		try {
 			var doc = System.Xml.Linq.XDocument.Load (projectPath);
 			var ns = doc.Root?.Name.Namespace ?? System.Xml.Linq.XNamespace.None;
-			var refs = new List<string> ();
-			foreach (var el in doc.Descendants (ns + "Reference")) {
-				var name = el.Attribute ("Include")?.Value;
-				if (!string.IsNullOrEmpty (name))
-					refs.Add (name.Split (',') [0]);
-			}
-			foreach (var el in doc.Descendants (ns + "PackageReference")) {
-				var id = el.Attribute ("Include")?.Value;
-				if (!string.IsNullOrEmpty (id))
-					refs.Add (id);
-			}
-			foreach (var el in doc.Descendants (ns + "ProjectReference")) {
-				var inc = el.Attribute ("Include")?.Value;
-				if (!string.IsNullOrEmpty (inc))
-					refs.Add (Path.GetFileNameWithoutExtension (inc));
-			}
-			foreach (var r in refs.OrderBy (r => r).Distinct ()) {
-				var nav = xwtSolutionStore!.AddNode (refsPos);
-				nav.SetValues (xwtSolIconField, XwtStockIcon ("reference-16.png"),
-					xwtSolTextField, r, xwtSolTagField, "reference:" + r);
+			var el = doc.Root?.Descendants (ns + "TargetFrameworks").FirstOrDefault ()
+				?? doc.Root?.Descendants (ns + "TargetFramework").FirstOrDefault ();
+			var tfms = (string)el;
+			if (!string.IsNullOrWhiteSpace (tfms)) {
+				foreach (var t in tfms.Split (';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+					if (!result.Contains (t))
+						result.Add (t);
 			}
 		} catch {
-			// Unreadable project file: leave References empty (legacy tolerance).
+			// Unreadable project file: no platform nodes (legacy tolerance).
 		}
+		return result;
+	}
+
+	// Reference items read from the project file for the Dependencies groups:
+	// FrameworkReference → "Frameworks", PackageReference → "NuGet",
+	// Reference → "Assemblies", ProjectReference → "Projects". Like the legacy
+	// tree, items are listed per platform (TFM-conditional ItemGroups are not
+	// evaluated without MSBuild).
+	class XwtProjectReferences
+	{
+		public List<string> Frameworks { get; } = new ();
+		public List<string> Packages { get; } = new ();
+		public List<string> Assemblies { get; } = new ();
+		public List<string> Projects { get; } = new ();
+	}
+
+	static XwtProjectReferences ReadProjectReferences (string projectPath)
+	{
+		var refs = new XwtProjectReferences ();
+		try {
+			var doc = System.Xml.Linq.XDocument.Load (projectPath);
+			var ns = doc.Root?.Name.Namespace ?? System.Xml.Linq.XNamespace.None;
+			var root = doc.Root;
+			if (root is null)
+				return refs;
+			foreach (var el in root.Descendants (ns + "FrameworkReference")) {
+				var v = el.Attribute ("Include")?.Value;
+				if (!string.IsNullOrWhiteSpace (v))
+					refs.Frameworks.Add (v);
+			}
+			foreach (var el in root.Descendants (ns + "PackageReference")) {
+				var id = el.Attribute ("Include")?.Value;
+				if (!string.IsNullOrWhiteSpace (id))
+					refs.Packages.Add (id);
+			}
+			foreach (var el in root.Descendants (ns + "Reference")) {
+				var v = el.Attribute ("Include")?.Value;
+				if (!string.IsNullOrWhiteSpace (v))
+					refs.Assemblies.Add (v);
+			}
+			foreach (var el in root.Descendants (ns + "ProjectReference")) {
+				var v = el.Attribute ("Include")?.Value;
+				if (!string.IsNullOrWhiteSpace (v))
+					refs.Projects.Add (v);
+			}
+		} catch {
+			// Unreadable project file: no reference groups (legacy tolerance).
+		}
+		return refs;
 	}
 
 	// ProjectFolderNodeBuilder equivalent over Xwt nodes: folders first (bin/obj
@@ -4713,7 +4848,6 @@ public partial class MainWindow : Window
 	{
 		var s = SelectedXwtNode ();
 		if (s is not null) {
-			if (s.StartsWith ("references:", StringComparison.Ordinal)) return ("References", s);
 			if (s.StartsWith ("reference:", StringComparison.Ordinal)) return ("ProjectReference", s);
 			if (s.StartsWith ("folder:", StringComparison.Ordinal)) return ("ProjectFolder", s ["folder:".Length..]);
 			if (s.EndsWith (".sln", StringComparison.OrdinalIgnoreCase)) return ("Solution", s);
@@ -4724,10 +4858,10 @@ public partial class MainWindow : Window
 	}
 
 	/// <summary>Tag of the selected node in the Xwt tree ("solution:path",
-	/// "project:path", "folder:path", "references:path", "reference:name" or a
-	/// file path), resolved through the store by TreePosition — null when nothing
-	/// is selected. This is the single source of truth for every consumer that
-	/// used to read the Avalonia preview tree's Tag (context menu, properties).</summary>
+	/// "project:path", "folder:path", "reference:name" or a file path), resolved
+	/// through the store by TreePosition — null when nothing is selected. This is
+	/// the single source of truth for every consumer that used to read the
+	/// Avalonia preview tree's Tag (context menu, properties).</summary>
 	string? SelectedXwtNode ()
 	{
 		if (xwtSolutionTree is null || xwtSolutionStore is null)
@@ -4933,11 +5067,6 @@ public partial class MainWindow : Window
 			rows.Add (new ("Misc", "Name", refName));
 			rows.Add (new ("Build", "Local Copy", "True"));
 			rows.Add (new ("Build", "Specific Version", "False"));
-			break;
-
-		case "References":
-			rows.Add (new ("Misc", "Name", "References"));
-			rows.Add (new ("Misc", "Path", path.StartsWith ("references:", StringComparison.Ordinal) ? path ["references:".Length..] : ""));
 			break;
 		}
 		return rows;
