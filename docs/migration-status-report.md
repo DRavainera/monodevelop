@@ -329,7 +329,30 @@ El bucle de migración Gtk → Avalonia continúa por módulos (detalle por hito
     QA §18.5 APROBADO en 2 rondas (ronda 1: 1 hallazgo menor de código muerto preexistente,
     corregido; revalidación limpia). Build 0 errores; sin tocar submódulos ni la ruta
     `--old-gui`. Detalle en `docs/interfaz-plan.md` (follow-up "Solution pad — Dependencies
-    y referencias portadas de la UI Gtk").
+         y referencias portadas de la UI Gtk").
+- **Oleada 1 de la integración total del backend (2026-11-05)**: backbone de
+  comandos del menú sobre el `CommandManager` real. El shell dispatcha menús y
+  hotkeys a través del `CommandManager` no-GTK de `MonoDevelop.Ide`
+  (pipeline `CommandActivating`/`CommandActivated`), alimentado por un loader
+  nuevo (`CommandCatalogLoader`, solo `AVALONIA_SHELL`) que lee el catálogo
+  legacy de comandos (secciones `/MonoDevelop/Ide/Commands` de los 72
+  `*.addin.xml` de core + addins, staged en `addinxml/`) y replica el mapping
+  de `CommandCodon` **sin** depender de `Mono.Addins` (los codones arrastrarían
+  el motor de addins GTK). Los comandos sin `DefaultHandler` resuelto caen a
+  `CommandManager.CommandRouter`, que la shell enlaza a `MainWindow.
+  OnMenuCommand` (el mismo dispatcher de siempre); ids sintéticos (`recent:`,
+  `pad:`) conservan el dispatch legacy. Nuevo `CommandService` (singleton del
+  shell, counterpart de `IdeApp.CommandService`) + guardas `#if !AVALONIA_SHELL`
+  en `CommandEntry`/`CommandEntrySet` + registro del `SynchronizationContext`
+  de UI en `Runtime.MainSynchronizationContext` (como el `IdeStartup` GTK con
+  el main context de Gtk). Catálogo cargado: 461 comandos; menudump invariante
+  (`menus=11 items=225 cmds=0 bindings=205`). QA §18.5 APROBADO (P1–P4):
+  dispatch por menú verificado E2E por teclado (File → New File / New Solution
+  abren los diálogos reales sin flags), hotkeys `ctrl+n`/`F8`/`ctrl+q`
+  verificados, sin lado efectos. Build 0 errores; sin submódulos; la ruta
+  `--old-gui` no se toca (código bajo `#if AVALONIA_SHELL` o aditivo no-GTK).
+  Detalle en `docs/interfaz-plan.md` (follow-up "Oleada 1 — backbone de
+  comandos del menú") y `docs/session_summary.md` (2026-11-05 (1)).
 
 Nota operativa: el árbol de build único es `main/build/` (cualquier otra dirección de build en la documentación es obsoleta). El binario de la UI Avalonia es `main/build/MonoDevelop.AvaloniaShell.dll` y el IDE GTK legacy (`--old-gui`) es `main/build/MonoDevelop.dll`.
 

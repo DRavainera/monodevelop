@@ -3557,3 +3557,97 @@ idéntico). Build 0 errores en ambas rondas.
 handoff se pusha junto con él a `origin/agents/sub-agent-senior-dev-role-report`. Sin
 cambios en submódulos; la ruta `--old-gui` no se ve afectada (cambios en la shell
 Avalonia + entrada aditiva de mapa de iconos en `IconService` core).
+
+### Menú (follow-up) — Oleada 1: backbone de comandos del menú sobre CommandManager + catálogo legacy (2026-11-05)
+
+Primera oleada de la integración total del backend `MonoDevelop.Ide`/`MonoDevelop.Core`
+en la shell Avalonia (directriz del operador: reutilizar módulos no-GTK, portar los
+GTK, sin separación de carpetas). Antes de esta oleada la shell dispatchaba menús y
+hotkeys directamente a `MainWindow.OnMenuCommand` con ids a mano; ahora el dispatch
+corre por el `CommandManager` real de `MonoDevelop.Ide` (pipeline
+`CommandActivating`/`CommandActivated`, el mismo sobre el que se basa el record/replay
+de `AutoTestService.SessionRecord`), alimentado por el **catálogo de comandos legacy**.
+
+**Fuente legacy referenciada**:
+- Catálogo: las secciones `<Extension path="/MonoDevelop/Ide/Commands">` de los
+  `*.addin.xml` (core `MonoDevelop.Ide` + cada addin). En el build GTK los carga
+  `CommandCodon` vía el motor `Mono.Addins`.
+- `CommandCodon.CreateInstance`: mapping codón → `ActionCommand` (sub-rutas de la
+  ruta base, `Condition`/Platform, flags de tipo, `winShortcut` > `shortcut`,
+  prefijo `@` de id de paquete, `disabledVisible`).
+- `IdeApp.CommandService` (`IdeApp.CommandManager`): el singleton del IDE GTK que
+  dispatcha por el `CommandManager`.
+
+**Implementación**:
+- `main/src/core/MonoDevelop.Ide/MonoDevelop.Components.Commands/CommandCatalogLoader.cs`
+  (**nuevo**, solo `AVALONIA_SHELL`): lee `baseDir/addinxml/**.addin.xml` y registra
+  cada comando en el `CommandManager` sobre el modelo no-GTK (`Command`/
+  `ActionCommand`), replicando el mapping de `CommandCodon` **sin** reutilizar los
+  codones (derivados de `Mono.Addins.ExtensionNode`; cargarlos arrastraría el motor
+  de addins GTK). `DefaultHandler` no se resuelve (los handler de GTK viven en el
+  ensamblado GTK). `LastError` expone el primer fichero fallido.
+- `.../CommandService.cs` (**nuevo**, solo `AVALONIA_SHELL`): singleton del shell
+  (counterpart de `IdeApp.CommandService`): `Manager`, `LoadCatalog` (idempotente),
+  `LoadedCommands`, `Count`, `GetCommand`, `Dispatch`.
+- `.../CommandManager.cs` (región `#if AVALONIA_SHELL`): `Count` + `CommandRouter`
+  (fallback para comandos de catálogo sin handler) y `DispatchCommand` tolerante a
+  handler nulo (con router: `CommandRouter(cmd.Id, dataItem)`; la rama con
+  `DefaultHandlerType` resuelto no cambia).
+- `.../CommandEntry.cs` / `CommandEntrySet.cs`: guardas `#if !AVALONIA_SHELL` de las
+  partes Gtk del modelo de entradas de menú.
+- `MonoDevelop.Startup.Avalonia.csproj`: `Compile` de los 4 ficheros y `Content` de
+  los 72 `*.addin.xml` a `addinxml/{core,addins}/` (`CopyToOutputDirectory=
+  PreserveNewest`). El build GTK stagea su propio despliegue (`main/build/AddIns`)
+  y no se toca.
+- `Program.cs`: al arranque enlaza `CommandService.Manager.CommandRouter` a
+  `MainWindow.Instance?.OnMenuCommand` y carga el catálogo desde
+  `AppContext.BaseDirectory` (warn si hay `LastError`).
+- `App.axaml.cs`: `Runtime.MainSynchronizationContext = SynchronizationContext.
+  Current` en `OnFrameworkInitializationCompleted` (equivalente del main context de
+  Gtk que registra `IdeStartup`, `IdeStartup.cs:182`) — los asserts de main thread
+  de los servicios compartidos lo exigen en dispatch.
+- `Views/MenuService.cs`: `RunCommand` y `CommandAction.Run` enrutan por
+  `CommandService.Dispatch(id, null, CommandSource.MainMenu)` si el id está
+  registrado; ids sintéticos (`"recent:"`, `"pad:"`, ...) o no registrados
+  conservan `OnMenuCommand`.
+
+**Forma**: el menú visible no cambia (misma estructura/items) — cambia **qué ejecuta**
+cada item: la pipeline del `CommandManager` con el catálogo legacy, y el router como
+fallback hasta que las oleadas siguientes porten los handlers core reales.
+
+**Validación / evidencia** (artefactos en `~/opencode/`):
+- Build `0 Errores` (net10.0 y net10.0-windows): `dotnet build main/src/core/
+  MonoDevelop.Startup.Avalonia/MonoDevelop.Startup.Avalonia.csproj -c Debug -f
+  net10.0 --nologo`.
+- Harness de catálogo (`~/opencode/catload_test/`): `Count=461`,
+  `LoadedCommands=475`, ids de menú `196/172 resueltos`, dispatch `routed=1`.
+- Smoke (`~/opencode/smoke_oleada1.sh`): arranque sin warnings, línea
+  `[avalonia-shell] runtime main thread registered`, `--menudump` invariante
+  (`menus=11 items=225 cmds=0 bindings=205`).
+- QA E2E por teclado X11 (XTEST; el ratón XTEST no llega al cliente en este
+  entorno Wayland/XWayland — hallazgo de entorno, ver abajo), app arrancada
+  **sin flags de menú** (solo `--sln`):
+  - P3: `alt+f` → popup File (255x464) → `Return` → diálogo "New File" en `wmctrl`
+    (cadena completa `MenuItem → CommandAction.Run → CommandService.Dispatch →
+    pipeline → CommandRouter → OnMenuCommand → OpenNewFileDialog`); `Down+Return`
+    → "Create a New Solution" (760x600); Help `alt+h` + `a` → "About MonoDevelop"
+    (rama lambda, no catálogo). Diálogos cerrados sin residuo (`Fixture.sln` 3
+    proyectos, sin `~/Solution`).
+  - P4: `ctrl+n` → diálogo "New File"; `F8` → build (`[build]` 0→5 en el log);
+    `ctrl+q` → el proceso termina.
+- Artefactos: `~/opencode/oleada1_qa/` (`cap.py`, `focus.py`, `click_qa.py`,
+  `final_qa*.sh`, `seq_qa.sh`, `probe_*.sh`, capturas/OCR), `~/opencode/keys.py`,
+  `~/opencode/smoke_oleada1.sh`, `~/opencode/catload_test/`, logs
+  `~/opencode/oleada1_final3.log` y compañía.
+
+**QA (§18.5)**: Tester QA Senior — **APROBADO, PASS (P1–P4), 0 hallazgos de app
+abiertos**. Hallazgos no bloqueantes: (1) XTEST mouse no se entrega al cliente
+(Wayland/XWayland; el click solo activa a nivel WM) ⇒ QA de menús por teclado;
+(2) popups de menú mal posicionados arriba-izq (hallazgo previo, no regresión);
+(3) `alt+f` ~50% fiable y teclas en cola ⇒ oracles por conteo de log inestables;
+(4) `NewFileDialog` no cierra con Escape (solo Cancel) — candidata a Oleada 2;
+(5) ImageMagick `import` roba focus/hanguea ⇒ capturas con Xlib `get_image`.
+
+**Cierre**: código en commit `0a3aff4b51` pushado a
+`origin/agents/sub-agent-senior-dev-role-report`. Sin submódulos; la ruta
+`--old-gui` no se ve afectada (todo bajo `#if AVALONIA_SHELL` o aditivo no-GTK).
