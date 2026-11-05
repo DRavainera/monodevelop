@@ -26,12 +26,16 @@
 //
 
 
+#if !AVALONIA_SHELL
 using MonoDevelop.Core;
 using MonoDevelop.Components.Commands;
 using MonoDevelop.Ide.Gui;
 using MonoDevelop.Ide.Gui.Content;
 using Gtk;
 using System.Linq;
+#else
+using MonoDevelop.Components.Commands;
+#endif
 
 namespace MonoDevelop.Ide.Commands
 {
@@ -49,6 +53,7 @@ namespace MonoDevelop.Ide.Commands
 		SwitchPreviousDocument
 	}
 
+#if !AVALONIA_SHELL
 	internal class NextDocumentHandler : CommandHandler
 	{
 		protected override void Update (CommandInfo info)
@@ -444,4 +449,179 @@ namespace MonoDevelop.Ide.Commands
 			Switch (false);
 		}
 	}
+#else
+	// Oleada 2: AVALONIA_SHELL ports of the legacy handlers above. Each one
+	// delegates to the shell's menu dispatcher (ShellCommandHandler) — the same
+	// OnMenuCommand endpoint the catalog router uses — so behavior is
+	// unchanged; the Update overrides (enabled/visible state) are not ported
+	// yet. OpenDocument1..9 and SwitchNextPad/SwitchPreviousPad forward their
+	// literal catalog id: the WindowCommands enum has no members for them.
+	internal class NextDocumentHandler : CommandHandler
+	{
+		protected override void Run ()
+		{
+			ShellCommandHandler.Run (WindowCommands.NextDocument);
+		}
+	}
+
+	internal class PrevDocumentHandler : CommandHandler
+	{
+		protected override void Run ()
+		{
+			ShellCommandHandler.Run (WindowCommands.PrevDocument);
+		}
+	}
+
+	internal class OpenDocumentListHandler : CommandHandler
+	{
+		protected override void Run (object dataItem)
+		{
+			ShellCommandHandler.Run (WindowCommands.OpenDocumentList, dataItem);
+		}
+	}
+
+	internal class OpenDocument1 : CommandHandler
+	{
+		protected override void Run ()
+		{
+			ShellCommandHandler.Run ("MonoDevelop.Ide.Commands.WindowCommands.OpenDocument1");
+		}
+	}
+
+	internal class OpenDocument2 : CommandHandler
+	{
+		protected override void Run ()
+		{
+			ShellCommandHandler.Run ("MonoDevelop.Ide.Commands.WindowCommands.OpenDocument2");
+		}
+	}
+
+	internal class OpenDocument3 : CommandHandler
+	{
+		protected override void Run ()
+		{
+			ShellCommandHandler.Run ("MonoDevelop.Ide.Commands.WindowCommands.OpenDocument3");
+		}
+	}
+
+	internal class OpenDocument4 : CommandHandler
+	{
+		protected override void Run ()
+		{
+			ShellCommandHandler.Run ("MonoDevelop.Ide.Commands.WindowCommands.OpenDocument4");
+		}
+	}
+
+	internal class OpenDocument5 : CommandHandler
+	{
+		protected override void Run ()
+		{
+			ShellCommandHandler.Run ("MonoDevelop.Ide.Commands.WindowCommands.OpenDocument5");
+		}
+	}
+
+	internal class OpenDocument6 : CommandHandler
+	{
+		protected override void Run ()
+		{
+			ShellCommandHandler.Run ("MonoDevelop.Ide.Commands.WindowCommands.OpenDocument6");
+		}
+	}
+
+	internal class OpenDocument7 : CommandHandler
+	{
+		protected override void Run ()
+		{
+			ShellCommandHandler.Run ("MonoDevelop.Ide.Commands.WindowCommands.OpenDocument7");
+		}
+	}
+
+	internal class OpenDocument8 : CommandHandler
+	{
+		protected override void Run ()
+		{
+			ShellCommandHandler.Run ("MonoDevelop.Ide.Commands.WindowCommands.OpenDocument8");
+		}
+	}
+
+	internal class OpenDocument9 : CommandHandler
+	{
+		protected override void Run ()
+		{
+			ShellCommandHandler.Run ("MonoDevelop.Ide.Commands.WindowCommands.OpenDocument9");
+		}
+	}
+
+	internal class OpenWindowListHandler : CommandHandler
+	{
+		protected override void Run (object dataItem)
+		{
+			ShellCommandHandler.Run (WindowCommands.OpenWindowList, dataItem);
+		}
+	}
+
+	internal class SplitWindowVertically : CommandHandler
+	{
+		protected override void Run ()
+		{
+			ShellCommandHandler.Run (WindowCommands.SplitWindowVertically);
+		}
+	}
+
+	internal class SplitWindowHorizontally : CommandHandler
+	{
+		protected override void Run ()
+		{
+			ShellCommandHandler.Run (WindowCommands.SplitWindowHorizontally);
+		}
+	}
+
+	internal class UnsplitWindow : CommandHandler
+	{
+		protected override void Run ()
+		{
+			ShellCommandHandler.Run (WindowCommands.UnsplitWindow);
+		}
+	}
+
+	internal class SwitchSplitWindow : CommandHandler
+	{
+		protected override void Run ()
+		{
+			ShellCommandHandler.Run (WindowCommands.SwitchSplitWindow);
+		}
+	}
+
+	internal class SwitchNextDocument : CommandHandler
+	{
+		protected override void Run ()
+		{
+			ShellCommandHandler.Run (WindowCommands.SwitchNextDocument);
+		}
+	}
+
+	internal class SwitchPreviousDocument : CommandHandler
+	{
+		protected override void Run ()
+		{
+			ShellCommandHandler.Run (WindowCommands.SwitchPreviousDocument);
+		}
+	}
+
+	internal class SwitchNextPad : CommandHandler
+	{
+		protected override void Run ()
+		{
+			ShellCommandHandler.Run ("MonoDevelop.Ide.Commands.WindowCommands.SwitchNextPad");
+		}
+	}
+
+	internal class SwitchPreviousPad : CommandHandler
+	{
+		protected override void Run ()
+		{
+			ShellCommandHandler.Run ("MonoDevelop.Ide.Commands.WindowCommands.SwitchPreviousPad");
+		}
+	}
+#endif
 }

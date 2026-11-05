@@ -26,6 +26,7 @@
 //
 
 
+#if !AVALONIA_SHELL
 using System;
 using MonoDevelop.Ide.Gui.Dialogs;
 using MonoDevelop.Core;
@@ -40,6 +41,9 @@ using MonoDevelop.Ide.Desktop;
 using System.Linq;
 using MonoDevelop.Components;
 using MonoDevelop.Components.Extensions;
+#else
+using MonoDevelop.Components.Commands;
+#endif
 
 namespace MonoDevelop.Ide.Commands
 {
@@ -76,6 +80,7 @@ namespace MonoDevelop.Ide.Commands
 		CopyToOutputDirectory
 	}
 
+#if !AVALONIA_SHELL
 	// MonoDevelop.Ide.Commands.FileCommands.OpenFile
 	public class OpenFileHandler : CommandHandler
 	{
@@ -445,4 +450,154 @@ namespace MonoDevelop.Ide.Commands
 	// MonoDevelop.Ide.Commands.FileTabCommands.ToggleMaximize     Implemented in FileTabCommands.cs
 	// MonoDevelop.Ide.Commands.FileTabCommands.ReopenClosedTab    Implemented in FileTabCommands.cs
 	// MonoDevelop.Ide.Commands.FileTabCommands.CloseAllExceptPinned    Implemented in FileTabCommands.cs
+#else
+	// Oleada 2: AVALONIA_SHELL ports of the legacy handlers above. Each one
+	// delegates to the shell's menu dispatcher (ShellCommandHandler) — the same
+	// OnMenuCommand endpoint the catalog router uses — so behavior is
+	// unchanged; the Update overrides (enabled/visible state) are not ported
+	// yet.
+	// MonoDevelop.Ide.Commands.FileCommands.OpenFile
+	public class OpenFileHandler : CommandHandler
+	{
+		protected override void Run ()
+		{
+			ShellCommandHandler.Run (FileCommands.OpenFile);
+		}
+	}
+
+	// MonoDevelop.Ide.Commands.FileCommands.NewFile
+	public class NewFileHandler : CommandHandler
+	{
+		protected override void Run ()
+		{
+			ShellCommandHandler.Run (FileCommands.NewFile);
+		}
+	}
+
+	// MonoDevelop.Ide.Commands.FileCommands.SaveAll
+	public class SaveAllHandler : CommandHandler
+	{
+		protected override void Run ()
+		{
+			ShellCommandHandler.Run (FileCommands.SaveAll);
+		}
+	}
+
+	//MonoDevelop.Ide.Commands.FileCommands.NewProject
+	public class NewProjectHandler : CommandHandler
+	{
+		protected override void Run ()
+		{
+			ShellCommandHandler.Run (FileCommands.NewProject);
+		}
+	}
+
+	//MonoDevelop.Ide.Commands.FileCommands.NewWorkspace
+	public class NewWorkspaceHandler : CommandHandler
+	{
+		protected override void Run ()
+		{
+			ShellCommandHandler.Run (FileCommands.NewWorkspace);
+		}
+	}
+
+	// MonoDevelop.Ide.Commands.FileCommands.CloseAllFiles
+	public class CloseAllFilesHandler : CommandHandler
+	{
+		protected override void Run ()
+		{
+			ShellCommandHandler.Run (FileCommands.CloseAllFiles);
+		}
+	}
+
+	// MonoDevelop.Ide.Commands.FileCommands.CloseFile
+	public class CloseFileHandler : CommandHandler
+	{
+		protected override void Run ()
+		{
+			ShellCommandHandler.Run (FileCommands.CloseFile);
+		}
+	}
+
+	// MonoDevelop.Ide.Commands.FileCommands.CloseWorkspace
+	public class CloseWorkspaceHandler : CommandHandler
+	{
+		protected override void Run ()
+		{
+			ShellCommandHandler.Run (FileCommands.CloseWorkspace);
+		}
+	}
+
+	// MonoDevelop.Ide.Commands.FileCommands.PrintDocument
+	public class PrintHandler : CommandHandler
+	{
+		protected override void Run ()
+		{
+			ShellCommandHandler.Run (FileCommands.PrintDocument);
+		}
+	}
+
+	// MonoDevelop.Ide.Commands.FileCommands.PrintPreviewDocument
+	public class PrintPreviewHandler : CommandHandler
+	{
+		protected override void Run ()
+		{
+			ShellCommandHandler.Run (FileCommands.PrintPreviewDocument);
+		}
+	}
+
+	// MonoDevelop.Ide.Commands.FileCommands.PrintPageSetup
+	public class PrintPageSetupHandler : CommandHandler
+	{
+		protected override void Run ()
+		{
+			ShellCommandHandler.Run (FileCommands.PrintPageSetup);
+		}
+	}
+
+	// MonoDevelop.Ide.Commands.FileCommands.RecentFileList
+	public class RecentFileListHandler : CommandHandler
+	{
+		protected override void Run (object dataItem)
+		{
+			ShellCommandHandler.Run (FileCommands.RecentFileList, dataItem);
+		}
+	}
+
+	// MonoDevelop.Ide.Commands.FileCommands.ClearRecentFiles
+	public class ClearRecentFilesHandler : CommandHandler
+	{
+		protected override void Run ()
+		{
+			ShellCommandHandler.Run (FileCommands.ClearRecentFiles);
+		}
+	}
+
+	// MonoDevelop.Ide.Commands.FileCommands.RecentProjectList
+	public class RecentProjectListHandler : CommandHandler
+	{
+		protected override void Run (object dataItem)
+		{
+			ShellCommandHandler.Run (FileCommands.RecentProjectList, dataItem);
+		}
+	}
+
+	// MonoDevelop.Ide.Commands.FileCommands.ClearRecentProjects
+	internal class ClearRecentProjectsHandler : CommandHandler
+	{
+		protected override void Run ()
+		{
+			ShellCommandHandler.Run (FileCommands.ClearRecentProjects);
+		}
+	}
+
+	// MonoDevelop.Ide.Commands.FileCommands.Exit
+	public class ExitHandler : CommandHandler
+	{
+		protected override void Run ()
+		{
+			ShellCommandHandler.Run (FileCommands.Exit);
+		}
+	}
+#endif
 }

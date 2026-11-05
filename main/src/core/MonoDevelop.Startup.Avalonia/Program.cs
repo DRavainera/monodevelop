@@ -40,6 +40,7 @@ internal static class Program
 		MonoDevelop.Components.Commands.CommandService.LoadCatalog (AppContext.BaseDirectory);
 		if (MonoDevelop.Components.Commands.CommandCatalogLoader.LastError is { } catalogError)
 			Console.Error.WriteLine ($"[warn] {catalogError}");
+		Console.WriteLine ($"[commands] catalog loaded: {MonoDevelop.Components.Commands.CommandService.LoadedCommands} commands, {MonoDevelop.Components.Commands.CommandCatalogLoader.ResolvedHandlers} with resolvable default handler");
 
 		ArmStartupWatchdog ();
 		BuildAvaloniaApp ().StartWithClassicDesktopLifetime (StripOldGui (args));

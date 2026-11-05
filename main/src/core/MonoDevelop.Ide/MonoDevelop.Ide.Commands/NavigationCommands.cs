@@ -26,6 +26,7 @@
 //
 
 
+#if !AVALONIA_SHELL
 using System;
 using System.Collections.Generic;
 
@@ -33,6 +34,9 @@ using MonoDevelop.Core;
 using MonoDevelop.Ide.Gui;
 using MonoDevelop.Components.Commands;
 using MonoDevelop.Ide.Navigation;
+#else
+using MonoDevelop.Components.Commands;
+#endif
 
 namespace MonoDevelop.Ide.Commands
 {
@@ -44,6 +48,7 @@ namespace MonoDevelop.Ide.Commands
 		ClearNavigationHistory
 	}
 	
+#if !AVALONIA_SHELL
 	internal class NavigateBack : CommandHandler
 	{
 		protected override void Run ()
@@ -112,4 +117,42 @@ namespace MonoDevelop.Ide.Commands
 			info.Enabled = IdeServices.NavigationHistoryService.CanMoveForward || IdeServices.NavigationHistoryService.CanMoveBack;
 		}
 	}
+#else
+	// Oleada 2: AVALONIA_SHELL ports of the legacy handlers above. Each one
+	// delegates to the shell's menu dispatcher (ShellCommandHandler) — the same
+	// OnMenuCommand endpoint the catalog router uses — so behavior is
+	// unchanged; the Update overrides (enabled/visible state) are not ported
+	// yet.
+	internal class NavigateBack : CommandHandler
+	{
+		protected override void Run ()
+		{
+			ShellCommandHandler.Run (NavigationCommands.NavigateBack);
+		}
+	}
+
+	internal class NavigateForward : CommandHandler
+	{
+		protected override void Run ()
+		{
+			ShellCommandHandler.Run (NavigationCommands.NavigateForward);
+		}
+	}
+
+	internal class NavigateHistory : CommandHandler
+	{
+		protected override void Run (object dataItem)
+		{
+			ShellCommandHandler.Run (NavigationCommands.NavigateHistory, dataItem);
+		}
+	}
+
+	internal class ClearNavigationHistory : CommandHandler
+	{
+		protected override void Run ()
+		{
+			ShellCommandHandler.Run (NavigationCommands.ClearNavigationHistory);
+		}
+	}
+#endif
 }

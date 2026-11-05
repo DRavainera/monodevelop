@@ -3356,6 +3356,11 @@ Gtk.Widget GetFocusedChild (Control widget)
 			return GetCommand (cmdId) as ActionCommand;
 		}
 
+		public IEnumerable<Command> GetCommands ()
+		{
+			return cmds.Values;
+		}
+
 		/// <summary>
 		/// Runs the command through its DefaultHandler and raises the activation
 		/// events (the GTK DefaultDispatchCommand path without the widget target
@@ -3380,7 +3385,8 @@ Gtk.Widget GetFocusedChild (Control widget)
 					// Catalog command without a default handler: the router
 					// (shell menu dispatcher) executes it.
 				} else {
-					cmd.DefaultHandler = (CommandHandler) Activator.CreateInstance (cmd.DefaultHandlerType);
+					// nonPublic: the catalog handlers are mostly internal classes.
+					cmd.DefaultHandler = (CommandHandler) Activator.CreateInstance (cmd.DefaultHandlerType, true);
 				}
 			}
 			if (IsEnabled)

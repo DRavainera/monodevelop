@@ -25,8 +25,12 @@
 // THE SOFTWARE.
 
 
+// Oleada 2: the two GUI usings are only needed by the GTK build; the
+// AVALONIA_SHELL build compiles this file for the shared enum alone.
+#if !AVALONIA_SHELL
 using MonoDevelop.Ide.Gui.Dialogs;
 using MonoDevelop.Ide.Gui;
+#endif
 using MonoDevelop.Components.Commands;
 
 namespace MonoDevelop.Ide.Commands

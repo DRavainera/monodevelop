@@ -29,15 +29,25 @@ namespace MonoDevelop.Components.Commands
 		public static string LastError { get; private set; }
 
 		/// <summary>
+		/// Commands whose defaultHandler attribute was resolved to a handler
+		/// type that ships in this build (Oleada 2: the MonoDevelop.Ide.Commands
+		/// ports). The remaining commands keep dispatching through
+		/// manager.CommandRouter.
+		/// </summary>
+		public static int ResolvedHandlers { get; private set; }
+
+		/// <summary>
 		/// Loads every *.addin.xml under baseDir/addinxml and registers the
 		/// commands found in their /MonoDevelop/Ide/Commands extensions into
-		/// manager. defaultHandler types are NOT resolved (the GTK handler
-		/// classes live in the GTK assembly); those commands dispatch through
-		/// manager.CommandRouter. Returns the number of commands registered.
+		/// manager. A defaultHandler whose type ships in this build is resolved
+		/// onto the command (DispatchCommand instantiates it); the rest keep
+		/// dispatching through manager.CommandRouter. Returns the number of
+		/// commands registered.
 		/// </summary>
 		public static int Load (CommandManager manager, string baseDir)
 		{
 			LastError = null;
+			ResolvedHandlers = 0;
 			var catalogDir = Path.Combine (baseDir, "addinxml");
 			if (!Directory.Exists (catalogDir)) {
 				LastError = "Command catalog directory not found: " + catalogDir;
@@ -125,10 +135,11 @@ namespace MonoDevelop.Components.Commands
 			return negated ? !match : match;
 		}
 
-		// Maps one <Command .../> element to an ActionCommand, mirroring
-		// CommandCodon.CreateInstance (type flags, shortcut selection, @-prefixed
-		// ids). defaultHandler is intentionally left unresolved.
-		static int ProcessCommand (CommandManager manager, XElement el, string category)
+	// Maps one <Command .../> element to an ActionCommand, mirroring
+	// CommandCodon.CreateInstance (type flags, shortcut selection, @-prefixed
+	// ids). The defaultHandler attribute is resolved when the type ships in
+	// this build (see ResolveHandlerType).
+	static int ProcessCommand (CommandManager manager, XElement el, string category)
 		{
 			var id = (string) el.Attribute ("id");
 			if (string.IsNullOrEmpty (id))
@@ -186,8 +197,28 @@ namespace MonoDevelop.Components.Commands
 			var displayName = (string) el.Attribute ("_displayName");
 			if (!string.IsNullOrWhiteSpace (displayName))
 				cmd.DisplayName = displayName;
+
+			// Oleada 2: wire the legacy defaultHandler when its class compiles
+			// into this build (the MonoDevelop.Ide.Commands ports). Types that
+			// do not (add-in handlers, MainToolbar, FindInFiles, ...) leave the
+			// command on the router fallback.
+			var defaultHandler = (string) el.Attribute ("defaultHandler");
+			if (!string.IsNullOrEmpty (defaultHandler)) {
+				var handlerType = ResolveHandlerType (defaultHandler);
+				if (handlerType != null) {
+					cmd.DefaultHandlerType = handlerType;
+					ResolvedHandlers++;
+				}
+			}
+
 			manager.RegisterCommand (cmd);
 			return 1;
+		}
+
+		static Type ResolveHandlerType (string typeName)
+		{
+			var t = typeof (CommandCatalogLoader).Assembly.GetType (typeName);
+			return t != null && typeof (CommandHandler).IsAssignableFrom (t) ? t : null;
 		}
 	}
 }

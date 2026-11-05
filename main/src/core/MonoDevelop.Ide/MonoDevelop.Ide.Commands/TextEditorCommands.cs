@@ -25,9 +25,13 @@
 //
 //
 
+#if !AVALONIA_SHELL
 using System;
 using MonoDevelop.Components.Commands;
 using MonoDevelop.Core;
+#else
+using MonoDevelop.Components.Commands;
+#endif
 
 namespace MonoDevelop.Ide.Commands
 {
@@ -107,6 +111,7 @@ namespace MonoDevelop.Ide.Commands
 		ShowQuickInfo
 	}
 	
+#if !AVALONIA_SHELL
 	public class ToggleCompletionSuggestionModeHandler : CommandHandler
 	{
 		protected override void Run ()
@@ -123,4 +128,17 @@ namespace MonoDevelop.Ide.Commands
 				info.Text = GettextCatalog.GetString ("Switch to Suggestion Mode");
 		}
 	}
+#else
+	// Oleada 2: AVALONIA_SHELL port of the legacy handler above; delegates to
+	// the shell's menu dispatcher (ShellCommandHandler), the same
+	// OnMenuCommand endpoint the catalog router uses. The Update override
+	// (enabled/visible state) is not ported yet.
+	public class ToggleCompletionSuggestionModeHandler : CommandHandler
+	{
+		protected override void Run ()
+		{
+			ShellCommandHandler.Run (TextEditorCommands.ToggleCompletionSuggestionMode);
+		}
+	}
+#endif
 }

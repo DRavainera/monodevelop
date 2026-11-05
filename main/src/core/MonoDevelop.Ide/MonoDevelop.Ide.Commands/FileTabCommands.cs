@@ -26,6 +26,7 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
 
+#if !AVALONIA_SHELL
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -42,6 +43,9 @@ using MonoDevelop.Ide.Gui.Shell;
 using MonoDevelop.Components.DockNotebook;
 using System.Collections.Immutable;
 using MonoDevelop.Core;
+#else
+using MonoDevelop.Components.Commands;
+#endif
 
 namespace MonoDevelop.Ide.Commands
 {
@@ -57,6 +61,7 @@ namespace MonoDevelop.Ide.Commands
 		PinTab,
 	}
 
+#if !AVALONIA_SHELL
 	class CloseAllHandler : TabCommandHandler
 	{
 		protected virtual ImmutableArray<Document> GetDocumentExceptions ()
@@ -251,4 +256,73 @@ namespace MonoDevelop.Ide.Commands
 			info.Enabled = IdeServices.NavigationHistoryService.HasClosedDocuments;
 		}
 	}
+#else
+	// Oleada 2: AVALONIA_SHELL ports of the legacy handlers above (the GTK
+	// TabCommandHandler/CloseAllHandler base classes and their document
+	// bookkeeping are not needed: each port delegates to the shell's menu
+	// dispatcher, the same OnMenuCommand endpoint the catalog router uses).
+	class CloseAllHandler : CommandHandler
+	{
+		protected override void Run ()
+		{
+			ShellCommandHandler.Run (FileTabCommands.CloseAll);
+		}
+	}
+
+	class CloseAllExceptPinnedHandler : CommandHandler
+	{
+		protected override void Run ()
+		{
+			ShellCommandHandler.Run (FileTabCommands.CloseAllExceptPinned);
+		}
+	}
+
+	class PinTabHandler : CommandHandler
+	{
+		protected override void Run ()
+		{
+			ShellCommandHandler.Run (FileTabCommands.PinTab);
+		}
+	}
+
+	class CloseAllButThisHandler : CommandHandler
+	{
+		protected override void Run ()
+		{
+			ShellCommandHandler.Run (FileTabCommands.CloseAllButThis);
+		}
+	}
+
+	class CloseAllToTheRightHandler : CommandHandler
+	{
+		protected override void Run ()
+		{
+			ShellCommandHandler.Run (FileTabCommands.CloseAllToTheRight);
+		}
+	}
+
+	class ToggleMaximizeHandler : CommandHandler
+	{
+		protected override void Run ()
+		{
+			ShellCommandHandler.Run (FileTabCommands.ToggleMaximize);
+		}
+	}
+
+	class CopyPathNameHandler : CommandHandler
+	{
+		protected override void Run ()
+		{
+			ShellCommandHandler.Run (FileTabCommands.CopyPathName);
+		}
+	}
+
+	class ReopenClosedTabHandler : CommandHandler
+	{
+		protected override void Run ()
+		{
+			ShellCommandHandler.Run (FileTabCommands.ReopenClosedTab);
+		}
+	}
+#endif
 }

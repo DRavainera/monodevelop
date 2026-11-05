@@ -26,6 +26,7 @@
 //
 
 
+#if !AVALONIA_SHELL
 using System;
 using System.Timers;
 
@@ -33,6 +34,9 @@ using MonoDevelop.Ide.Gui.Dialogs;
 using MonoDevelop.Ide.Gui;
 using MonoDevelop.Components.Commands;
 using MonoDevelop.Core;
+#else
+using MonoDevelop.Components.Commands;
+#endif
 
 namespace MonoDevelop.Ide.Commands
 {
@@ -47,6 +51,7 @@ namespace MonoDevelop.Ide.Commands
 		About
 	}
 
+#if !AVALONIA_SHELL
 	// MonoDevelop.Ide.Commands.HelpCommands.Help
 	public class HelpHandler : CommandHandler
 	{
@@ -178,4 +183,75 @@ namespace MonoDevelop.Ide.Commands
 			LoggingService.LogInfo ("\n\n--- --- --- --- MARK --- --- --- ---\n\n");
 		}
 	}
+#else
+	// Oleada 2: AVALONIA_SHELL ports of the legacy handlers above. Each one
+	// delegates to the shell's menu dispatcher (ShellCommandHandler) — the same
+	// OnMenuCommand endpoint the catalog router uses — so behavior is
+	// unchanged; the Update overrides (enabled/visible state) are not ported
+	// yet. DumpUITree/DumpA11yTree/DumpA11yTreeDelayed/MarkLog forward their
+	// literal catalog id: the HelpCommands enum has no members for them.
+	public class HelpHandler : CommandHandler
+	{
+		protected override void Run ()
+		{
+			ShellCommandHandler.Run (HelpCommands.Help);
+		}
+	}
+
+	public class OpenLogDirectoryHandler : CommandHandler
+	{
+		protected override void Run ()
+		{
+			ShellCommandHandler.Run (HelpCommands.OpenLogDirectory);
+		}
+	}
+
+	public class TipOfTheDayHandler : CommandHandler
+	{
+		protected override void Run ()
+		{
+			ShellCommandHandler.Run (HelpCommands.TipOfTheDay);
+		}
+	}
+
+	public class AboutHandler : CommandHandler
+	{
+		protected override void Run ()
+		{
+			ShellCommandHandler.Run (HelpCommands.About);
+		}
+	}
+
+	class DumpUITreeHandler : CommandHandler
+	{
+		protected override void Run ()
+		{
+			ShellCommandHandler.Run ("MonoDevelop.Ide.Commands.HelpCommands.DumpUITree");
+		}
+	}
+
+	class DumpA11yTreeHandler : CommandHandler
+	{
+		protected override void Run ()
+		{
+			ShellCommandHandler.Run ("MonoDevelop.Ide.Commands.HelpCommands.DumpA11yTree");
+		}
+	}
+
+	class DumpA11yTreeDelayedHandler : CommandHandler
+	{
+		protected override void Run ()
+		{
+			ShellCommandHandler.Run ("MonoDevelop.Ide.Commands.HelpCommands.DumpA11yTreeDelayed");
+		}
+	}
+
+	class MarkLogHandler : CommandHandler
+	{
+		protected override void Run ()
+		{
+			ShellCommandHandler.Run ("MonoDevelop.Ide.Commands.HelpCommands.MarkLog");
+		}
+	}
+#endif
 }

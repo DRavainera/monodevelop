@@ -26,6 +26,7 @@
 //
 
 
+#if !AVALONIA_SHELL
 using System;
 using System.Linq;
 using MonoDevelop.Ide.Gui.Dialogs;
@@ -38,6 +39,9 @@ using System.Collections.Generic;
 using MonoDevelop.Ide.Gui.Shell;
 using Microsoft.VisualStudio.Text.Editor;
 using Microsoft.VisualStudio.Text;
+#else
+using MonoDevelop.Components.Commands;
+#endif
 
 namespace MonoDevelop.Ide.Commands
 {
@@ -65,6 +69,7 @@ namespace MonoDevelop.Ide.Commands
 		ShowWelcomePage
 	}
 
+#if !AVALONIA_SHELL
 	// MonoDevelop.Ide.Commands.ViewCommands.ViewList
 	public class ViewListHandler : CommandHandler
 	{
@@ -468,4 +473,139 @@ namespace MonoDevelop.Ide.Commands
 			}
 		}
 	}
+#else
+	// Oleada 2: AVALONIA_SHELL ports of the legacy handlers above. Each one
+	// delegates to the shell's menu dispatcher (ShellCommandHandler) — the same
+	// OnMenuCommand endpoint the catalog router uses — so behavior is
+	// unchanged; the Update overrides (enabled/visible state) are not ported
+	// yet. SideBySideMode/SingleMode/NextNotebook/PreviousNotebook forward
+	// their literal catalog id: the ViewCommands enum has no members for them.
+	public class ViewListHandler : CommandHandler
+	{
+		protected override void Run (object dataItem)
+		{
+			ShellCommandHandler.Run (ViewCommands.ViewList, dataItem);
+		}
+	}
+
+	public class LayoutListHandler : CommandHandler
+	{
+		protected override void Run (object dataItem)
+		{
+			ShellCommandHandler.Run (ViewCommands.LayoutList, dataItem);
+		}
+	}
+
+	public class NewLayoutHandler : CommandHandler
+	{
+		protected override void Run ()
+		{
+			ShellCommandHandler.Run (ViewCommands.NewLayout);
+		}
+	}
+
+	public class DeleteCurrentLayoutHandler : CommandHandler
+	{
+		protected override void Run ()
+		{
+			ShellCommandHandler.Run (ViewCommands.DeleteCurrentLayout);
+		}
+	}
+
+	public class FullScreenHandler : CommandHandler
+	{
+		protected override void Run ()
+		{
+			ShellCommandHandler.Run (ViewCommands.FullScreen);
+		}
+	}
+
+	public class ShowNextHandler : CommandHandler
+	{
+		protected override void Run ()
+		{
+			ShellCommandHandler.Run (ViewCommands.ShowNext);
+		}
+	}
+
+	public class ShowPreviousHandler : CommandHandler
+	{
+		protected override void Run ()
+		{
+			ShellCommandHandler.Run (ViewCommands.ShowPrevious);
+		}
+	}
+
+	public class ZoomIn : CommandHandler
+	{
+		protected override void Run ()
+		{
+			ShellCommandHandler.Run (ViewCommands.ZoomIn);
+		}
+	}
+
+	public class ZoomOut : CommandHandler
+	{
+		protected override void Run ()
+		{
+			ShellCommandHandler.Run (ViewCommands.ZoomOut);
+		}
+	}
+
+	public class ZoomReset : CommandHandler
+	{
+		protected override void Run ()
+		{
+			ShellCommandHandler.Run (ViewCommands.ZoomReset);
+		}
+	}
+
+	public class SideBySideModeHandler : CommandHandler
+	{
+		protected override void Run ()
+		{
+			ShellCommandHandler.Run ("MonoDevelop.Ide.Commands.ViewCommands.SideBySideMode");
+		}
+	}
+
+	public class SingleModeHandler : CommandHandler
+	{
+		protected override void Run ()
+		{
+			ShellCommandHandler.Run ("MonoDevelop.Ide.Commands.ViewCommands.SingleMode");
+		}
+	}
+
+	public class NextNotebookHandler : CommandHandler
+	{
+		protected override void Run ()
+		{
+			ShellCommandHandler.Run ("MonoDevelop.Ide.Commands.ViewCommands.NextNotebook");
+		}
+	}
+
+	public class PreviousNotebookHandler : CommandHandler
+	{
+		protected override void Run ()
+		{
+			ShellCommandHandler.Run ("MonoDevelop.Ide.Commands.ViewCommands.PreviousNotebook");
+		}
+	}
+
+	public class FocusCurrentDocumentHandler : CommandHandler
+	{
+		protected override void Run ()
+		{
+			ShellCommandHandler.Run (ViewCommands.FocusCurrentDocument);
+		}
+	}
+
+	public class CenterAndFocusCurrentDocumentHandler : CommandHandler
+	{
+		protected override void Run ()
+		{
+			ShellCommandHandler.Run (ViewCommands.CenterAndFocusCurrentDocument);
+		}
+	}
+#endif
 }

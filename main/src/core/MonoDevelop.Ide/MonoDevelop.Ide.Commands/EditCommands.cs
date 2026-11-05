@@ -26,6 +26,7 @@
 //
 
 
+#if !AVALONIA_SHELL
 using System;
 using MonoDevelop.Ide.Gui.Dialogs;
 using MonoDevelop.Core;
@@ -34,6 +35,9 @@ using MonoDevelop.Components.Commands;
 using MonoDevelop.Ide.Gui;
 using MonoDevelop.Projects;
 using Microsoft.VisualStudio.Text.Editor;
+#else
+using MonoDevelop.Components.Commands;
+#endif
 
 namespace MonoDevelop.Ide.Commands
 {
@@ -77,6 +81,7 @@ namespace MonoDevelop.Ide.Commands
 		SortSelectedLines
 	}
 	
+#if !AVALONIA_SHELL
 	internal class MonodevelopPreferencesHandler: CommandHandler
 	{
 		protected override void Run ()
@@ -433,4 +438,82 @@ namespace MonoDevelop.Ide.Commands
 			info.Bypass = !info.Enabled;
 		}
 	}	
+#else
+	// Oleada 2: AVALONIA_SHELL ports of the legacy handlers above. Each one
+	// delegates to the shell's menu dispatcher (ShellCommandHandler) — the same
+	// OnMenuCommand endpoint the catalog router uses — so behavior is
+	// unchanged; the Update overrides (enabled/visible state) are not ported
+	// yet.
+	internal class MonodevelopPreferencesHandler : CommandHandler
+	{
+		protected override void Run ()
+		{
+			ShellCommandHandler.Run (EditCommands.MonodevelopPreferences);
+		}
+	}
+
+	internal class DefaultPoliciesHandler : CommandHandler
+	{
+		protected override void Run ()
+		{
+			ShellCommandHandler.Run (EditCommands.DefaultPolicies);
+		}
+	}
+
+	internal class DefaultDeleteKeyHandler : CommandHandler
+	{
+		protected override void Run ()
+		{
+			ShellCommandHandler.Run (EditCommands.DeleteKey);
+		}
+	}
+
+	internal class DefaultDeleteHandler : CommandHandler
+	{
+		protected override void Run ()
+		{
+			ShellCommandHandler.Run (EditCommands.Delete);
+		}
+	}
+
+	internal class DefaultCopyHandler : CommandHandler
+	{
+		protected override void Run ()
+		{
+			ShellCommandHandler.Run (EditCommands.Copy);
+		}
+	}
+
+	internal class DefaultCutHandler : CommandHandler
+	{
+		protected override void Run ()
+		{
+			ShellCommandHandler.Run (EditCommands.Cut);
+		}
+	}
+
+	internal class DefaultPasteHandler : CommandHandler
+	{
+		protected override void Run ()
+		{
+			ShellCommandHandler.Run (EditCommands.Paste);
+		}
+	}
+
+	internal class InsertStandardHeaderHandler : CommandHandler
+	{
+		protected override void Run ()
+		{
+			ShellCommandHandler.Run (EditCommands.InsertStandardHeader);
+		}
+	}
+
+	internal class DefaultSelectAllHandler : CommandHandler
+	{
+		protected override void Run ()
+		{
+			ShellCommandHandler.Run (EditCommands.SelectAll);
+		}
+	}
+#endif
 }

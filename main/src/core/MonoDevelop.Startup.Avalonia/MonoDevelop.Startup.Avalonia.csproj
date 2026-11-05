@@ -132,6 +132,24 @@
 		<Compile Include="..\MonoDevelop.Ide\MonoDevelop.Components.Commands\CommandEntrySet.cs" />
 		<Compile Include="..\MonoDevelop.Ide\MonoDevelop.Components.Commands\CommandCatalogLoader.cs" />
 		<Compile Include="..\MonoDevelop.Ide\MonoDevelop.Components.Commands\CommandService.cs" />
+		<!-- Oleada 2 (real core handlers): the MonoDevelop.Ide.Commands handler
+		     classes. Their legacy GTK code is wrapped in #if !AVALONIA_SHELL; the
+		     AVALONIA_SHELL ports delegate to the shell menu dispatcher through
+		     ShellCommandHandler (the same OnMenuCommand endpoint the Oleada 1
+		     router used). CustomStringTagProvider.cs is NOT a command handler
+		     (GtkTextView tag provider) and stays out of this build. -->
+		<Compile Include="..\MonoDevelop.Ide\MonoDevelop.Ide.Commands\ShellCommandHandler.cs" />
+		<Compile Include="..\MonoDevelop.Ide\MonoDevelop.Ide.Commands\FileCommands.cs" />
+		<Compile Include="..\MonoDevelop.Ide\MonoDevelop.Ide.Commands\EditCommands.cs" />
+		<Compile Include="..\MonoDevelop.Ide\MonoDevelop.Ide.Commands\ProjectCommands.cs" />
+		<Compile Include="..\MonoDevelop.Ide\MonoDevelop.Ide.Commands\ViewCommands.cs" />
+		<Compile Include="..\MonoDevelop.Ide\MonoDevelop.Ide.Commands\WindowCommands.cs" />
+		<Compile Include="..\MonoDevelop.Ide\MonoDevelop.Ide.Commands\FileTabCommands.cs" />
+		<Compile Include="..\MonoDevelop.Ide\MonoDevelop.Ide.Commands\HelpCommands.cs" />
+		<Compile Include="..\MonoDevelop.Ide\MonoDevelop.Ide.Commands\ToolsCommands.cs" />
+		<Compile Include="..\MonoDevelop.Ide\MonoDevelop.Ide.Commands\TextEditorCommands.cs" />
+		<Compile Include="..\MonoDevelop.Ide\MonoDevelop.Ide.Commands\NavigationCommands.cs" />
+		<Compile Include="..\MonoDevelop.Ide\MonoDevelop.Ide.Commands\SearchCommands.cs" />
 	</ItemGroup>
 	<!-- Legacy command catalogs: the *.addin.xml sources (MonoDevelop.Ide core +
 	     every add-in) are staged next to the binaries under addinxml/ and loaded

@@ -30,6 +30,7 @@
 //
 //
 
+#if !AVALONIA_SHELL
 using System;
 using System.Threading;
 using MonoDevelop.Core;
@@ -46,6 +47,9 @@ using MonoDevelop.Ide.Projects;
 using MonoDevelop.Projects.Policies;
 using MonoDevelop.Core.FeatureConfiguration;
 using MonoDevelop.Ide.Projects.FileNesting;
+#else
+using MonoDevelop.Components.Commands;
+#endif
 
 namespace MonoDevelop.Ide.Commands
 {
@@ -97,6 +101,7 @@ namespace MonoDevelop.Ide.Commands
 		ExcludeFromProject
 	}
 
+#if !AVALONIA_SHELL
 	internal class SolutionOptionsHandler : CommandHandler
 	{
 		protected override void Update (CommandInfo info)
@@ -622,4 +627,211 @@ namespace MonoDevelop.Ide.Commands
 			IdeApp.ProjectOperations.CurrentSelectedSolution.UserProperties.SetValue (PropertyName, !enabled);
 		}
 	}
+#else
+	// Oleada 2: AVALONIA_SHELL ports of the legacy handlers above. Each one
+	// delegates to the shell's menu dispatcher (ShellCommandHandler) — the same
+	// OnMenuCommand endpoint the catalog router uses — so behavior is
+	// unchanged; the Update overrides (enabled/visible state) are not ported
+	// yet. ApplyPolicy/ExportPolicy forward their literal catalog id: the
+	// ProjectCommands enum has no members for them.
+	internal class SolutionOptionsHandler : CommandHandler
+	{
+		protected override void Run ()
+		{
+			ShellCommandHandler.Run (ProjectCommands.SolutionOptions);
+		}
+	}
+
+	internal class ProjectOptionsHandler : CommandHandler
+	{
+		protected override void Run ()
+		{
+			ShellCommandHandler.Run (ProjectCommands.ProjectOptions);
+		}
+	}
+
+	internal class SolutionItemOptionsHandler : CommandHandler
+	{
+		protected override void Run ()
+		{
+			ShellCommandHandler.Run (ProjectCommands.Options);
+		}
+	}
+
+	internal class SetStartupProjectsHandler : CommandHandler
+	{
+		protected override void Run ()
+		{
+			ShellCommandHandler.Run (ProjectCommands.SetStartupProjects);
+		}
+	}
+
+	internal class EditReferencesHandler : CommandHandler
+	{
+		protected override void Run ()
+		{
+			ShellCommandHandler.Run (ProjectCommands.AddReference);
+		}
+	}
+
+	internal class BuildSolutionHandler : CommandHandler
+	{
+		protected override void Run ()
+		{
+			ShellCommandHandler.Run (ProjectCommands.BuildSolution);
+		}
+	}
+
+	internal class BuildHandler : CommandHandler
+	{
+		protected override void Run ()
+		{
+			ShellCommandHandler.Run (ProjectCommands.Build);
+		}
+	}
+
+	internal class RebuildSolutionHandler : CommandHandler
+	{
+		protected override void Run ()
+		{
+			ShellCommandHandler.Run (ProjectCommands.RebuildSolution);
+		}
+	}
+
+	internal class RebuildHandler : CommandHandler
+	{
+		protected override void Run ()
+		{
+			ShellCommandHandler.Run (ProjectCommands.Rebuild);
+		}
+	}
+
+	internal class RunHandler : CommandHandler
+	{
+		protected override void Run ()
+		{
+			ShellCommandHandler.Run (ProjectCommands.Run);
+		}
+	}
+
+	internal class RunWithHandler : CommandHandler
+	{
+		protected override void Run (object dataItem)
+		{
+			ShellCommandHandler.Run (ProjectCommands.RunWithList, dataItem);
+		}
+	}
+
+	internal class RunEntryHandler : CommandHandler
+	{
+		protected override void Run ()
+		{
+			ShellCommandHandler.Run (ProjectCommands.RunEntry);
+		}
+	}
+
+	internal class RunEntryWithHandler : CommandHandler
+	{
+		protected override void Run (object dataItem)
+		{
+			ShellCommandHandler.Run (ProjectCommands.RunEntryWithList, dataItem);
+		}
+	}
+
+	internal class CleanHandler : CommandHandler
+	{
+		protected override void Run ()
+		{
+			ShellCommandHandler.Run (ProjectCommands.Clean);
+		}
+	}
+
+	internal class CleanSolutionHandler : CommandHandler
+	{
+		protected override void Run ()
+		{
+			ShellCommandHandler.Run (ProjectCommands.CleanSolution);
+		}
+	}
+
+	public class StopHandler : CommandHandler
+	{
+		protected override void Run ()
+		{
+			ShellCommandHandler.Run (ProjectCommands.Stop);
+		}
+	}
+
+	internal class CustomCommandListHandler : CommandHandler
+	{
+		protected override void Run (object dataItem)
+		{
+			ShellCommandHandler.Run (ProjectCommands.CustomCommandList, dataItem);
+		}
+	}
+
+	internal class ExportSolutionHandler : CommandHandler
+	{
+		protected override void Run ()
+		{
+			ShellCommandHandler.Run (ProjectCommands.ExportSolution);
+		}
+	}
+
+	internal class SelectActiveConfigurationHandler : CommandHandler
+	{
+		protected override void Run (object dataItem)
+		{
+			ShellCommandHandler.Run (ProjectCommands.SelectActiveConfiguration, dataItem);
+		}
+	}
+
+	internal class SelectActiveRuntimeHandler : CommandHandler
+	{
+		protected override void Run (object dataItem)
+		{
+			ShellCommandHandler.Run (ProjectCommands.SelectActiveRuntime, dataItem);
+		}
+	}
+
+	class ApplyPolicyHandler : CommandHandler
+	{
+		protected override void Run ()
+		{
+			ShellCommandHandler.Run ("MonoDevelop.Ide.Commands.ProjectCommands.ApplyPolicy");
+		}
+	}
+
+	class ExportPolicyHandler : CommandHandler
+	{
+		protected override void Run ()
+		{
+			ShellCommandHandler.Run ("MonoDevelop.Ide.Commands.ProjectCommands.ExportPolicy");
+		}
+	}
+
+	internal class RunCodeAnalysisSolutionHandler : CommandHandler
+	{
+		protected override void Run ()
+		{
+			ShellCommandHandler.Run ("MonoDevelop.Ide.Commands.ProjectCommands.RunCodeAnalysisSolution");
+		}
+	}
+
+	internal class RunCodeAnalysisProjectHandler : CommandHandler
+	{
+		protected override void Run ()
+		{
+			ShellCommandHandler.Run ("MonoDevelop.Ide.Commands.ProjectCommands.RunCodeAnalysisProject");
+		}
+	}
+
+	internal class ToggleFileNestingHandler : CommandHandler
+	{
+		protected override void Run ()
+		{
+			ShellCommandHandler.Run (ProjectCommands.ToggleFileNesting);
+		}
+	}
+#endif
 }

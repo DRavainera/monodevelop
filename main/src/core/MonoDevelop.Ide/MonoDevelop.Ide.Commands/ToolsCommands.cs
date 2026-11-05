@@ -25,6 +25,7 @@
 //
 //
 
+#if !AVALONIA_SHELL
 using MonoDevelop.Components.AutoTest;
 using MonoDevelop.Components.Commands;
 using MonoDevelop.Core;
@@ -33,6 +34,9 @@ using MonoDevelop.Ide.Gui.Dialogs;
 using System;
 using MonoDevelop.Ide.Updater;
 using System.Threading.Tasks;
+#else
+using MonoDevelop.Components.Commands;
+#endif
 
 namespace MonoDevelop.Ide.Commands
 {
@@ -46,6 +50,7 @@ namespace MonoDevelop.Ide.Commands
 		EditCustomTools,
 	}
 
+#if !AVALONIA_SHELL
 	internal class AddinManagerHandler : CommandHandler
 	{
 		protected override void Run ()
@@ -175,4 +180,59 @@ namespace MonoDevelop.Ide.Commands
 			info.Visible = IdeApp.Preferences.EnableAutomatedTesting;
 		}
 	}
+#else
+	// Oleada 2: AVALONIA_SHELL ports of the legacy handlers above (RunCustomTool
+	// is not ported: it is constructed with an ExternalTool instance and is not
+	// referenced by any catalog defaultHandler). Each port delegates to the
+	// shell's menu dispatcher (ShellCommandHandler) — the same OnMenuCommand
+	// endpoint the catalog router uses — so behavior is unchanged; the Update
+	// overrides (enabled/visible state) are not ported yet.
+	internal class AddinManagerHandler : CommandHandler
+	{
+		protected override void Run ()
+		{
+			ShellCommandHandler.Run (ToolCommands.AddinManager);
+		}
+	}
+
+	internal class ToolListHandler : CommandHandler
+	{
+		protected override void Run (object dataItem)
+		{
+			ShellCommandHandler.Run (ToolCommands.ToolList, dataItem);
+		}
+	}
+
+	internal class EditCustomToolsHandler : CommandHandler
+	{
+		protected override void Run ()
+		{
+			ShellCommandHandler.Run (ToolCommands.EditCustomTools);
+		}
+	}
+
+	internal class InstrumentationViewerHandler : CommandHandler
+	{
+		protected override void Run ()
+		{
+			ShellCommandHandler.Run (ToolCommands.InstrumentationViewer);
+		}
+	}
+
+	internal class ToggleSessionRecorderHandler : CommandHandler
+	{
+		protected override void Run ()
+		{
+			ShellCommandHandler.Run (ToolCommands.ToggleSessionRecorder);
+		}
+	}
+
+	internal class ReplaySessionHandler : CommandHandler
+	{
+		protected override void Run ()
+		{
+			ShellCommandHandler.Run (ToolCommands.ReplaySession);
+		}
+	}
+#endif
 }
