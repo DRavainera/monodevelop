@@ -1888,9 +1888,14 @@ public partial class MainWindow : Window
 				// transition and dump the command-bound File items' enabled state after
 				// each — verifies the Update→ShellCommandState→IsEnabled loop E2E.
 				Avalonia.Threading.Dispatcher.UIThread.Post (async () => {
+					// Oleada 3 slice 3: open two documents so the document-count
+					// gates (Window Next/Previous, Open Document 1..9) can be seen
+					// transition 0 -> 1 -> 2, then close them one at a time.
 					DumpCmdStates ("initial");
 					OpenDocumentText ("QA Cmd", "x");
 					DumpCmdStates ("opened");
+					OpenDocumentText ("QA Cmd2", "y");
+					DumpCmdStates ("opened2");
 					if (docs.TryGetValue ("QA Cmd", out var cmdEd)) {
 						cmdEd.IsDirty = true;
 						DumpCmdStates ("dirty");
@@ -1898,7 +1903,9 @@ public partial class MainWindow : Window
 						DumpCmdStates ("clean");
 					}
 					await CloseDocumentAsync ("QA Cmd");
-					DumpCmdStates ("closed");
+					DumpCmdStates ("closed1");
+					await CloseDocumentAsync ("QA Cmd2");
+					DumpCmdStates ("closed2");
 					Output ("[cmdstates] done");
 				}, Avalonia.Threading.DispatcherPriority.Background);
 			} else if (qa == "--viewcmds") {
@@ -2773,8 +2780,23 @@ public partial class MainWindow : Window
 			return null;
 		}
 		string B (bool? v) => v is null ? "?" : (v.Value ? "1" : "0");
+		// Direct command-state read (runs the command's Update handler without
+		// dispatch). Used for ported commands that have no menu item to mirror the
+		// state on (e.g. FocusCurrentDocument is shortcut-only, matching the
+		// legacy MainMenu.addin.xml), so the En() menu walk would return null.
+		bool? CEn (string fullId)
+		{
+			try {
+				return MonoDevelop.Components.Commands.CommandService.GetCommandInfo (fullId).Enabled;
+			} catch (System.Exception ex) {
+				Output ("[cmdstates] CEn " + fullId + " error: " + ex.Message);
+				return null;
+			}
+		}
 		const string F = "MonoDevelop.Ide.Commands.FileCommands.";
 		const string E = "MonoDevelop.Ide.Commands.EditCommands.";
+		const string W = "MonoDevelop.Ide.Commands.WindowCommands.";
+		const string V = "MonoDevelop.Ide.Commands.ViewCommands.";
 		Output ("[cmdstates] (" + when + ") "
 			+ "saveAll=" + B (En (F + "SaveAll"))
 			+ " close=" + B (En (F + "CloseFile"))
@@ -2790,7 +2812,19 @@ public partial class MainWindow : Window
 			+ " paste=" + B (En (E + "Paste"))
 			+ " delete=" + B (En (E + "Delete"))
 			+ " selectAll=" + B (En (E + "SelectAll"))
-			+ " | hasDocs=" + HasDocuments + " hasActive=" + HasActiveDocument
+			+ " | nextDoc=" + B (En (W + "NextDocument"))
+			+ " prevDoc=" + B (En (W + "PrevDocument"))
+			+ " open1=" + B (En (W + "OpenDocument1"))
+			+ " open2=" + B (En (W + "OpenDocument2"))
+			+ " open3=" + B (En (W + "OpenDocument3"))
+			+ " open9=" + B (En (W + "OpenDocument9"))
+			+ " | zoomIn=" + B (En (V + "ZoomIn"))
+			+ " zoomOut=" + B (En (V + "ZoomOut"))
+			+ " zoomReset=" + B (En (V + "ZoomReset"))
+			+ " focusDoc=" + B (CEn (V + "FocusCurrentDocument"))
+			+ " centerFocus=" + B (En (V + "CenterAndFocusCurrentDocument"))
+			+ " | docCount=" + DocumentCount
+			+ " hasDocs=" + HasDocuments + " hasActive=" + HasActiveDocument
 			+ " hasActiveEditor=" + HasActiveEditor + " hasDirty=" + HasDirtyDocuments
 			+ " hasWs=" + HasWorkspace + " hasRecent=" + HasRecentSolutions);
 	}
@@ -3393,6 +3427,9 @@ public partial class MainWindow : Window
 	// Oleada 3 (slice 2): the persisted recent-solutions list is non-empty — gates
 	// "Clear Recent Solutions List".
 	internal bool HasRecentSolutions => RecentSolutions.GetAll ().Count > 0;
+	// Oleada 3 (slice 3): number of open document tabs — gates Window navigation
+	// (Next/Previous Document need >= 2; Open Document N needs >= N).
+	internal int DocumentCount => documents.Count;
 
 	// Oleada 3: re-evaluates the command-bound menu items' enabled state after a
 	// document/workspace change (cheap: a handful of GetCommandInfo calls).

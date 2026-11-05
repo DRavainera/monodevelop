@@ -462,6 +462,13 @@ namespace MonoDevelop.Ide.Commands
 		{
 			ShellCommandHandler.Run (WindowCommands.NextDocument);
 		}
+
+		// Oleada 3 (slice 3): enabled only with two or more open documents
+		// (legacy: IdeApp.Workbench.Documents.Count < 2 → disabled).
+		protected override void Update (CommandInfo info)
+		{
+			info.Enabled = ShellCommandState.DocumentCount >= 2;
+		}
 	}
 
 	internal class PrevDocumentHandler : CommandHandler
@@ -469,6 +476,13 @@ namespace MonoDevelop.Ide.Commands
 		protected override void Run ()
 		{
 			ShellCommandHandler.Run (WindowCommands.PrevDocument);
+		}
+
+		// Oleada 3 (slice 3): enabled only with two or more open documents
+		// (legacy: IdeApp.Workbench.Documents.Count < 2 → disabled).
+		protected override void Update (CommandInfo info)
+		{
+			info.Enabled = ShellCommandState.DocumentCount >= 2;
 		}
 	}
 
@@ -486,6 +500,15 @@ namespace MonoDevelop.Ide.Commands
 		{
 			ShellCommandHandler.Run ("MonoDevelop.Ide.Commands.WindowCommands.OpenDocument1");
 		}
+
+		// Oleada 3 (slice 3): enabled when at least one document is open (legacy:
+		// Documents.Count >= index). The legacy item also renames to the doc title
+		// and hides when short — deferred with the other dynamic-label/visibility
+		// ports.
+		protected override void Update (CommandInfo info)
+		{
+			info.Enabled = ShellCommandState.DocumentCount >= 1;
+		}
 	}
 
 	internal class OpenDocument2 : CommandHandler
@@ -493,6 +516,13 @@ namespace MonoDevelop.Ide.Commands
 		protected override void Run ()
 		{
 			ShellCommandHandler.Run ("MonoDevelop.Ide.Commands.WindowCommands.OpenDocument2");
+		}
+
+		// Oleada 3 (slice 3): enabled when at least two documents are open
+		// (legacy: Documents.Count >= index).
+		protected override void Update (CommandInfo info)
+		{
+			info.Enabled = ShellCommandState.DocumentCount >= 2;
 		}
 	}
 
@@ -502,6 +532,13 @@ namespace MonoDevelop.Ide.Commands
 		{
 			ShellCommandHandler.Run ("MonoDevelop.Ide.Commands.WindowCommands.OpenDocument3");
 		}
+
+		// Oleada 3 (slice 3): enabled when at least three documents are open
+		// (legacy: Documents.Count >= index).
+		protected override void Update (CommandInfo info)
+		{
+			info.Enabled = ShellCommandState.DocumentCount >= 3;
+		}
 	}
 
 	internal class OpenDocument4 : CommandHandler
@@ -509,6 +546,13 @@ namespace MonoDevelop.Ide.Commands
 		protected override void Run ()
 		{
 			ShellCommandHandler.Run ("MonoDevelop.Ide.Commands.WindowCommands.OpenDocument4");
+		}
+
+		// Oleada 3 (slice 3): enabled when at least four documents are open
+		// (legacy: Documents.Count >= index).
+		protected override void Update (CommandInfo info)
+		{
+			info.Enabled = ShellCommandState.DocumentCount >= 4;
 		}
 	}
 
@@ -518,6 +562,13 @@ namespace MonoDevelop.Ide.Commands
 		{
 			ShellCommandHandler.Run ("MonoDevelop.Ide.Commands.WindowCommands.OpenDocument5");
 		}
+
+		// Oleada 3 (slice 3): enabled when at least five documents are open
+		// (legacy: Documents.Count >= index).
+		protected override void Update (CommandInfo info)
+		{
+			info.Enabled = ShellCommandState.DocumentCount >= 5;
+		}
 	}
 
 	internal class OpenDocument6 : CommandHandler
@@ -525,6 +576,13 @@ namespace MonoDevelop.Ide.Commands
 		protected override void Run ()
 		{
 			ShellCommandHandler.Run ("MonoDevelop.Ide.Commands.WindowCommands.OpenDocument6");
+		}
+
+		// Oleada 3 (slice 3): enabled when at least six documents are open
+		// (legacy: Documents.Count >= index).
+		protected override void Update (CommandInfo info)
+		{
+			info.Enabled = ShellCommandState.DocumentCount >= 6;
 		}
 	}
 
@@ -534,6 +592,13 @@ namespace MonoDevelop.Ide.Commands
 		{
 			ShellCommandHandler.Run ("MonoDevelop.Ide.Commands.WindowCommands.OpenDocument7");
 		}
+
+		// Oleada 3 (slice 3): enabled when at least seven documents are open
+		// (legacy: Documents.Count >= index).
+		protected override void Update (CommandInfo info)
+		{
+			info.Enabled = ShellCommandState.DocumentCount >= 7;
+		}
 	}
 
 	internal class OpenDocument8 : CommandHandler
@@ -542,6 +607,13 @@ namespace MonoDevelop.Ide.Commands
 		{
 			ShellCommandHandler.Run ("MonoDevelop.Ide.Commands.WindowCommands.OpenDocument8");
 		}
+
+		// Oleada 3 (slice 3): enabled when at least eight documents are open
+		// (legacy: Documents.Count >= index).
+		protected override void Update (CommandInfo info)
+		{
+			info.Enabled = ShellCommandState.DocumentCount >= 8;
+		}
 	}
 
 	internal class OpenDocument9 : CommandHandler
@@ -549,6 +621,13 @@ namespace MonoDevelop.Ide.Commands
 		protected override void Run ()
 		{
 			ShellCommandHandler.Run ("MonoDevelop.Ide.Commands.WindowCommands.OpenDocument9");
+		}
+
+		// Oleada 3 (slice 3): enabled when at least nine documents are open
+		// (legacy: Documents.Count >= index).
+		protected override void Update (CommandInfo info)
+		{
+			info.Enabled = ShellCommandState.DocumentCount >= 9;
 		}
 	}
 

@@ -36,6 +36,12 @@ namespace MonoDevelop.Ide.Commands
 		// gates "Clear Recent Solutions List" (legacy recent list count > 0).
 		public static bool HasRecentSolutions
 			=> MonoDevelop.AvaloniaShell.Views.MainWindow.Instance?.HasRecentSolutions ?? false;
+
+		// Oleada 3 (slice 3): the number of open document tabs — the shell
+		// equivalent of the legacy IdeApp.Workbench.Documents.Count that gated
+		// Window Next/Previous Document (>= 2) and Open Document 1..9 (>= index).
+		public static int DocumentCount
+			=> MonoDevelop.AvaloniaShell.Views.MainWindow.Instance?.DocumentCount ?? 0;
 	}
 }
 #endif

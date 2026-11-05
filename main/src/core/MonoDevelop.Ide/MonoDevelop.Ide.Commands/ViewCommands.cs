@@ -542,6 +542,13 @@ namespace MonoDevelop.Ide.Commands
 		{
 			ShellCommandHandler.Run (ViewCommands.ZoomIn);
 		}
+
+		// Oleada 3 (slice 3): enabled when the active tab holds a zoomable editor
+		// (legacy: ActiveDocument != null && content is IZoomable && EnableZoomIn).
+		protected override void Update (CommandInfo info)
+		{
+			info.Enabled = ShellCommandState.HasActiveEditor;
+		}
 	}
 
 	public class ZoomOut : CommandHandler
@@ -550,6 +557,12 @@ namespace MonoDevelop.Ide.Commands
 		{
 			ShellCommandHandler.Run (ViewCommands.ZoomOut);
 		}
+
+		// Oleada 3 (slice 3): same gate as ZoomIn (legacy IZoomable.EnableZoomOut).
+		protected override void Update (CommandInfo info)
+		{
+			info.Enabled = ShellCommandState.HasActiveEditor;
+		}
 	}
 
 	public class ZoomReset : CommandHandler
@@ -557,6 +570,12 @@ namespace MonoDevelop.Ide.Commands
 		protected override void Run ()
 		{
 			ShellCommandHandler.Run (ViewCommands.ZoomReset);
+		}
+
+		// Oleada 3 (slice 3): same gate as ZoomIn (legacy IZoomable.EnableZoomReset).
+		protected override void Update (CommandInfo info)
+		{
+			info.Enabled = ShellCommandState.HasActiveEditor;
 		}
 	}
 
@@ -598,6 +617,13 @@ namespace MonoDevelop.Ide.Commands
 		{
 			ShellCommandHandler.Run (ViewCommands.FocusCurrentDocument);
 		}
+
+		// Oleada 3 (slice 3): enabled when the active document has a text view
+		// (legacy: ActiveDocument != null && GetContent<ITextView>() != null).
+		protected override void Update (CommandInfo info)
+		{
+			info.Enabled = ShellCommandState.HasActiveEditor;
+		}
 	}
 
 	public class CenterAndFocusCurrentDocumentHandler : CommandHandler
@@ -605,6 +631,12 @@ namespace MonoDevelop.Ide.Commands
 		protected override void Run ()
 		{
 			ShellCommandHandler.Run (ViewCommands.CenterAndFocusCurrentDocument);
+		}
+
+		// Oleada 3 (slice 3): same gate as FocusCurrentDocument.
+		protected override void Update (CommandInfo info)
+		{
+			info.Enabled = ShellCommandState.HasActiveEditor;
 		}
 	}
 #endif

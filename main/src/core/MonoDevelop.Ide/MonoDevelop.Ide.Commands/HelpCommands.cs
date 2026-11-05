@@ -188,7 +188,8 @@ namespace MonoDevelop.Ide.Commands
 	// delegates to the shell's menu dispatcher (ShellCommandHandler) — the same
 	// OnMenuCommand endpoint the catalog router uses — so behavior is
 	// unchanged; the Update overrides (enabled/visible state) are not ported
-	// yet. DumpUITree/DumpA11yTree/DumpA11yTreeDelayed/MarkLog forward their
+	// yet, except OpenLogDirectoryHandler (Oleada 3, slice 3).
+	// DumpUITree/DumpA11yTree/DumpA11yTreeDelayed/MarkLog forward their
 	// literal catalog id: the HelpCommands enum has no members for them.
 	public class HelpHandler : CommandHandler
 	{
@@ -203,6 +204,18 @@ namespace MonoDevelop.Ide.Commands
 		protected override void Run ()
 		{
 			ShellCommandHandler.Run (HelpCommands.OpenLogDirectory);
+		}
+
+		// Oleada 3 (slice 3): mirrors the legacy Update exactly — always enabled
+		// and not disabled by the shell lock (legacy:
+		//   info.DisableOnShellLock = false; info.Enabled = true;).
+		// (The CanShowHelp visibility gate belongs to the separate F1 "Help" item
+		//  / HelpHandler, not to this command, and is deferred with the other
+		//  visibility ports.)
+		protected override void Update (CommandInfo info)
+		{
+			info.DisableOnShellLock = false;
+			info.Enabled = true;
 		}
 	}
 
