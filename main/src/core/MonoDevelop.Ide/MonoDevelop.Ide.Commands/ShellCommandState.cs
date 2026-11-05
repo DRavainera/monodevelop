@@ -25,6 +25,17 @@ namespace MonoDevelop.Ide.Commands
 
 		public static bool HasWorkspace
 			=> MonoDevelop.AvaloniaShell.Views.MainWindow.Instance?.HasWorkspace ?? false;
+
+		// Oleada 3 (slice 2): the selected document tab holds a text editor — the
+		// shell equivalent of the legacy "the focused widget is an editable
+		// Gtk.TextView/IEditable" check that gated Cut/Copy/Paste/Delete/SelectAll.
+		public static bool HasActiveEditor
+			=> MonoDevelop.AvaloniaShell.Views.MainWindow.Instance?.HasActiveEditor ?? false;
+
+		// Oleada 3 (slice 2): the persisted recent-solutions list is non-empty —
+		// gates "Clear Recent Solutions List" (legacy recent list count > 0).
+		public static bool HasRecentSolutions
+			=> MonoDevelop.AvaloniaShell.Views.MainWindow.Instance?.HasRecentSolutions ?? false;
 	}
 }
 #endif

@@ -564,6 +564,13 @@ namespace MonoDevelop.Ide.Commands
 		{
 			ShellCommandHandler.Run (FileCommands.PrintDocument);
 		}
+
+		// Oleada 3 (slice 2): enabled when there is an active document to print
+		// (legacy PrintHandler: ActiveDocument != null && GetContent<IPrintable>()).
+		protected override void Update (CommandInfo info)
+		{
+			info.Enabled = ShellCommandState.HasActiveDocument;
+		}
 	}
 
 	// MonoDevelop.Ide.Commands.FileCommands.PrintPreviewDocument
@@ -573,6 +580,12 @@ namespace MonoDevelop.Ide.Commands
 		{
 			ShellCommandHandler.Run (FileCommands.PrintPreviewDocument);
 		}
+
+		// Oleada 3 (slice 2): same gate as Print (legacy uses CanPrint()).
+		protected override void Update (CommandInfo info)
+		{
+			info.Enabled = ShellCommandState.HasActiveDocument;
+		}
 	}
 
 	// MonoDevelop.Ide.Commands.FileCommands.PrintPageSetup
@@ -581,6 +594,12 @@ namespace MonoDevelop.Ide.Commands
 		protected override void Run ()
 		{
 			ShellCommandHandler.Run (FileCommands.PrintPageSetup);
+		}
+
+		// Oleada 3 (slice 2): same gate as Print (legacy uses CanPrint()).
+		protected override void Update (CommandInfo info)
+		{
+			info.Enabled = ShellCommandState.HasActiveDocument;
 		}
 	}
 
@@ -600,6 +619,14 @@ namespace MonoDevelop.Ide.Commands
 		{
 			ShellCommandHandler.Run (FileCommands.ClearRecentFiles);
 		}
+
+		// Oleada 3 (slice 2): the shell's "Recent Files" submenu is a static
+		// "(Empty)" placeholder (it keeps no per-file recent store), so there is
+		// never anything to clear — always disabled (legacy: RecentFiles count > 0).
+		protected override void Update (CommandInfo info)
+		{
+			info.Enabled = false;
+		}
 	}
 
 	// MonoDevelop.Ide.Commands.FileCommands.RecentProjectList
@@ -617,6 +644,13 @@ namespace MonoDevelop.Ide.Commands
 		protected override void Run ()
 		{
 			ShellCommandHandler.Run (FileCommands.ClearRecentProjects);
+		}
+
+		// Oleada 3 (slice 2): enabled when the persisted recent-solutions list is
+		// non-empty (legacy: recent projects count > 0).
+		protected override void Update (CommandInfo info)
+		{
+			info.Enabled = ShellCommandState.HasRecentSolutions;
 		}
 	}
 

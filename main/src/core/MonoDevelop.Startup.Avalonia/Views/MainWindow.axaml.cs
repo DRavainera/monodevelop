@@ -2756,12 +2756,11 @@ public partial class MainWindow : Window
 	void DumpCmdStates (string when)
 	{
 		MenuBuilder.RefreshCommandStates ();
-		bool? En (string member)
+		bool? En (string fullId)
 		{
-			string full = "MonoDevelop.Ide.Commands.FileCommands." + member;
 			bool? Find (Avalonia.Controls.MenuItem mi)
 			{
-				if (mi.Tag is string t && t == full)
+				if (mi.Tag is string t && t == fullId)
 					return mi.IsEnabled;
 				foreach (var c in mi.Items.OfType<Avalonia.Controls.MenuItem> ())
 					if (Find (c) is { } r)
@@ -2774,12 +2773,26 @@ public partial class MainWindow : Window
 			return null;
 		}
 		string B (bool? v) => v is null ? "?" : (v.Value ? "1" : "0");
-		Output ("[cmdstates] (" + when + ") saveAll=" + B (En ("SaveAll"))
-			+ " close=" + B (En ("CloseFile"))
-			+ " closeAll=" + B (En ("CloseAllFiles"))
-			+ " closeWs=" + B (En ("CloseWorkspace"))
+		const string F = "MonoDevelop.Ide.Commands.FileCommands.";
+		const string E = "MonoDevelop.Ide.Commands.EditCommands.";
+		Output ("[cmdstates] (" + when + ") "
+			+ "saveAll=" + B (En (F + "SaveAll"))
+			+ " close=" + B (En (F + "CloseFile"))
+			+ " closeAll=" + B (En (F + "CloseAllFiles"))
+			+ " closeWs=" + B (En (F + "CloseWorkspace"))
+			+ " print=" + B (En (F + "PrintDocument"))
+			+ " printPrev=" + B (En (F + "PrintPreviewDocument"))
+			+ " pageSetup=" + B (En (F + "PrintPageSetup"))
+			+ " clrFiles=" + B (En (F + "ClearRecentFiles"))
+			+ " clrProj=" + B (En (F + "ClearRecentProjects"))
+			+ " | cut=" + B (En (E + "Cut"))
+			+ " copy=" + B (En (E + "Copy"))
+			+ " paste=" + B (En (E + "Paste"))
+			+ " delete=" + B (En (E + "Delete"))
+			+ " selectAll=" + B (En (E + "SelectAll"))
 			+ " | hasDocs=" + HasDocuments + " hasActive=" + HasActiveDocument
-			+ " hasDirty=" + HasDirtyDocuments + " hasWs=" + HasWorkspace);
+			+ " hasActiveEditor=" + HasActiveEditor + " hasDirty=" + HasDirtyDocuments
+			+ " hasWs=" + HasWorkspace + " hasRecent=" + HasRecentSolutions);
 	}
 
 	void UpdatePadChecks (System.Collections.Generic.IReadOnlyList<MenuService.MenuEntry> entries)
@@ -3374,6 +3387,12 @@ public partial class MainWindow : Window
 	internal bool HasActiveDocument => DocTabs?.SelectedItem is TabItem;
 	internal bool HasDirtyDocuments => docs.Values.Any (v => v.IsDirty);
 	internal bool HasWorkspace => loadedSolutionPath is not null;
+	// Oleada 3 (slice 2): the selected tab's document is a text editor (mirrors the
+	// WithActiveEditor lookup) — gates Cut/Copy/Paste/Delete/SelectAll.
+	internal bool HasActiveEditor => DocTabs?.SelectedItem is TabItem t && docs.ContainsKey (t.Tag as string ?? "");
+	// Oleada 3 (slice 2): the persisted recent-solutions list is non-empty — gates
+	// "Clear Recent Solutions List".
+	internal bool HasRecentSolutions => RecentSolutions.GetAll ().Count > 0;
 
 	// Oleada 3: re-evaluates the command-bound menu items' enabled state after a
 	// document/workspace change (cheap: a handful of GetCommandInfo calls).
@@ -4313,7 +4332,7 @@ public partial class MainWindow : Window
 				xwtSolutionTree.ExpandRow (rootPos, false);
 			}
 			RecentSolutions.Add (path);
-
+			NotifyCommandStateChanged (); // Oleada 3 (slice 2): a recent solution was added
 			// Restore the persisted watch expressions (legacy PinnedWatches user
 			// prefs load path); the Watch pad re-fills them on the next stop.
 			// SavePreservingPins: re-writing the pad rows must NOT wipe the

@@ -474,6 +474,13 @@ namespace MonoDevelop.Ide.Commands
 		{
 			ShellCommandHandler.Run (EditCommands.Delete);
 		}
+
+		// Oleada 3 (slice 2): enabled when the active tab holds a text editor
+		// (legacy: the focused widget is an editable Gtk.TextView/IEditable).
+		protected override void Update (CommandInfo info)
+		{
+			info.Enabled = ShellCommandState.HasActiveEditor;
+		}
 	}
 
 	internal class DefaultCopyHandler : CommandHandler
@@ -481,6 +488,13 @@ namespace MonoDevelop.Ide.Commands
 		protected override void Run ()
 		{
 			ShellCommandHandler.Run (EditCommands.Copy);
+		}
+
+		// Oleada 3 (slice 2): enabled when the active tab holds a text editor
+		// (legacy: the focused widget is an editable Gtk.TextView/IEditable).
+		protected override void Update (CommandInfo info)
+		{
+			info.Enabled = ShellCommandState.HasActiveEditor;
 		}
 	}
 
@@ -490,6 +504,13 @@ namespace MonoDevelop.Ide.Commands
 		{
 			ShellCommandHandler.Run (EditCommands.Cut);
 		}
+
+		// Oleada 3 (slice 2): enabled when the active tab holds a text editor
+		// (legacy: the focused widget is an editable Gtk.TextView/IEditable).
+		protected override void Update (CommandInfo info)
+		{
+			info.Enabled = ShellCommandState.HasActiveEditor;
+		}
 	}
 
 	internal class DefaultPasteHandler : CommandHandler
@@ -497,6 +518,13 @@ namespace MonoDevelop.Ide.Commands
 		protected override void Run ()
 		{
 			ShellCommandHandler.Run (EditCommands.Paste);
+		}
+
+		// Oleada 3 (slice 2): enabled when the active tab holds a text editor
+		// (legacy: the focused widget is an editable Gtk.TextView/IEditable).
+		protected override void Update (CommandInfo info)
+		{
+			info.Enabled = ShellCommandState.HasActiveEditor;
 		}
 	}
 
@@ -513,6 +541,13 @@ namespace MonoDevelop.Ide.Commands
 		protected override void Run ()
 		{
 			ShellCommandHandler.Run (EditCommands.SelectAll);
+		}
+
+		// Oleada 3 (slice 2): enabled when the active tab holds a text editor
+		// (legacy: the focused widget is an editable Gtk.TextView/IEditable).
+		protected override void Update (CommandInfo info)
+		{
+			info.Enabled = ShellCommandState.HasActiveEditor;
 		}
 	}
 #endif
