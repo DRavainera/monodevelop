@@ -355,8 +355,35 @@ El bucle de migración Gtk → Avalonia continúa por módulos (detalle por hito
   deliberado para ejercitar el pad de problemas). Build 0 errores; sin
   submódulos; la ruta
   `--old-gui` no se toca (código bajo `#if AVALONIA_SHELL` o aditivo no-GTK).
-  Detalle en `docs/interfaz-plan.md` (follow-up "Oleada 1 — backbone de
-  comandos del menú") y `docs/session_summary.md` (2026-11-05 (1)).
+   Detalle en `docs/interfaz-plan.md` (follow-up "Oleada 1 — backbone de
+   comandos del menú") y `docs/session_summary.md` (2026-11-05 (1)).
+ - **Oleada 2 de la integración total del backend (2026-11-05)**: handlers
+   core reales de `MonoDevelop.Ide.Commands` en la shell Avalonia. Los 11
+   ficheros de handlers se portan con guardas `#if !AVALONIA_SHELL` (código
+   GTK byte-idéntico) / `#else` (clases que delegan su `Run` en el nuevo
+   puente `ShellCommandHandler.Run` → `CommandManager.ToCommandId` →
+   `MainWindow.OnMenuCommand`, el mismo destino que el router de la Oleada 1).
+   `CommandCatalogLoader` resuelve el `defaultHandler` del catálogo a
+   `ActionCommand.DefaultHandlerType` cuando la clase compila en este build
+   (`ResolvedHandlers`); `DispatchCommand` instancia el handler con
+   `Activator.CreateInstance(type, true)`. Resultado: **111 comandos** pasan
+   por un handler real en vez del router (259 `defaultHandler` en todo el
+   catálogo; 112 elementos `MonoDevelop.Ide.Commands.*`, 0 nombres
+   irresolubles; el resto —Debugger, CSharp, VersionControl, Packaging, etc.—
+   sigue por router). **Cero cambio de comportamiento**: menudump byte-igual
+   (`menus=11 items=225 cmds=0 bindings=205`), `Count=461/LoadedCommands=475`.
+   QA §18.5 (subagente Tester QA Senior, ronda 1) **APROBADO (P1–P5),
+   0 hallazgos bloqueantes de app**: build 0 errores (ambos TFMs), oracle
+   `ResolvedHandlers=111`/`unresolved=0`, smoke sin excepciones, funcional F1
+   (handler real → `OnMenuCommand`) verificado E2E, y sin doble registro de
+   sesión (`SessionRecorder` pasivo). Un incidente autoinfligido del subagente
+   (probe `--no-incremental`, fallo preexistente de `MonoRoslynCompat`) dejó
+   `main/build` temporalmente inconsistente; recuperado con build incremental
+   y re-validado en verde. Build 0 errores; sin submódulos; la ruta `--old-gui`
+   no se toca (código nuevo bajo `#if AVALONIA_SHELL`). Detalle en
+   `docs/interfaz-plan.md` (follow-up "Oleada 2 — handlers core reales") y
+   `docs/session_summary.md` (2026-11-05 (2)).
+
 
 Nota operativa: el árbol de build único es `main/build/` (cualquier otra dirección de build en la documentación es obsoleta). El binario de la UI Avalonia es `main/build/MonoDevelop.AvaloniaShell.dll` y el IDE GTK legacy (`--old-gui`) es `main/build/MonoDevelop.dll`.
 

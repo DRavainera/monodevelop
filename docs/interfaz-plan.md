@@ -3666,3 +3666,114 @@ ImageMagick `import` roba focus/hanguea ⇒ capturas con Xlib `get_image`.
 **Cierre**: código en commit `0a3aff4b51` pushado a
 `origin/agents/sub-agent-senior-dev-role-report`. Sin submódulos; la ruta
 `--old-gui` no se ve afectada (todo bajo `#if AVALONIA_SHELL` o aditivo no-GTK).
+
+### Menú (follow-up) — Oleada 2: handlers core reales de `MonoDevelop.Ide.Commands` (111 comandos) (2026-11-05)
+
+Segunda oleada de la integración total del backend (directriz: "sigue con la
+oleada 2"). En la Oleada 1 el dispatch ya corría por el `CommandManager` +
+catálogo, pero **todos** los comandos caían al router (`OnMenuCommand`). Esta
+oleada integra los **handlers reales del núcleo**: los comandos cuyo
+`defaultHandler` del catálogo se resuelve a una clase compilada en este build
+pasan por un `DefaultHandler` real que, a su vez, delega en el mismo
+`OnMenuCommand`. **Invariante de diseño: cero cambio de comportamiento** (menú
+y dispatch final idénticos); lo único que cambia es que 111 comandos ya no van
+por el router sino por su handler real.
+
+**Fuente legacy referenciada**:
+- El atributo `defaultHandler` de los `<Command>` del catálogo
+  (`main/build/addinxml/**.addin.xml`) nombra la clase de handler
+  (p. ej. `MonoDevelop.Ide.Commands.HelpHandler`). En el build GTK la instancia
+  el motor de addins; aquí se resuelve por reflexión contra el ensamblado
+  Avalonia.
+- Los 11 ficheros `MonoDevelop.Ide.Commands/*.cs` (FileCommands, EditCommands,
+  ProjectCommands, ViewCommands, WindowCommands, FileTabCommands, HelpCommands,
+  ToolsCommands, TextEditorCommands, NavigationCommands, SearchCommands): cada
+  handler legacy es una `CommandHandler` cuyo `Run(dataItem)` ejecuta la acción
+  (vía servicios/`IdeApp`). Sus enums de id son compartidos.
+
+**Implementación** (commit `176ee02252`, 16 ficheros):
+- **Nuevo** `main/src/core/MonoDevelop.Ide/MonoDevelop.Ide.Commands/
+  ShellCommandHandler.cs` (`#if AVALONIA_SHELL`): puente estático
+  `Run(object commandId, object dataItem=null)` → `CommandManager.ToCommandId`
+  → `MainWindow.Instance?.OnMenuCommand(id, dataItem as string)`. Es el único
+  punto donde el handler portado se entrelaza con la shell.
+- 11 ficheros `MonoDevelop.Ide.Commands/*.cs`: código legacy envuelto en
+  `#if !AVALONIA_SHELL` (byte-idéntico, usings GTK incluidos); enums
+  compartidos sin guarda; bajo `#else` las clases con el mismo nombre delegan su
+  `Run()` en `ShellCommandHandler.Run(commandId, dataItem)`. **Sin override de
+  `Update` en esta oleada** (el estado de habilitación de menú es la Oleada 3);
+  `CommandInfo.enabled/visible` son `true` por defecto, así que el dispatch no
+  se bloquea. La mayoría delega por member de enum; los sin member lo hacen por
+  string ID (políticas, code analysis, side-by-side/single mode, notebooks,
+  `OpenDocument1..9`, `SwitchNext/PreviousPad`, `DumpUITree`/`DumpA11yTree*`/
+  `MarkLog`).
+- `.../MonoDevelop.Components.Commands/CommandCatalogLoader.cs`: contador
+  `ResolvedHandlers` + `ResolveHandlerType(string)`
+  (`typeof(CommandCatalogLoader).Assembly.GetType(name)` +
+  `CommandHandler.IsAssignableFrom`) → asigna `cmd.DefaultHandlerType` en
+  `ProcessCommand`; si no resuelve (handler de addin no compilado aquí) deja
+  `null` y el comando cae al router (sin cambio de comportamiento).
+- `.../CommandManager.cs` (región `#if AVALONIA_SHELL`): `DispatchCommand`
+  instancia el handler con `Activator.CreateInstance (cmd.DefaultHandlerType,
+  true)` (`nonPublic:true` porque los handlers del catálogo son mayormente
+  `internal`); añade `GetCommands()` público (lo usa el oracle de QA).
+- `Program.cs`: línea `[commands] catalog loaded: {N} commands, {M} with
+  resolvable default handler` tras `LoadCatalog`.
+- `MonoDevelop.Startup.Avalonia.csproj`: 12 `<Compile>` (ShellCommandHandler +
+  los 11). `RunCustomToolHandler` no portada (ctor con `ExternalTool`, no
+  referenciada en XML); las bases abstractas `TabCommandHandler` /
+  `OpenDocumentHandlerBase` tampoco (cada clase concreta delega directa).
+
+**Números medidos** (sobre `main/build/addinxml` + oracle):
+- 259 `defaultHandler` en todo el catálogo; 112 elementos `<Command>` en
+  `MonoDevelop.Ide.Commands.*` (111 ids únicos; 1 duplicado:
+  `EditCommands.MonodevelopPreferences`).
+- **`ResolvedHandlers=111`**, 0 nombres irresolubles. El resto de
+  `defaultHandler` (Debugger, CSharp, VersionControl, Packaging,
+  PackageManagement, PerformanceDiagnostics, DesignerSupport, MainToolbar,
+  FindInFiles, ...) no compila en este build → router.
+- Catálogo invariante: `Count=461`, `LoadedCommands=475`, ids de menú
+  `196/172 resueltos / 24 missing` (sintéticos `pad:*`/`recent:`/`tool:`).
+
+**Validación / evidencia** (artefactos en `~/opencode/`):
+- Build `0 Errores` (net10.0 y net10.0-windows).
+- Oracle extendido (`~/opencode/catload_test/`): `catalog: Count=461
+  LoadedCommands=475`; `oleada2: ResolvedHandlers=111
+  commandsWithHandlerType=111 totalCommands=461`;
+  `oleada2-unresolved(MonoDevelop.Ide.Commands): 0`; `menu ids: total=196
+  resolved=172 missing=24`; `dispatch: registered=True … routed=0` (un comando
+  con handler ya no pasa por el router).
+- Smoke (`~/opencode/smoke_oleada1.sh`): arranque limpio con `--sln`, línea
+  `[commands] catalog loaded: 475 commands, 111 with resolvable default
+  handler`, `--menudump` **byte-igual** a la Oleada 1
+  (`menus=11 items=225 cmds=0 bindings=205`).
+- Funcional (`~/opencode/oleada2_qa_subagent/functional_f1.sh`): F1 (XTEST con
+  focus verificado vía `focus.py`) → `[help] API documentation root (Help
+  pad)` — cadena completa `OnKeyDown → MenuService.RunCommand →
+  CommandService.Dispatch → HelpHandler (uno de los 111) →
+  ShellCommandHandler.Run → OnMenuCommand` en la app real, sin excepciones.
+
+**QA (§18.5)**: ejecutado por el **subagente Tester QA Senior** (ronda 1; solo
+lectura, artefactos en `~/opencode/oleada2_qa_subagent/`) — **APROBADO,
+P1–P5 todos PASS, 0 hallazgos bloqueantes de app** (ciclo cerrado en ronda 1):
+P1 build 0 errores (ambos TFMs); P2 oracle con valores exactos
+(`ResolvedHandlers=111`, `unresolved=0`, `196/172/24`, `routed=0`); P3 smoke
+sin excepciones + menudump byte-igual; P4 funcional F1 → `[help]` (XTEST de
+focus confirmado y respaldo XSendEvent); P5 sin doble registro de sesión
+(`SessionRecorder` pasivo, `Record` único al inicio de `OnMenuCommand`,
+convergencia única router→`Program.cs:38` / handler→`ShellCommandHandler.cs`).
+Hallazgos (ninguno bloqueante de app): 1) [entorno] ratón XTEST muerto
+(conocido); 2) [entorno] teclado XTEST intermitente a nivel de sesión
+(XSendEvent sí entregaba); 3) [incidente·autoinfligido, resuelto] el probe
+`--no-incremental` del subagente (fuera de alcance P1) dejó `main/build`
+temporalmente inconsistente (faltó `MonoDevelop.AvaloniaShell.dll`); el fallo
+de `--no-incremental` es **preexistente** (`MonoRoslynCompat` no compila solo —
+`Microsoft.VisualStudio.Text.Data.dll` por HintPath, `MonoRoslynCompat.csproj`);
+el dev recuperó `main/build` con build incremental normal y re-validó P2+P3 en
+verde.
+
+**Cierre**: código en commit `176ee02252` pushado a
+`origin/agents/sub-agent-senior-dev-role-report`. Sin submódulos; la ruta
+`--old-gui` no se ve afectada (código nuevo bajo `#if AVALONIA_SHELL`; los
+ficheros portados conservan el código GTK byte-idéntico bajo
+`#if !AVALONIA_SHELL`).
