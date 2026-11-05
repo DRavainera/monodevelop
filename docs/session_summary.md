@@ -3112,3 +3112,44 @@ shell Avalonia + 1 entrada de mapa de iconos en core).
 **Queda pendiente (slices siguientes de la Oleada 3)**: portar el resto de los `Update` pendientes — View, Build, Run, Tools, Window, Help y el resto de File (`Save`/`SaveAs`/`Open` son routed y no requieren port), más los items de edición de selección del Edit (Indent/Unindent/Case/Comment/Join/Sort…) y `Undo`/`Redo` (que exigirían un `CanUndo`/`CanRedo` real del editor, hoy no público en `SkTextEditor`). El mecanismo, el cableado y el QA ya están cubiertos por Slice 1–2.
 
 **Cierre**: código en commit `438b2311ce` pushado a `origin/agents/sub-agent-senior-dev-role-report`; handoff + veredicto del QA en el commit de docs que le sigue. Sin cambios en submódulos; la ruta `--old-gui` no se ve afectada (todo el nuevo código está bajo `#if AVALONIA_SHELL` y los bloques legacy de `FileCommands.cs`/`EditCommands.cs` son byte-iguales al commit anterior).
+
+## 2026-11-05 (5) — Oleada 3 (backend Avalonia): estado de habilitación de menú (Update) — Slice 3
+
+**Contexto**: tercera slice de la Oleada 3 sobre el mecanismo ya instalado en Slice 1 (proveedor `ShellCommandState` + cableado menú↔`CommandInfo.Enabled`). Alcance elegido por el operador: **Window + View + Help**. Se portaron los overrides `Update` de esos tres menús cuyo estado depende solo de `ShellCommandState` (recuento de documentos y editor activo), mapeando las consultas legacy (`IdeApp.Workbench.Documents.Count`, `ActiveDocument` + `IZoomable`/`ITextView`, lock de shell) al estado equivalente de la shell.
+
+**Qué se hizo** (commit `c5f01f6b40`, 5 ficheros):
+- `ShellCommandState.cs`: 1 propiedad nueva — `DocumentCount` (`MainWindow.Instance?.DocumentCount ?? 0`), espejo de `IdeApp.Workbench.Documents.Count`.
+- `MainWindow.axaml.cs`: 1 accessor `internal` (`DocumentCount => documents.Count`); extensión del helper QA `DumpCmdStates` (ahora vuelca `nextDoc/prevDoc/open1/open2/open3/open9` + `zoomIn/zoomOut/zoomReset/focusDoc/centerFocus` + `docCount`) y un reader directo `CEn(id)` vía `CommandService.GetCommandInfo(id).Enabled` para comandos portados **sin** ítem de menú (el walk de menú devolvería `null`); el driver `--cmdstates` ahora abre 2 documentos para ejercitar la transición `docCount` 0→1→2→1→0.
+- `WindowCommands.cs` (solo el bloque Avalonia `#else`; legacy byte-igual): 11 overrides `Update` — `NextDocument`/`PrevDocument`→`DocumentCount >= 2` (legacy `Documents.Count < 2` → disable); `OpenDocument1..OpenDocument9`→`DocumentCount >= N` (legacy `Documents.Count >= index`).
+- `ViewCommands.cs` (solo `#else`; legacy byte-igual): 5 overrides `Update` — `ZoomIn`/`ZoomOut`/`ZoomReset`/`FocusCurrentDocument`/`CenterAndFocusCurrentDocument`→`HasActiveEditor` (legacy `ActiveDocument != null` + `IZoomable`/`ITextView`).
+- `HelpCommands.cs` (solo `#else`; legacy byte-igual): 1 override `Update` — `OpenLogDirectory`→`info.DisableOnShellLock = false; info.Enabled = true` (espejo exacto del legacy).
+
+**Decisiones de mapeo**:
+- `FocusCurrentDocument` **no es ítem de menú** (en legacy `MainMenu.addin.xml` solo aparece `CenterAndFocusCurrentDocument` como "_Cursor Position"; `FocusCurrentDocument` es solo shortcut F7). Por eso el E2E lo lee vía `CEn` (estado directo del comando), no por el walk de menú; el override sí está portado y gatea por `HasActiveEditor`.
+- Gates **más gruesos que legacy** (diseño acordado, no defecto): `ZoomIn/Out/Reset` no modelan `EnableZoomIn/Out/Reset` por dirección (en el límite de zoom el ítem queda habilitado y el `Run` hace clamp); `FocusCurrentDocument`/`CenterAndFocusCurrentDocument` no modelan `ITextView` (usan `HasActiveEditor` = tab con `SkTextEditor`).
+- **Deferidas documentadas en el código** (port de visibility/dynamic-labels, fuera de scope del slice): `OpenDocument1..9` quedan visibles-deshabilitados (legacy hacía `Visible=false` + rename al título cuando `Count < index`); el gate `CanShowHelp` del item Help (F1)/`HelpHandler`; el submenú dinámico `OpenDocumentList`.
+- `OpenLogDirectory` **no** es el comando con `CanShowHelp` (ese es el item Help/F1); su port replica exactamente `DisableOnShellLock=false` + `Enabled=true`.
+
+**Números clave**:
+- 17 overrides `Update` portados en esta slice (11 Window + 5 View + 1 Help) → **31 acumulado en la Oleada 3** (Slice 1: 4, Slice 2: 10, Slice 3: 17); el resto (Build, Run, Project, Tools y el resto de View/File/Edit) en slices siguientes.
+- Catálogo y menú invariantes: `Count=461`, `LoadedCommands=475`, `ResolvedHandlers=111`, `menu ids total=196 resolved=172 missing=24`, menudump `menus=11 items=225 cmds=0 bindings=205` (byte-igual a Oleada 1/2 y Slices 1–2 de la Oleada 3 — el modelo `MenuService` no se toca; el estado habilitado no forma parte del menudump).
+
+**Cómo validar**:
+- Build: `dotnet build main/src/core/MonoDevelop.Startup.Avalonia/MonoDevelop.Startup.Avalonia.csproj -c Debug -f net10.0 --nologo` → `0 Errores` (también `net10.0-windows`). El build compila las fuentes de `MonoDevelop.Ide` dentro de `MonoDevelop.AvaloniaShell.dll` (csproj `Compile Include` + `AVALONIA_SHELL`), así que los cambios de `MonoDevelop.Ide.Commands/*` van al assembly de la shell.
+- Oracle (`~/opencode/catload_test/`, sección `oleada3` extendida a 36 ids): headless ⇒ los 17 ids con handler portado en esta slice + los 14 previos reportan `enabled=False expected=False`; controles `OpenFile` (sin override), `Save`/`Undo` (routed) e id desconocido `enabled=True expected=True` → `oleada3: ok=36 fail=0`, exit 0; invariantes `Count=461 LoadedCommands=475 ResolvedHandlers=111`.
+- Smoke (`~/opencode/smoke_oleada1.sh`): `--menudump` **byte-igual** (`menus=11 items=225 cmds=0 bindings=205 _File=19i/0c … _Help=13i/0c`), 0 líneas `[warn]/[fatal]/Exception`.
+- E2E (`~/opencode/oleada3_cmdstates.sh`, 2 casos con/sin soln × 7 transiciones initial→opened→opened2→dirty→clean→closed1→closed2): `docCount` transcurre 0→1→2→2→2→1→0; `nextDoc`/`prevDoc`=`0` hasta `docCount>=2` (entonces `1`); `open1`=`1` con `docCount>=1`, `open2`=`1` con `docCount>=2`, `open3`/`open9`=`0` (solo 2 docs abiertos); `zoomIn/zoomOut/zoomReset/focusDoc/centerFocus`=`1` con editor activo y `0` sin docs. 0 `?`, 0 excepciones en ambos casos.
+
+**QA (§18.5)**: ejecutado por el **subagente Tester QA Senior** (solo lectura, artefactos en `~/opencode/`).
+- **Ronda 1**: **APROBADO CON OBSERVACIONES** (P1 build / P2 oracle / P3 smoke OK; P4 = deferida documentada de visibility de `OpenDocument1..9`, out-of-scope; 3 P5 de higiene).
+- **Correcciones aplicadas y re-verificadas**:
+  - **P5-1**: comentario de `OpenLogDirectory` que atribuía `CanShowHelp` a este comando → corregido (ese gate es del item Help/F1).
+  - **P5-2**: falta de paridad `info.DisableOnShellLock = false` (legacy) → añadida al port (paridad estricta; hoy sin efecto observable porque la shell Avalonia nunca incrementa `guiLock`).
+  - **P5-3**: `CEn` trataba la excepción en silencio → ahora loguea `Output("[cmdstates] CEn <id> error: <msg>")` antes de devolver `null`.
+  - **N1** (nuevo, bajo): comentario de bloque Oleada 2 en `HelpCommands.cs` que decía "los Update no portados" → matizado a "salvo `OpenLogDirectoryHandler`".
+- **Ronda 2**: **APROBADO** (los 3 P5 resueltos, sin regresión: build 0 errores, E2E 7×2 exacto, sin líneas `CEn error`).
+- Observaciones no bloqueantes (sin acción): (1) P4 = `OpenDocument1..9` visibles-deshabilitados en vez de ocultos (port de visibility diferido); (2) gates de zoom/focus más gruesos que legacy por diseño; (3) los umbrales `open3..open9` (>=3..>=9) se validan por inspección (uniformes), no con 3+ docs abiertos; (4) `DocumentCount` cuenta todos los tabs (hoy todos son editores); (5) la ruta `--old-gui` se verificó por inspección del diff (bloques legacy intocados), no por build Gtk.
+
+**Queda pendiente (slices 4..n de la Oleada 3)**: portar el resto de los `Update` pendientes — Build, Run, Project, Tools (requieren estado de build/debug/solución aún no rastreado por `ShellCommandState`), y el resto de View (items de layout/pads, que dependen de `Visible`/dynamic y del port de visibilidad), más la **port de visibility/rename/dynamic** (OpenDocument1..9, CanShowHelp, OpenDocumentList) y `Undo`/`Redo` (exigirían `CanUndo`/`CanRedo` real del editor, hoy no público en `SkTextEditor`). Mecanismo, cableado y ciclo de QA ya quedaron cubiertos por Slice 1–3.
+
+**Cierre**: código en commit `c5f01f6b40` pushado a `origin/agents/sub-agent-senior-dev-role-report`; handoff + veredicto del QA en el commit de docs que le sigue. Sin cambios en submódulos; la ruta `--old-gui` no se ve afectada (todo el nuevo código está bajo `#if AVALONIA_SHELL` y los bloques legacy de `WindowCommands.cs`/`ViewCommands.cs`/`HelpCommands.cs` son byte-iguales al commit anterior).

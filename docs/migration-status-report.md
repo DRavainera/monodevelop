@@ -436,6 +436,34 @@ El bucle de migración Gtk → Avalonia continúa por módulos (detalle por hito
      la ruta `--old-gui` no se toca. Detalle en `docs/interfaz-plan.md`
      (follow-up "Oleada 3 — Slice 2") y `docs/session_summary.md`
      (2026-11-05 (4)).
+   - **Oleada 3 (Slice 3) de la integración total del backend (2026-11-05)**:
+     estado de habilitación de menú (overrides `Update`) — Window + View + Help,
+     sobre el mecanismo de Slice 1. `ShellCommandState` ampliado con
+     `DocumentCount` (`MainWindow.DocumentCount => documents.Count`, espejo de
+     `IdeApp.Workbench.Documents.Count`). 17 `Update` portados (bloques Avalonia
+     `#else`, legacy byte-igual): Window — `NextDocument`/`PrevDocument`→
+     `DocumentCount >= 2`, `OpenDocument1..9`→`DocumentCount >= N`; View —
+     `ZoomIn`/`ZoomOut`/`ZoomReset`/`FocusCurrentDocument`/`CenterAndFocus
+     CurrentDocument`→`HasActiveEditor`; Help — `OpenLogDirectory`→
+     `DisableOnShellLock=false` + `Enabled=true` (espejo exacto del legacy).
+     Gates de zoom/focus más gruesos que legacy por diseño (no modelan los flags
+     por dirección / `ITextView`). Diferidos (port de visibility/dynamic):
+     `OpenDocument1..9` visibility/rename, `CanShowHelp` (item Help/F1) y el
+     submenú `OpenDocumentList`. `FocusCurrentDocument` no es item de menú (solo
+     shortcut F7) ⇒ el E2E lo lee vía `CommandService.GetCommandInfo(id).Enabled`
+     directo (helper `CEn`). **Invariante**: modelo de menú intacto (menudump
+     byte-igual `menus=11 items=225 cmds=0 bindings=205`), catálogo sin cambios
+     (`Count=461 LoadedCommands=475 ResolvedHandlers=111`, menu ids 196/172/24),
+     bloques legacy de `WindowCommands.cs`/`ViewCommands.cs`/`HelpCommands.cs`
+     byte-iguales. QA §18.5 (subagente Tester QA Senior) **APROBADO** tras 2
+     rondas (ronda 1 APROBADO CON OBSERVACIONES: 3 P5 de higiene — comentario
+     `CanShowHelp`, paridad `DisableOnShellLock`, log en `CEn` — + 1 N1 comentario
+     de bloque; todos corregidos y re-verificados; ronda 2 sin regresión): build
+     0 errores (ambos TFMs), oracle headless 36/36, smoke sin excepciones, E2E
+     `--cmdstates` 7 transiciones × 2 casos exactas (±sln, `docCount`
+     0→1→2→1→0). Sin submódulos; la ruta `--old-gui` no se toca. Detalle en
+     `docs/interfaz-plan.md` (follow-up "Oleada 3 — Slice 3") y
+     `docs/session_summary.md` (2026-11-05 (5)).
  
 
 
