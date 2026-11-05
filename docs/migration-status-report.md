@@ -379,10 +379,36 @@ El bucle de migración Gtk → Avalonia continúa por módulos (detalle por hito
    sesión (`SessionRecorder` pasivo). Un incidente autoinfligido del subagente
    (probe `--no-incremental`, fallo preexistente de `MonoRoslynCompat`) dejó
    `main/build` temporalmente inconsistente; recuperado con build incremental
-   y re-validado en verde. Build 0 errores; sin submódulos; la ruta `--old-gui`
-   no se toca (código nuevo bajo `#if AVALONIA_SHELL`). Detalle en
-   `docs/interfaz-plan.md` (follow-up "Oleada 2 — handlers core reales") y
-   `docs/session_summary.md` (2026-11-05 (2)).
+    y re-validado en verde. Build 0 errores; sin submódulos; la ruta `--old-gui`
+    no se toca (código nuevo bajo `#if AVALONIA_SHELL`). Detalle en
+    `docs/interfaz-plan.md` (follow-up "Oleada 2 — handlers core reales") y
+    `docs/session_summary.md` (2026-11-05 (2)).
+  - **Oleada 3 (Slice 1) de la integración total del backend (2026-11-05)**:
+    estado de habilitación de menú (overrides `Update`). Mecanismo nuevo:
+    `CommandManager.GetCommandInfo` (región Avalonia) ejecuta el `Update` del
+    `DefaultHandler` sin despachar; `ShellCommandState` (nuevo, proveedor sobre
+    `MainWindow.Instance`: `HasDocuments`/`HasActiveDocument`/
+    `HasDirtyDocuments`/`HasWorkspace`, fallback false headless);
+    `MenuBuilder.RefreshCommandStates()` refleja `CommandInfo.Enabled` en
+    `MenuItem.IsEnabled` de los items ligados a comando, invocado al construir
+    el menú y en cada cambio de estado (añadir/cerrar/renombrar docs, dirty,
+    seleccionar tab, abrir/cerrar workspace). Portados los 4 `Update` de mayor
+    valor del menú File (`SaveAll`→dirty, `CloseAllFiles`→docs, `CloseFile`→
+    doc activo, `CloseWorkspace`→workspace; `CloseWorkspaceItem` comparte
+    handler); el resto de los 85 `Update` legacy (que acuden a
+    `IdeApp.Workbench`/`Workspace`, inexistentes en este build) queda en slices
+    siguientes sobre el mismo mecanismo. **Invariante**: modelo de menú intacto
+    (menudump byte-igual `menus=11 items=225 cmds=0 bindings=205`), catálogo
+    y dispatch sin cambios, bloque legacy de `FileCommands.cs` byte-igual.
+    QA §18.5 (subagente Tester QA Senior, ronda 1) **APROBADO (P1–P5),
+    0 hallazgos**: build 0 errores (ambos TFMs), oracle headless 8/8 (los 5
+    ids portados `enabled=False` sin shell; controles routed/sin-handler
+    `enabled=True`), smoke sin excepciones, E2E `--cmdstates` con las 5
+    transiciones initial→open→dirty→clean→closed exactas (±sln). Build 0
+    errores; sin submódulos; la ruta `--old-gui` no se toca (código nuevo bajo
+    `#if AVALONIA_SHELL`). Detalle en `docs/interfaz-plan.md` (follow-up
+    "Oleada 3 — Slice 1: estado de habilitación de menú") y
+    `docs/session_summary.md` (2026-11-05 (3)).
 
 
 Nota operativa: el árbol de build único es `main/build/` (cualquier otra dirección de build en la documentación es obsoleta). El binario de la UI Avalonia es `main/build/MonoDevelop.AvaloniaShell.dll` y el IDE GTK legacy (`--old-gui`) es `main/build/MonoDevelop.dll`.

@@ -3777,3 +3777,101 @@ verde.
 `--old-gui` no se ve afectada (código nuevo bajo `#if AVALONIA_SHELL`; los
 ficheros portados conservan el código GTK byte-idéntico bajo
 `#if !AVALONIA_SHELL`).
+
+### Menú (follow-up) — Oleada 3, Slice 1: estado de habilitación de menú (overrides `Update`) (2026-11-05)
+
+Tercera oleada de la integración total del backend; alcance **faseado por
+decisión del operador (vertical slice primero)**: primero el mecanismo completo
+(proveedor de estado + cableado menú↔`CommandInfo.Enabled`) y el subconjunto de
+mayor valor del menú File; el resto de `Update` sigue en slices posteriores
+sobre este mismo mecanismo.
+
+**Fuente legacy referenciada**:
+- 85 overrides `Update` repartidos en 11 ficheros de
+  `MonoDevelop.Ide.Commands`. Todos los portados hasta la Oleada 2 dejaron su
+  `Update` legacy bajo `#if !AVALONIA_SHELL` porque acuden a
+  `IdeApp.Workbench`/`IdeApp.Workspace`/`IdeApp.IsInitialized`/servicios que no
+  existen en el build Avalonia: no es un port mecánico, cada `Update` exige
+  mapear su consulta al estado real de la shell.
+- En Gtk el menú consulta `CommandInfo` en cada apertura; aquí el estado se
+  calcula bajo demanda (`GetCommandInfo` sin dispatch) y se refleja en
+  `MenuItem.IsEnabled`.
+
+**Implementación** (commit `757553d93b`, 8 ficheros):
+- `CommandManager.GetCommandInfo(object commandId)` (región `#if
+  AVALONIA_SHELL`, tras `DispatchCommand`): `ToCommandId` → `GetActionCommand`
+  → `new CommandInfo(cmd)` (o `new CommandInfo()` si el id no existe) → si el
+  `DefaultHandler` no existe y hay `DefaultHandlerType` lo instancia con
+  `Activator.CreateInstance(type, true)` (nonPublic) → `InternalUpdate(info)`
+  (si `IsEnabled`) → `info.Enabled &= IsEnabled` → `CancelAsyncUpdate()`.
+  `CommandService.GetCommandInfo` lo expone de forma estática.
+- **Nuevo** `MonoDevelop.Ide.Commands/ShellCommandState.cs` (`#if
+  AVALONIA_SHELL`): proveedor de estado static sobre `MainWindow.Instance`
+  (fallback `?? false` headless) — `HasDocuments` (`documents.Count > 0`),
+  `HasActiveDocument` (`DocTabs.SelectedItem is TabItem`),
+  `HasDirtyDocuments` (alguno editor `IsDirty`), `HasWorkspace`
+  (`loadedSolutionPath != null`). El Welcome page es un overlay y no cuenta.
+- `MainWindow.axaml.cs`: 4 accessors `internal` que exponen el estado;
+  `NotifyCommandStateChanged()` (llama a `MenuBuilder.RefreshCommandStates()`);
+  hooks en cada punto de mutación: `AddDocument` (suscripción `PropertyChanged`
+  al `SkTextEditor.IsDirtyProperty` de cada editor + aviso al añadir),
+  `OnDocSelectionChanged`, `CloseDocumentAsync` (tras `SelectFirstDocument()`),
+  `OpenSolutionInWindow` (tras cargar), `CloseWorkspaceAsync` (tras cerrar);
+  `MenuBuilder.RefreshCommandStates()` al final de `BuildMenu()`.
+- `MenuBuilder.cs`: `static List<MenuItem> commandItems` — solo items ligados a
+  `CommandAction` (`item.Tag = ca.Id`), se limpia al reconstruir (`BuildItems`,
+  única llamada: menú principal); `RefreshCommandStates()` itera la lista y
+  fija `item.IsEnabled = CommandService.GetCommandInfo(id).Enabled`.
+- `FileCommands.cs` (solo el bloque Avalonia `#else`; el legacy quedó
+  byte-igual): 4 overrides `Update(CommandInfo)` — `SaveAllHandler` →
+  `HasDirtyDocuments`, `CloseAllFilesHandler` → `HasDocuments`,
+  `CloseFileHandler` → `HasActiveDocument`, `CloseWorkspaceHandler` →
+  `HasWorkspace` (el comando `CloseWorkspaceItem` comparte el handler y hereda
+  el estado).
+- QA: `Program.cs` añade `--cmdstates` a los flags; `MainWindow` añade
+  `DumpCmdStates(when)` (dump de `IsEnabled` de los 4 items + estado
+  subyacente) y el hook `--cmdstates`, que encadena initial → open doc → dirty
+  → clean → close doc con un dump por transición (verificable sin capturas).
+
+**Invariantes**: modelo de menú (`MenuService`) intacto → `--menudump`
+byte-igual (`menus=11 items=225 cmds=0 bindings=205`); catálogo y dispatch
+sin cambios (`Count=461`, `LoadedCommands=475`, `ResolvedHandlers=111`);
+comandos sin `Update` portado conservan `CommandInfo.Enabled=true` por
+defecto (el dispatch no se bloquea); la ruta `--old-gui` no se toca.
+
+**Validación / evidencia** (artefactos en `~/opencode/`):
+- Build `0 Errores` (net10.0 y net10.0-windows).
+- Oracle extendido (`~/opencode/catload_test/`): `oleada3: ok=8 fail=0`
+  (headless ⇒ los 5 ids con handler portado, incluido `CloseWorkspaceItem`,
+  `enabled=False`; controles `OpenFile`/`Save`/id-inexistente `enabled=True`);
+  regresión `oleada2: ResolvedHandlers=111` presente.
+- Smoke (`~/opencode/smoke_oleada1.sh`): sin excepciones, `--menudump`
+  byte-igual a Oleada 1/2.
+- E2E (`~/opencode/oleada3_cmdstates.sh`): con `--sln`, secuencia exacta
+  `initial 0/0/0/1 → opened 0/1/1/1 → dirty 1/1/1/1 → clean 0/1/1/1 → closed
+  0/0/0/1` (saveAll/close/closeAll/closeWs) con `hasWs=True`; sin sln lo mismo
+  con `closeWs=0`/`hasWs=False`. 0 warn/fatal/exception en ambos logs.
+
+**QA (§18.5)**: **subagente Tester QA Senior** (ronda 1; solo lectura,
+artefactos en `~/opencode/oleada3_qa_subagent/`) — **APROBADO, P1–P5 todos
+PASS, 0 hallazgos bloqueantes ni menores**: P1 revisión estática (región
+Avalonia, bloque legacy byte-igual, hooks cubren todas las mutaciones,
+`BuildItems` única llamada, modelo intacto); P2 build 0 errores; P3 oracle
+8/8; P4 smoke menudump byte-igual; P5 E2E secuencia exacta (±sln).
+Observaciones no bloqueantes: 1) la suscripción `PropertyChanged` del editor
+no se desuscribe al cerrar el doc (no es fuga: el editor es la raíz y queda
+recolectable); 2) `DumpCmdStates` usa `MainMenu!` (riesgo acotado al hook QA,
+el menú se construye síncrono antes); 3) `commandItems` siempre en sincronía
+(rebuild ⇒ clear+refill; sin menú, no-op).
+
+**Queda pendiente (slices 2..n de la Oleada 3)**: portar los 81 `Update`
+restantes (Edit, View, Build, Run, Tools, Window, Help y el resto de File —
+`Save`/`SaveAs`/`Open`/`Exit`...), ampliando `ShellCommandState` con lo que
+cada consulta legacy exija (p. ej. `HasActiveEditor`, `CanSave`, estado de
+build/solución). Mecanismo, cableado y ciclo de QA ya quedaron cubiertos por
+esta slice.
+
+**Cierre**: código en commit `757553d93b` pushado a
+`origin/agents/sub-agent-senior-dev-role-report`. Sin submódulos; la ruta
+`--old-gui` no se ve afectada (código nuevo bajo `#if AVALONIA_SHELL`; el
+bloque legacy de `FileCommands.cs` es byte-igual al commit anterior).
