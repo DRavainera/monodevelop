@@ -3318,6 +3318,15 @@ Gtk.Widget GetFocusedChild (Control widget)
 
 		public bool IsEnabled { get; set; }
 
+		public int Count => cmds.Count;
+
+		/// <summary>
+		/// Fallback dispatch for catalog commands with no DefaultHandler: the
+		/// shell wires it to its menu command dispatcher. Commands carrying a
+		/// real DefaultHandler (or resolvable DefaultHandlerType) never reach it.
+		/// </summary>
+		public Action<object, object> CommandRouter { get; set; }
+
 		public event EventHandler<CommandActivationEventArgs> CommandActivating;
 		public event EventHandler<CommandActivationEventArgs> CommandActivated;
 
@@ -3362,15 +3371,20 @@ Gtk.Widget GetFocusedChild (Control widget)
 			var info = new CommandInfo (cmd);
 			if (cmd.DefaultHandler == null) {
 				if (cmd.DefaultHandlerType == null) {
-					info.Enabled = false;
-					if (!cmd.DisabledVisible)
-						info.Visible = false;
-					return false;
+					if (CommandRouter == null) {
+						info.Enabled = false;
+						if (!cmd.DisabledVisible)
+							info.Visible = false;
+						return false;
+					}
+					// Catalog command without a default handler: the router
+					// (shell menu dispatcher) executes it.
+				} else {
+					cmd.DefaultHandler = (CommandHandler) Activator.CreateInstance (cmd.DefaultHandlerType);
 				}
-				cmd.DefaultHandler = (CommandHandler) Activator.CreateInstance (cmd.DefaultHandlerType);
 			}
 			if (IsEnabled)
-				cmd.DefaultHandler.InternalUpdate (info);
+				cmd.DefaultHandler?.InternalUpdate (info);
 			info.Enabled &= IsEnabled;
 			info.CancelAsyncUpdate ();
 			if (!info.Enabled || !info.Visible)
@@ -3379,7 +3393,10 @@ Gtk.Widget GetFocusedChild (Control widget)
 			OnCommandActivating (cmd.Id, info, dataItem, initialTarget, source);
 			var sw = Stopwatch.StartNew ();
 			try {
-				cmd.DefaultHandler.InternalRun (dataItem);
+				if (cmd.DefaultHandler != null)
+					cmd.DefaultHandler.InternalRun (dataItem);
+				else
+					CommandRouter (cmd.Id, dataItem);
 			} finally {
 				sw.Stop ();
 				OnCommandActivated (cmd.Id, info, dataItem, initialTarget, source, sw.Elapsed);

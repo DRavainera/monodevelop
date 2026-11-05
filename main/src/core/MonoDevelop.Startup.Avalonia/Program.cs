@@ -29,6 +29,18 @@ internal static class Program
 		// UI language from the legacy preference (same MonoDevelopProperties.xml the
 		// GTK UI reads), applied before any string is built.
 		MonoDevelop.Ide.Services.GettextService.Initialize ();
+
+		// Oleada 1 (command backbone): load the legacy command catalog
+		// (main/build/addinxml, the *.addin.xml of MonoDevelop.Ide + add-ins) into
+		// the shell's single CommandManager and route catalog commands without a
+		// default handler to the main window's menu dispatcher (the same
+		// OnMenuCommand the menus and hotkeys already use).
+		MonoDevelop.Components.Commands.CommandService.Manager.CommandRouter = (commandId, dataItem) =>
+			Views.MainWindow.Instance?.OnMenuCommand (commandId as string ?? commandId.ToString ());
+		MonoDevelop.Components.Commands.CommandService.LoadCatalog (AppContext.BaseDirectory);
+		if (MonoDevelop.Components.Commands.CommandCatalogLoader.LastError is { } catalogError)
+			Console.Error.WriteLine ($"[warn] {catalogError}");
+
 		ArmStartupWatchdog ();
 		BuildAvaloniaApp ().StartWithClassicDesktopLifetime (StripOldGui (args));
 		return 0;

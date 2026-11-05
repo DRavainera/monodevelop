@@ -25,6 +25,16 @@ public partial class App : Application
 
 	public override void OnFrameworkInitializationCompleted ()
 	{
+		// Register the UI thread with the core Runtime (the GTK IdeStartup does the
+		// same with the Gtk main context, IdeStartup.cs:182): shared services assert
+		// the main thread, and command dispatch (CommandManager) runs on it.
+		if (System.Threading.SynchronizationContext.Current is { } uiContext) {
+			MonoDevelop.Core.Runtime.MainSynchronizationContext = uiContext;
+			Console.WriteLine ($"[avalonia-shell] runtime main thread registered (context={uiContext.GetType ().Name})");
+		} else {
+			Console.Error.WriteLine ("[warn] No SynchronizationContext at framework init; Runtime main thread not registered.");
+		}
+
 		// New Avalonia add-in host (Mono.Addins stays with the GTK IDE). User installs
 		// land in Program.UserAddinsDirectory, outside the shipped tree.
 		var addons = new MonoDevelop.AvaloniaAddons.AddonHost (Program.AddonsDirectory, Program.UserAddinsDirectory);

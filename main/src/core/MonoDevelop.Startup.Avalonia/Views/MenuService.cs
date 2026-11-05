@@ -88,9 +88,16 @@ public static class MenuService
 		}
 	}
 
-	// Runs a command directly (keyboard dispatcher). Mirrors OnMenuCommand dispatch.
+	// Runs a command directly (keyboard dispatcher). Registered catalog commands
+	// go through the CommandManager pipeline (Oleada 1); synthetic ids
+	// ("recent:", "pad:", ...) and unregistered ids keep the legacy dispatch.
 	public static void RunCommand (string commandId)
-		=> MainWindow.Instance?.OnMenuCommand (commandId);
+	{
+		if (MonoDevelop.Components.Commands.CommandService.GetCommand (commandId) != null)
+			MonoDevelop.Components.Commands.CommandService.Dispatch (commandId, null, MonoDevelop.Components.Commands.CommandSource.MainMenu);
+		else
+			MainWindow.Instance?.OnMenuCommand (commandId);
+	}
 
 	static void Translate (List<MenuEntry> entries)
 	{
@@ -658,11 +665,19 @@ public sealed class CommandAction
 	public CommandAction (string id)
 	{
 		Id = id;
-		// Read the instance property (NOT the ctor param): a lambda that only
-		// touches `this` compiles onto the instance itself, so delegates derived
-		// from Run keep Target == this CommandAction — MenuBuilder/UpdatePadChecks
-		// recover the command id from the delegate Target.
-		Run = () => MainWindow.Instance?.OnMenuCommand (Id);
+		// The lambda only touches the instance property Id (NOT the ctor param):
+		// it compiles onto the instance itself, so delegates derived from Run
+		// keep Target == this CommandAction — MenuBuilder/UpdatePadChecks recover
+		// the command id from the delegate Target.
+		Run = () => {
+			// Oleada 1: registered catalog commands dispatch through the
+			// CommandManager pipeline; synthetic/unregistered ids keep the legacy
+			// OnMenuCommand dispatch.
+			if (MonoDevelop.Components.Commands.CommandService.GetCommand (Id) != null)
+				MonoDevelop.Components.Commands.CommandService.Dispatch (Id, null, MonoDevelop.Components.Commands.CommandSource.MainMenu);
+			else
+				MainWindow.Instance?.OnMenuCommand (Id);
+		};
 	}
 
 	public static implicit operator Action (CommandAction c) => c.Run;

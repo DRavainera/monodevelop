@@ -124,5 +124,21 @@
 		<Compile Include="..\MonoDevelop.Ide\MonoDevelop.Components.Commands\KeyBindingScheme.cs" />
 		<Compile Include="..\MonoDevelop.Ide\MonoDevelop.Components.Commands\KeyBindingService.cs" />
 		<Compile Include="..\MonoDevelop.Ide\MonoDevelop.Components.Commands.ExtensionNodes\SchemeExtensionNode.cs" />
+		<!-- Oleada 1 (command backbone): the non-GTK menu entry model (Gtk parts
+		     wrapped in #if !AVALONIA_SHELL) and the AVALONIA_SHELL-only catalog
+		     loader + service that feed the shell's CommandManager from the legacy
+		     *.addin.xml command catalogs. -->
+		<Compile Include="..\MonoDevelop.Ide\MonoDevelop.Components.Commands\CommandEntry.cs" />
+		<Compile Include="..\MonoDevelop.Ide\MonoDevelop.Components.Commands\CommandEntrySet.cs" />
+		<Compile Include="..\MonoDevelop.Ide\MonoDevelop.Components.Commands\CommandCatalogLoader.cs" />
+		<Compile Include="..\MonoDevelop.Ide\MonoDevelop.Components.Commands\CommandService.cs" />
+	</ItemGroup>
+	<!-- Legacy command catalogs: the *.addin.xml sources (MonoDevelop.Ide core +
+	     every add-in) are staged next to the binaries under addinxml/ and loaded
+	     at startup by CommandCatalogLoader (CommandService). The GTK build stages
+	     its own add-in deployment (main/build/AddIns) and is untouched. -->
+	<ItemGroup>
+		<Content Include="..\**\*.addin.xml" Exclude="**\obj\**;**\bin\**" Link="addinxml\core\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+		<Content Include="..\..\addins\**\*.addin.xml" Exclude="**\obj\**;**\bin\**" Link="addinxml\addins\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
 	</ItemGroup>
 </Project>

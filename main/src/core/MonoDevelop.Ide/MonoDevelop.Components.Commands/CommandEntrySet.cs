@@ -141,6 +141,7 @@ namespace MonoDevelop.Components.Commands
 			get { return cmds.Count; }
 		}
 		
+#if !AVALONIA_SHELL
 		internal override Gtk.MenuItem CreateMenuItem (CommandManager manager)
 		{
 			Gtk.MenuItem mi;
@@ -158,7 +159,7 @@ namespace MonoDevelop.Components.Commands
 			return new MenuToolButton (menu, icon);
 		}
 	}
-	
+
 	class AutoHideMenuItem: Gtk.ImageMenuItem
 	{
 		public AutoHideMenuItem (string name): base (name)
@@ -170,13 +171,14 @@ namespace MonoDevelop.Components.Commands
 			get {
 				if (!Submenu.IsRealized)
 					Submenu.Realize ();
-				foreach (Gtk.Widget item in ((Gtk.Menu)Submenu).Children) {
-					if (item.Visible)
-						return true;
-				}
-				return false;
+			foreach (Gtk.Widget item in ((Gtk.Menu)Submenu).Children) {
+				if (item.Visible)
+					return true;
 			}
+			return false;
 		}
 	}
+#endif
+}
 }
 
