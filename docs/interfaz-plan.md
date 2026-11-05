@@ -3875,3 +3875,93 @@ esta slice.
 `origin/agents/sub-agent-senior-dev-role-report`. Sin submódulos; la ruta
 `--old-gui` no se ve afectada (código nuevo bajo `#if AVALONIA_SHELL`; el
 bloque legacy de `FileCommands.cs` es byte-igual al commit anterior).
+
+### Menú (follow-up) — Oleada 3, Slice 2: estado de habilitación de menú (overrides `Update`) — File resto + Edit básicos (2026-11-05)
+
+Segunda slice de la Oleada 3, sobre el mecanismo de Slice 1. Alcance elegido
+por el operador: **File (resto) + Edit básicos**.
+
+**Mapeo legacy → estado shell** (bloques Avalonia `#else`; legacy
+`#if !AVALONIA_SHELL` byte-igual):
+- File `Print`/`PrintPreview`/`PrintPageSetup` → `ShellCommandState.HasActiveDocument`
+  (legacy `CanPrint()` = `ActiveDocument != null && GetContent<IPrintable>()`).
+- File `ClearRecentProjects` → `ShellCommandState.HasRecentSolutions`
+  (legacy: count de la lista de recientes > 0).
+- File `ClearRecentFiles` → `false` fijo (el submenú "Recent Files" de la shell
+  es un placeholder "(Empty)" estático; la shell no mantiene store de recientes
+  de archivos). Dejarlo deshabilitado evita además que su handler (que en la
+  shell vacía `RecentSolutions`) sea alcanzable por el path de "Recent Files".
+- Edit `Cut`/`Copy`/`Paste`/`Delete`/`SelectAll` → `ShellCommandState.HasActiveEditor`
+  (legacy: el widget con foco es un `Gtk.TextView`/`IEditable` editable;
+  **ninguno** de los 5 comprueba selección ⇒ no se introduce check de selección).
+- No portados (routed o sin `Update` legacy, se quedan `Enabled=true` por
+  defecto, coherente con GTK): `Undo`, `Redo`, `Find`, `Save`, `SaveAs`, `Exit`.
+- `DeleteKey` no es item de menú (legacy `Bypass=true`, forward al teclado).
+
+**Implementación** (commit `438b2311ce`, 4 ficheros):
+- `ShellCommandState.cs`: `HasActiveEditor` (tab seleccionado sostiene un
+  `SkTextEditor`) y `HasRecentSolutions` (`RecentSolutions.GetAll().Count > 0`),
+  ambas fallback `?? false`.
+- `MainWindow.axaml.cs`: accessors `internal` `HasActiveEditor => DocTabs?.
+  SelectedItem is TabItem t && docs.ContainsKey (t.Tag as string ?? "")`
+  (espejo de `WithActiveEditor`) y `HasRecentSolutions => RecentSolutions
+  .GetAll ().Count > 0`; `NotifyCommandStateChanged()` tras
+  `RecentSolutions.Add(path)` en `OpenSolutionInWindow` (el hook de Slice 1
+  estaba antes del `Add`); `DumpCmdStates` extendido (print/printPrev/
+  pageSetup/clrFiles/clrProj + cut/copy/paste/delete/selectAll +
+  hasActiveEditor/hasRecent).
+- `FileCommands.cs`: 5 `Update` (Print×3→`HasActiveDocument`,
+  ClearRecentFiles→`false`, ClearRecentProjects→`HasRecentSolutions`).
+- `EditCommands.cs`: 5 `Update` (Delete/Copy/Cut/Paste/SelectAll→
+  `HasActiveEditor`).
+
+**Invariantes**: modelo de menú (`MenuService`) intacto → `--menudump`
+byte-igual (`menus=11 items=225 cmds=0 bindings=205`); catálogo sin cambios
+(`Count=461`, `LoadedCommands=475`, `ResolvedHandlers=111`); comandos sin
+`Update` portado conservan `Enabled=true`; bloques legacy de `FileCommands.cs`/
+`EditCommands.cs` byte-iguales; la ruta `--old-gui` no se toca.
+
+**Validación / evidencia** (artefactos en `~/opencode/`):
+- Build `0 Errores` (net10.0 y net10.0-windows). Nota: el build compila las
+  fuentes de `MonoDevelop.Ide` dentro de `MonoDevelop.AvaloniaShell.dll`
+  (csproj `Compile Include` + `AVALONIA_SHELL`), así que los cambios de
+  `MonoDevelop.Ide.Commands/*` van al assembly de la shell (el
+  `MonoDevelop.Ide.dll` legacy de `main/build` queda sin usar por la ruta
+  Avalonia).
+- Oracle extendido (`~/opencode/catload_test/`): `oleada3: ok=19 fail=0`
+  (headless ⇒ los 14 ids con handler portado, `enabled=False`; controles
+  `OpenFile`/`Save`/`Undo`/id-inexistente `enabled=True`).
+- Smoke (`~/opencode/smoke_oleada1.sh`): sin excepciones, `--menudump`
+  byte-igual.
+- E2E (`~/opencode/oleada3_cmdstates.sh`, 2 casos × 5 transiciones): los 5
+  items de Edit y los 3 de Print siguen `0→1→1→1→0`; `clrFiles=0` siempre;
+  `clrProj=hasRecent`; `closeWs`/`hasWs` = 1/True (con sln) y 0/False (sin
+  sln); `saveAll` sigue `hasDirty`. 0 warn/fatal/exception.
+
+**QA (§18.5)**: **subagente Tester QA Senior** (ronda 1; solo lectura,
+artefactos en `~/opencode/oleada3_slice2_qa/`) — **APROBADO, P1–P5 todos OK,
+0 hallazgos bloqueantes ni mayores**: P1 build 0 errores (ambos TFMs) +
+artefacto desplegado; P2 oracle 19/19 + invariantes; P3 smoke menudump
+byte-igual; P4 E2E 5×2 exacto; P5 mapeo fiel al legacy + bloques legacy
+byte-iguales + `HasActiveEditor` sin check de selección + `--old-gui` intacta.
+Hallazgo **Menor** (corregido y re-verificado antes del commit de docs): el
+`#endif` de cierre compartido de `EditCommands.cs` quedó con tab extra +
+CRLF→LF por el edit; restaurado a `#endif\r\n` (diff lógico en inserciones
+puras, 0 líneas eliminadas). Observaciones no bloqueantes: oracle con una
+caída transitoria de entorno (repetición exit 0); `main/build/MonoDevelop
+.Ide.dll` legacy antiguo sin usar (preexistente); `hasRecent=True` desde
+`initial` en el E2E (lista de recientes persistida).
+
+**Queda pendiente (slices 3..n de la Oleada 3)**: portar el resto de los
+`Update` — View, Build, Run, Tools, Window, Help y el resto de File
+(`Save`/`SaveAs`/`Open` son routed y no requieren port), más los items de
+edición de selección del Edit (Indent/Unindent/Case/Comment/Join/Sort…) y
+`Undo`/`Redo` (exigirían un `CanUndo`/`CanRedo` real del editor, hoy no
+público en `SkTextEditor`). Mecanismo, cableado y ciclo de QA ya quedaron
+cubiertos por Slice 1–2.
+
+**Cierre**: código en commit `438b2311ce` pushado a
+`origin/agents/sub-agent-senior-dev-role-report`. Sin submódulos; la ruta
+`--old-gui` no se ve afectada (código nuevo bajo `#if AVALONIA_SHELL`; los
+bloques legacy de `FileCommands.cs`/`EditCommands.cs` son byte-iguales al
+commit anterior).

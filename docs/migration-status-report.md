@@ -409,6 +409,34 @@ El bucle de migración Gtk → Avalonia continúa por módulos (detalle por hito
     `#if AVALONIA_SHELL`). Detalle en `docs/interfaz-plan.md` (follow-up
     "Oleada 3 — Slice 1: estado de habilitación de menú") y
     `docs/session_summary.md` (2026-11-05 (3)).
+   - **Oleada 3 (Slice 2) de la integración total del backend (2026-11-05)**:
+     estado de habilitación de menú (overrides `Update`) — File resto + Edit
+     básicos, sobre el mecanismo de Slice 1. `ShellCommandState` ampliado con
+     `HasActiveEditor` (tab seleccionado sostiene un `SkTextEditor`, espejo de
+     `WithActiveEditor`) y `HasRecentSolutions` (`RecentSolutions.GetAll().Count
+     > 0`); hook de refresh tras `RecentSolutions.Add` en `OpenSolutionInWindow`.
+     10 `Update` portados (bloques Avalonia `#else`, legacy byte-igual):
+     File — `Print`/`PrintPreview`/`PrintPageSetup`→`HasActiveDocument`
+     (legacy `CanPrint()`), `ClearRecentProjects`→`HasRecentSolutions`,
+     `ClearRecentFiles`→`false` (submenú "Recent Files" es placeholder
+     "(Empty)" estático, sin store de recientes de archivos); Edit —
+     `Cut`/`Copy`/`Paste`/`Delete`/`SelectAll`→`HasActiveEditor` (el legacy
+     gatea por "widget editable con foco" y ninguno comprueba selección).
+     No portados (routed o sin `Update` legacy): `Undo`/`Redo`/`Find`/`Save`/
+     `SaveAs`/`Exit`; `DeleteKey` no es item de menú (`Bypass=true`).
+     **Invariante**: modelo de menú intacto (menudump byte-igual
+     `menus=11 items=225 cmds=0 bindings=205`), catálogo sin cambios
+     (`Count=461 LoadedCommands=475 ResolvedHandlers=111`), bloques legacy de
+     `FileCommands.cs`/`EditCommands.cs` byte-iguales. QA §18.5 (subagente
+     Tester QA Senior, ronda 1) **APROBADO (P1–P5), 0 hallazgos
+     bloqueantes/mayores** (1 menor — `#endif` de cierre de `EditCommands.cs`
+     con tab/CRLF alterado — corregido y re-verificado): build 0 errores
+     (ambos TFMs), oracle headless 19/19, smoke sin excepciones, E2E
+     `--cmdstates` 5 transiciones × 2 casos exactas (±sln). Sin submódulos;
+     la ruta `--old-gui` no se toca. Detalle en `docs/interfaz-plan.md`
+     (follow-up "Oleada 3 — Slice 2") y `docs/session_summary.md`
+     (2026-11-05 (4)).
+ 
 
 
 Nota operativa: el árbol de build único es `main/build/` (cualquier otra dirección de build en la documentación es obsoleta). El binario de la UI Avalonia es `main/build/MonoDevelop.AvaloniaShell.dll` y el IDE GTK legacy (`--old-gui`) es `main/build/MonoDevelop.dll`.
