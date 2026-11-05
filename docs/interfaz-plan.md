@@ -3453,3 +3453,107 @@ en el gutter siempre conmuta.
 **Cierre**: submódulo `main/external/xwt` commiteado/pushed en rama `net10` (`8b3233b5`:
 `TreeGutter.cs` + `ListBackends.cs`); repos principal `b7e3070125` (gitlink del submódulo) pushado
 a `origin/agents/sub-agent-senior-dev-role-report`. Sin código GTK en la ruta Avalonia.
+
+### Solution pad (follow-up) — Dependencies y referencias portadas de la UI Gtk (2026-11-04)
+
+El solution pad Avalonia no pintaba el subárbol de dependencias que el pad Gtk legacy
+(addin `MonoDevelop.DotNetCore`) muestra bajo cada proyecto. Tarea: portar
+"Dependencies > Platforms" y, sobre todo, **las referencias dentro de Dependencies**
+tal cual la UI Gtk, retirando el nodo interno "References" que la shell mostraba como
+reemplazo provisional.
+
+**Forma decidida (operador, opción b)**: el nivel "Platforms" se muestra **siempre** —
+`Proyecto → Dependencies → net10.0 → …` — también con TFM único. El legacy
+(`DependenciesNode.GetLoadedDependencyNodes`) colapsa el TFM único y pinta sus hijos
+directamente en Dependencies; la desviación es deliberada y quedará marcada así en el
+handoff.
+
+**Fuente legacy referenciada** (`main/src/addins/MonoDevelop.DotNetCore/
+MonoDevelop.DotNetCore.NodeBuilders/`):
+- `DependenciesNode.GetChildNodes(frameworkNode)` — orden de los grupos bajo cada TFM:
+  1. `FrameworkReferencesNode` (label "Frameworks", icono `Stock.OpenReferenceFolder`) solo
+     si `CanGetFrameworkReferences` y con hijos;
+  2. `PackageDependenciesNode` (label "NuGet") con los `PackageReference`;
+  3. `SdkDependenciesNode` (label "SDK") **solo si no se añadió Frameworks**;
+     `GetDefaultNodes`: `IsNetCoreApp` → `Microsoft.NETCore.App`, `IsNetStandard` →
+     `NETStandard.Library`;
+  4. `AssemblyDependenciesNode` (label "Assemblies") con los `Reference`;
+  5. `ProjectDependenciesNode` (label "Projects") con los `ProjectReference`.
+- Iconos hoja: `PackageDependencyNodeBuilder` → `md-package-dependency` (nuget-16.png,
+  PNG del addin `MonoDevelop.PackageManagement`); `ProjectReferenceNodeBuilder` →
+  `md-reference-project` (Project), `md-reference-folder` (Assembly, label
+  `Path.GetFileName`), `md-reference-package` (Package); `FrameworkReferenceNode` →
+  `md-reference-package`. Todos los folders: `Stock.OpenReferenceFolder` =
+  `folder-component-16.png`.
+- `ProjectReferenceNodeCommandHandler.ActivateItem`: al activar una referencia de
+  proyecto abre el archivo fuente principal del proyecto referenciado.
+
+**Implementación** (`main/src/core/MonoDevelop.Startup.Avalonia/Views/MainWindow.axaml.cs`):
+- `AddXwtDependenciesNode`: nodo "Dependencies" (`folder-component-16.png`, tag
+  `dependencies:<path>`) + un hijo por TFM (`framework-16.png`, tag
+  `platform:<path>:<tfm>`). TFMs vía `ReadTargetFrameworks` (`<TargetFrameworks>`
+  separado por `;`, luego `<TargetFramework>`; XDocument namespace-aware; sin MSBuild).
+- `AddXwtTfmReferenceGroups`: los 5 grupos anteriores en orden legacy, bajo **cada** TFM.
+  Grupo vacío → no se pinta (paridad con `HasChildNodes`). Tags:
+  `depgrp:<path>:<tfm>:<kind>`, `fwref:`/`package:`/`asmref:` (no-archivo → RowActivated
+  inerte) y la referencia de proyecto con tag = ruta del `.cs` objetivo.
+- `XwtReferencedProjectFile`: resuelve el include relativo (con `\` → `/`) al .csproj
+  referenciado y devuelve el primer `.cs` de su directorio (orden alfanumérico); si no
+  resuelve, devuelve el include crudo (no-archivo).
+- `ReadProjectReferences` + clase `XwtProjectReferences`: lectura ligera de los 4 tipos
+  de items. **Limitación documentada**: los ItemGroups condicionales por TFM
+  (`Condition="'$(TargetFramework)'==…'"`) no se evalúan (sin MSBuild); los items se
+  listan iguales en cada plataforma.
+- `XwtStockImage(stockId)`: helper nuevo (junto a `XwtStockIcon`) que resuelve un stock
+  id → PNG vía `IconService.ResolveFilePath` (theme-aware; admite stock ids de addins)
+  con fallback a `file-source-16.png`.
+- **Retirada total del nodo "References"**: además del nodo Xwt, se eliminó el código
+  muerto del árbol preview (`BuildReferencesNode`) y las ramas defensivas `references:`
+  de `SelectedNodeType`, `ContextTargetDirectory` y el properties pad. Queda el
+  clasificador `reference:` (singular, ItemType `ProjectReference`) por ser la
+  clasificación legacy de un item de referencia en general.
+
+**IconService** (`main/src/core/MonoDevelop.Ide/Services/IconService.cs`): una entrada
+aditiva en `VcStockToResource` — `["md-package-dependency"] = ("nuget-16",
+"MonoDevelop.PackageManagement")` (mismo patrón que el resto de ids de addins; el PNG
+vive en `main/src/addins/MonoDevelop.PackageManagement/icons/`).
+
+**Fixture** (`~/opencode/solpad_deps/Fixture.sln`, no commiteado — artefacto QA en
+`~/opencode/`): 3 proyectos net10.0 que ejercitan los 5 grupos:
+- App: `FrameworkReference` Microsoft.AspNetCore.App + `ProjectReference` LibA →
+  Frameworks + Projects (**sin** SDK, como el legacy);
+- LibA: `ProjectReference` LibB → SDK + Projects;
+- LibB: `PackageReference` Newtonsoft.Json 13.0.3 + `Reference` System.Runtime →
+  NuGet + SDK + Assemblies.
+
+**Validación / evidencia** (artefactos en `~/opencode/`):
+- Build (0 errores): `dotnet build main/src/core/MonoDevelop.Startup.Avalonia/
+  MonoDevelop.Startup.Avalonia.csproj -c Debug -f net10.0 --nologo`.
+- `bash ~/opencode/solpad_avalonia_qa.sh` (arranca con el Fixture, captura
+  `solpad_avalonia_1.png`, log `solpad_avalonia.log`; ventana 320,157 1280x800; fila 21
+  px; indent 16 px/nivel). OCR por fila + PIL (tema oscuro: texto claro >170; el primer
+  píxel claro de una fila expandible es el triángulo del gutter, no el texto):
+  - App → Dependencies → net10.0 → Frameworks (Microsoft.AspNetCore.App) + Projects
+    (LibA); LibA → … → SDK (Microsoft.NETCore.App) + Projects (LibB); LibB → … → NuGet
+    (Newtonsoft.Json) + SDK (Microsoft.NETCore.App) + Assemblies (System.Runtime).
+  - Orden de grupos = orden legacy exacto; App sin grupo SDK; archivos
+    Program.cs/A.cs/B.cs presentes; sin bin/obj; sin "References" en el pad.
+- Interacción X11 (foco `wmctrl -i -a` + doble-clic XTest): fila "LibA" bajo
+  App→Projects → `[rowactivate] opened A.cs` + documento abierto en el editor
+  (`[skeditor]` + `[outline] 1 node(s) in A.cs`); doble-clic en filas de grupo y de
+  paquete **no** abre nada ni crashes.
+- Limpieza: `grep -rn "AddXwtReferencesNode\|\"references:\"" main/src/core/
+  MonoDevelop.Startup.Avalonia --include=*.cs` → 0 resultados.
+- Capturas: `solpad_deps_tree.png` (árbol completo), `solpad_deps_editor.png` (A.cs en
+  el editor), bandas OCR en `ocr_bands/`, diffs `diff_round2_mainwindow.txt`.
+
+**QA (§18.5)**: Tester QA Senior. Ronda 1: 9/10 PASS; hallazgo menor: 4 restos
+`"references:"` en código muerto preexistente (no del diff) → limpieza del concepto
+"código muerto References" (arriba). Revalidación (ronda 2): **PASS, 0 hallazgos
+abiertos** (grep limpio, el feature byte-intacto, log sin Exception, OCR del árbol
+idéntico). Build 0 errores en ambas rondas.
+
+**Cierre**: código en commit `0d1a1cc9dc` (MainWindow.axaml.cs + IconService.cs); este
+handoff se pusha junto con él a `origin/agents/sub-agent-senior-dev-role-report`. Sin
+cambios en submódulos; la ruta `--old-gui` no se ve afectada (cambios en la shell
+Avalonia + entrada aditiva de mapa de iconos en `IconService` core).

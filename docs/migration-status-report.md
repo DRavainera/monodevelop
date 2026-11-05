@@ -307,10 +307,29 @@ El bucle de migración Gtk → Avalonia continúa por módulos (detalle por hito
    `main/external/xwt`, backend `Xwt.Avalonia`: `TreeGutter.cs` nuevo + columna gutter en
    `ListBackends.cs`), sin código GTK — en el backend Gtk el triángulo/líneas los dibuja
    nativamente `GtkTreeView`, así que la versión Avalonia es una rasterización propia con
-   `DrawRectangle` (fill), alineada a píxel entero y con color por luminancia del fondo
-   efectivo (no por `ActualThemeVariant`, no fiable en esta app). QA §18.5 APROBADO, 5/5
-   PASS; build 0 errores; la ruta `--old-gui` no se toca y sigue compilando. Detalle en
-   `docs/interfaz-plan.md` (follow-up "Solution pad — gutter estilo GTK").
+    `DrawRectangle` (fill), alineada a píxel entero y con color por luminancia del fondo
+    efectivo (no por `ActualThemeVariant`, no fiable en esta app). QA §18.5 APROBADO, 5/5
+    PASS; build 0 errores; la ruta `--old-gui` no se toca y sigue compilando. Detalle en
+    `docs/interfaz-plan.md` (follow-up "Solution pad — gutter estilo GTK").
+  - **Solution pad — Dependencies > Platforms + referencias (2026-11-04)**: portado del
+    addin `MonoDevelop.DotNetCore` el subárbol que el pad Gtk pinta bajo cada proyecto:
+    `Proyecto → Dependencies → <TFM> → {Frameworks, NuGet, SDK, Assemblies, Projects}`
+    (orden y condiciones exactos de `DependenciesNode.GetChildNodes`; SDK solo sin
+    Frameworks: `net*`→Microsoft.NETCore.App, `netstandard*`→NETStandard.Library). El
+    nivel de plataformas se muestra **siempre** (opción del operador; el legacy colapsa
+    el TFM único). Lectura XML ligera del csproj (sin MSBuild) de `FrameworkReference` /
+    `PackageReference` / `Reference` / `ProjectReference` / `TargetFramework(s)`. Doble-clic
+    en referencia de proyecto abre el `.cs` principal del proyecto referenciado (port de
+    `ProjectReferenceNodeCommandHandler.ActivateItem`). El nodo clásico "References" se
+    **retiró** por completo (su contenido vive en Dependencies; limpio también el código
+    muerto `references:` del árbol preview). Iconos legacy exactos:
+    `Stock.OpenReferenceFolder` (folders), `md-framework-dependency`, `md-package-dependency`
+    (entrada aditiva en `VcStockToResource` de `IconService` → `nuget-16.png` del addin
+    PackageManagement), `md-reference-folder`, `md-reference-project`, `md-reference-package`.
+    QA §18.5 APROBADO en 2 rondas (ronda 1: 1 hallazgo menor de código muerto preexistente,
+    corregido; revalidación limpia). Build 0 errores; sin tocar submódulos ni la ruta
+    `--old-gui`. Detalle en `docs/interfaz-plan.md` (follow-up "Solution pad — Dependencies
+    y referencias portadas de la UI Gtk").
 
 Nota operativa: el árbol de build único es `main/build/` (cualquier otra dirección de build en la documentación es obsoleta). El binario de la UI Avalonia es `main/build/MonoDevelop.AvaloniaShell.dll` y el IDE GTK legacy (`--old-gui`) es `main/build/MonoDevelop.dll`.
 
