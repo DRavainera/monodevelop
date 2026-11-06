@@ -585,6 +585,56 @@ El bucle de migración Gtk → Avalonia continúa por módulos (detalle por hito
         `--old-gui` no se toca. Detalle en `docs/interfaz-plan.md`
         (follow-up "Oleada 3 — Slice 7") y `docs/session_summary.md`
         (2026-11-05 (9)).
+     - **Oleada 3 (Slice 8) de la integración total del backend (2026-11-06)**:
+         estado de habilitación de menú (overrides `Update`) — **gates
+         context-only `SolutionItemOptions` (Options) y `EditReferences`
+         (Add Reference)**, los dos comandos que el legacy gatea por la
+         **selección** del pad de solución. A diferencia de Slice 6 (puente
+         grueso por `ActiveProjectCount`), esta slice construye el **bridge
+         exacto**: la selección del pad clasificada por tipo de nodo —
+         `ShellCommandState.SelectedNodeIsBuildTarget` (fila Solution/Project,
+         espejo de `CurrentSelectedBuildTarget != null`) y
+         `SelectedNodeIsProject` (fila Project, espejo de
+         `CurrentSelectedProject is DotNetProject`; cada fila de proyecto de la
+         shell es un .csproj). `ProjectCommands.cs` (bloques Avalonia `#else`,
+         legacy byte-igual): 2 `Update` nuevos —
+         `SolutionItemOptionsHandler.Update` → `SelectedNodeIsBuildTarget` y
+         `EditReferencesHandler.Update` → `SelectedNodeIsProject` con
+         `info.Bypass` espejo del keybinding legacy. `MainWindow.axaml.cs`:
+         accessors de clasificación, `SelectionChanged` añade
+         `NotifyCommandStateChanged()` (fix QA F-1: el item tracked
+         "Add Reference..." necesitaba el trigger de refresco por selección),
+         caso `OnMenuCommand` nuevo `Options` (Properties del menú contextual
+         del pad) y `AddReference` actualizado (nodo del pad si el comando
+         llega con `nodeContext`, si no proyecto activo), `DumpCmdStates` añade
+         `solItemOpts=`/`editRefs=` (este último lee el `IsEnabled` real del
+         `MenuItem` tracked) y el driver `--cmdstates` añade 3 fases node
+         determinísticas (`node_solution`/`node_project`/`node_file`, proyecto
+         elegido por walker del store en orden de solución) + instrumentación
+         `itemRefs=` (test de regresión de F-1). El E2E destapó un **bug
+         preexistente del submódulo `xwt`** corregido en esta slice:
+         `TreeStoreBackend.GetChild` (`Xwt.Avalonia/ListBackends.cs`) no acotaba
+         el índice y `MoveToChild` sobre una hoja lanzaba
+         `ArgumentOutOfRangeException`, rompiendo cualquier recorrido completo
+         del store (fix: devolver `null` fuera de rango, contrato
+         `ITreeStoreBackend` igual que el backend Gtk; la hipótesis de
+         backslash en `Microsoft.Build.dll` fue descartada por probe).
+         **Invariante**: menudump byte-igual (`menus=11 items=225 cmds=0
+         bindings=205`), catálogo sin cambios (`Count=461 LoadedCommands=475
+         ResolvedHandlers=111`). QA §18.5 (subagente Tester QA Senior): ronda 1
+         RECHAZADO (P3 F-1, introducido por la slice: estado obsoleto del item
+         tracked tras cambiar la selección) → fix de 1 línea + instrumentación
+         → ronda 2 **APROBADO**, 0 hallazgos P1–P4, 5 P5 informativos (3
+         desviaciones documentadas, F-5d preexistente gate-vs-ejecución del
+         menú principal diferida, F-5e cosmético). Build 0 errores (ambos
+         TFMs), oracle headless `oleada3 51/51` (49→51, los 2 nuevos expected
+         false), smoke sin excepciones, E2E `--cmdstates` 3 casos (withsln:
+         `itemRefs` 0→1→0, dumps 1/0→1/1→0/0; emptysl ghost: 1/0→1/1; nosln:
+         sin fases node). Con cambio en submódulo `xwt` (+1 commit); la ruta
+         `--old-gui` no se toca (bloques legacy byte-iguales; el fix de `xwt`
+         acota solo el backend Avalonia). Detalle en `docs/interfaz-plan.md`
+         (follow-up "Oleada 3 — Slice 8") y `docs/session_summary.md`
+         (2026-11-06 (10)).
    
 
 

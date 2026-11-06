@@ -4233,3 +4233,61 @@ no cambia: la línea `[commands]` del arranque queda idéntica.
 `--old-gui` no se ve afectada (código nuevo bajo `#else`/`AVALONIA_SHELL` o en
 ficheros exclusivos del shell; `SkTextEditor.cs` no se compila en el build
 legacy).
+
+### Menú (follow-up) — Oleada 3, Slice 8: estado de habilitación de menú (overrides `Update`) — gates context-only `SolutionItemOptions`/`EditReferences` (2026-11-06)
+
+Octava slice de la Oleada 3, sobre el mecanismo de Slice 1. Cierra el item (1)
+de "pendiente" de Slice 7: los **gates context-only de `SolutionItemOptions`
+(Options) y `EditReferences` (Add Reference)** — los dos comandos que el legacy
+gatea por la **selección** del pad de solución
+(`CurrentSelectedBuildTarget != null` y `CurrentSelectedProject is
+DotNetProject`, respectivamente), a diferencia de los gates del menú principal
+de Slice 6 (puente grueso por `ActiveProjectCount`). Esta slice construye el
+**bridge exacto** sobre la selección del pad de la shell.
+
+**Matiz de esta slice**: el E2E destapó un **bug preexistente del submódulo
+`xwt`** que bloqueaba el trabajo: `TreeStoreBackend.GetChild`
+(`Xwt.Avalonia/ListBackends.cs`) no acotaba el índice, así que
+`TreeNavigator.MoveToChild` sobre una hoja lanzaba
+`ArgumentOutOfRangeException` (tragado por el `try/catch` de
+`SelectXwtSolutionRow`) y rompía cualquier recorrido completo del store — el
+DFS de búsqueda de filas moría en la primera hoja del subtree de dependencies
+(sin alcanzar nunca las filas de proyecto/archivo). La hipótesis de backslash
+(paths sin normalizar en `Microsoft.Build.dll`) quedó **descartada** por un
+probe vía reflexión sobre ambas DLL (`main/build` y SDK 10.0.401): los paths ya
+llegan con slash limpio. Fix: `GetChild` devuelve `null` fuera de rango (el
+contrato de `ITreeStoreBackend`, idéntico al backend Gtk en
+`TreeStoreBackend.cs:94`); los consumidores (`MoveToChild`,
+`FindNavigators`, `RemoveChildren`) solo se hacen más seguros.
+
+**Mapeo legacy → estado shell** (bloques Avalonia `#else`; legacy
+`#if !AVALONIA_SHELL` byte-igual):
+- `Options` (SolutionItemOptions) → `ShellCommandState.SelectedNodeIsBuildTarget` ⇒ el nodo seleccionado del pad es una fila de **Solution o Project** (espejo de `CurrentSelectedBuildTarget != null`; la shell no tiene solution folders, así que build target = fila de solución o proyecto).
+- `AddReference` (EditReferences) → `ShellCommandState.SelectedNodeIsProject` ⇒ el nodo seleccionado es una fila de **Project** (espejo de `CurrentSelectedProject is DotNetProject`; cada fila de proyecto de la shell es un .csproj). `Update` asimétrico documentado: escribe `Enabled=false` + `info.Bypass=true` cuando el gate está off (espejo del keybinding legacy) y `Bypass=false` en el otro brazo; correcto porque `CommandInfo.Enabled` default `true` y `GetCommandInfo` crea instancia fresca por llamada.
+- **Desviación aceptada (F-5a)**: el proyecto fantasma (solución que referencia un .csproj ausente en disco) tiene fila en el pad ⇒ `editRefs=1` con `projCount=0` — el gate lee la selección del pad, no la existencia en disco; el fallback de ejecución (guard `File.Exists` → `ResolveActiveProject()`) cubre el caso.
+- **F-5d (preexistente, documentado)**: ejecutar "Add Reference..." desde el **menú principal** actúa sobre el proyecto **activo**, no sobre la selección del pad (`nodeContext` solo lo lleva el menú contextual del pad; el clic principal va por `CommandService.Dispatch` → `EditReferencesHandler.Run` → `ShellCommandHandler.Run` sin contexto → fallback `ResolveActiveProject()`). Gate por selección del pad, ejecución por proyecto activo; el legacy apuntaba a `CurrentSelectedProject` en ambas rutas. Diferido a un slice futuro (recomendación del QA).
+
+**Implementación** (4 ficheros + 1 en el submódulo `xwt`, +169/−8):
+- `Xwt.Avalonia/ListBackends.cs` (submódulo `main/external/xwt`; +8/−1): `TreeStoreBackend.GetChild` acota el índice y devuelve `null` fuera de rango (bug preexistente descrito arriba).
+- `ShellCommandState.cs` (+13): `SelectedNodeIsBuildTarget`/`SelectedNodeIsProject` vía `MainWindow.Instance` (headless ⇒ false).
+- `MainWindow.axaml.cs` (+117/−3): accessors `internal SelectedNodeIsBuildTarget` ("Solution" or "Project") y `SelectedNodeIsProject` ("Project"); `SelectionChanged` (tree Xwt) añade `NotifyCommandStateChanged()` (fix F-1 del QA: el item tracked "Add Reference..." quedaba con estado obsoleto tras cambiar la selección — la slice portó el gate sin portar el trigger); caso `OnMenuCommand` nuevo `ProjectCommands.Options` (Properties del menú contextual del pad: strip del prefijo `solution:`/`project:`/`folder:`) y `AddReference` actualizado (nodo del pad si el comando llega con `nodeContext`, si no proyecto activo); `DumpCmdStates` añade `solItemOpts=` (vía `CEn`) y `editRefs=` (vía `En`: el `IsEnabled` real del `MenuItem` tracked tras el `RefreshCommandStates` del dump); driver QA `--cmdstates` con 3 fases node determinísticas (`node_solution`, `node_project`, `node_file` — el proyecto se elige por **walker del store** en orden de solución, función local `CollectProjects`, sustituyendo un disk scan no determinístico; el archivo es el primer `.cs` bajo el proyecto) + instrumentación `itemRefs=` (el `IsEnabled` real del `MenuItem` tracked inmediatamente tras `SelectXwtSolutionRow`, sin refresh — test de regresión de F-1).
+- `ProjectCommands.cs` (solo el bloque `#else`; +31/−4): `SolutionItemOptionsHandler.Update` → `SelectedNodeIsBuildTarget`; `EditReferencesHandler.Update` → `SelectedNodeIsProject` + `Bypass`; comentario-header del bloque actualizado (la coarse-bridge de Slice 6 queda restringida a los items del menú principal; Slice 8 = bridge exacto).
+
+**Invariantes**: modelo de menú (`MenuService`) intacto → `--menudump` byte-igual (`menus=11 items=225 cmds=0 bindings=205`); catálogo sin cambios (`Count=461`, `LoadedCommands=475`, `ResolvedHandlers=111`, `menu ids total=196 resolved=172 missing=24`); bloques legacy byte-iguales; la ruta `--old-gui` no se toca (el fix de `xwt` acota solo el backend Avalonia, al contrato del backend Gtk).
+
+**Validación / evidencia** (artefactos en `~/opencode/oleada3_slice8_qa/`):
+- Build `0 Errores` (net10.0 y net10.0-windows).
+- Oracle extendido (`~/opencode/catload_test/`, sección `oleada3` a **51 ids** — 2 nuevos: `SolutionItemOptions` y `AddReference`, ambos expected=false): `oleada3: ok=51 fail=0`; invariantes intactas.
+- Smoke (`~/opencode/smoke_oleada1.sh`): sin excepciones, `--menudump` byte-igual.
+- E2E (`~/opencode/oleada3_cmdstates.sh`, **3 casos** — 16 fases previas + 3 node, las node solo con solución cargada): withsln (`Fixture.sln`: App + LibA + LibB) — `node select=True` ×3, `itemRefs` **0→1→0** (en vivo, sin refresh), dumps `node_solution` `solItemOpts=1 editRefs=0`, `node_project` `1/1`, `node_file` `0/0`; emptysl (ghost, .csproj ausente en disco) — `node_solution` `1/0`, `node_project` (ghost) `1/1` (desviación F-5a), sin `node_file`; nosln — sin fases node. 0 `Unhandled`/`Exception`; fases previas intactas.
+
+**QA (§18.5)**: **subagente Tester QA Senior** (solo lectura, artefactos en `~/opencode/oleada3_slice8_qa/`, veredicto en `veredicto.md`). Dos rondas: ronda 1 **RECHAZADO** — 1 P3 abierto (**F-1**, introducido por la slice: el item de menú principal "Add Reference..." — tracked en `MenuBuilder` — no se re-evaluaba al cambiar la selección del pad porque `SelectionChanged` solo llamaba a `UpdatePropertiesPad()`; el E2E no lo detectaba por diseño, porque el dump medía el `Update` en frío y no el `IsEnabled` espejado en el `MenuItem`) → el dev aplicó el fix de 1 línea (`NotifyCommandStateChanged()` en `SelectionChanged`) + la instrumentación `itemRefs` como test de regresión → ronda 2 **APROBADO**, **0 hallazgos P1–P4** — P1 `--old-gui` intacta; P2 los 2 `Update` en las clases correctas con el mapeo legacy documentado (incluida la corrección de `GetChild` del submódulo, fiel al contrato Gtk y sin efectos en `FlattenTree`/`ExpandRow`); P3 sin recursión ni trabajo excesivo en el fix; P4 E2E completo con `itemRefs` + oracle 51/51 + menudump byte-igual + builds 2 TFMs 0 errores. P5 (5, informativos, no bloqueantes): F-5a fantasma `editRefs=1` (desviación aceptada); F-5b fase `node_folder` omitida del driver (los fixtures no contienen solution folders); F-5c fase `node_ref` omitida (los fixtures no exponen filas `reference:` seleccionables); F-5d inconsistencia gate-vs-ejecución preexistente del menú principal (diferida a slice futura); F-5e nomenclatura cosmética (`SolutionOptionsHandler` en `#else` vs `SolutionItemOptionsHandler` legacy).
+
+**Queda pendiente (slices 9..n de la Oleada 3)**: (1) la **port de visibility/rename/dynamic** (`OpenDocument1..9`, `CanShowHelp`, `OpenDocumentList`, etiquetas dinámicas de `Run`/`RunEntry`/`Build` y de `ProjectOptionsHandler`); (2) `Tools` (visibility + dynamic-text) y `Navigation` (requiere historial back/forward de documentos); (3) mejora P5: mensaje de error tras `Stop` legítimo; (4) P5 preexistente: el early-return de `OpenSolutionInWindow` (mismo `solutionLoaded && path`) traga el refresh — tras añadir un proyecto el árbol Xwt de solución no se re-puebla; (5) P5 preexistente (Slice 7): los atajos Ctrl+Z/Ctrl+Y están tragados por `isTextEditingCombo` del window y no existen en `SkTextEditor.OnKeyDown`; (6) **nuevo (QA F-5d)**: tejer la selección del pad en la dispatch del menú principal de "Add Reference..." (o documentar el gate como "estado por selección del pad, ejecución por proyecto activo"); (7) cosmético (QA F-5e): renombrar `SolutionOptionsHandler` (rama `#else`) para no confundirlo con el comando `SolutionOptions`. El item `SolutionItemOptions`/`EditReferences` (context-only) de las listas anteriores queda **cerrado por esta slice**. Mecanismo, cableado y ciclo de QA ya quedaron cubiertos por Slice 1–7.
+
+**Cierre**: código en commit (3 ficheros + puntero del submódulo) y en el
+submódulo `xwt` (1 fichero, su propio commit), pushados a
+`origin/agents/sub-agent-senior-dev-role-report` y al remoto de `xwt`. La ruta
+`--old-gui` no se ve afectada (código nuevo bajo `#else`/`AVALONIA_SHELL` o en
+ficheros exclusivos del shell; el fix de `xwt` acota `TreeStoreBackend`,
+backend exclusivo Avalonia, al contrato del backend Gtk).
