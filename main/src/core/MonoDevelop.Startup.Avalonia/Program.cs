@@ -42,6 +42,17 @@ internal static class Program
 			Console.Error.WriteLine ($"[warn] {catalogError}");
 		Console.WriteLine ($"[commands] catalog loaded: {MonoDevelop.Components.Commands.CommandService.LoadedCommands} commands, {MonoDevelop.Components.Commands.CommandCatalogLoader.ResolvedHandlers} with resolvable default handler");
 
+		// Oleada 3 (slice 7): Undo/Redo have no defaultHandler in the shared
+		// Commands.addin.xml (the legacy GTK handlers live in the --old-gui-only
+		// ViewCommandHandlers.cs, which the shell build does not compile), so the
+		// shell binds its own ported handlers to their catalog ids here, after the
+		// catalog load. Their Update gates on the active editor's undo/redo stacks
+		// (legacy IUndoHandler.EnableUndo/EnableRedo).
+		if (MonoDevelop.Components.Commands.CommandService.Manager.GetActionCommand ("MonoDevelop.Ide.Commands.EditCommands.Undo") is { } undoCmd)
+			undoCmd.DefaultHandlerType = typeof (MonoDevelop.Ide.Commands.UndoHandler);
+		if (MonoDevelop.Components.Commands.CommandService.Manager.GetActionCommand ("MonoDevelop.Ide.Commands.EditCommands.Redo") is { } redoCmd)
+			redoCmd.DefaultHandlerType = typeof (MonoDevelop.Ide.Commands.RedoHandler);
+
 		ArmStartupWatchdog ();
 		BuildAvaloniaApp ().StartWithClassicDesktopLifetime (StripOldGui (args));
 		return 0;

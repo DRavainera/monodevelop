@@ -1907,6 +1907,26 @@ public partial class MainWindow : Window
 						cmdEd.IsDirty = false;
 						DumpCmdStates ("clean");
 					}
+					// Oleada 3 (slice 7): drive the active editor's undo/redo
+					// stacks through type -> switch-active -> undo -> redo ->
+					// undo-all -> redo + clean, dumping the gates after each.
+					if (docs.TryGetValue ("QA Cmd", out var undoEd)) {
+						SelectDocument ("QA Cmd");
+						undoEd.InsertAtCaret ("_qa");
+						DumpCmdStates ("typed");
+						SelectDocument ("QA Cmd2");
+						DumpCmdStates ("otheractive");
+						SelectDocument ("QA Cmd");
+						undoEd.Undo ();
+						DumpCmdStates ("undone");
+						undoEd.Redo ();
+						DumpCmdStates ("redone");
+						undoEd.Undo ();
+						DumpCmdStates ("undoneall");
+						undoEd.Redo ();
+						undoEd.IsDirty = false;
+						DumpCmdStates ("restored");
+					}
 					await CloseDocumentAsync ("QA Cmd");
 					DumpCmdStates ("closed1");
 					await CloseDocumentAsync ("QA Cmd2");
@@ -2834,6 +2854,8 @@ public partial class MainWindow : Window
 			+ " paste=" + B (En (E + "Paste"))
 			+ " delete=" + B (En (E + "Delete"))
 			+ " selectAll=" + B (En (E + "SelectAll"))
+			+ " undo=" + B (En (E + "Undo"))
+			+ " redo=" + B (En (E + "Redo"))
 			+ " | nextDoc=" + B (En (W + "NextDocument"))
 			+ " prevDoc=" + B (En (W + "PrevDocument"))
 			+ " open1=" + B (En (W + "OpenDocument1"))
@@ -3496,6 +3518,16 @@ public partial class MainWindow : Window
 		}
 	}
 
+	// Oleada 3 (slice 7): the selected tab's editor, or null (the same lookup
+	// WithActiveEditor uses) — the host of the Undo/Redo stack gates.
+	internal MonoDevelop.Ide.Controls.SkTextEditor? ActiveTextEditor
+		=> DocTabs?.SelectedItem is TabItem t && docs.TryGetValue (t.Tag as string ?? "", out var ed) ? ed : null;
+	// Oleada 3 (slice 7): undo/redo availability of the active editor — the shell
+	// equivalent of the legacy IUndoHandler.EnableUndo/EnableRedo on the focused
+	// document's content. Gates the Undo/Redo menu items.
+	internal bool CanUndo => ActiveTextEditor?.CanUndo ?? false;
+	internal bool CanRedo => ActiveTextEditor?.CanRedo ?? false;
+
 	// Oleada 3: re-evaluates the command-bound menu items' enabled state after a
 	// document/workspace change (cheap: a handful of GetCommandInfo calls).
 	void NotifyCommandStateChanged ()
@@ -3516,6 +3548,9 @@ public partial class MainWindow : Window
 				if (e.Property == MonoDevelop.Ide.Controls.SkTextEditor.IsDirtyProperty)
 					NotifyCommandStateChanged ();
 			};
+			// Oleada 3 (slice 7): any editor's undo/redo stack change re-evaluates
+			// the command-bound menu items (Undo/Redo gates).
+			ed.UndoStateChanged += NotifyCommandStateChanged;
 		}
 
 		var header = new Panel();

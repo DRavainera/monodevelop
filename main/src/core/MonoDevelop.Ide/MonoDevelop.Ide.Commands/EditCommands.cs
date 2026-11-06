@@ -442,8 +442,9 @@ namespace MonoDevelop.Ide.Commands
 	// Oleada 2: AVALONIA_SHELL ports of the legacy handlers above. Each one
 	// delegates to the shell's menu dispatcher (ShellCommandHandler) — the same
 	// OnMenuCommand endpoint the catalog router uses — so behavior is
-	// unchanged; the Update overrides (enabled/visible state) are not ported
-	// yet.
+	// unchanged. Oleada 3: the Update overrides (enabled/visible state) are
+	// ported slice by slice, consulting ShellCommandState — the shell's
+	// document/workspace view that stands in for the GTK-only IdeApp surface.
 	internal class MonodevelopPreferencesHandler : CommandHandler
 	{
 		protected override void Run ()
@@ -548,6 +549,42 @@ namespace MonoDevelop.Ide.Commands
 		protected override void Update (CommandInfo info)
 		{
 			info.Enabled = ShellCommandState.HasActiveEditor;
+		}
+	}
+
+	// Oleada 3 (slice 7): Undo/Redo have no defaultHandler in the shared
+	// Commands.addin.xml (the legacy GTK handlers live in the --old-gui-only
+	// ViewCommandHandlers.cs), so the shell binds these to their catalog ids
+	// after the catalog load (Program.Main).
+	internal class UndoHandler : CommandHandler
+	{
+		protected override void Run ()
+		{
+			ShellCommandHandler.Run (EditCommands.Undo);
+		}
+
+		// Oleada 3 (slice 7): enabled when the active editor's undo stack is
+		// non-empty (legacy: IUndoHandler.EnableUndo on the focused document's
+		// content).
+		protected override void Update (CommandInfo info)
+		{
+			info.Enabled = ShellCommandState.CanUndo;
+		}
+	}
+
+	internal class RedoHandler : CommandHandler
+	{
+		protected override void Run ()
+		{
+			ShellCommandHandler.Run (EditCommands.Redo);
+		}
+
+		// Oleada 3 (slice 7): enabled when the active editor's redo stack is
+		// non-empty (legacy: IUndoHandler.EnableRedo on the focused document's
+		// content).
+		protected override void Update (CommandInfo info)
+		{
+			info.Enabled = ShellCommandState.CanRedo;
 		}
 	}
 #endif

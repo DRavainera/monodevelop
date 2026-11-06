@@ -982,6 +982,7 @@ public class SkTextEditor : Control
 		if (undoStack.Count > 200)
 			undoStack.RemoveAt (0);
 		redoStack.Clear ();
+		UndoStateChanged?.Invoke ();
 	}
 
 	void Commit ()
@@ -2451,7 +2452,13 @@ public class SkTextEditor : Control
 	readonly List<(string Text, int Line, int Col)> redoStack = new ();
 	bool undoing;
 
+	/// <summary>Undo/redo stack depth changed (Oleada 3, slice 7) — the shell's
+	/// Undo/Redo menu gates re-evaluate their enabled state on this.</summary>
+	public event Action? UndoStateChanged;
+
 	public bool CanUndo => undoStack.Count > 0;
+
+	public bool CanRedo => redoStack.Count > 0;
 
 	public void Undo ()
 	{
@@ -2467,6 +2474,7 @@ public class SkTextEditor : Control
 		caretCol = Math.Clamp (col, 0, lines [caretLine].Length);
 		hasSelection = false;
 		MarkDirty ();
+		UndoStateChanged?.Invoke ();
 	}
 
 	public void Redo ()
@@ -2481,6 +2489,7 @@ public class SkTextEditor : Control
 		caretCol = Math.Clamp (col, 0, lines [caretLine].Length);
 		hasSelection = false;
 		MarkDirty ();
+		UndoStateChanged?.Invoke ();
 	}
 
 	#region Rendering

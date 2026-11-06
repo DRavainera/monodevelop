@@ -56,6 +56,15 @@ namespace MonoDevelop.Ide.Commands
 		// has projects" stands in for CurrentSelectedBuildTarget != null).
 		public static int ActiveProjectCount
 			=> MonoDevelop.AvaloniaShell.Views.MainWindow.Instance?.ActiveProjectCount ?? 0;
+
+		// Oleada 3 (slice 7): the active editor's undo/redo stacks are non-empty —
+		// the shell equivalent of the legacy IUndoHandler.EnableUndo/EnableRedo on
+		// the focused document's content. Gates the Undo/Redo menu items.
+		public static bool CanUndo
+			=> MonoDevelop.AvaloniaShell.Views.MainWindow.Instance?.CanUndo ?? false;
+
+		public static bool CanRedo
+			=> MonoDevelop.AvaloniaShell.Views.MainWindow.Instance?.CanRedo ?? false;
 	}
 }
 #endif
