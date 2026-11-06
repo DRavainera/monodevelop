@@ -547,9 +547,45 @@ El bucle de migración Gtk → Avalonia continúa por módulos (detalle por hito
        fases (withsln: `projCount=3`, gates 1, busy guard solo en `operating` y
        solo en Build/Rebuild/Clean; emptysl "ghost": `hasWs=True projCount=0`
        todo 0; nosln: todo 0). Sin submódulos; la ruta `--old-gui` no se toca.
-       Detalle en `docs/interfaz-plan.md` (follow-up "Oleada 3 — Slice 6") y
-       `docs/session_summary.md` (2026-11-05 (8)).
-  
+        Detalle en `docs/interfaz-plan.md` (follow-up "Oleada 3 — Slice 6") y
+        `docs/session_summary.md` (2026-11-05 (8)).
+    - **Oleada 3 (Slice 7) de la integración total del backend (2026-11-05)**:
+        estado de habilitación de menú (overrides `Update`) — **gates de
+        `Undo`/`Redo`** sobre `CanUndo`/`CanRedo` del editor activo. Mapeo del
+        legacy `IUndoHandler.EnableUndo/EnableRedo` (contenido del documento
+        enfocado): `ActiveTextEditor != null && CanUndo/CanRedo`, stack-based
+        (simplificación documentada: el MVP no tiene `currentAtomicOperation`);
+        el gate sigue al editor activo (pestaña seleccionada). Matiz de la
+        slice: `Undo`/`Redo` no tienen `defaultHandler` en el
+        `Commands.addin.xml` compartido (los handlers GTK viven en
+        `ViewCommandHandlers.cs`, solo `--old-gui`), así que el enlazado se hace
+        **post-`LoadCatalog` en `Program.cs`** (`DefaultHandlerType` con guard
+        nulo) — tocar el XML rompería la ruta legacy; `ResolvedHandlers=111` no
+        cambia (se calcula en el Load). `SkTextEditor.cs` (no incluido en el
+        csproj legacy): `public CanRedo` + `public event UndoStateChanged`
+        (disparada en añadir/`Undo`/`Redo`, no en early-returns).
+        `MainWindow.axaml.cs`: `ActiveTextEditor`/`CanUndo`/`CanRedo`,
+        suscripción `UndoStateChanged → NotifyCommandStateChanged` en
+        `AddDocument`, `DumpCmdStates` añade `undo=`/`redo=` (menu-walk) y el
+        driver `--cmdstates` añade 6 fases (typed/otheractive/undone/redone/
+        undoneall/restored). `ShellCommandState.cs`: `CanUndo`/`CanRedo`
+        (headless ⇒ false). `EditCommands.cs` (bloques Avalonia `#else`, legacy
+        byte-igual): `UndoHandler`/`RedoHandler` + header actualizado.
+        **Invariante**: menudump byte-igual (`menus=11 items=225 cmds=0
+        bindings=205`), catálogo sin cambios (`Count=461 LoadedCommands=475
+        ResolvedHandlers=111`, menu ids 196/172/24). QA §18.5 (subagente
+        Tester QA Senior): un solo ciclo, **CERRAR**, 0 hallazgos P1–P4 (4 P5
+        preexistentes/observaciones, entre ellos un **nuevo pendiente**: los
+        atajos Ctrl+Z/Ctrl+Y están tragados por `isTextEditingCombo` del
+        window — Undo/Redo hoy solo por menú). Build 0 errores (ambos TFMs),
+        oracle headless `oleada3 49/49` (Undo/Redo wired, expected false),
+        smoke sin excepciones, E2E `--cmdstates` 3 casos × 16 fases (typed
+        1/0, otheractive 0/0, undone 0/1, redone 1/0, undoneall 0/1, restored
+        1/0; sin regresión en gates previos). Sin submódulos; la ruta
+        `--old-gui` no se toca. Detalle en `docs/interfaz-plan.md`
+        (follow-up "Oleada 3 — Slice 7") y `docs/session_summary.md`
+        (2026-11-05 (9)).
+   
 
 
 

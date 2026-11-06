@@ -4179,3 +4179,57 @@ cargada (el mismo conjunto que itera el build).
 `origin/agents/sub-agent-senior-dev-role-report`. Sin submódulos; la ruta
 `--old-gui` no se ve afectada (código nuevo bajo `#else`/`AVALONIA_SHELL`; el
 bloque legacy de `ProjectCommands.cs` es byte-igual al commit anterior).
+
+### Menú (follow-up) — Oleada 3, Slice 7: estado de habilitación de menú (overrides `Update`) — gates de `Undo`/`Redo` (2026-11-05)
+
+Séptima slice de la Oleada 3, sobre el mecanismo de Slice 1. Cierra el item (3)
+de "pendiente" de Slice 6: los **gates de `Undo`/`Redo`** sobre `CanUndo`/
+`CanRedo` del editor activo. El legacy gatea con `IUndoHandler.EnableUndo`/
+`EnableRedo` del contenido del documento enfocado (`ViewCommandHandlers.cs`,
+solo `--old-gui`, fuera del build Avalonia).
+
+**Matiz de esta slice**: a diferencia de las slices 2–6, `Undo`/`Redo` **no
+tienen `defaultHandler` en el `Commands.addin.xml` compartido** (los handlers
+GTK viven en `ViewCommandHandlers.cs`, que el shell no compila). El port por
+tanto no es solo un `Update` en el bloque `#else`: hay que **enlazar el handler
+al id del catálogo** sin tocar el XML compartido — tocarlo rompería `--old-gui`
+(la clase no existiría en el ensamblado legacy) y un special-case en
+`MenuBuilder.RefreshCommandStates` hardcodearía ids en la capa de menú.
+Solución: enlazado **post-`LoadCatalog`** en `Program.cs`
+(`ActionCommand.DefaultHandlerType`, setter validado que existe desde el
+núcleo). Consecuencia aceptada y documentada: al registrar el handler,
+`DispatchCommand` ejecuta `Update` antes de `Run` y **bloquea si el comando
+está disabled** (un clic en Undo disabled no hace nada) — coherente con el
+resto de comandos portados. `ResolvedHandlers=111` se calcula en el `Load` y
+no cambia: la línea `[commands]` del arranque queda idéntica.
+
+**Mapeo legacy → estado shell** (bloques Avalonia `#else`; legacy
+`#if !AVALONIA_SHELL` byte-igual):
+- `Undo` → `ShellCommandState.CanUndo` ⇒ `ActiveTextEditor != null && ActiveTextEditor.CanUndo` (legacy: `textBuffer != null && textBuffer.EnableUndo`, con `textBuffer = GetContent<IUndoHandler>()` del documento activo). Stack-based, fiel a `TextDocument.CanUndo => undoStack.Count > 0 || currentAtomicOperation != null`; el MVP de `SkTextEditor` no tiene `currentAtomicOperation` (**simplificación documentada**).
+- `Redo` → `ShellCommandState.CanRedo` ⇒ `ActiveTextEditor != null && ActiveTextEditor.CanRedo` (misma nota).
+- El gate sigue al **editor activo** (pestaña seleccionada), no al último editor editado: se valida con la fase `otheractive` de la E2E (activar una pestaña con stack vacío deshabilita Undo aunque otra pestaña tenga undo disponible).
+
+**Implementación** (5 ficheros, +103/−2):
+- `SkTextEditor.cs` (compilado en la shell; NO en la lista explícita del csproj legacy): `public bool CanRedo => redoStack.Count > 0;` y `public event Action? UndoStateChanged;` — disparada en las tres mutaciones de stack que importan (la ruta de añadir de `PushUndo`, al final de `Undo()`, al final de `Redo()`), nunca en los early-returns (`undoing`, `before == joined`).
+- `MainWindow.axaml.cs`: `internal SkTextEditor? ActiveTextEditor` (mismo lookup que `WithActiveEditor`), `internal bool CanUndo`/`CanRedo`; en `AddDocument`, `ed.UndoStateChanged += NotifyCommandStateChanged;` (mismo patrón que la suscripción `IsDirtyProperty` existente); `DumpCmdStates` añade `undo=`/`redo=` vía `En()` (menu-walk real de `MenuItem.IsEnabled`); driver QA `--cmdstates` con 6 fases nuevas: `typed` (InsertAtCaret), `otheractive` (cambio de pestaña a stack vacío), `undone`, `redone`, `undoneall`, `restored` (Redo + `IsDirty=false` para el cierre posterior sin prompt).
+- `ShellCommandState.cs`: `CanUndo`/`CanRedo` vía `MainWindow.Instance?.CanUndo/CanRedo ?? false` (headless ⇒ false).
+- `EditCommands.cs` (solo el bloque `#else`): `UndoHandler`/`RedoHandler` (Run → `ShellCommandHandler.Run(EditCommands.Undo/Redo)`; Update → `ShellCommandState.CanUndo/CanRedo`); comentario-header del bloque actualizado (obsoleto desde Slice 2).
+- `Program.cs`: tras `LoadCatalog`, `GetActionCommand("MonoDevelop.Ide.Commands.EditCommands.Undo").DefaultHandlerType = typeof(UndoHandler)` (y lo mismo para `Redo`), con guard `is { }`.
+
+**Invariantes**: modelo de menú (`MenuService`) intacto → `--menudump` byte-igual (`menus=11 items=225 cmds=0 bindings=205`); catálogo sin cambios (`Count=461`, `LoadedCommands=475`, `ResolvedHandlers=111`, `menu ids total=196 resolved=172 missing=24`); `Commands.addin.xml` no modificado; bloque legacy de `EditCommands.cs` byte-igual; la ruta `--old-gui` no se toca.
+
+**Validación / evidencia** (artefactos en `~/opencode/`):
+- Build `0 Errores` (net10.0 y net10.0-windows).
+- Oracle extendido (`~/opencode/catload_test/`, sección `oleada3` a **49 ids** — `Undo` pasa de control "routed" expected=true a wired expected=false y se añade `Redo` expected=false; el wiring de `Program.Main` se replica vía reflexión porque las clases son `internal` y el test referencia el mismo `MonoDevelop.AvaloniaShell.dll`): `oleada3: ok=49 fail=0`, línea `slice7: … wired=True`.
+- Smoke (`~/opencode/smoke_oleada1.sh`): sin excepciones, `--menudump` byte-igual.
+- E2E (`~/opencode/oleada3_cmdstates.sh`, **3 casos** × 16 fases — 10 previas + 6 nuevas): las fases nuevas, iguales en los 3 casos — `typed` `undo=1 redo=0` (`hasDirty=True`), `otheractive` `undo=0 redo=0` (el gate sigue al editor activo), `undone` `undo=0 redo=1`, `redone` `undo=1 redo=0`, `undoneall` `undo=0 redo=1`, `restored` `undo=1 redo=0` (`hasDirty=False`); sin regresión: fases previas `undo=0 redo=0`, `operating` `stop=1`, `closeWs` 1/1/0, `postop` recupera; línea `[commands] catalog loaded: 475 commands, 111 with resolvable default handler` idéntica. 0 `?`, 0 warn/fatal/exception.
+
+**QA (§18.5)**: **subagente Tester QA Senior** (solo lectura, artefactos en `~/opencode/oleada3_slice7_qa/`, veredicto en `veredicto.md`). Un solo ciclo: **CERRAR**, **0 hallazgos P1–P4** — P1 `--old-gui` intacta (diff íntegro bajo `AVALONIA_SHELL`/`#else` o en ficheros exclusivos del shell; `Commands.addin.xml` no modificado; `SkTextEditor.cs` no se compila en el build legacy); P2 los 2 gates en las clases correctas con el mapeo legacy documentado; P3 el evento `UndoStateChanged` cubre todas y solo las mutaciones de stack que importan (incluida la invalidación de `redoStack` por edición); P4 E2E sin regresión (3 casos × 16 fases con matriz exacta + oracle 49/49 + menudump byte-igual). P5 (todos preexistentes u observaciones, no de esta slice): (1) **nuevo pendiente** — Ctrl+Z/Ctrl+Y no funcionan como atajos (early-return de `isTextEditingCombo` en `MainWindow.OnKeyDown` + sin casos Z/Y en `SkTextEditor.OnKeyDown`); (2) pendientes P5 previas de la Oleada 3 (post-Stop, early-return de `OpenSolutionInWindow`, context-only); (3) la suscripción de `UndoStateChanged` no se desuscribe en el cierre (patrón idéntico al preexistente `PropertyChanged`); (4) simplificación stack-based documentada.
+
+**Queda pendiente (slices 8..n de la Oleada 3)**: (1) `SolutionItemOptions`/`EditReferences` (context-only — requieren un modelo de nodo de contexto sobre el árbol de solución); (2) la **port de visibility/rename/dynamic** (`OpenDocument1..9`, `CanShowHelp`, `OpenDocumentList`, etiquetas dinámicas de `Run`/`RunEntry`/`Build`); (3) `Tools` (visibility + dynamic-text) y `Navigation` (requiere historial back/forward de documentos); (4) mejora P5: mensaje de error tras `Stop` legítimo; (5) P5 preexistente: el early-return de `OpenSolutionInWindow` (mismo `solutionLoaded && path`) traga el refresh — tras añadir un proyecto el árbol Xwt de solución no se re-puebla; (6) **nuevo P5 preexistente (confirmado por el QA de esta slice)**: los atajos Ctrl+Z/Ctrl+Y están tragados por `isTextEditingCombo` del window y no existen en `SkTextEditor.OnKeyDown` — portarlos implica añadir los casos Z/Y en el editor (el gate validado en esta slice ya funciona por `DispatchCommand`, que bloquea si está disabled). El item `Undo`/`Redo` de las listas anteriores queda **cerrado por esta slice**. Mecanismo, cableado y ciclo de QA ya quedaron cubiertos por Slice 1–7.
+
+**Cierre**: código en commit (5 ficheros) pushado a
+`origin/agents/sub-agent-senior-dev-role-report`. Sin submódulos; la ruta
+`--old-gui` no se ve afectada (código nuevo bajo `#else`/`AVALONIA_SHELL` o en
+ficheros exclusivos del shell; `SkTextEditor.cs` no se compila en el build
+legacy).
