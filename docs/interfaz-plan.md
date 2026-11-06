@@ -4348,3 +4348,130 @@ el commit de docs que le sigue. Sin cambios en submódulos; la ruta `--old-gui`
 no se ve afectada (todo el diff cae en `#else`/`#if AVALONIA_SHELL` o en
 ficheros exclusivos del shell; los bloques legacy quedan byte-iguales a la
 base).
+
+### Menú (follow-up) — Oleada 3, Slice 10: estado de habilitación de menú (overrides `Update`) — port de Tools (visibility + dynamic-text) (2026-11-06)
+
+Décima slice de la Oleada 3, sobre el mecanismo de Slice 1. Cierra el item (1)
+de "pendiente" de Slice 9: el **port de Tools (visibility + dynamic-text)** —
+los 4 overrides escalares de `ToolsCommands.cs` (los más simples del bloque
+legacy `#else`, porque `EditCustomTools` no es un array y los 3 restantes solo
+tocan `Visible`/`Text`), más el primer consumo real de `AutoHide` en el render
+(`MenuBuilder`) y los hooks de refresco de menú al cerrar Preferences.
+
+**Mapeo legacy → estado shell** (bloques Avalonia `#else`; legacy
+`#if !AVALONIA_SHELL` byte-igual; los handlers `#else` se compilan DENTRO del
+ensamblado del shell, así que alcanzan `MainWindow` y el shim
+`GettextCatalog` sin referencia cruzada):
+- `EditCustomTools` → `info.Enabled = true` + `info.Text = tools.Count > 0 ? "Edit Custom Tools..." : "Add Custom Tool..."` (`SettingsStore.LoadTools().Count`, strings vía shim `GettextCatalog`).
+- `InstrumentationViewer` → `info.Visible = InstrumentationService.Enabled` (el flag de servicio ya vive en el backend compartido; solo el gate de visibilidad).
+- `ToggleSessionRecorder` → `info.Visible = SettingsStore.GetBool("MonoDevelop.EnableAutomatedTesting", false)` + `info.Text = IsSessionRecording ? "Stop Session Recorder" : "Start Session Recorder"`.
+- `ReplaySession` → mismo gate de pref (`info.Visible`).
+- **Desviación documentada**: el `Update(CommandArrayInfo)` de
+  `ToolListHandler` legacy **no** se porta. El modelo del shell
+  (`MenuService.BuildTools`) ya inlinea los tools configurados como hijos
+  `tool:<name>` (con sus atajos), y portar el array habría **duplicado** la
+  entrada de cada tool (modelo + hijos dinámicos) y roto el invariante
+  del menudump (`_Tools=8i` con 1 tool configurado).
+- **Gap de refresco (nuevo)**: el shell no refrescaba el menú al cerrar
+  Preferences ni al editar tools; `editToolsTxt` quedaba stale. Fix:
+  `dlg.Closed += BuildMenu()` en `OnPreferencesMenu` y en el caso
+  `EditCustomTools` del dispatch (misma llamada que hacen los otros
+  flujos de menú).
+
+**Implementación** (5 ficheros, +145/−2):
+- `ToolsCommands.cs` (solo `#else`; +39): los 4 overrides `Update` (strings
+  legacy idénticos; usings nuevos `MonoDevelop.Core` para el shim
+  `GettextCatalog` y `MonoDevelop.Ide.Services` para `InstrumentationService`).
+  Cabecera del bloque actualizada (61 overrides `Update` acumulados en la
+  Oleada 3).
+- `ShellCommandState.cs` (+7): `IsSessionRecording` (→
+  `MainWindow.IsSessionRecording => sessionRecorder.IsRecording`).
+- `MainWindow.axaml.cs` (+80/−2): accessor `IsSessionRecording`;
+  `DumpCmdStates` +helper `Sub(header)` + 6 campos al final (orden previos
+  intacto): `editToolsTxt instrVis sessVis sessTxt replayVis sessSub`; driver
+  `--cmdstates`: 7 fases nuevas `tools`/`instrOff`/`instrOn`/`sessOn`/
+  `sessOff`/`noTools`/`toolsBack` bajo try/finally que **restaura** la pref
+  `MonoDevelop.EnableAutomatedTesting` y los tools del usuario (los tests no
+  pueden dejar el estado del operador); hooks `dlg.Closed += BuildMenu()`
+  (2 lugares).
+- `MenuService.cs` (+5): el helper `Sub(label, children, autoHide)` ahora
+  **propaga `AutoHide = autoHide`** al `MenuEntry` (fix — ver abajo).
+- `MenuBuilder.cs` (solo shell; +16): registro en `autoHideSubs` de los subs
+  con `AutoHide` en `BuildItem` y consumo en `RefreshCommandStates`
+  (tras el mirror scalar y el rebuild de arrays):
+  `item.IsVisible = item.Items.OfType<MenuItem>().Any(c => c.IsVisible)` —
+  el sub se oculta si todos sus hijos quedan ocultos. Afecta a 3 subs en el
+  modelo: "Session Recorder" (Tools — objetivo de la slice; se oculta con la
+  pref off), "Active Configuration" (Project — los hijos tienen ids
+  sintéticos `SelectActiveConfiguration:<cfg>` sin `Command`, así que el info
+  vacío los deja siempre visibles → el sub nunca se oculta, como en legacy) y
+  "Run With" (Run — el hijo "(Default)" disabled pero visible → idem).
+
+**QA y fixes** (ciclo §18.5, 1 ronda — veredicto en
+`~/opencode/oleada3_slice10_qa/veredicto.md`):
+- **F0 (bug propio, pre-QA → resuelto)**: la 1ª E2E daba `sessOff` con
+  `sessSub=1` — el sub "Session Recorder" seguía visible con ambos hijos
+  ocultos. Root cause: el helper `Sub()` de `MenuService.cs` computaba
+  `Disabled` desde `autoHide` pero **no** seteaba `entry.AutoHide` (se
+  quedaba `false`), así que el barrido AutoHide de `MenuBuilder` no lo
+  registraba nunca. Fix: propagar `AutoHide = autoHide`. E2E post-fix:
+  `sessOff → sessSub=0` en los 3 casos.
+- QA (solo lectura): **APROBADO** directamente, 0 hallazgos P1–P4, 5 P5
+  informativos: (1) la rama "Stop Session Recorder" no está ejercitada por
+  oracle/E2E (verificada por inspección del código: `IsRecording` se setea en
+  `ToggleSessionRecordingAsync` y el accessor es directo); (2) comentario
+  stale preexistente en `BuildToolsWithExternal` ("before Pr_eferences");
+  (3) `SettingsStore.LoadTools` ignora el atributo `version` del XML;
+  (4) `bindings=` del menudump depende del entorno (205 solo reproducible con
+  `--sln=Fixture.sln`); (5) las líneas "Terminado (killed)" de los logs E2E
+  son artefacto del harness bash (timeout del `kill`), no de la app.
+
+**Invariantes**: modelo de menú (`MenuService`) intacto salvo el fix de
+propagación de `AutoHide` (no cambia la estructura) → `--menudump` byte-igual
+(`menus=11 items=225 cmds=0 bindings=205`); catálogo sin cambios
+(`Count=461`, `LoadedCommands=475`, `ResolvedHandlers=111`); bloques legacy
+byte-iguales (todo el diff cae en `#else`/`#if AVALONIA_SHELL` o en ficheros
+exclusivos del shell) → la ruta `--old-gui` no se toca.
+
+**Validación / evidencia** (artefactos en `~/opencode/` y
+`~/opencode/oleada3_slice10_qa/`):
+- Build `0 Errores` (net10.0 y net10.0-windows; warnings preexistentes).
+- Oracle (`~/opencode/catload_test/`): `oleada3: ok=51 fail=0` +
+  `oleada3dyn: ok=19 fail=0` (sin cambios) + **sección nueva
+  `oleada3tools`: ok=5 fail=0** (checks vs estado vivo: etiqueta
+  `EditCustomTools` vs `LoadTools()`, visible `InstrumentationViewer` vs
+  `Enabled`, visibles `ToggleSessionRecorder`/`ReplaySession` vs la pref,
+  label "Start" sin sesión activa) — exit 0.
+- Smoke (`~/opencode/smoke_oleada1.sh`): sin warn/Exception, `--menudump`
+  byte-igual.
+- E2E (`~/opencode/oleada3_cmdstates.sh`, **3 casos** withsln/emptysl/nosln):
+  `tools` `editToolsTxt=Edit Custom Tools... instrVis=1 sessVis=1
+  sessTxt=Start Session Recorder replayVis=1 sessSub=1` → `instrOff`
+  `instrVis=0` → `instrOn` `instrVis=1` → `sessOn` `sessVis=1 replayVis=1
+  sessSub=1` → `sessOff` `sessVis=0 replayVis=0 sessSub=0` (el fix) →
+  `noTools` `editToolsTxt=Add Custom Tool...` → `toolsBack`
+  `editToolsTxt=Edit Custom Tools...` (los 3 casos); prefijos de fases
+  previas byte-iguales (regresión 0); 0 `Unhandled`/`Exception`; estado del
+  usuario restaurado al terminar, sin procesos huérfanos.
+
+**Queda pendiente (slices 11..n de la Oleada 3)**: (1) `Navigation`
+(requiere historial back/forward de documentos); (2) **nuevo**: render legacy
+completo de los array commands (master oculto + hijos inline como hermanos —
+hoy submenu dinámico con master oculto cuando el array está vacío); (3) mejora
+P5: mensaje de error tras `Stop` legítimo; (4) P5 preexistente: el
+early-return de `OpenSolutionInWindow` traga el refresh; (5) P5 preexistente
+(Slice 7): los atajos Ctrl+Z/Ctrl+Y están tragados por `isTextEditingCombo`
+del window; (6) P5 (QA F-5d, Slice 8): tejer la selección del pad en la
+dispatch del menú principal de "Add Reference..."; (7) cosmético (QA F-5e,
+Slice 8): renombrar `SolutionOptionsHandler` (rama `#else`); (8) **nuevo (QA
+F6, Slice 9)**: endurecer la regresión de los submenús dinámicos (dump del
+`Tag` del hijo o dispatch vía click real); (9) P5 (QA F3, Slice 9): exponer el
+proyecto del archivo seleccionado para las etiquetas file→proyecto. El item
+(1) de la lista de Slice 9 (Tools) queda **cerrado por esta slice**.
+
+**Cierre**: código en commit (5 ficheros) pushado a
+`origin/agents/sub-agent-senior-dev-role-report`; handoff + veredicto del QA en
+el commit de docs que le sigue. Sin cambios en submódulos; la ruta `--old-gui`
+no se ve afectada (todo el diff cae en `#else`/`#if AVALONIA_SHELL` o en
+ficheros exclusivos del shell; los bloques legacy quedan byte-iguales a la
+base).

@@ -681,8 +681,59 @@ El bucle de migración Gtk → Avalonia continúa por módulos (detalle por hito
           `activeDoc=QA List13`; labels dinámicos en las 3 soluciones). Sin
           cambios en submódulos; la ruta `--old-gui` no se toca (diff íntegro
           bajo `#else`/`#if AVALONIA_SHELL` o en ficheros exclusivos del
-          shell). Detalle en `docs/interfaz-plan.md` (follow-up "Oleada 3 —
-          Slice 9") y `docs/session_summary.md` (2026-11-06 (11)).
+           shell). Detalle en `docs/interfaz-plan.md` (follow-up "Oleada 3 —
+           Slice 9") y `docs/session_summary.md` (2026-11-06 (11)).
+      - **Oleada 3 (Slice 10) de la integración total del backend (2026-11-06)**:
+          estado de habilitación de menú (overrides `Update`) — **port de
+          Tools (visibility + dynamic-text)** al shell Avalonia: 4 overrides
+          escalares de `ToolsCommands.cs` (bloque `#else`, legacy byte-igual):
+          `EditCustomTools` (etiqueta dinámica "Edit Custom Tools..."/"Add
+          Custom Tool..." según `SettingsStore.LoadTools().Count > 0`),
+          `InstrumentationViewer` (`info.Visible =
+          InstrumentationService.Enabled`), `ToggleSessionRecorder` (visible
+          según la pref `MonoDevelop.EnableAutomatedTesting` + etiqueta
+          dinámica "Start"/"Stop Session Recorder" vía
+          `ShellCommandState.IsSessionRecording`) y `ReplaySession` (mismo
+          gate de pref). El `Update(CommandArrayInfo)` de `ToolListHandler`
+          **no** se porta a propósito: el modelo del shell ya inlinea los
+          tools como hijos `tool:<name>` en `BuildTools()` y portar el array
+          duplicaría la entrada y rompería el menudump. `ShellCommandState.cs`:
+          1 accessor nuevo (`IsSessionRecording` →
+          `MainWindow.IsSessionRecording => sessionRecorder.IsRecording`).
+          `MainWindow.axaml.cs`: accessor `IsSessionRecording`;
+          `DumpCmdStates` +helper `Sub(header)` + 6 campos
+          (`editToolsTxt`/`instrVis`/`sessVis`/`sessTxt`/`replayVis`/
+          `sessSub`); driver `--cmdstates` con 7 fases nuevas
+          (`tools`/`instrOff`/`instrOn`/`sessOn`/`sessOff`/`noTools`/
+          `toolsBack`) bajo try/finally que restaura prefs y tools; hooks
+          `dlg.Closed += BuildMenu()` en `OnPreferencesMenu` y en el caso
+          `EditCustomTools` del dispatch (el refresh de menú al cerrar
+          Preferences era el gap que dejaba `editToolsTxt` stale).
+          `MenuService.cs`: el helper `Sub(label, children, autoHide)` ahora
+          **propaga `AutoHide = autoHide`** al `MenuEntry` (fix: solo
+          computaba `Disabled`, el barrido AutoHide de `MenuBuilder` no
+          registraba el sub "Session Recorder" y `sessOff` dejaba `sessSub=1`).
+          `MenuBuilder.cs` (solo shell): registro en `autoHideSubs` de los
+          subs con `AutoHide` en `BuildItem` y consumo en
+          `RefreshCommandStates` (`item.IsVisible = item.Items.OfType
+          <MenuItem>().Any(c => c.IsVisible)` — el sub se oculta si todos sus
+          hijos visibles desaparecen). **Invariante**: menudump byte-igual
+          (`menus=11 items=225 cmds=0 bindings=205`), catálogo sin cambios.
+          QA §18.5 (subagente Tester QA Senior, solo lectura): **APROBADO**
+          directamente, 0 hallazgos P1–P4, 5 P5 informativos (rama "Stop
+          Session Recorder" no ejercitada — verificada por código; comentario
+          stale preexistente en `BuildToolsWithExternal`; `LoadTools` ignora
+          el atributo `version`; `bindings=` depende del entorno; líneas
+          "Terminado (killed)" = artefacto del harness bash). Build 0 errores
+          (ambos TFMs), oracle headless `oleada3 51/51` + `oleada3dyn 19/19` +
+          sección nueva `oleada3tools 5/5` (checks vs estado vivo), smoke sin
+          excepciones, E2E `--cmdstates` 3 casos (withsln/emptysl/nosln) con
+          las 7 fases correctas y prefijos previos byte-iguales (regresión 0).
+          Sin cambios en submódulos; la ruta `--old-gui` no se toca (diff
+          íntegro bajo `#else`/`#if AVALONIA_SHELL` o en ficheros exclusivos
+          del shell). Detalle en `docs/interfaz-plan.md` (follow-up "Oleada 3
+          — Slice 10") y `docs/session_summary.md` (2026-11-06 (12)).
+
    
 
 
