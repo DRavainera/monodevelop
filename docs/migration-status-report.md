@@ -513,8 +513,42 @@ El bucle de migración Gtk → Avalonia continúa por módulos (detalle por hito
       errores (ambos TFMs), oracle headless `oleada3 43/43`, smoke sin excepciones,
       E2E `--cmdstates` 2 casos × 10 fases (con soln: busy guard solo en
       `operating`, `stop` 0→1→0; sin soln: todo 0 salvo `operating`). Sin
-      submódulos; la ruta `--old-gui` no se toca. Detalle en `docs/interfaz-plan.md`
-      (follow-up "Oleada 3 — Slice 5") y `docs/session_summary.md` (2026-11-05 (7)).
+       submódulos; la ruta `--old-gui` no se toca. Detalle en `docs/interfaz-plan.md`
+       (follow-up "Oleada 3 — Slice 5") y `docs/session_summary.md` (2026-11-05 (7)).
+    - **Oleada 3 (Slice 6) de la integración total del backend (2026-11-05)**:
+       estado de habilitación de menú (overrides `Update`) — **gates
+       project-level** (`Build`/`Rebuild`/`Clean`, Project Options, Set Startup
+       Projects), sobre el puente `ActiveProjectCount`: el legacy gateaba por
+       `CurrentSelectedBuildTarget != null` (proyecto seleccionado en el pad) y la
+       shell no tiene selección de pad, así que "la solución cargada tiene
+       proyectos" (`MainWindow.ActiveProjectCount`, memoizado por path de solución
+       e invalidado en todos los puntos de mutación: `RefreshSolutionTree`, cierre
+       de workspace y las dos vías `AppendProjectToSolution`) hace las veces de
+       target seleccionado. `ShellCommandState.ActiveProjectCount` lo expone a los
+       handlers (headless ⇒ 0). `ProjectCommands.cs` (bloques Avalonia `#else`,
+       legacy byte-igual): 5 `Update` nuevos — `Build`/`Rebuild`/`Clean` →
+       `HasWorkspace && ActiveProjectCount > 0 && !IsOperationRunning` (puente del
+       target + in-progress documentado; en `Clean` el guard es endurecimiento
+       añadido) y `ProjectOptions`/`SetStartupProjects` → `HasWorkspace &&
+       ActiveProjectCount > 0` (sin busy guard; la matiz legacy multi-startup
+       descartada, documentada). `SolutionItemOptions`/`EditReferences` quedan
+       pendientes (context-only, requieren modelo de nodo de contexto).
+       `MainWindow.axaml.cs`: `DumpCmdStates` añade
+       `buildProj=/rebuildProj=/cleanProj=/projOpts=/setStartup=/projCount=`.
+       **Invariante**: menudump byte-igual (`menus=11 items=225 cmds=0
+       bindings=205`), catálogo sin cambios (`Count=461 LoadedCommands=475
+       ResolvedHandlers=111`, menu ids 196/172/24), bloque legacy de
+       `ProjectCommands.cs` byte-igual. QA §18.5 (subagente Tester QA Senior):
+       QA #1 NO CERRAR (P3: hueco de invalidación del memo en la vía de añadir
+       proyecto + 2 P5 menores) → fix → QA final **CERRAR**, P1–P4 OK, 1 P5 (H1:
+       el mismo hueco en la vía driver QA `--newproject`) → fix + re-verificación
+       → 0 hallazgos abiertos. Build 0 errores (ambos TFMs), oracle headless
+       `oleada3 48/48`, smoke sin excepciones, E2E `--cmdstates` 3 casos × 10
+       fases (withsln: `projCount=3`, gates 1, busy guard solo en `operating` y
+       solo en Build/Rebuild/Clean; emptysl "ghost": `hasWs=True projCount=0`
+       todo 0; nosln: todo 0). Sin submódulos; la ruta `--old-gui` no se toca.
+       Detalle en `docs/interfaz-plan.md` (follow-up "Oleada 3 — Slice 6") y
+       `docs/session_summary.md` (2026-11-05 (8)).
   
 
 

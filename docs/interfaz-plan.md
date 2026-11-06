@@ -4139,3 +4139,43 @@ de "hay build o run in-progress".
 `origin/agents/sub-agent-senior-dev-role-report`. Sin submódulos; la ruta
 `--old-gui` no se ve afectada (código nuevo bajo `#else`/`AVALONIA_SHELL`; el
 bloque legacy de `ProjectCommands.cs` es byte-igual al commit anterior).
+
+### Menú (follow-up) — Oleada 3, Slice 6: estado de habilitación de menú (overrides `Update`) — gates project-level (`ActiveProjectCount`) (2026-11-05)
+
+Sexta slice de la Oleada 3, sobre el mecanismo de Slice 1. Puntualiza el item
+(1) de "pendiente" de Slice 5: los **gates de selección de build target** del
+menú principal (`Build`/`Rebuild`/`Clean`, Project Options, Set Startup
+Projects). El legacy gatea por `CurrentSelectedBuildTarget != null` — un
+proyecto seleccionado en el pad — y la shell no tiene selección de pad, así que
+el puente elegido es "la solución cargada tiene proyectos":
+`MainWindow.ActiveProjectCount`, el recuento de proyectos de la solución
+cargada (el mismo conjunto que itera el build).
+
+**Mapeo legacy → estado shell** (bloques Avalonia `#else`; legacy
+`#if !AVALONIA_SHELL` byte-igual):
+- `Build`/`Rebuild`/`Clean` → `ShellCommandState.HasWorkspace && ShellCommandState.ActiveProjectCount > 0 && !ShellCommandState.IsOperationRunning` (legacy: `CurrentSelectedBuildTarget != null && CurrentBuildOperation.IsCompleted && CanBuild` — **puente más grueso documentado**: target seleccionado ⇒ "la solución tiene proyectos"; `CanBuild` no está modelado; en `Clean` el busy guard es endurecimiento añadido — el legacy Clean no chequea in-progress, a diferencia de Build/Rebuild).
+- `ProjectOptions` → `HasWorkspace && ActiveProjectCount > 0` (legacy: `CurrentSelectedBuildTarget is Project`; la etiqueta dinámica `"{0} _Options"` no es portable).
+- `SetStartupProjects` → `HasWorkspace && ActiveProjectCount > 0` (legacy: >= 2 proyectos — matiz multi-startup descartada: el flujo de la shell marca un único startup project, documentado).
+- `SolutionItemOptions`/`EditReferences` → **diferidos**: context-only (menú sobre un nodo del árbol de solución); requieren un modelo de nodo de contexto que la shell aún no tiene.
+
+**Implementación** (3 ficheros, +108/−2):
+- `MainWindow.axaml.cs`: accessor `internal int ActiveProjectCount` (región de estado de Oleada 3): **memoizado por `loadedSolutionPath`** (los gates lo leen en cada refresh de estado de comandos, incluidos los cambios de dirty por tecla, así que un rescaneo por refresh golpearía el disco cada vez); 0 si no hay solución o el `.sln` no existe en disco (`File.Exists`); invalidaciones `activeProjectCountSln = null` en cada punto donde el conjunto de proyectos puede cambiar: `RefreshSolutionTree()` (añadir/quitar/renombrar), `CloseWorkspaceAsync` (cierre), `OpenNewSolutionDialogAsync` (ruta de producción de añadir proyecto: tras `AppendProjectToSolution`, antes del `OpenSolutionInWindow` que early-returns por path igual) y el driver QA `--newproject` (mismo patrón); `DumpCmdStates` añade `buildProj=/rebuildProj=/cleanProj=/projOpts=/setStartup=` (vía `En()`) y `projCount=` (lectura directa).
+- `ShellCommandState.cs`: `ActiveProjectCount => MainWindow.Instance?.ActiveProjectCount ?? 0` (headless ⇒ 0).
+- `ProjectCommands.cs` (solo el bloque `#else`): 5 `Update` nuevos (`BuildHandler`/`RebuildHandler`/`CleanHandler` con busy guard; `ProjectOptionsHandler`/`SetStartupProjectsHandler` sin) + comentario-header del bloque actualizado.
+
+**Invariantes**: modelo de menú (`MenuService`) intacto → `--menudump` byte-igual (`menus=11 items=225 cmds=0 bindings=205`); catálogo sin cambios (`Count=461`, `LoadedCommands=475`, `ResolvedHandlers=111`, `menu ids total=196 resolved=172 missing=24`); bloque legacy de `ProjectCommands.cs` byte-igual; la ruta `--old-gui` no se toca.
+
+**Validación / evidencia** (artefactos en `~/opencode/`):
+- Build `0 Errores` (net10.0 y net10.0-windows).
+- Oracle extendido (`~/opencode/catload_test/`, sección `oleada3` a 48 ids — añade Build/Rebuild/Clean/ProjectOptions/SetStartupProjects, expected false headless): `oleada3: ok=48 fail=0`.
+- Smoke (`~/opencode/smoke_oleada1.sh`): sin excepciones, `--menudump` byte-igual.
+- E2E (`~/opencode/oleada3_cmdstates.sh`, **3 casos** × 10 fases): withsln (`Fixture.sln`, 3 proyectos) — `hasWs=True projCount=3`, `buildProj/rebuildProj/cleanProj/projOpts/setStartup=1`, `operating` (`isOp=1`): `buildProj/rebuildProj/cleanProj=0` (busy guard) pero `projOpts/setStartup=1` (sin guard, por diseño) y `stop=1`, `postop` recupera; emptysl (fixture nuevo `~/opencode/oleada3_slice6_empty/Empty.sln` — su único proyecto referenciado no existe en disco: `hasWs=True projCount=0`, 5 gates `0` en todas las fases — una solución cargada no implica proyectos buildables); nosln — `hasWs=False projCount=0`, todo `0`. 0 `?`, 0 warn/fatal/exception.
+
+**QA (§18.5)**: **subagente Tester QA Senior** (solo lectura, artefactos en `~/opencode/oleada3_slice6_qa/`). Ciclo: QA #1 **NO CERRAR** — P3 (hueco de invalidación: la ruta de producción de añadir proyecto, `AppendProjectToSolution` en `OpenNewSolutionDialogAsync`, no invalidaba el memo; como `OpenSolutionInWindow` early-returns por path igual, el conteo quedaba obsoleto N vs N+1) + 2 P5 menores (comentarios) → el dev aplicó el fix → QA final (re-QA) **CERRAR**, P1–P4 OK, 1 P5 no bloqueante (**H1**: el mismo hueco en la **vía driver QA `--newproject`**; solo afecta a sesiones lanzadas con ese flag, la ruta de producción estaba corregida) → el dev corrigió H1 (mismo patrón) y re-verificó (build 0 errores ambos TFMs, oracle `ok=48 fail=0`, menudump byte-igual). Estado final: **0 hallazgos abiertos**. P1 `--old-gui` intacta (región legacy ln 1–630 byte-igual a HEAD, diff exit 0; todos los hunks tras el `#else`); P2 los 5 gates en las clases correctas con el mapeo legacy documentado; P3 correctitud del memo (todos los puntos de mutación de producción invalidan/re-clavean; fix del QA #1 validado); P4 E2E sin regresión (3 × 10 fases + oracle 48/48 + menudump byte-igual).
+
+**Queda pendiente (slices 7..n de la Oleada 3)**: (1) `SolutionItemOptions`/`EditReferences` (context-only — requieren un modelo de nodo de contexto sobre el árbol de solución); (2) la **port de visibility/rename/dynamic** (`OpenDocument1..9`, `CanShowHelp`, `OpenDocumentList`, etiquetas dinámicas de `Run`/`RunEntry`/`Build`); (3) `Undo`/`Redo` (`CanUndo`/`CanRedo` del editor, hoy no público en `SkTextEditor`); (4) `Tools` (visibility + dynamic-text) y `Navigation` (requiere historial back/forward de documentos); (5) mejora P5: mensaje de error tras `Stop` legítimo; (6) P5 preexistente: el early-return de `OpenSolutionInWindow` (mismo `solutionLoaded && path`) traga el refresh — tras añadir un proyecto el árbol Xwt de solución no se re-puebla (preexistente desde `36e657221c`; la invalidación de `ActiveProjectCount` mantiene el estado de menú correcto, pero el árbol visible no se actualiza). Mecanismo, cableado y ciclo de QA ya quedaron cubiertos por Slice 1–6.
+
+**Cierre**: código en commit (3 ficheros) pushado a
+`origin/agents/sub-agent-senior-dev-role-report`. Sin submódulos; la ruta
+`--old-gui` no se ve afectada (código nuevo bajo `#else`/`AVALONIA_SHELL`; el
+bloque legacy de `ProjectCommands.cs` es byte-igual al commit anterior).
