@@ -638,8 +638,14 @@ namespace MonoDevelop.Ide.Commands
 	// ShellCommandState.IsOperationRunning stands in for the legacy
 	// CurrentBuildOperation/CurrentRunOperation in-progress checks — it gates
 	// Stop (enabled while an operation runs) and the busy guards of
-	// Build/Rebuild Solution, Run and Run Entry. The remaining Update overrides
-	// (selected build target, dynamic labels) are not ported yet.
+	// Build/Rebuild Solution, Run and Run Entry. Oleada 3 (slice 6) ports the
+	// project-level selected-build-target gates of the main menu (Build/Rebuild/
+	// Clean, Project Options, Set Startup Projects) onto
+	// ShellCommandState.ActiveProjectCount — the shell has no pad selection, so
+	// "the loaded solution has projects" stands in for
+	// CurrentSelectedBuildTarget != null (coarser bridge, documented per
+	// handler). The remaining Update overrides (dynamic labels, the
+	// context-only SolutionItemOptions/EditReferences) are not ported yet.
 	// ApplyPolicy/ExportPolicy forward their literal catalog id: the
 	// ProjectCommands enum has no members for them.
 	internal class SolutionOptionsHandler : CommandHandler
@@ -663,6 +669,15 @@ namespace MonoDevelop.Ide.Commands
 		{
 			ShellCommandHandler.Run (ProjectCommands.ProjectOptions);
 		}
+
+		// Oleada 3 (slice 6): enabled when the loaded solution has projects
+		// (legacy: CurrentSelectedBuildTarget is a Project — the selected target
+		// is bridged by the solution's project set; the dynamic "{0} _Options"
+		// label is not portable, MenuBuilder only mirrors Enabled).
+		protected override void Update (CommandInfo info)
+		{
+			info.Enabled = ShellCommandState.HasWorkspace && ShellCommandState.ActiveProjectCount > 0;
+		}
 	}
 
 	internal class SolutionItemOptionsHandler : CommandHandler
@@ -678,6 +693,14 @@ namespace MonoDevelop.Ide.Commands
 		protected override void Run ()
 		{
 			ShellCommandHandler.Run (ProjectCommands.SetStartupProjects);
+		}
+
+		// Oleada 3 (slice 6): enabled when the loaded solution has projects
+		// (legacy: a solution with >= 2 projects — the multi-startup nuance is
+		// dropped because the shell's flow marks a single startup project).
+		protected override void Update (CommandInfo info)
+		{
+			info.Enabled = ShellCommandState.HasWorkspace && ShellCommandState.ActiveProjectCount > 0;
 		}
 	}
 
@@ -713,6 +736,17 @@ namespace MonoDevelop.Ide.Commands
 		{
 			ShellCommandHandler.Run (ProjectCommands.Build);
 		}
+
+		// Oleada 3 (slice 6): enabled when the loaded solution has projects and
+		// no build/run operation is in progress (legacy: CurrentSelectedBuildTarget
+		// != null && CurrentBuildOperation.IsCompleted && CanBuild — the selected
+		// target is bridged by the solution's project set and CanBuild is not
+		// modeled, both documented coarsenings; the dynamic label is not
+		// portable).
+		protected override void Update (CommandInfo info)
+		{
+			info.Enabled = ShellCommandState.HasWorkspace && ShellCommandState.ActiveProjectCount > 0 && !ShellCommandState.IsOperationRunning;
+		}
 	}
 
 	internal class RebuildSolutionHandler : CommandHandler
@@ -738,6 +772,17 @@ namespace MonoDevelop.Ide.Commands
 		protected override void Run ()
 		{
 			ShellCommandHandler.Run (ProjectCommands.Rebuild);
+		}
+
+		// Oleada 3 (slice 6): enabled when the loaded solution has projects and
+		// no build/run operation is in progress (legacy: CurrentSelectedBuildTarget
+		// != null && CurrentBuildOperation.IsCompleted && CanBuild — the selected
+		// target is bridged by the solution's project set and CanBuild is not
+		// modeled, both documented coarsenings; the dynamic label is not
+		// portable).
+		protected override void Update (CommandInfo info)
+		{
+			info.Enabled = ShellCommandState.HasWorkspace && ShellCommandState.ActiveProjectCount > 0 && !ShellCommandState.IsOperationRunning;
 		}
 	}
 
@@ -796,6 +841,18 @@ namespace MonoDevelop.Ide.Commands
 		protected override void Run ()
 		{
 			ShellCommandHandler.Run (ProjectCommands.Clean);
+		}
+
+		// Oleada 3 (slice 6): enabled when the loaded solution has projects and
+		// no build/run operation is in progress (legacy: CurrentSelectedBuildTarget
+		// != null && .CanBuild — the selected target is bridged by the solution's
+		// project set and CanBuild is not modeled, both documented coarsenings;
+		// the busy guard !IsOperationRunning is an added hardening: the legacy
+		// Clean does not check CurrentBuildOperation.IsCompleted, unlike
+		// Build/Rebuild; the dynamic label is not portable).
+		protected override void Update (CommandInfo info)
+		{
+			info.Enabled = ShellCommandState.HasWorkspace && ShellCommandState.ActiveProjectCount > 0 && !ShellCommandState.IsOperationRunning;
 		}
 	}
 

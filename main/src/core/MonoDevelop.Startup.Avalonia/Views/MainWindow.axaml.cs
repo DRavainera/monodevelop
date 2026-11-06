@@ -730,6 +730,11 @@ public partial class MainWindow : Window
 					var projPath = dlg.CreatedProjectPath;
 					if (projPath is not null)
 						MonoDevelop.Ide.Services.ConfigurationService.AppendProjectToSolution (projPath, loadedSolutionPath);
+					// Oleada 3 (slice 6): the project set changed outside
+					// RefreshSolutionTree (OpenSolutionInWindow below early-returns
+					// on the same path) — drop the memoized ActiveProjectCount.
+					if (projPath is not null)
+						activeProjectCountSln = null;
 					var slnText = File.ReadAllText (loadedSolutionPath);
 					Output ("[newproject] template=" + newProjTemplate + " created=" + (projPath is not null) + " path=" + projPath + " sln-entry=" + slnText.Contains ("QAAdded") + " mappings=" + slnText.Contains (".Debug|AnyCPU.Build.0"));
 					OpenSolutionInWindow (loadedSolutionPath);
@@ -2847,8 +2852,14 @@ public partial class MainWindow : Window
 			+ " solOpts=" + B (En (P + "SolutionOptions"))
 			+ " runEntry=" + B (CEn (P + "RunEntry"))
 			+ " stop=" + B (En (P + "Stop"))
+			+ " buildProj=" + B (En (P + "Build"))
+			+ " rebuildProj=" + B (En (P + "Rebuild"))
+			+ " cleanProj=" + B (En (P + "Clean"))
+			+ " projOpts=" + B (En (P + "ProjectOptions"))
+			+ " setStartup=" + B (En (P + "SetStartupProjects"))
 			+ " | docCount=" + DocumentCount
 			+ " isOp=" + (IsOperationRunning ? "1" : "0")
+			+ " projCount=" + ActiveProjectCount
 			+ " hasDocs=" + HasDocuments + " hasActive=" + HasActiveDocument
 			+ " hasActiveEditor=" + HasActiveEditor + " hasDirty=" + HasDirtyDocuments
 			+ " hasWs=" + HasWorkspace + " hasRecent=" + HasRecentSolutions);
@@ -3461,6 +3472,29 @@ public partial class MainWindow : Window
 	// (enabled while running) and the busy guards of Build/Rebuild Solution,
 	// Run and Run Entry.
 	internal bool IsOperationRunning => runningProc is { HasExited: false };
+	// Oleada 3 (slice 6): number of projects of the loaded solution — the same
+	// set the build iterates (SolutionProjects). Memoized by solution path: the
+	// gates read it on every command-state refresh (including per-keystroke
+	// dirty changes), so a rescan per refresh would hit the disk each time.
+	// Invalidated on RefreshSolutionTree (project add/remove/rename) and
+	// workspace close; opening a (possibly different) solution re-keys the
+	// cache automatically.
+	string? activeProjectCountSln;
+	int activeProjectCountValue;
+	internal int ActiveProjectCount
+	{
+		get
+		{
+			var sln = loadedSolutionPath;
+			if (sln is null)
+				return 0;
+			if (!string.Equals (sln, activeProjectCountSln, StringComparison.Ordinal)) {
+				activeProjectCountSln = sln;
+				activeProjectCountValue = File.Exists (sln) ? SolutionProjects (sln).Count : 0;
+			}
+			return activeProjectCountValue;
+		}
+	}
 
 	// Oleada 3: re-evaluates the command-bound menu items' enabled state after a
 	// document/workspace change (cheap: a handful of GetCommandInfo calls).
@@ -4165,6 +4199,9 @@ public partial class MainWindow : Window
 	// delete/add to refresh the tree like the legacy pad's UpdateAll).
 	void RefreshSolutionTree ()
 	{
+		// Oleada 3 (slice 6): the project set may have changed (add/remove/
+		// rename) — drop the memoized ActiveProjectCount.
+		activeProjectCountSln = null;
 		if (!string.IsNullOrEmpty (loadedSolutionPath) && File.Exists (loadedSolutionPath))
 			OpenSolutionInWindow (loadedSolutionPath);
 	}
@@ -5481,6 +5518,10 @@ public partial class MainWindow : Window
 				// mappings in the .sln, then reload the tree.
 				MonoDevelop.Ide.Services.ConfigurationService.AppendProjectToSolution (dlg.CreatedProjectPath, loadedSolutionPath);
 				Output ("[newproject] added " + Path.GetFileName (dlg.CreatedProjectPath) + " to " + Path.GetFileName (loadedSolutionPath));
+				// Oleada 3 (slice 6): the project set changed outside
+				// RefreshSolutionTree (OpenSolutionInWindow early-returns on the
+				// same path) — drop the memoized ActiveProjectCount.
+				activeProjectCountSln = null;
 				OpenSolutionInWindow (loadedSolutionPath);
 				return;
 			}
@@ -5611,6 +5652,7 @@ public partial class MainWindow : Window
 		PersistWatches (); // last watch state before the solution path goes away
 		loadedSolutionPath = null;
 		solutionLoaded = false;
+		activeProjectCountSln = null; // Oleada 3 (slice 6): no solution, no projects
 		NotifyCommandStateChanged (); // Oleada 3: the workspace was closed
 		// The three symbol pads are solution/document scoped: reset them so a later
 		// solution does not show stale rows (legacy pads cleared on workspace close).

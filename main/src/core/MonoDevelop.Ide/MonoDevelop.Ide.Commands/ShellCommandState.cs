@@ -49,6 +49,13 @@ namespace MonoDevelop.Ide.Commands
 		// guards of Build/Rebuild Solution, Run and Run Entry.
 		public static bool IsOperationRunning
 			=> MonoDevelop.AvaloniaShell.Views.MainWindow.Instance?.IsOperationRunning ?? false;
+
+		// Oleada 3 (slice 6): the number of projects of the loaded solution — the
+		// shell equivalent of the legacy "a build target is selected" presence
+		// check (coarser bridge: the shell has no pad selection, so "the solution
+		// has projects" stands in for CurrentSelectedBuildTarget != null).
+		public static int ActiveProjectCount
+			=> MonoDevelop.AvaloniaShell.Views.MainWindow.Instance?.ActiveProjectCount ?? 0;
 	}
 }
 #endif
