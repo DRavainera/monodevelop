@@ -1906,6 +1906,22 @@ public partial class MainWindow : Window
 					DumpCmdStates ("closed1");
 					await CloseDocumentAsync ("QA Cmd2");
 					DumpCmdStates ("closed2");
+					// Oleada 3 (slice 5): drive the shared build/run process
+					// (the same RunProcessAsync path a real build/run takes)
+					// through start -> in-progress -> exit and dump the
+					// in-progress gates (stop, buildSol, rebuildSol, run,
+					// runEntry) after each phase.
+					DumpCmdStates ("preop");
+					_ = RunProcessAsync ("sleep", "3");
+					for (int i = 0; i < 50 && !IsOperationRunning; i++)
+						await System.Threading.Tasks.Task.Delay (100);
+					DumpCmdStates ("operating");
+					while (IsOperationRunning)
+						await System.Threading.Tasks.Task.Delay (100);
+					// Let the completion dispatcher post (the state
+					// notification) run before the final dump.
+					await System.Threading.Tasks.Task.Delay (300);
+					DumpCmdStates ("postop");
 					Output ("[cmdstates] done");
 				}, Avalonia.Threading.DispatcherPriority.Background);
 			} else if (qa == "--viewcmds") {
@@ -2830,7 +2846,9 @@ public partial class MainWindow : Window
 			+ " run=" + B (En (P + "Run"))
 			+ " solOpts=" + B (En (P + "SolutionOptions"))
 			+ " runEntry=" + B (CEn (P + "RunEntry"))
+			+ " stop=" + B (En (P + "Stop"))
 			+ " | docCount=" + DocumentCount
+			+ " isOp=" + (IsOperationRunning ? "1" : "0")
 			+ " hasDocs=" + HasDocuments + " hasActive=" + HasActiveDocument
 			+ " hasActiveEditor=" + HasActiveEditor + " hasDirty=" + HasDirtyDocuments
 			+ " hasWs=" + HasWorkspace + " hasRecent=" + HasRecentSolutions);
@@ -3437,6 +3455,12 @@ public partial class MainWindow : Window
 	// Oleada 3 (slice 3): number of open document tabs — gates Window navigation
 	// (Next/Previous Document need >= 2; Open Document N needs >= N).
 	internal int DocumentCount => documents.Count;
+	// Oleada 3 (slice 5): the shared build/run process (runningProc) is still
+	// alive — the shell equivalent of the legacy
+	// CurrentBuildOperation/CurrentRunOperation in-progress checks. Gates Stop
+	// (enabled while running) and the busy guards of Build/Rebuild Solution,
+	// Run and Run Entry.
+	internal bool IsOperationRunning => runningProc is { HasExited: false };
 
 	// Oleada 3: re-evaluates the command-bound menu items' enabled state after a
 	// document/workspace change (cheap: a handful of GetCommandInfo calls).
@@ -9465,6 +9489,10 @@ public partial class MainWindow : Window
 				Output ("[process] failed to start " + exe);
 				return;
 			}
+			// Oleada 3 (slice 5): the build/run menu gates (Stop, the busy
+			// guards of Build/Rebuild Solution, Run, Run Entry) track this
+			// process's lifetime.
+			NotifyCommandStateChanged ();
 			// Process events arrive on thread-pool threads: marshal to the UI thread
 			// before touching controls (same model as the legacy Gtk.Application.Invoke).
 			void OnLine (string line)
@@ -9492,6 +9520,9 @@ public partial class MainWindow : Window
 				else if (buildErrors.Count == 0)
 					SetErrors ($"Build FAILED with exit code {code}.");
 				RefreshCodeIssuesPad ();
+				// Oleada 3 (slice 5): the process exited — re-enable the
+				// build/run gates and disable Stop.
+				NotifyCommandStateChanged ();
 			});
 		} catch (Exception ex) {
 			Output ("[process] " + ex.Message);

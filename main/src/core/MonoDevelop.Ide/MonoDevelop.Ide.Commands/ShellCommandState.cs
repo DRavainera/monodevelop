@@ -42,6 +42,13 @@ namespace MonoDevelop.Ide.Commands
 		// Window Next/Previous Document (>= 2) and Open Document 1..9 (>= index).
 		public static int DocumentCount
 			=> MonoDevelop.AvaloniaShell.Views.MainWindow.Instance?.DocumentCount ?? 0;
+
+		// Oleada 3 (slice 5): the shared build/run process is still alive — the
+		// shell equivalent of the legacy CurrentBuildOperation/CurrentRunOperation
+		// in-progress checks. Gates Stop (enabled while running) and the busy
+		// guards of Build/Rebuild Solution, Run and Run Entry.
+		public static bool IsOperationRunning
+			=> MonoDevelop.AvaloniaShell.Views.MainWindow.Instance?.IsOperationRunning ?? false;
 	}
 }
 #endif

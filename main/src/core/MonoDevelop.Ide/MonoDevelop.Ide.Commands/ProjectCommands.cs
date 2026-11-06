@@ -633,9 +633,14 @@ namespace MonoDevelop.Ide.Commands
 	// OnMenuCommand endpoint the catalog router uses — so behavior is
 	// unchanged. Oleada 3 (slice 4) ports the solution-level enabled gates
 	// (Build/Rebuild/Clean Solution, Run, Run Entry, Solution Options) onto
-	// ShellCommandState.HasWorkspace; the remaining Update overrides (selected
-	// build target, build/run operation in-progress, dynamic labels) are not
-	// ported yet. ApplyPolicy/ExportPolicy forward their literal catalog id: the
+	// ShellCommandState.HasWorkspace. Oleada 3 (slice 5) adds the in-progress
+	// gates: the shell keeps one shared build/run process, so
+	// ShellCommandState.IsOperationRunning stands in for the legacy
+	// CurrentBuildOperation/CurrentRunOperation in-progress checks — it gates
+	// Stop (enabled while an operation runs) and the busy guards of
+	// Build/Rebuild Solution, Run and Run Entry. The remaining Update overrides
+	// (selected build target, dynamic labels) are not ported yet.
+	// ApplyPolicy/ExportPolicy forward their literal catalog id: the
 	// ProjectCommands enum has no members for them.
 	internal class SolutionOptionsHandler : CommandHandler
 	{
@@ -691,12 +696,14 @@ namespace MonoDevelop.Ide.Commands
 			ShellCommandHandler.Run (ProjectCommands.BuildSolution);
 		}
 
-		// Oleada 3 (slice 4): enabled when a solution is loaded (legacy:
-		// CurrentSelectedSolution != null && CurrentBuildOperation.IsCompleted —
-		// the in-progress check is deferred with the build operation state).
+		// Oleada 3 (slice 4 + 5): enabled when a solution is loaded and no
+		// build/run operation is in progress (legacy: CurrentSelectedSolution
+		// != null && CurrentBuildOperation.IsCompleted — the shell's shared
+		// process also covers the run operation, so IsOperationRunning is a
+		// slightly coarser bridge).
 		protected override void Update (CommandInfo info)
 		{
-			info.Enabled = ShellCommandState.HasWorkspace;
+			info.Enabled = ShellCommandState.HasWorkspace && !ShellCommandState.IsOperationRunning;
 		}
 	}
 
@@ -715,12 +722,14 @@ namespace MonoDevelop.Ide.Commands
 			ShellCommandHandler.Run (ProjectCommands.RebuildSolution);
 		}
 
-		// Oleada 3 (slice 4): enabled when a solution is loaded (legacy:
-		// CurrentSelectedSolution != null && CurrentBuildOperation.IsCompleted —
-		// the in-progress check is deferred with the build operation state).
+		// Oleada 3 (slice 4 + 5): enabled when a solution is loaded and no
+		// build/run operation is in progress (legacy: CurrentSelectedSolution
+		// != null && CurrentBuildOperation.IsCompleted — the shell's shared
+		// process also covers the run operation, so IsOperationRunning is a
+		// slightly coarser bridge).
 		protected override void Update (CommandInfo info)
 		{
-			info.Enabled = ShellCommandState.HasWorkspace;
+			info.Enabled = ShellCommandState.HasWorkspace && !ShellCommandState.IsOperationRunning;
 		}
 	}
 
@@ -739,12 +748,13 @@ namespace MonoDevelop.Ide.Commands
 			ShellCommandHandler.Run (ProjectCommands.Run);
 		}
 
-		// Oleada 3 (slice 4): enabled when a solution is loaded (legacy:
-		// Workspace.IsOpen && CanRun — the CanExecute / in-progress checks are
-		// deferred with the run operation state).
+		// Oleada 3 (slice 4 + 5): enabled when a solution is loaded and no
+		// build/run operation is in progress (legacy: Workspace.IsOpen && CanRun
+		// — the legacy "an application is already running" confirmation dialog
+		// and the dynamic "Restart" label are replaced by the busy guard).
 		protected override void Update (CommandInfo info)
 		{
-			info.Enabled = ShellCommandState.HasWorkspace;
+			info.Enabled = ShellCommandState.HasWorkspace && !ShellCommandState.IsOperationRunning;
 		}
 	}
 
@@ -763,12 +773,13 @@ namespace MonoDevelop.Ide.Commands
 			ShellCommandHandler.Run (ProjectCommands.RunEntry);
 		}
 
-		// Oleada 3 (slice 4): enabled when a solution is loaded (legacy:
-		// build target != null && CanExecute — the CanExecute / in-progress
-		// checks are deferred with the build/run operation state).
+		// Oleada 3 (slice 4 + 5): enabled when a solution is loaded and no
+		// build/run operation is in progress (legacy: build target != null &&
+		// CanExecute — the CanExecute in-progress part is bridged by
+		// IsOperationRunning).
 		protected override void Update (CommandInfo info)
 		{
-			info.Enabled = ShellCommandState.HasWorkspace;
+			info.Enabled = ShellCommandState.HasWorkspace && !ShellCommandState.IsOperationRunning;
 		}
 	}
 
@@ -808,6 +819,15 @@ namespace MonoDevelop.Ide.Commands
 		protected override void Run ()
 		{
 			ShellCommandHandler.Run (ProjectCommands.Stop);
+		}
+
+		// Oleada 3 (slice 5): enabled while a build or run operation is in
+		// progress (legacy: !CurrentBuildOperation.IsCompleted ||
+		// !CurrentRunOperation.IsCompleted — the shell maps both onto the
+		// single shared process, so IsOperationRunning is the exact bridge).
+		protected override void Update (CommandInfo info)
+		{
+			info.Enabled = ShellCommandState.IsOperationRunning;
 		}
 	}
 
