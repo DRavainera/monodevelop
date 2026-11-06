@@ -49,6 +49,7 @@ using MonoDevelop.Core.FeatureConfiguration;
 using MonoDevelop.Ide.Projects.FileNesting;
 #else
 using MonoDevelop.Components.Commands;
+using MonoDevelop.Core; // the shell-side GettextCatalog shim (CoreGettextShim)
 #endif
 
 namespace MonoDevelop.Ide.Commands
@@ -649,8 +650,13 @@ namespace MonoDevelop.Ide.Commands
 	// solution-pad selected node through ShellCommandState
 	// (SelectedNodeIsBuildTarget / SelectedNodeIsProject) — the exact legacy
 	// bridge for CurrentSelectedBuildTarget / CurrentSelectedProject is
-	// DotNetProject, unlike the slice 6 coarsening. The remaining Update
-	// overrides (dynamic labels) are not ported yet.
+	// DotNetProject, unlike the slice 6 coarsening. Oleada 3 (slice 9) ports
+	// the dynamic labels: Build/Rebuild/Clean ("B_uild {0}" et al. with
+	// ShellCommandState.SelectedBuildTargetName), Run ("Restart/Start Without
+	// Debugging" on IsOperationRunning), Run Entry ("Run Solution"/"Run
+	// Project" on the pad selection) and Project Options ("{0} _Options"). The
+	// legacy underscore escapes (Name.Replace ("_","__")) are not portable —
+	// Avalonia renders headers literally, so the names go in as-is.
 	// ApplyPolicy/ExportPolicy forward their literal catalog id: the
 	// ProjectCommands enum has no members for them.
 	internal class SolutionOptionsHandler : CommandHandler
@@ -675,13 +681,19 @@ namespace MonoDevelop.Ide.Commands
 			ShellCommandHandler.Run (ProjectCommands.ProjectOptions);
 		}
 
-		// Oleada 3 (slice 6): enabled when the loaded solution has projects
+		// Oleada 3 (slice 6 + 9): enabled when the loaded solution has projects
 		// (legacy: CurrentSelectedBuildTarget is a Project — the selected target
-		// is bridged by the solution's project set; the dynamic "{0} _Options"
-		// label is not portable, MenuBuilder only mirrors Enabled).
+		// is bridged by the solution's project set). Slice 9 adds the legacy
+		// dynamic label: "{0} _Options" with the selected project name when the
+		// pad selection is a project row, "Project _Options" otherwise (the
+		// catalog label — the mirror restores it unchanged).
 		protected override void Update (CommandInfo info)
 		{
 			info.Enabled = ShellCommandState.HasWorkspace && ShellCommandState.ActiveProjectCount > 0;
+			var name = ShellCommandState.SelectedNodeIsProject ? ShellCommandState.SelectedBuildTargetName : null;
+			info.Text = name is not null
+				? GettextCatalog.GetString ("{0} _Options", name)
+				: GettextCatalog.GetString ("Project _Options");
 		}
 	}
 
@@ -764,15 +776,20 @@ namespace MonoDevelop.Ide.Commands
 			ShellCommandHandler.Run (ProjectCommands.Build);
 		}
 
-		// Oleada 3 (slice 6): enabled when the loaded solution has projects and
-		// no build/run operation is in progress (legacy: CurrentSelectedBuildTarget
-		// != null && CurrentBuildOperation.IsCompleted && CanBuild — the selected
-		// target is bridged by the solution's project set and CanBuild is not
-		// modeled, both documented coarsenings; the dynamic label is not
-		// portable).
+		// Oleada 3 (slice 6 + 9): enabled when the loaded solution has projects
+		// and no build/run operation is in progress (legacy:
+		// CurrentSelectedBuildTarget != null && CurrentBuildOperation.IsCompleted
+		// && CanBuild — the selected target is bridged by the solution's project
+		// set and CanBuild is not modeled, both documented coarsenings). Slice 9
+		// adds the legacy dynamic "B_uild {0}" label; the legacy underscore
+		// escape (Name.Replace ("_","__")) is not portable — Avalonia renders
+		// the header literally, so the name goes in as-is.
 		protected override void Update (CommandInfo info)
 		{
 			info.Enabled = ShellCommandState.HasWorkspace && ShellCommandState.ActiveProjectCount > 0 && !ShellCommandState.IsOperationRunning;
+			var name = ShellCommandState.SelectedBuildTargetName;
+			if (name is not null)
+				info.Text = GettextCatalog.GetString ("B_uild {0}", name);
 		}
 	}
 
@@ -801,15 +818,19 @@ namespace MonoDevelop.Ide.Commands
 			ShellCommandHandler.Run (ProjectCommands.Rebuild);
 		}
 
-		// Oleada 3 (slice 6): enabled when the loaded solution has projects and
-		// no build/run operation is in progress (legacy: CurrentSelectedBuildTarget
-		// != null && CurrentBuildOperation.IsCompleted && CanBuild — the selected
-		// target is bridged by the solution's project set and CanBuild is not
-		// modeled, both documented coarsenings; the dynamic label is not
-		// portable).
+		// Oleada 3 (slice 6 + 9): enabled when the loaded solution has projects
+		// and no build/run operation is in progress (legacy:
+		// CurrentSelectedBuildTarget != null && CurrentBuildOperation.IsCompleted
+		// && CanBuild — the selected target is bridged by the solution's project
+		// set and CanBuild is not modeled, both documented coarsenings). Slice 9
+		// adds the legacy dynamic "R_ebuild {0}" label (the underscore escape is
+		// not portable — Avalonia renders the header literally).
 		protected override void Update (CommandInfo info)
 		{
 			info.Enabled = ShellCommandState.HasWorkspace && ShellCommandState.ActiveProjectCount > 0 && !ShellCommandState.IsOperationRunning;
+			var name = ShellCommandState.SelectedBuildTargetName;
+			if (name is not null)
+				info.Text = GettextCatalog.GetString ("R_ebuild {0}", name);
 		}
 	}
 
@@ -820,13 +841,20 @@ namespace MonoDevelop.Ide.Commands
 			ShellCommandHandler.Run (ProjectCommands.Run);
 		}
 
-		// Oleada 3 (slice 4 + 5): enabled when a solution is loaded and no
+		// Oleada 3 (slice 4 + 5 + 9): enabled when a solution is loaded and no
 		// build/run operation is in progress (legacy: Workspace.IsOpen && CanRun
 		// — the legacy "an application is already running" confirmation dialog
-		// and the dynamic "Restart" label are replaced by the busy guard).
+		// is replaced by the busy guard). Slice 9 adds the legacy dynamic
+		// label: "Restart Without Debugging" while a run operation is in
+		// progress (shown disabled by the busy guard), "Start Without
+		// Debugging" otherwise (the catalog/model label — the mirror restores
+		// it unchanged).
 		protected override void Update (CommandInfo info)
 		{
 			info.Enabled = ShellCommandState.HasWorkspace && !ShellCommandState.IsOperationRunning;
+			info.Text = ShellCommandState.IsOperationRunning
+				? GettextCatalog.GetString ("Restart Without Debugging")
+				: GettextCatalog.GetString ("Start Without Debugging");
 		}
 	}
 
@@ -845,13 +873,21 @@ namespace MonoDevelop.Ide.Commands
 			ShellCommandHandler.Run (ProjectCommands.RunEntry);
 		}
 
-		// Oleada 3 (slice 4 + 5): enabled when a solution is loaded and no
+		// Oleada 3 (slice 4 + 5 + 9): enabled when a solution is loaded and no
 		// build/run operation is in progress (legacy: build target != null &&
 		// CanExecute — the CanExecute in-progress part is bridged by
-		// IsOperationRunning).
+		// IsOperationRunning). Slice 9 adds the legacy dynamic label:
+		// "Run Solution" for a selected solution row, "Run Project" for a
+		// selected project row, unchanged (catalog "_Run Item") without a pad
+		// selection (legacy: CurrentSelectedBuildTarget is Solution/Project
+		// respectively; no selection left the label untouched).
 		protected override void Update (CommandInfo info)
 		{
 			info.Enabled = ShellCommandState.HasWorkspace && !ShellCommandState.IsOperationRunning;
+			if (ShellCommandState.SelectedNodeIsSolution)
+				info.Text = GettextCatalog.GetString ("Run Solution");
+			else if (ShellCommandState.SelectedNodeIsProject)
+				info.Text = GettextCatalog.GetString ("Run Project");
 		}
 	}
 
@@ -870,16 +906,21 @@ namespace MonoDevelop.Ide.Commands
 			ShellCommandHandler.Run (ProjectCommands.Clean);
 		}
 
-		// Oleada 3 (slice 6): enabled when the loaded solution has projects and
-		// no build/run operation is in progress (legacy: CurrentSelectedBuildTarget
-		// != null && .CanBuild — the selected target is bridged by the solution's
-		// project set and CanBuild is not modeled, both documented coarsenings;
-		// the busy guard !IsOperationRunning is an added hardening: the legacy
-		// Clean does not check CurrentBuildOperation.IsCompleted, unlike
-		// Build/Rebuild; the dynamic label is not portable).
+		// Oleada 3 (slice 6 + 9): enabled when the loaded solution has projects
+		// and no build/run operation is in progress (legacy:
+		// CurrentSelectedBuildTarget != null && .CanBuild — the selected target
+		// is bridged by the solution's project set and CanBuild is not modeled,
+		// both documented coarsenings; the busy guard !IsOperationRunning is an
+		// added hardening: the legacy Clean does not check
+		// CurrentBuildOperation.IsCompleted, unlike Build/Rebuild). Slice 9
+		// adds the legacy dynamic "C_lean {0}" label (the underscore escape is
+		// not portable — Avalonia renders the header literally).
 		protected override void Update (CommandInfo info)
 		{
 			info.Enabled = ShellCommandState.HasWorkspace && ShellCommandState.ActiveProjectCount > 0 && !ShellCommandState.IsOperationRunning;
+			var name = ShellCommandState.SelectedBuildTargetName;
+			if (name is not null)
+				info.Text = GettextCatalog.GetString ("C_lean {0}", name);
 		}
 	}
 

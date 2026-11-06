@@ -3428,8 +3428,16 @@ Gtk.Widget GetFocusedChild (Control widget)
 				// nonPublic: the catalog handlers are mostly internal classes.
 				cmd.DefaultHandler = (CommandHandler) Activator.CreateInstance (cmd.DefaultHandlerType, true);
 			}
-			if (IsEnabled)
-				cmd.DefaultHandler?.InternalUpdate (info);
+			// Oleada 3 (slice 9): array commands (type="...|array" in the catalog,
+			// e.g. OpenDocumentList) fill their CommandArrayInfo from the handler's
+			// Update(CommandArrayInfo) — mirrors the GTK GetCommandInfo branch.
+			if (IsEnabled) {
+				if (cmd.CommandArray) {
+					info.ArrayInfo = new CommandArrayInfo (info);
+					cmd.DefaultHandler?.InternalUpdate (info.ArrayInfo);
+				} else
+					cmd.DefaultHandler?.InternalUpdate (info);
+			}
 			info.Enabled &= IsEnabled;
 			info.CancelAsyncUpdate ();
 			return info;

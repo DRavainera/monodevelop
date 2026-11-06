@@ -78,6 +78,37 @@ namespace MonoDevelop.Ide.Commands
 		// that gated the context-only Add Reference command.
 		public static bool SelectedNodeIsProject
 			=> MonoDevelop.AvaloniaShell.Views.MainWindow.Instance?.SelectedNodeIsProject ?? false;
+
+		// Oleada 3 (slice 9): the solution-pad selected node is the solution row —
+		// the shell equivalent of the legacy "the selected build target is the
+		// Solution" branch that picked the Run Entry "Run Solution" label.
+		public static bool SelectedNodeIsSolution
+			=> MonoDevelop.AvaloniaShell.Views.MainWindow.Instance?.SelectedNodeIsSolution ?? false;
+
+		// Oleada 3 (slice 9): the 1-based index-th open document's tab title —
+		// the shell equivalent of the legacy Document.Window.Title that renamed
+		// the Window > Open Document N items (null when the slot has no document).
+		public static string? DocumentTitleAt (int index)
+			=> MonoDevelop.AvaloniaShell.Views.MainWindow.Instance?.DocumentTitleAt (index);
+
+		// Oleada 3 (slice 9): the 1-based index-th open document's tab tag —
+		// the shell equivalent of the legacy Document dataItem the Open Document
+		// N / Document List commands activate (null when the slot is empty).
+		public static string? DocumentTagAt (int index)
+			=> MonoDevelop.AvaloniaShell.Views.MainWindow.Instance?.DocumentTagAt (index);
+
+		// Oleada 3 (slice 9): the 1-based index-th open document is the active
+		// tab — the shell equivalent of the legacy document == Workbench.
+		// ActiveDocument check that marked the Window > Open Document N items.
+		public static bool IsDocumentActive (int index)
+			=> MonoDevelop.AvaloniaShell.Views.MainWindow.Instance?.IsDocumentActive (index) ?? false;
+
+		// Oleada 3 (slice 9): the build-target name for the main-menu
+		// Build/Rebuild/Clean dynamic labels — the shell equivalent of the legacy
+		// CurrentSelectedBuildTarget.Name (pad-selected Solution/Project row,
+		// falling back to the solution's first project; null when there is none).
+		public static string? SelectedBuildTargetName
+			=> MonoDevelop.AvaloniaShell.Views.MainWindow.Instance?.SelectedBuildTargetName;
 	}
 }
 #endif

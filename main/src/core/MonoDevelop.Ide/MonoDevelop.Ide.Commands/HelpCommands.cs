@@ -197,6 +197,17 @@ namespace MonoDevelop.Ide.Commands
 		{
 			ShellCommandHandler.Run (HelpCommands.Help);
 		}
+
+		// Oleada 3 (slice 9): port of the legacy Update — the item is hidden
+		// when help cannot be shown (legacy:
+		//   if (!IdeServices.HelpOperations.CanShowHelp ("root:")) info.Visible = false;).
+		// Bridge: the shell's HelpOperations.CanShowHelp (topic != null) is
+		// always true for "root:" and the shell's Help pad is always available,
+		// so the gate degenerates to "always visible".
+		protected override void Update (CommandInfo info)
+		{
+			info.Visible = true;
+		}
 	}
 
 	public class OpenLogDirectoryHandler : CommandHandler

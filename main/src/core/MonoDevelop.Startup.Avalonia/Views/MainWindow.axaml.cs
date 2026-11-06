@@ -739,8 +739,10 @@ public partial class MainWindow : Window
 					// Oleada 3 (slice 6): the project set changed outside
 					// RefreshSolutionTree (OpenSolutionInWindow below early-returns
 					// on the same path) — drop the memoized ActiveProjectCount.
-					if (projPath is not null)
+					if (projPath is not null) {
 						activeProjectCountSln = null;
+						buildTargetNameSln = null; // Oleada 3 (slice 9): same invalidation
+					}
 					var slnText = File.ReadAllText (loadedSolutionPath);
 					Output ("[newproject] template=" + newProjTemplate + " created=" + (projPath is not null) + " path=" + projPath + " sln-entry=" + slnText.Contains ("QAAdded") + " mappings=" + slnText.Contains (".Debug|AnyCPU.Build.0"));
 					OpenSolutionInWindow (loadedSolutionPath);
@@ -1937,6 +1939,34 @@ public partial class MainWindow : Window
 					DumpCmdStates ("closed1");
 					await CloseDocumentAsync ("QA Cmd2");
 					DumpCmdStates ("closed2");
+					// Oleada 3 (slice 9): open 12 documents so the dynamic
+					// "Document List" submenu (documents 10+) fills in, dump,
+					// then close them all — the doc1/doc2 fields above track
+					// the rename/checked state of the first two of them.
+					for (int i = 1; i <= 12; i++)
+						OpenDocumentText ("QA List" + i, "l" + i);
+					DumpCmdStates ("docs12");
+					// Click-equivalent of a Document List submenu child: the
+					// array command dispatched with the child's dataItem (the
+					// tab tag) must select that document (doc1Chk flips on).
+					OnMenuCommand ("MonoDevelop.Ide.Commands.WindowCommands.OpenDocumentList", "QA List1");
+					DumpCmdStates ("docs12sel");
+					// Oleada 3 (slice 9, QA F1 regression): swap two documents
+					// while the count stays 12 — the Document List children must
+					// re-point at the NEW document set and the dispatch must use
+					// the current DataItem (the old in-place branch kept each
+					// child's captured DataItem, selecting the document that used
+					// to occupy the slot).
+					await CloseDocumentAsync ("QA List10");
+					await CloseDocumentAsync ("QA List11");
+					OpenDocumentText ("QA List13", "l13");
+					OpenDocumentText ("QA List14", "l14");
+					DumpCmdStates ("docs12swap");
+					OnMenuCommand ("MonoDevelop.Ide.Commands.WindowCommands.OpenDocumentList", "QA List13");
+					DumpCmdStates ("docs12swapsel");
+					for (int i = 14; i >= 1; i--)
+						if (docs.ContainsKey ("QA List" + i))
+							await CloseDocumentAsync ("QA List" + i);
 					// Oleada 3 (slice 5): drive the shared build/run process
 					// (the same RunProcessAsync path a real build/run takes)
 					// through start -> in-progress -> exit and dump the
@@ -2911,11 +2941,50 @@ public partial class MainWindow : Window
 				return null;
 			}
 		}
+		// Oleada 3 (slice 9): the tracked menu item itself (En/Vi/Hdr/Chk/ListN
+		// all walk from here — dynamic array submenu children are found through
+		// the parent's Items, their Tags are document dataItems, never ids).
+		Avalonia.Controls.MenuItem? Mi (string fullId)
+		{
+			Avalonia.Controls.MenuItem? Find (Avalonia.Controls.MenuItem mi)
+			{
+				if (mi.Tag is string t && t == fullId)
+					return mi;
+				foreach (var c in mi.Items.OfType<Avalonia.Controls.MenuItem> ())
+					if (Find (c) is { } r)
+						return r;
+				return null;
+			}
+			foreach (var top in MainMenu!.Items.OfType<Avalonia.Controls.MenuItem> ())
+				if (Find (top) is { } r)
+					return r;
+			return null;
+		}
+		bool? Vi (string fullId) => Mi (fullId)?.IsVisible;
+		string? Hdr (string fullId) => Mi (fullId)?.Header as string;
+		bool? Chk (string fullId)
+		{
+			var mi = Mi (fullId);
+			return mi is null ? null : mi.Icon is Avalonia.Controls.TextBlock tb && tb.Text == "\u2713";
+		}
+		int? ListN (string fullId) => Mi (fullId)?.Items.Count;
+		// Direct command-state read for commands with no menu item (RunEntry).
+		string? CTxt (string fullId)
+		{
+			try {
+				return MonoDevelop.Components.Commands.CommandService.GetCommandInfo (fullId).Text;
+			} catch (System.Exception ex) {
+				Output ("[cmdstates] CTxt " + fullId + " error: " + ex.Message);
+				return null;
+			}
+		}
+		string N (int? v) => v is null ? "?" : v.Value.ToString ();
 		const string F = "MonoDevelop.Ide.Commands.FileCommands.";
 		const string E = "MonoDevelop.Ide.Commands.EditCommands.";
 		const string W = "MonoDevelop.Ide.Commands.WindowCommands.";
 		const string V = "MonoDevelop.Ide.Commands.ViewCommands.";
 		const string P = "MonoDevelop.Ide.Commands.ProjectCommands.";
+		const string H = "MonoDevelop.Ide.Commands.HelpCommands.";
 		Output ("[cmdstates] (" + when + ") "
 			+ "saveAll=" + B (En (F + "SaveAll"))
 			+ " close=" + B (En (F + "CloseFile"))
@@ -2965,7 +3034,27 @@ public partial class MainWindow : Window
 			+ " projCount=" + ActiveProjectCount
 			+ " hasDocs=" + HasDocuments + " hasActive=" + HasActiveDocument
 			+ " hasActiveEditor=" + HasActiveEditor + " hasDirty=" + HasDirtyDocuments
-			+ " hasWs=" + HasWorkspace + " hasRecent=" + HasRecentSolutions);
+			+ " hasWs=" + HasWorkspace + " hasRecent=" + HasRecentSolutions
+			// Oleada 3 (slice 9): visibility/rename/checked + dynamic labels.
+			+ " | doc1Vis=" + B (Vi (W + "OpenDocument1"))
+			+ " doc2Vis=" + B (Vi (W + "OpenDocument2"))
+			+ " doc1Txt=" + (Hdr (W + "OpenDocument1") ?? "-")
+			+ " doc1Chk=" + B (Chk (W + "OpenDocument1"))
+			+ " doc2Chk=" + B (Chk (W + "OpenDocument2"))
+			+ " helpVis=" + B (Vi (H + "Help"))
+			+ " buildTxt=" + (Hdr (P + "Build") ?? "-")
+			+ " rebuildTxt=" + (Hdr (P + "Rebuild") ?? "-")
+			+ " cleanTxt=" + (Hdr (P + "Clean") ?? "-")
+			+ " runTxt=" + (Hdr (P + "Run") ?? "-")
+			+ " runEntryTxt=" + (CTxt (P + "RunEntry") ?? "-")
+			+ " projOptsTxt=" + (Hdr (P + "ProjectOptions") ?? "-")
+			+ " docListN=" + N (ListN (W + "OpenDocumentList"))
+			+ " winListN=" + N (ListN (W + "OpenWindowList"))
+			// Oleada 3 (slice 9, QA F1): the active document title (the dispatch
+			// target beyond slots 1/2) and the first Document List child header
+			// (the renamed-set check after a same-count document swap).
+			+ " activeDoc=" + (ActiveDocumentTitle ?? "-")
+			+ " docList0=" + (Mi (W + "OpenDocumentList")?.Items.OfType<Avalonia.Controls.MenuItem> ().FirstOrDefault ()?.Header as string ?? "-"));
 	}
 
 	void UpdatePadChecks (System.Collections.Generic.IReadOnlyList<MenuService.MenuEntry> entries)
@@ -3622,6 +3711,68 @@ public partial class MainWindow : Window
 	// Reference command.
 	internal bool SelectedNodeIsProject
 		=> SelectedNodeType ().NodeType == "Project";
+
+	// Oleada 3 (slice 9): the solution-pad selected node is the solution row —
+	// the shell equivalent of the legacy "the selected build target is the
+	// Solution" branch of the Run Entry / Build label updates.
+	internal bool SelectedNodeIsSolution
+		=> SelectedNodeType ().NodeType == "Solution";
+
+	// Oleada 3 (slice 9): the 1-based index-th open document's tab title (the
+	// same file name the tab header shows) — the shell equivalent of the legacy
+	// Document.Window.Title that renamed the Window > Open Document N items.
+	internal string? DocumentTitleAt (int index)
+		=> documents.Count >= index ? System.IO.Path.GetFileName (documents [index - 1].Tag) : null;
+
+	// Oleada 3 (slice 9): the 1-based index-th open document's tab tag (full path
+	// or untitled title) — the shell equivalent of the legacy Document dataItem
+	// the Open Document N / Document List commands activate.
+	internal string? DocumentTagAt (int index)
+		=> documents.Count >= index ? documents [index - 1].Tag : null;
+
+	// Oleada 3 (slice 9): the 1-based index-th open document holds the selected
+	// tab — the shell equivalent of the legacy document == Workbench.ActiveDocument
+	// check that marked the Window > Open Document N items.
+	internal bool IsDocumentActive (int index)
+		=> documents.Count >= index && DocTabs?.SelectedItem is TabItem t
+		&& documents [index - 1].Tag == t.Tag as string;
+
+	// Oleada 3 (slice 9, QA F1): the active tab's title (file name) — the
+	// dispatch-target check for Document List children beyond the first two
+	// documents (doc1Chk/doc2Chk only cover slots 1/2).
+	internal string? ActiveDocumentTitle
+		=> DocTabs?.SelectedItem is TabItem at && at.Tag is string aTag
+		&& docs.TryGetValue (aTag, out _) ? System.IO.Path.GetFileName (aTag) : null;
+
+	// Oleada 3 (slice 9): the build-target name the main-menu Build/Rebuild/Clean
+	// dynamic labels show — the shell equivalent of the legacy
+	// CurrentSelectedBuildTarget.Name: the pad-selected Solution/Project row,
+	// falling back to the solution's first project (the same target the
+	// single-project build commands execute, ResolveActiveProject). Memoized by
+	// solution path like ActiveProjectCount: the labels are re-read on every
+	// command-state refresh (including per-keystroke dirty changes).
+	string? buildTargetNameSln;
+	string? buildTargetNameValue;
+	internal string? SelectedBuildTargetName
+	{
+		get
+		{
+			var (nodeType, path) = SelectedNodeType ();
+			if (nodeType is "Solution" or "Project" && path is not null)
+				return System.IO.Path.GetFileNameWithoutExtension (path);
+			var sln = loadedSolutionPath;
+			if (sln is null)
+				return null;
+			if (!string.Equals (sln, buildTargetNameSln, StringComparison.Ordinal)) {
+				buildTargetNameSln = sln;
+				buildTargetNameValue = null;
+				var active = ResolveActiveProject ();
+				if (active is not null)
+					buildTargetNameValue = System.IO.Path.GetFileNameWithoutExtension (active);
+			}
+			return buildTargetNameValue;
+		}
+	}
 
 	// Oleada 3: re-evaluates the command-bound menu items' enabled state after a
 	// document/workspace change (cheap: a handful of GetCommandInfo calls).
@@ -4332,6 +4483,7 @@ public partial class MainWindow : Window
 		// Oleada 3 (slice 6): the project set may have changed (add/remove/
 		// rename) — drop the memoized ActiveProjectCount.
 		activeProjectCountSln = null;
+		buildTargetNameSln = null; // Oleada 3 (slice 9): same invalidation
 		if (!string.IsNullOrEmpty (loadedSolutionPath) && File.Exists (loadedSolutionPath))
 			OpenSolutionInWindow (loadedSolutionPath);
 	}
@@ -5652,6 +5804,7 @@ public partial class MainWindow : Window
 				// RefreshSolutionTree (OpenSolutionInWindow early-returns on the
 				// same path) — drop the memoized ActiveProjectCount.
 				activeProjectCountSln = null;
+				buildTargetNameSln = null; // Oleada 3 (slice 9): same invalidation
 				OpenSolutionInWindow (loadedSolutionPath);
 				return;
 			}
@@ -5783,6 +5936,7 @@ public partial class MainWindow : Window
 		loadedSolutionPath = null;
 		solutionLoaded = false;
 		activeProjectCountSln = null; // Oleada 3 (slice 6): no solution, no projects
+		buildTargetNameSln = null; // Oleada 3 (slice 9): same invalidation
 		NotifyCommandStateChanged (); // Oleada 3: the workspace was closed
 		// The three symbol pads are solution/document scoped: reset them so a later
 		// solution does not show stale rows (legacy pads cleared on workspace close).
@@ -6657,7 +6811,13 @@ public partial class MainWindow : Window
 				Output ("[search] no selection");
 			return;
 		case "MonoDevelop.Ide.Commands.WindowCommands.OpenDocumentList":
-			Output ("[window] open documents: " + string.Join (", ", documents.Select (d => d.Tag)));
+			// Oleada 3 (slice 9): a dynamic Document List submenu child activates
+			// its document (legacy OpenDocumentListHandler.Run: document.Select());
+			// without a dataItem (the leaf fallback) the diagnostic listing stays.
+			if (nodeContext is not null && documents.Any (d => d.Tag == nodeContext))
+				SelectDocument (nodeContext);
+			else
+				Output ("[window] open documents: " + string.Join (", ", documents.Select (d => d.Tag)));
 			return;
 		case "MonoDevelop.Ide.Commands.WindowCommands.OpenWindowList":
 			Output ("[window] only one workbench window in the new shell");

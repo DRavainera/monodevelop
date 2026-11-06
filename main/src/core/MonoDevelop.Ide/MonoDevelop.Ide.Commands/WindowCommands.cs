@@ -35,6 +35,7 @@ using Gtk;
 using System.Linq;
 #else
 using MonoDevelop.Components.Commands;
+using MonoDevelop.Core; // the shell-side GettextCatalog shim (CoreGettextShim)
 #endif
 
 namespace MonoDevelop.Ide.Commands
@@ -453,8 +454,12 @@ namespace MonoDevelop.Ide.Commands
 	// Oleada 2: AVALONIA_SHELL ports of the legacy handlers above. Each one
 	// delegates to the shell's menu dispatcher (ShellCommandHandler) — the same
 	// OnMenuCommand endpoint the catalog router uses — so behavior is
-	// unchanged; the Update overrides (enabled/visible state) are not ported
-	// yet. OpenDocument1..9 and SwitchNextPad/SwitchPreviousPad forward their
+	// unchanged. Oleada 3 (slice 3) ports the document-count enabled gates;
+	// Oleada 3 (slice 9) ports the OpenDocumentHandlerBase visibility/rename/
+	// checked state (Window > Open Document N hide when short and rename to
+	// the document title), the OpenDocumentList dynamic array (documents 10+
+	// as submenu children) and the single-window OpenWindowList array.
+	// OpenDocument1..9 and SwitchNextPad/SwitchPreviousPad forward their
 	// literal catalog id: the WindowCommands enum has no members for them.
 	internal class NextDocumentHandler : CommandHandler
 	{
@@ -492,142 +497,173 @@ namespace MonoDevelop.Ide.Commands
 		{
 			ShellCommandHandler.Run (WindowCommands.OpenDocumentList, dataItem);
 		}
+
+		// Oleada 3 (slice 9): port of the legacy Update(CommandArrayInfo) —
+		// documents 10+ appear as submenu children (the shell's dynamic array
+		// submenu). The legacy AccelKey branch (Documents.Count + i < 10) is
+		// dead code (never true once the count passes 9) and the GTK
+		// notification markup (blue span) is not representable — both dropped.
+		protected override void Update (CommandArrayInfo info)
+		{
+			int count = ShellCommandState.DocumentCount;
+			if (count < 10)
+				return;
+			for (int i = 9; i < count; i++) {
+				var title = ShellCommandState.DocumentTitleAt (i + 1);
+				var ci = new CommandInfo (title);
+				if (ShellCommandState.IsDocumentActive (i + 1))
+					ci.Checked = true;
+				ci.Description = GettextCatalog.GetString ("Activate document '{0}'", title);
+				info.Add (ci, ShellCommandState.DocumentTagAt (i + 1));
+			}
+		}
 	}
 
-	internal class OpenDocument1 : CommandHandler
+	// Oleada 3 (slice 9): port of the legacy OpenDocumentHandlerBase — the
+	// Window > Open Document N items hide when short (Visible=false), rename
+	// to the document title and mark the active document (Checked). The
+	// document dataItem is the tab tag (the shell's Document equivalent); the
+	// GTK notification markup is not representable (dropped, as in the list
+	// handler).
+	internal class OpenDocumentHandlerBase : CommandHandler
 	{
+		int index;
+
+		// 1-based index
+		protected OpenDocumentHandlerBase (int index)
+		{
+			this.index = index;
+		}
+
+		protected override void Update (CommandInfo info)
+		{
+			if (ShellCommandState.DocumentCount >= index) {
+				info.Text = ShellCommandState.DocumentTitleAt (index);
+				info.Checked = ShellCommandState.IsDocumentActive (index);
+				info.Description = GettextCatalog.GetString ("Activate document '{0}'", info.Text);
+				info.Visible = true;
+				info.Enabled = true;
+			} else {
+				info.Visible = false;
+				info.Enabled = false;
+			}
+		}
+	}
+
+	internal class OpenDocument1 : OpenDocumentHandlerBase
+	{
+		public OpenDocument1 ()
+			: base (1)
+		{
+		}
+
 		protected override void Run ()
 		{
 			ShellCommandHandler.Run ("MonoDevelop.Ide.Commands.WindowCommands.OpenDocument1");
 		}
-
-		// Oleada 3 (slice 3): enabled when at least one document is open (legacy:
-		// Documents.Count >= index). The legacy item also renames to the doc title
-		// and hides when short — deferred with the other dynamic-label/visibility
-		// ports.
-		protected override void Update (CommandInfo info)
-		{
-			info.Enabled = ShellCommandState.DocumentCount >= 1;
-		}
 	}
 
-	internal class OpenDocument2 : CommandHandler
+	internal class OpenDocument2 : OpenDocumentHandlerBase
 	{
+		public OpenDocument2 ()
+			: base (2)
+		{
+		}
+
 		protected override void Run ()
 		{
 			ShellCommandHandler.Run ("MonoDevelop.Ide.Commands.WindowCommands.OpenDocument2");
 		}
-
-		// Oleada 3 (slice 3): enabled when at least two documents are open
-		// (legacy: Documents.Count >= index).
-		protected override void Update (CommandInfo info)
-		{
-			info.Enabled = ShellCommandState.DocumentCount >= 2;
-		}
 	}
 
-	internal class OpenDocument3 : CommandHandler
+	internal class OpenDocument3 : OpenDocumentHandlerBase
 	{
+		public OpenDocument3 ()
+			: base (3)
+		{
+		}
+
 		protected override void Run ()
 		{
 			ShellCommandHandler.Run ("MonoDevelop.Ide.Commands.WindowCommands.OpenDocument3");
 		}
-
-		// Oleada 3 (slice 3): enabled when at least three documents are open
-		// (legacy: Documents.Count >= index).
-		protected override void Update (CommandInfo info)
-		{
-			info.Enabled = ShellCommandState.DocumentCount >= 3;
-		}
 	}
 
-	internal class OpenDocument4 : CommandHandler
+	internal class OpenDocument4 : OpenDocumentHandlerBase
 	{
+		public OpenDocument4 ()
+			: base (4)
+		{
+		}
+
 		protected override void Run ()
 		{
 			ShellCommandHandler.Run ("MonoDevelop.Ide.Commands.WindowCommands.OpenDocument4");
 		}
-
-		// Oleada 3 (slice 3): enabled when at least four documents are open
-		// (legacy: Documents.Count >= index).
-		protected override void Update (CommandInfo info)
-		{
-			info.Enabled = ShellCommandState.DocumentCount >= 4;
-		}
 	}
 
-	internal class OpenDocument5 : CommandHandler
+	internal class OpenDocument5 : OpenDocumentHandlerBase
 	{
+		public OpenDocument5 ()
+			: base (5)
+		{
+		}
+
 		protected override void Run ()
 		{
 			ShellCommandHandler.Run ("MonoDevelop.Ide.Commands.WindowCommands.OpenDocument5");
 		}
-
-		// Oleada 3 (slice 3): enabled when at least five documents are open
-		// (legacy: Documents.Count >= index).
-		protected override void Update (CommandInfo info)
-		{
-			info.Enabled = ShellCommandState.DocumentCount >= 5;
-		}
 	}
 
-	internal class OpenDocument6 : CommandHandler
+	internal class OpenDocument6 : OpenDocumentHandlerBase
 	{
+		public OpenDocument6 ()
+			: base (6)
+		{
+		}
+
 		protected override void Run ()
 		{
 			ShellCommandHandler.Run ("MonoDevelop.Ide.Commands.WindowCommands.OpenDocument6");
 		}
-
-		// Oleada 3 (slice 3): enabled when at least six documents are open
-		// (legacy: Documents.Count >= index).
-		protected override void Update (CommandInfo info)
-		{
-			info.Enabled = ShellCommandState.DocumentCount >= 6;
-		}
 	}
 
-	internal class OpenDocument7 : CommandHandler
+	internal class OpenDocument7 : OpenDocumentHandlerBase
 	{
+		public OpenDocument7 ()
+			: base (7)
+		{
+		}
+
 		protected override void Run ()
 		{
 			ShellCommandHandler.Run ("MonoDevelop.Ide.Commands.WindowCommands.OpenDocument7");
 		}
-
-		// Oleada 3 (slice 3): enabled when at least seven documents are open
-		// (legacy: Documents.Count >= index).
-		protected override void Update (CommandInfo info)
-		{
-			info.Enabled = ShellCommandState.DocumentCount >= 7;
-		}
 	}
 
-	internal class OpenDocument8 : CommandHandler
+	internal class OpenDocument8 : OpenDocumentHandlerBase
 	{
+		public OpenDocument8 ()
+			: base (8)
+		{
+		}
+
 		protected override void Run ()
 		{
 			ShellCommandHandler.Run ("MonoDevelop.Ide.Commands.WindowCommands.OpenDocument8");
 		}
-
-		// Oleada 3 (slice 3): enabled when at least eight documents are open
-		// (legacy: Documents.Count >= index).
-		protected override void Update (CommandInfo info)
-		{
-			info.Enabled = ShellCommandState.DocumentCount >= 8;
-		}
 	}
 
-	internal class OpenDocument9 : CommandHandler
+	internal class OpenDocument9 : OpenDocumentHandlerBase
 	{
+		public OpenDocument9 ()
+			: base (9)
+		{
+		}
+
 		protected override void Run ()
 		{
 			ShellCommandHandler.Run ("MonoDevelop.Ide.Commands.WindowCommands.OpenDocument9");
-		}
-
-		// Oleada 3 (slice 3): enabled when at least nine documents are open
-		// (legacy: Documents.Count >= index).
-		protected override void Update (CommandInfo info)
-		{
-			info.Enabled = ShellCommandState.DocumentCount >= 9;
 		}
 	}
 
@@ -636,6 +672,14 @@ namespace MonoDevelop.Ide.Commands
 		protected override void Run (object dataItem)
 		{
 			ShellCommandHandler.Run (WindowCommands.OpenWindowList, dataItem);
+		}
+
+		// Oleada 3 (slice 9): the catalog declares this an array command
+		// (type="radio|array"), so the shell renders it as a dynamic submenu —
+		// the single workbench window is its only child.
+		protected override void Update (CommandArrayInfo info)
+		{
+			info.Add ("Window 1", "Window 1");
 		}
 	}
 
