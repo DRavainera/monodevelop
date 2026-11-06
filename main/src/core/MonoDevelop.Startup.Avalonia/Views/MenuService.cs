@@ -600,6 +600,11 @@ public static class MenuService
 	{
 		var entry = new MenuEntry {
 			Label = label,
+			// The AutoHide property is the dynamic marker MenuBuilder consumes
+			// (slice 10: the sub hides at runtime while all children are
+			// invisible); Disabled is the static model-level fallback for the
+			// same intent (all children already disabled at build time).
+			AutoHide = autoHide,
 			Disabled = autoHide && children.TrueForAll (c => c.Disabled || c.IsSeparator),
 		};
 		entry.Children.AddRange (children);

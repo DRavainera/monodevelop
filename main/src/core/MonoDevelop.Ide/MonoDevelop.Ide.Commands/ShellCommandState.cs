@@ -109,6 +109,13 @@ namespace MonoDevelop.Ide.Commands
 		// falling back to the solution's first project; null when there is none).
 		public static string? SelectedBuildTargetName
 			=> MonoDevelop.AvaloniaShell.Views.MainWindow.Instance?.SelectedBuildTargetName;
+
+		// Oleada 3 (slice 10): the shell session recorder is capturing — the
+		// shell equivalent of the legacy AutoTestService.CurrentRecordSession
+		// != null check that flipped the Tools > Session Recorder Start/Stop
+		// label.
+		public static bool IsSessionRecording
+			=> MonoDevelop.AvaloniaShell.Views.MainWindow.Instance?.IsSessionRecording ?? false;
 	}
 }
 #endif

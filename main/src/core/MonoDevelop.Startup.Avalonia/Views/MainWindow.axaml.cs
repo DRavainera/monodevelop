@@ -2054,6 +2054,37 @@ public partial class MainWindow : Window
 							}
 						}
 					}
+					// Oleada 3 (slice 10): drive the Tools Update sources through
+					// their on/off states and dump after each — the Instrumentation
+					// Monitor gate (InstrumentationService.Enabled), the Session
+					// Recorder/Replay gate (the EnableAutomatedTesting pref, toggled
+					// in the real property store) and the dynamic Edit Custom Tools
+					// label (the tools file, emptied and restored). Everything is
+					// restored in the finally so a crash mid-phase cannot leave the
+					// user's settings or tools file altered.
+					var autoTestWas = MonoDevelop.Ide.Services.SettingsStore.GetBool ("MonoDevelop.EnableAutomatedTesting", false);
+					var instrWas = MonoDevelop.Core.Instrumentation.InstrumentationService.Enabled;
+					var toolsWere = MonoDevelop.Ide.Services.SettingsStore.LoadTools ();
+					try {
+						DumpCmdStates ("tools");
+						MonoDevelop.Core.Instrumentation.InstrumentationService.Enabled = !instrWas;
+						DumpCmdStates ("instrOff");
+						MonoDevelop.Core.Instrumentation.InstrumentationService.Enabled = instrWas;
+						DumpCmdStates ("instrOn");
+						MonoDevelop.Ide.Services.SettingsStore.SetBool ("MonoDevelop.EnableAutomatedTesting", true);
+						DumpCmdStates ("sessOn");
+						MonoDevelop.Ide.Services.SettingsStore.SetBool ("MonoDevelop.EnableAutomatedTesting", false);
+						DumpCmdStates ("sessOff");
+						var savedTools = MonoDevelop.Ide.Services.SettingsStore.LoadTools ();
+						MonoDevelop.Ide.Services.SettingsStore.SaveTools (System.Array.Empty<MonoDevelop.Ide.Services.SettingsStore.ExternalTool> ());
+						DumpCmdStates ("noTools");
+						MonoDevelop.Ide.Services.SettingsStore.SaveTools (savedTools);
+						DumpCmdStates ("toolsBack");
+					} finally {
+						MonoDevelop.Core.Instrumentation.InstrumentationService.Enabled = instrWas;
+						MonoDevelop.Ide.Services.SettingsStore.SetBool ("MonoDevelop.EnableAutomatedTesting", autoTestWas);
+						MonoDevelop.Ide.Services.SettingsStore.SaveTools (toolsWere);
+					}
 					Output ("[cmdstates] done");
 				}, Avalonia.Threading.DispatcherPriority.Background);
 			} else if (qa == "--viewcmds") {
@@ -2979,12 +3010,31 @@ public partial class MainWindow : Window
 			}
 		}
 		string N (int? v) => v is null ? "?" : v.Value.ToString ();
+		// Oleada 3 (slice 10): a (non command-bound) menu item by header — the
+		// AutoHide "Session Recorder" sub carries no command Tag.
+		Avalonia.Controls.MenuItem? Sub (string header)
+		{
+			Avalonia.Controls.MenuItem? Find (Avalonia.Controls.MenuItem mi)
+			{
+				if (mi.Header as string == header)
+					return mi;
+				foreach (var c in mi.Items.OfType<Avalonia.Controls.MenuItem> ())
+					if (Find (c) is { } r)
+						return r;
+				return null;
+			}
+			foreach (var top in MainMenu!.Items.OfType<Avalonia.Controls.MenuItem> ())
+				if (Find (top) is { } r)
+					return r;
+			return null;
+		}
 		const string F = "MonoDevelop.Ide.Commands.FileCommands.";
 		const string E = "MonoDevelop.Ide.Commands.EditCommands.";
 		const string W = "MonoDevelop.Ide.Commands.WindowCommands.";
 		const string V = "MonoDevelop.Ide.Commands.ViewCommands.";
 		const string P = "MonoDevelop.Ide.Commands.ProjectCommands.";
 		const string H = "MonoDevelop.Ide.Commands.HelpCommands.";
+		const string T = "MonoDevelop.Ide.Commands.ToolCommands.";
 		Output ("[cmdstates] (" + when + ") "
 			+ "saveAll=" + B (En (F + "SaveAll"))
 			+ " close=" + B (En (F + "CloseFile"))
@@ -3054,7 +3104,18 @@ public partial class MainWindow : Window
 			// target beyond slots 1/2) and the first Document List child header
 			// (the renamed-set check after a same-count document swap).
 			+ " activeDoc=" + (ActiveDocumentTitle ?? "-")
-			+ " docList0=" + (Mi (W + "OpenDocumentList")?.Items.OfType<Avalonia.Controls.MenuItem> ().FirstOrDefault ()?.Header as string ?? "-"));
+			+ " docList0=" + (Mi (W + "OpenDocumentList")?.Items.OfType<Avalonia.Controls.MenuItem> ().FirstOrDefault ()?.Header as string ?? "-")
+			// Oleada 3 (slice 10): Tools Update states — the dynamic Edit Custom
+			// Tools label (tools file), the Instrumentation Monitor gate
+			// (InstrumentationService.Enabled), the Session Recorder/Replay gate
+			// (EnableAutomatedTesting pref) and the AutoHide of the Session
+			// Recorder sub (hidden while both children are invisible).
+			+ " | editToolsTxt=" + (Hdr (T + "EditCustomTools") ?? "-")
+			+ " instrVis=" + B (Vi (T + "InstrumentationViewer"))
+			+ " sessVis=" + B (Vi (T + "ToggleSessionRecorder"))
+			+ " sessTxt=" + (Hdr (T + "ToggleSessionRecorder") ?? "-")
+			+ " replayVis=" + B (Vi (T + "ReplaySession"))
+			+ " sessSub=" + B (Sub ("Session Recorder")?.IsVisible));
 	}
 
 	void UpdatePadChecks (System.Collections.Generic.IReadOnlyList<MenuService.MenuEntry> entries)
@@ -3664,6 +3725,10 @@ public partial class MainWindow : Window
 	// (enabled while running) and the busy guards of Build/Rebuild Solution,
 	// Run and Run Entry.
 	internal bool IsOperationRunning => runningProc is { HasExited: false };
+	// Oleada 3 (slice 10): the session recorder is capturing — the shell
+	// equivalent of the legacy AutoTestService.CurrentRecordSession != null
+	// check behind the Tools > Session Recorder Start/Stop label.
+	internal bool IsSessionRecording => sessionRecorder.IsRecording;
 	// Oleada 3 (slice 6): number of projects of the loaded solution — the same
 	// set the build iterates (SolutionProjects). Memoized by solution path: the
 	// gates read it on every command-state refresh (including per-keystroke
@@ -6431,7 +6496,15 @@ public partial class MainWindow : Window
 		=> new AboutDialog { WindowStartupLocation = WindowStartupLocation.CenterOwner }.ShowDialog (this);
 
 	public void OnPreferencesMenu ()
-		=> new PreferencesDialog { WindowStartupLocation = WindowStartupLocation.CenterOwner }.ShowDialog (this);
+	{
+		var dlg = new PreferencesDialog { WindowStartupLocation = WindowStartupLocation.CenterOwner };
+		// Oleada 3 (slice 10): the dialog edits the sources the ported Tools
+		// Update overrides read (the tools file, EnableAutomatedTesting) —
+		// rebuild the menu on close so the labels/visibility catch up (legacy
+		// GTK re-updated the menu when the options changed).
+		dlg.Closed += (_, _) => BuildMenu ();
+		dlg.ShowDialog (this);
+	}
 
 	public void OnAddinManagerMenu ()
 		=> new AddinManagerDialog { WindowStartupLocation = WindowStartupLocation.CenterOwner }.ShowDialog (this);
@@ -7291,6 +7364,9 @@ public partial class MainWindow : Window
 			var prefsTools = new PreferencesDialog { WindowStartupLocation = WindowStartupLocation.CenterOwner };
 			_ = prefsTools.ShowDialog (this);
 			prefsTools.Opened += (_, _) => prefsTools.SelectPanel ("externaltools");
+			// Oleada 3 (slice 10): adding/removing a tool changes the model
+			// (the inlined tool items) and the dynamic label — rebuild on close.
+			prefsTools.Closed += (_, _) => BuildMenu ();
 			return;
 		// ----- Session recording (Fila C): the shell-local recorder writes the
 		// legacy SessionRecord XML format, the viewer is in-process (no mdmonitor)

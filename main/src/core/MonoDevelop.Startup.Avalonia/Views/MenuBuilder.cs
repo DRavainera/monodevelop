@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Shapes;
@@ -35,12 +36,20 @@ public static class MenuBuilder
 	// CommandArrayInfo on every refresh (legacy GTK array menu items).
 	static readonly List<Avalonia.Controls.MenuItem> dynamicSubmenus = new ();
 
+	// Oleada 3 (slice 10): submenus carrying the model's AutoHide flag — hidden
+	// while every one of their children is invisible (the model's "an empty
+	// group disappears" marker, e.g. Tools > Session Recorder while automated
+	// testing is disabled). Evaluated on every state refresh, after the child
+	// visibility has been mirrored.
+	static readonly List<Avalonia.Controls.MenuItem> autoHideSubs = new ();
+
 	public static List<Control> BuildItems (IReadOnlyList<MenuService.MenuEntry> entries)
 	{
 		commandItems.Clear (); // the menu is rebuilt: refresh the tracked set
 		originalHeaders.Clear ();
 		checkEligible.Clear ();
 		dynamicSubmenus.Clear ();
+		autoHideSubs.Clear ();
 		var items = new List<Control> ();
 		foreach (var entry in entries)
 			items.Add (BuildItem (entry, topLevel: true));
@@ -77,6 +86,11 @@ public static class MenuBuilder
 		// Document List, Window List) from their current CommandArrayInfo.
 		foreach (var item in dynamicSubmenus)
 			RebuildArrayChildren (item, (string)item.Tag!);
+		// Oleada 3 (slice 10): apply the AutoHide model flag — a sub disappears
+		// while all of its child items are invisible (separators are not
+		// counted as children). Runs after the per-item visibility mirror.
+		foreach (var item in autoHideSubs)
+			item.IsVisible = item.Items.OfType<Avalonia.Controls.MenuItem> ().Any (c => c.IsVisible);
 	}
 
 	// Extracts the legacy command id from a menu action (CommandAction.Target).
@@ -105,6 +119,8 @@ public static class MenuBuilder
 		if (entry.Children.Count > 0) {
 			foreach (var child in entry.Children)
 				item.Items.Add (BuildItem (child));
+			if (entry.AutoHide)
+				autoHideSubs.Add (item); // Oleada 3 (slice 10): track for the visibility sweep
 		} else if (entry.OnClick is not null) {
 			var click = entry.OnClick;
 			// Oleada 3 (slice 9): array commands (catalog type="...|array",

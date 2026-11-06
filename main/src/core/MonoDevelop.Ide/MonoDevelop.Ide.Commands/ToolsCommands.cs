@@ -36,6 +36,8 @@ using MonoDevelop.Ide.Updater;
 using System.Threading.Tasks;
 #else
 using MonoDevelop.Components.Commands;
+using MonoDevelop.Core; // the shell-side GettextCatalog shim (CoreGettextShim)
+using MonoDevelop.Ide.Services;
 #endif
 
 namespace MonoDevelop.Ide.Commands
@@ -209,6 +211,17 @@ namespace MonoDevelop.Ide.Commands
 		{
 			ShellCommandHandler.Run (ToolCommands.EditCustomTools);
 		}
+
+		// Oleada 3 (slice 10): port of the legacy Update — the label flips to
+		// "Add Custom Tool..." when the user has no configured external tool
+		// (legacy: ExternalToolService.Tools.Count > 0; the shell reads the same
+		// MonoDevelop-tools.xml through SettingsStore.LoadTools).
+		protected override void Update (CommandInfo info)
+		{
+			info.Text = SettingsStore.LoadTools ().Count > 0 ?
+				GettextCatalog.GetString ("Edit Custom Tools...") :
+				GettextCatalog.GetString ("Add Custom Tool...");
+		}
 	}
 
 	internal class InstrumentationViewerHandler : CommandHandler
@@ -216,6 +229,13 @@ namespace MonoDevelop.Ide.Commands
 		protected override void Run ()
 		{
 			ShellCommandHandler.Run (ToolCommands.InstrumentationViewer);
+		}
+
+		// Oleada 3 (slice 10): port of the legacy Update — the item is hidden
+		// while the shared instrumentation service is disabled.
+		protected override void Update (CommandInfo info)
+		{
+			info.Visible = MonoDevelop.Core.Instrumentation.InstrumentationService.Enabled;
 		}
 	}
 
@@ -225,6 +245,18 @@ namespace MonoDevelop.Ide.Commands
 		{
 			ShellCommandHandler.Run (ToolCommands.ToggleSessionRecorder);
 		}
+
+		// Oleada 3 (slice 10): port of the legacy Update — gated on the
+		// EnableAutomatedTesting preference (legacy:
+		// IdeApp.Preferences.EnableAutomatedTesting; the shell reads the same
+		// key through SettingsStore) and the label flips Start/Stop with the
+		// recording state (legacy: AutoTestService.CurrentRecordSession == null;
+		// the shell equivalent is MainWindow's SessionRecorder.IsRecording).
+		protected override void Update (CommandInfo info)
+		{
+			info.Visible = SettingsStore.GetBool ("MonoDevelop.EnableAutomatedTesting", false);
+			info.Text = ShellCommandState.IsSessionRecording ? "Stop Session Recorder" : "Start Session Recorder";
+		}
 	}
 
 	internal class ReplaySessionHandler : CommandHandler
@@ -232,6 +264,13 @@ namespace MonoDevelop.Ide.Commands
 		protected override void Run ()
 		{
 			ShellCommandHandler.Run (ToolCommands.ReplaySession);
+		}
+
+		// Oleada 3 (slice 10): port of the legacy Update — the same
+		// EnableAutomatedTesting preference gate as the session recorder.
+		protected override void Update (CommandInfo info)
+		{
+			info.Visible = SettingsStore.GetBool ("MonoDevelop.EnableAutomatedTesting", false);
 		}
 	}
 #endif
