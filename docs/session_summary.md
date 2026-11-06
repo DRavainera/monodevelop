@@ -3153,3 +3153,35 @@ shell Avalonia + 1 entrada de mapa de iconos en core).
 **Queda pendiente (slices 4..n de la Oleada 3)**: portar el resto de los `Update` pendientes — Build, Run, Project, Tools (requieren estado de build/debug/solución aún no rastreado por `ShellCommandState`), y el resto de View (items de layout/pads, que dependen de `Visible`/dynamic y del port de visibilidad), más la **port de visibility/rename/dynamic** (OpenDocument1..9, CanShowHelp, OpenDocumentList) y `Undo`/`Redo` (exigirían `CanUndo`/`CanRedo` real del editor, hoy no público en `SkTextEditor`). Mecanismo, cableado y ciclo de QA ya quedaron cubiertos por Slice 1–3.
 
 **Cierre**: código en commit `c5f01f6b40` pushado a `origin/agents/sub-agent-senior-dev-role-report`; handoff + veredicto del QA en el commit de docs que le sigue. Sin cambios en submódulos; la ruta `--old-gui` no se ve afectada (todo el nuevo código está bajo `#if AVALONIA_SHELL` y los bloques legacy de `WindowCommands.cs`/`ViewCommands.cs`/`HelpCommands.cs` son byte-iguales al commit anterior).
+
+## 2026-11-05 (6) — Oleada 3 (backend Avalonia): estado de habilitación de menú (Update) — Slice 4
+
+**Contexto**: cuarta slice de la Oleada 3 sobre el mecanismo ya instalado en Slice 1 (proveedor `ShellCommandState` + cableado menú↔`CommandInfo.Enabled`). Alcance decidido: los overrides `Update` **solution-level** del menú Project/Build/Run, cuyo estado depende de "hay solución cargada" (`ShellCommandState.HasWorkspace`). Se investigó primero el alcance real: los handlers Build/Run/Project viven en `ProjectCommands.cs` (que SÍ compila en el build Avalonia), mientras que `BuildCommands`/`RunCommands`/`DebugCommands` no existen en `MonoDevelop.Ide.Commands` (están en otros ensamblados no compilados en el build Avalonia). Se portó el subconjunto solution-level; los gates que requieren build/run in-progress o selección de proyecto quedan diferidos (estado no rastreado por la shell).
+
+**Qué se hizo** (commit `0c3367a73c`, 2 ficheros):
+- `ProjectCommands.cs` (solo el bloque Avalonia `#else`; legacy byte-igual): 6 overrides `Update` → `info.Enabled = ShellCommandState.HasWorkspace;` en `BuildSolutionHandler`, `RebuildSolutionHandler`, `CleanSolutionHandler`, `RunHandler`, `RunEntryHandler`, `SolutionOptionsHandler`. Se actualizó el comentario-header del bloque `#else` (los gates solution-level ya están portados; el resto no).
+- `MainWindow.axaml.cs`: `DumpCmdStates` extendido — constante `P = "MonoDevelop.Ide.Commands.ProjectCommands."` y 6 campos: `buildSol/rebuildSol/cleanSol/run/solOpts` vía `En()` (menu-walk; están en los menús Build/Run/Project) y `runEntry` vía `CEn()` (lectura directa, porque `RunEntry` no es item del menú principal, solo de context/run-list).
+
+**Decisiones de mapeo**:
+- `SolutionOptions`/`CleanSolution` = **bridge exacto** (legacy `CurrentSelectedSolution != null` ⇒ `HasWorkspace`).
+- `BuildSolution`/`RebuildSolution`/`Run`/`RunEntry` = **bridge más grueso** (legacy además chequea `CurrentBuildOperation.IsCompleted` / `CurrentRunOperation.IsCompleted` / `CanExecute` / `CurrentSelectedBuildTarget`); esos refinamientos se difieren con el estado de build/run y la selección de proyecto. Diseño acordado (mismo precedente que los gates de zoom/focus de Slice 3).
+- `RunEntry` **no es ítem del menú principal** (en `MainMenu.addin.xml` solo aparece `Run`; `RunEntry` va en context/run-list), por eso el E2E lo lee vía `CEn` (estado directo del comando); el override sí está portado y gatea por `HasWorkspace`.
+- `HasWorkspace` = `MainWindow.loadedSolutionPath is not null`, el mismo accessor que ya usa `CloseWorkspace` (consistencia).
+
+**Números clave**:
+- 6 overrides `Update` portados en esta slice → **37 acumulado en la Oleada 3** (Slice 1: 4, Slice 2: 10, Slice 3: 17, Slice 4: 6); el resto (in-progress build/run, selected-build-target, visibility/dynamic, Tools, Navigation, Undo/Redo) en slices siguientes.
+- Catálogo y menú invariantes: `Count=461`, `LoadedCommands=475`, `ResolvedHandlers=111`, `menu ids total=196 resolved=172 missing=24`, menudump `menus=11 items=225 cmds=0 bindings=205` (byte-igual — el estado habilitado no forma parte del menudump).
+
+**Cómo validar**:
+- Build: `dotnet build main/src/core/MonoDevelop.Startup.Avalonia/MonoDevelop.Startup.Avalonia.csproj -c Debug -f net10.0 --nologo` → `0 Errores` (también `net10.0-windows`).
+- Oracle (`~/opencode/catload_test/`, sección `oleada3` extendida a 42 ids): los 6 ids nuevos reportan `enabled=False expected=False` (headless ⇒ `HasWorkspace=false`); con los 36 previos → `oleada3: ok=42 fail=0`, exit 0; invariantes `Count=461 LoadedCommands=475 ResolvedHandlers=111`.
+- Smoke (`~/opencode/smoke_oleada1.sh`): `--menudump` **byte-igual** (`menus=11 items=225 … _Help=13i/0c`), 0 líneas `[warn]/[fatal]/Exception`.
+- E2E (`~/opencode/oleada3_cmdstates.sh`, 2 casos con/sin soln × 7 transiciones initial→opened→opened2→dirty→clean→closed1→closed2): con soln (`hasWs=True`) `buildSol/rebuildSol/cleanSol/run/solOpts/runEntry = 1` en las 7 transiciones; sin soln (`hasWs=False`) los 6 = `0`; `closeWs` 1/0 estable; los estados previos (docCount, zoom, edit) sin regresión. 0 `?`, 0 warn/fatal/exception en ambos casos.
+
+**QA (§18.5)**: ejecutado por el **subagente Tester QA Senior** (solo lectura, artefactos en `~/opencode/oleada3_qa/`).
+- **CERRAR — P1–P5 OK, 0 hallazgos**: P1 `--old-gui` intacta (bloque legacy de `ProjectCommands.cs` byte-igual a HEAD, sha256 idéntico en HEAD y worktree; todo el cambio entre `#else` y `#endif`); P2 los 6 gates en la clase correcta con `HasWorkspace` (mapeo vs legacy verificado; `runEntry` no es item del menú principal, verificado en `MenuService.cs`); P3 `HasWorkspace` = `loadedSolutionPath is not null` (mismo accessor que `CloseWorkspace`); P4 E2E sin regresión (logs ±sln + oracle `ok=42 fail=0` + menudump byte-igual, 0 warn/fatal/Exception); P5 comentarios coherentes, sin dead code/TODO.
+- Observación informativa (sin acción): `ClearRecentProjects` gatea por `HasRecentSolutions` (no `HasWorkspace`) — es su gate propio desde Slice 2, no una incoherencia.
+
+**Queda pendiente (slices 5..n de la Oleada 3)**: (1) gates **in-progress** de build/run (`IsBuilding`/`IsRunning`); (2) gates de **selección de build target** (`Build`/`Rebuild`/`ProjectOptions`/`SolutionItemOptions`/`EditReferences`/`SetStartupProjects`); (3) **port de visibility/rename/dynamic** (`OpenDocument1..9`, `CanShowHelp`, `OpenDocumentList`, etiquetas de `Run`/`RunEntry`/`Build`); (4) `Undo`/`Redo` (`CanUndo`/`CanRedo` del editor, hoy no público en `SkTextEditor`); (5) `Tools` (visibility + dynamic-text) y `Navigation` (historial back/forward de documentos). Mecanismo, cableado y ciclo de QA ya quedaron cubiertos por Slice 1–4.
+
+**Cierre**: código en commit `0c3367a73c` pushado a `origin/agents/sub-agent-senior-dev-role-report`; handoff + veredicto del QA en el commit de docs que le sigue. Sin cambios en submódulos; la ruta `--old-gui` no se ve afectada (todo el nuevo código está bajo `#else`/`AVALONIA_SHELL` y el bloque legacy de `ProjectCommands.cs` es byte-igual al commit anterior).

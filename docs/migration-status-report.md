@@ -462,8 +462,30 @@ El bucle de migración Gtk → Avalonia continúa por módulos (detalle por hito
      0 errores (ambos TFMs), oracle headless 36/36, smoke sin excepciones, E2E
      `--cmdstates` 7 transiciones × 2 casos exactas (±sln, `docCount`
      0→1→2→1→0). Sin submódulos; la ruta `--old-gui` no se toca. Detalle en
-     `docs/interfaz-plan.md` (follow-up "Oleada 3 — Slice 3") y
-     `docs/session_summary.md` (2026-11-05 (5)).
+      `docs/interfaz-plan.md` (follow-up "Oleada 3 — Slice 3") y
+      `docs/session_summary.md` (2026-11-05 (5)).
+   - **Oleada 3 (Slice 4) de la integración total del backend (2026-11-05)**:
+      estado de habilitación de menú (overrides `Update`) — Project/Build/Run
+      solution-level, sobre el mecanismo de Slice 1. 6 `Update` portados (bloques
+      Avalonia `#else`, legacy byte-igual) en `ProjectCommands.cs` — `BuildSolution`/
+      `RebuildSolution`/`CleanSolution`/`Run`/`RunEntry`/`SolutionOptions`→
+      `ShellCommandState.HasWorkspace` (bridge: hay solución cargada, espejo de
+      `loadedSolutionPath != null`; mismo accessor que `CloseWorkspace`). Legacy
+      además chechea build/run op in-progress, `CanExecute` y `CurrentSelected
+      BuildTarget` — **diferidos** (estado de build/run y selección de proyecto no
+      rastreados por la shell). Gate exacto en `SolutionOptions`/`CleanSolution`
+      (legacy `CurrentSelectedSolution != null`); más grueso (documentado) en
+      `BuildSolution`/`RebuildSolution`/`Run`/`RunEntry`. `MainWindow.axaml.cs`:
+      `DumpCmdStates` extendido (`buildSol/rebuildSol/cleanSol/run/solOpts` vía
+      `En()`, `runEntry` vía `CEn()` — no es item del menú principal). **Invariante**:
+      menudump byte-igual (`menus=11 items=225 cmds=0 bindings=205`), catálogo sin
+      cambios (`Count=461 LoadedCommands=475 ResolvedHandlers=111`, menu ids 196/172/24),
+      bloque legacy de `ProjectCommands.cs` byte-igual. QA §18.5 (subagente Tester
+      QA Senior) **APROBADO, CERRAR, 0 hallazgos** (P1–P5 OK): build 0 errores
+      (ambos TFMs), oracle headless `oleada3 42/42`, smoke sin excepciones, E2E
+      `--cmdstates` los 6 gates =1 con soln / =0 sin soln en las 7 transiciones. Sin
+      submódulos; la ruta `--old-gui` no se toca. Detalle en `docs/interfaz-plan.md`
+      (follow-up "Oleada 3 — Slice 4") y `docs/session_summary.md` (2026-11-05 (6)).
  
 
 
