@@ -4291,3 +4291,60 @@ submódulo `xwt` (1 fichero, su propio commit), pushados a
 `--old-gui` no se ve afectada (código nuevo bajo `#else`/`AVALONIA_SHELL` o en
 ficheros exclusivos del shell; el fix de `xwt` acota `TreeStoreBackend`,
 backend exclusivo Avalonia, al contrato del backend Gtk).
+
+### Menú (follow-up) — Oleada 3, Slice 9: estado de habilitación de menú (overrides `Update`) — port de visibility/rename/dynamic (2026-11-06)
+
+Novena slice de la Oleada 3, sobre el mecanismo de Slice 1. Cierra el item (1)
+de "pendiente" de Slice 8: el **port de visibility/rename/dynamic** — todo lo
+que los handlers legacy `Update` hacen más allá del booleano `Enabled`:
+visibilidad/rename/checked de `OpenDocument1..9`, el array `OpenDocumentList`
+(documentos 10+), `OpenWindowList`, el gate `CanShowHelp` y las etiquetas
+dinámicas de `Build`/`Rebuild`/`Clean`/`Run`/`RunEntry`/`ProjectOptions`. La
+slice completa el espejo de estado en `MenuBuilder` (visible, header dinámico,
+glyph checked, submenús dinámicos) y añade la rama de **array commands** al
+`CommandManager` del shell.
+
+**Mapeo legacy → estado shell** (bloques Avalonia `#else`; legacy
+`#if !AVALONIA_SHELL` byte-igual; los handlers `#else` se compilan DENTRO del
+ensamblado del shell, así que alcanzan `MainWindow` y el shim
+`GettextCatalog` sin referencia cruzada):
+- `OpenDocument1..9` → `OpenDocumentHandlerBase (index)`: `DocumentCount >= index` ⇒ rename al título del tab, `Checked = IsDocumentActive (index)`, `Visible/Enabled = true` + description; si no `Visible/Enabled = false` (espejo del legacy menos el escape `_`→`__` y el markup azul GTK, ambos documentados). `Run` → id literal vía `ShellCommandHandler` (el enum `WindowCommands` no tiene miembros 1..9).
+- `OpenDocumentList` (array, `type="radio|array"`) → `Update (CommandArrayInfo)`: docs 10+ como hijos del submenu dinámico con `DataItem = DocumentTagAt (i+1)`; el branch `AccelKey` legacy es **dead code** (con `count >= 10` e `i >= 9`, `count + i < 10` nunca se cumple) y el markup GTK no es portable — ambos descartados.
+- `OpenWindowList` (array) → 1 hijo fijo "Window 1" (ventana única).
+- `Help` → `info.Visible = true` (**degeneración documentada** de `CanShowHelp`: la shell no tiene `HelpOperations`).
+- `Build`/`Rebuild`/`Clean` → `"B_uild {0}"/"R_ebuild {0}"/"C_lean {0}"` si `SelectedBuildTargetName` non-null (pad Solution/Project, fallback `ResolveActiveProject` — el mismo target que la shell construye de verdad), si no catálogo.
+- `Run` → `IsOperationRunning` ⇒ "Restart Without Debugging" / "Start Without Debugging" (el busy-guard de Slice 5 mantiene el item visible-disabled).
+- `RunEntry` → **bridge solo por selección del pad**: `SelectedNodeIsSolution` ⇒ "Run Solution", `SelectedNodeIsProject` ⇒ "Run Project", sin selección ⇒ catálogo (`_Run Item`) — **sin** fallback a `ActiveProjectCount` (decisión de diseño: port más fiel del legacy, que resuelve por `CurrentSelectedBuildTarget`).
+- `ProjectOptions` → `SelectedNodeIsProject ? name : null` ⇒ `"{0} _Options"` / `"Project _Options"`.
+- **Desviación F3 (informativa)**: con un **file** seleccionado, la shell pinta el fallback (`B_uild LibA`/`Project _Options`/`_Run Item`) en vez de la resolución file→proyecto del legacy (`B_uild App`/`App _Options`/`Run Project`) — la shell expone la selección solo como Solution/Project (el legacy fija `CurrentSelectedSolutionItem` al proyecto contenedor). Brecha heredada del diseño del bridge, no de esta slice.
+
+**Implementación** (7 ficheros, +486/−104):
+- `CommandManager.cs` (sección `#if AVALONIA_SHELL`; +12): `GetCommandInfo` detecta `cmd.CommandArray` ⇒ `info.ArrayInfo = new CommandArrayInfo (info)` + `DefaultHandler.InternalUpdate (info.ArrayInfo)` (espejo de la rama legacy ln 1876–1885); el camino scalar queda intacto.
+- `MenuBuilder.cs` (solo shell; +99/−6): `RefreshCommandStates` espeja 4 estados — `IsEnabled`, `IsVisible`, **Header dinámico** (`info.Text != cmd.Text ? info.Text : originalHeaders[item]`; solo cuando el handler renombró de verdad, restaurando el header del modelo en caso contrario: el label de catálogo puede diferir, "Activate 1" vs "_1"; ids sintéticos `cmd:*` → `Command` null → sin espejo de Text/Checked) y **Checked** (glyph ✓ solo en `checkEligible`: items sin icon en modelo y sin model-checked); **submenús dinámicos** — `BuildItem` detecta array commands (`GetActionCommand (id)?.CommandArray == true`), suprime el `Click` del master y lo registra; `RebuildArrayChildren` **full rebuild en cada refresh** (ver F1) con click de hijo → `CommandService.Dispatch (id, dataItem, CommandSource.MainMenu)`; **master oculto con array vacío** (ver F2).
+- `WindowCommands.cs` (solo `#else`; +174): `OpenDocumentHandlerBase` + 9 thin, `OpenDocumentListHandler`, `OpenWindowListHandler`; cabecera del bloque actualizada.
+- `HelpCommands.cs` (solo `#else`; +11): `HelpHandler.Update` (cita textual del gate legacy en el comment).
+- `ProjectCommands.cs` (solo `#else`; +97/−): los 6 overrides de etiqueta (strings legacy idénticos salvo el escape de `_`, documentado); cabecera actualizada.
+- `ShellCommandState.cs` (+31): `SelectedNodeIsSolution`, `DocumentTitleAt`/`DocumentTagAt`/`IsDocumentActive` (1-based, null/false fuera de rango) y `SelectedBuildTargetName` (memoizado, mismo contrato y los mismos 4 puntos de invalidación que `ActiveProjectCount`).
+- `MainWindow.axaml.cs` (+166/−4): accessors `internal` (`SelectedNodeIsSolution`, `DocumentTitleAt`, `DocumentTagAt`, `IsDocumentActive`, `SelectedBuildTargetName` con fallback `ResolveActiveProject`, `ActiveDocumentTitle` — QA F1); caso `OnMenuCommand` `OpenDocumentList` (dataItem válido → `SelectDocument`); `DumpCmdStates` +16 campos al final (orden previos intacto): `doc1Vis doc2Vis doc1Txt doc1Chk doc2Chk helpVis buildTxt rebuildTxt cleanTxt runTxt runEntryTxt projOptsTxt docListN winListN activeDoc docList0`; driver `--cmdstates`: 4 fases nuevas `docs12`/`docs12sel`/`docs12swap`/`docs12swapsel` (la de swap = regresión F1; close-all final con guard `docs.ContainsKey`).
+
+**QA y fixes** (ciclo §18.5, 2 rondas — veredicto en `~/opencode/oleada3_slice9_qa/veredicto.md`):
+- **F1 (P2, ronda 1 → resuelto)**: `RebuildArrayChildren` tenía rama in-place (count igual) que actualizaba Header/Enabled/Icon pero **no** el `Tag` ni el closure `Click` (dataItem capturado en la creación) — con ≥10 docs, cerrar uno y abrir otro (count constante) dispatchaba el dataItem antiguo (documento equivocado o fallback diagnóstico). Fix: **full rebuild en cada refresh** (coste despreciable: hijos ≤ docCount−9) + fases E2E `docs12swap`/`docs12swapsel` como regresión (`docList0=QA List12` → `activeDoc=QA List13`).
+- **F2 (P4, ronda 1 → resuelto)**: el master del array siempre visible (submenu vacío incluido con <10 docs); el legacy GTK oculta el master e inlinea los hijos como hermanos. Fix: `item.IsVisible = arr is { Count: > 0 }` (master oculto con array vacío — coincide con el estado vacío del legacy; "Window List" con 1 hijo fijo sigue siempre visible). El **render inline completo** (master oculto + hijos como hermanos) queda **diferido** como decisión de diseño de la slice (submenu dinámico); no afecta al menudump (model-based).
+- **F3 (P5)**: labels file-selection por el bridge (arriba). **F4 (P5)**: el ✓ en `OpenDocument1..9` no existe en el legacy GTK (`ActionType.Normal` → `CommandMenuItem` sin `Checked`) — render enriquecido coherente con la slice. **F5 (P5)**: memoización de `SelectedBuildTargetName` con la misma exposición que `ActiveProjectCount` (Slice 6) — sin leak nuevo. **F6 (P5, ronda 2)**: la regresión E2E no discrimina directamente el fix (el dispatch del driver pasa por `nodeContext`/`OnMenuCommand`, no por el `Click` del hijo; `docList0` lee el Header) — el fix se valida por inspección estructural; sugerencia: dump del `Tag` del hijo o dispatch vía click real.
+
+**Invariantes**: modelo de menú (`MenuService`) intacto → `--menudump` byte-igual (`menus=11 items=225 cmds=0 bindings=205` — el dump se genera del modelo, así que el render dinámico no lo altera); catálogo sin cambios (`Count=461`, `LoadedCommands=475`, `ResolvedHandlers=111`); bloques legacy byte-iguales (todo el diff cae en `#else`/`#if AVALONIA_SHELL` o en ficheros exclusivos del shell) → la ruta `--old-gui` no se toca.
+
+**Validación / evidencia** (artefactos en `~/opencode/oleada3_slice9_qa/`):
+- Build `0 Errores` (net10.0 y net10.0-windows; warnings preexistentes).
+- Oracle (`~/opencode/catload_test/`): `oleada3: ok=51 fail=0` (sin cambios) + **sección nueva `oleada3dyn`: ok=19 fail=0** (visible OpenDocument1..9=false sin docs, Help=true, 7 labels de catálogo, array count 0/1 "Window 1").
+- Smoke (`~/opencode/smoke_oleada1.sh`): sin warn/Exception, `--menudump` byte-igual.
+- E2E (`~/opencode/oleada3_cmdstates.sh`, **3 casos**): `docs12` `docCount=12 docListN=3 winListN=1 doc1Chk=0` → `docs12sel` `doc1Chk=1 activeDoc=QA List1` → `docs12swap` `docList0=QA List12` (hijos re-puntados al nuevo set) → `docs12swapsel` `activeDoc=QA List13` (los 3 casos); labels dinámicos: withsln `node_solution` `B_uild Fixture`/`Run Solution`/`Project _Options`, `node_project` App `B_uild App`/`Run Project`/`App _Options`, `node_file` `B_uild LibA`/`_Run Item` (F3), `operating` `Restart Without Debugging`; emptysl ghost `B_uild Ghost`/`Ghost _Options`/`Run Project` con `buildProj=0`; nosln defaults de catálogo. 0 `Unhandled`/`Exception`; fases previas intactas.
+
+**Queda pendiente (slices 10..n de la Oleada 3)**: (1) `Tools` (visibility + dynamic-text) y `Navigation` (requiere historial back/forward de documentos); (2) **nuevo**: render legacy completo de los array commands (master oculto + hijos inline como hermanos — hoy submenu dinámico con master oculto cuando el array está vacío); (3) mejora P5: mensaje de error tras `Stop` legítimo; (4) P5 preexistente: el early-return de `OpenSolutionInWindow` traga el refresh; (5) P5 preexistente (Slice 7): los atajos Ctrl+Z/Ctrl+Y están tragados por `isTextEditingCombo` del window; (6) P5 (QA F-5d, Slice 8): tejer la selección del pad en la dispatch del menú principal de "Add Reference..."; (7) cosmético (QA F-5e, Slice 8): renombrar `SolutionOptionsHandler` (rama `#else`); (8) **nuevo (QA F6)**: endurecer la regresión de los submenús dinámicos (dump del `Tag` del hijo o dispatch vía click real); (9) P5 (QA F3): exponer el proyecto del archivo seleccionado para las etiquetas file→proyecto. El item (1) de la lista de Slice 8 (visibility/rename/dynamic) queda **cerrado por esta slice**.
+
+**Cierre**: código en commit (7 ficheros) pushado a
+`origin/agents/sub-agent-senior-dev-role-report`; handoff + veredicto del QA en
+el commit de docs que le sigue. Sin cambios en submódulos; la ruta `--old-gui`
+no se ve afectada (todo el diff cae en `#else`/`#if AVALONIA_SHELL` o en
+ficheros exclusivos del shell; los bloques legacy quedan byte-iguales a la
+base).

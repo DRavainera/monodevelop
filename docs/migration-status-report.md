@@ -633,8 +633,56 @@ El bucle de migración Gtk → Avalonia continúa por módulos (detalle por hito
          sin fases node). Con cambio en submódulo `xwt` (+1 commit); la ruta
          `--old-gui` no se toca (bloques legacy byte-iguales; el fix de `xwt`
          acota solo el backend Avalonia). Detalle en `docs/interfaz-plan.md`
-         (follow-up "Oleada 3 — Slice 8") y `docs/session_summary.md`
-         (2026-11-06 (10)).
+          (follow-up "Oleada 3 — Slice 8") y `docs/session_summary.md`
+          (2026-11-06 (10)).
+      - **Oleada 3 (Slice 9) de la integración total del backend (2026-11-06)**:
+          estado de habilitación de menú (overrides `Update`) — **port de
+          visibility/rename/dynamic** al shell Avalonia: visibilidad/rename/
+          checked de `OpenDocument1..9`, el array `OpenDocumentList` (docs 10+),
+          `OpenWindowList`, el gate `CanShowHelp` y las etiquetas dinámicas de
+          `Build`/`Rebuild`/`Clean`/`Run`/`RunEntry`/`ProjectOptions`.
+          `CommandManager.cs` (sección `#if AVALONIA_SHELL`): rama de array
+          commands en `GetCommandInfo` (`CommandArrayInfo` +
+          `InternalUpdate (info.ArrayInfo)`, espejo de la rama legacy).
+          `MenuBuilder.cs` (solo shell): `RefreshCommandStates` espeja 4 estados
+          (Enabled/Visible/Header dinámico con restore del header del
+          modelo/Checked con glyph ✓ en items sin icon) y añade **submenús
+          dinámicos** — array commands detectados por
+          `GetActionCommand (id)?.CommandArray`, full rebuild de hijos en cada
+          refresh (Tag + closure de dispatch siempre re-vinculados — fix QA
+          F1), master oculto con array vacío (fix QA F2). `WindowCommands.cs`
+          y `HelpCommands.cs` (bloques `#else`, legacy byte-igual):
+          `OpenDocumentHandlerBase` + 9 thin, `OpenDocumentListHandler`
+          (docs 10+ como hijos con `DataItem = DocumentTagAt`),
+          `OpenWindowListHandler` (1 hijo "Window 1"), `HelpHandler.Update`
+          (degeneración documentada de `CanShowHelp`). `ProjectCommands.cs`
+          (bloque `#else`): 6 etiquetas dinámicas vía `GettextCatalog` (shim),
+          con **RunEntry por selección del pad** (`Run Solution`/`Run Project`,
+          sin fallback a `ActiveProjectCount`). `ShellCommandState.cs`: 5
+          accessors nuevos (`SelectedNodeIsSolution`, `DocumentTitleAt`,
+          `DocumentTagAt`, `IsDocumentActive`, `SelectedBuildTargetName`
+          memoizado). `MainWindow.axaml.cs`: caso `OnMenuCommand`
+          `OpenDocumentList` (dataItem → `SelectDocument`), `DumpCmdStates`
+          +16 campos y driver `--cmdstates` con 4 fases nuevas
+          (`docs12`/`docs12sel`/`docs12swap`/`docs12swapsel` — la de swap es la
+          regresión de F1: intercambio de 2 docs con count constante).
+          **Invariante**: menudump byte-igual (`menus=11 items=225 cmds=0
+          bindings=205`), catálogo sin cambios (`Count=461 LoadedCommands=475
+          ResolvedHandlers=111`). QA §18.5 (subagente Tester QA Senior): ronda 1
+          CERRAR (F1 P2 — DataItem stale en la rama in-place del submenu; F2 P4
+          — master siempre visible) → fixes + fase de regresión E2E → ronda 2
+          **APROBADO**, 0 hallazgos P1–P4, 4 P5 informativos (F3 labels
+          file-selection por el bridge, F4 ✓ no existente en legacy, F5
+          memoización, F6 la regresión E2E no discrimina el fix por inspección
+          del dispatch). Build 0 errores (ambos TFMs), oracle headless
+          `oleada3 51/51` + sección nueva `oleada3dyn 19/19`, smoke sin
+          excepciones, E2E `--cmdstates` 3 casos (docs12 → docs12sel `doc1Chk`
+          0→1; docs12swap `docList0=QA List12` + docs12swapsel
+          `activeDoc=QA List13`; labels dinámicos en las 3 soluciones). Sin
+          cambios en submódulos; la ruta `--old-gui` no se toca (diff íntegro
+          bajo `#else`/`#if AVALONIA_SHELL` o en ficheros exclusivos del
+          shell). Detalle en `docs/interfaz-plan.md` (follow-up "Oleada 3 —
+          Slice 9") y `docs/session_summary.md` (2026-11-06 (11)).
    
 
 
