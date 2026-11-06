@@ -641,11 +641,16 @@ namespace MonoDevelop.Ide.Commands
 	// Build/Rebuild Solution, Run and Run Entry. Oleada 3 (slice 6) ports the
 	// project-level selected-build-target gates of the main menu (Build/Rebuild/
 	// Clean, Project Options, Set Startup Projects) onto
-	// ShellCommandState.ActiveProjectCount — the shell has no pad selection, so
-	// "the loaded solution has projects" stands in for
+	// ShellCommandState.ActiveProjectCount — for those main-menu items the
+	// "the loaded solution has projects" presence check stands in for
 	// CurrentSelectedBuildTarget != null (coarser bridge, documented per
-	// handler). The remaining Update overrides (dynamic labels, the
-	// context-only SolutionItemOptions/EditReferences) are not ported yet.
+	// handler). Oleada 3 (slice 8) ports the context-only pad-selection gates:
+	// SolutionItemOptions (Options) and EditReferences (Add Reference) read the
+	// solution-pad selected node through ShellCommandState
+	// (SelectedNodeIsBuildTarget / SelectedNodeIsProject) — the exact legacy
+	// bridge for CurrentSelectedBuildTarget / CurrentSelectedProject is
+	// DotNetProject, unlike the slice 6 coarsening. The remaining Update
+	// overrides (dynamic labels) are not ported yet.
 	// ApplyPolicy/ExportPolicy forward their literal catalog id: the
 	// ProjectCommands enum has no members for them.
 	internal class SolutionOptionsHandler : CommandHandler
@@ -686,6 +691,15 @@ namespace MonoDevelop.Ide.Commands
 		{
 			ShellCommandHandler.Run (ProjectCommands.Options);
 		}
+
+		// Oleada 3 (slice 8): enabled when the solution pad has a build target
+		// selected (legacy: CurrentSelectedBuildTarget != null — the exact
+		// bridge: the shell's pad selection classifies Solution/Project rows,
+		// like the legacy IBuildTarget item type).
+		protected override void Update (CommandInfo info)
+		{
+			info.Enabled = ShellCommandState.SelectedNodeIsBuildTarget;
+		}
 	}
 
 	internal class SetStartupProjectsHandler : CommandHandler
@@ -709,6 +723,19 @@ namespace MonoDevelop.Ide.Commands
 		protected override void Run ()
 		{
 			ShellCommandHandler.Run (ProjectCommands.AddReference);
+		}
+
+		// Oleada 3 (slice 8): enabled only when the pad selection is a project
+		// row (legacy: CurrentSelectedProject is DotNetProject — every shell
+		// project row is a .csproj). Bypass mirrors the legacy keybinding
+		// behavior while the gate is off.
+		protected override void Update (CommandInfo info)
+		{
+			if (!ShellCommandState.SelectedNodeIsProject) {
+				info.Enabled = false;
+				info.Bypass = true;
+			} else
+				info.Bypass = false;
 		}
 	}
 

@@ -65,6 +65,19 @@ namespace MonoDevelop.Ide.Commands
 
 		public static bool CanRedo
 			=> MonoDevelop.AvaloniaShell.Views.MainWindow.Instance?.CanRedo ?? false;
+
+		// Oleada 3 (slice 8): the solution-pad selected node is a build target
+		// (Solution/Project row) — the shell equivalent of the legacy
+		// CurrentSelectedBuildTarget != null that gated the context-only Options
+		// command (the pad menu "Properties").
+		public static bool SelectedNodeIsBuildTarget
+			=> MonoDevelop.AvaloniaShell.Views.MainWindow.Instance?.SelectedNodeIsBuildTarget ?? false;
+
+		// Oleada 3 (slice 8): the solution-pad selected node is a project row —
+		// the shell equivalent of the legacy CurrentSelectedProject is DotNetProject
+		// that gated the context-only Add Reference command.
+		public static bool SelectedNodeIsProject
+			=> MonoDevelop.AvaloniaShell.Views.MainWindow.Instance?.SelectedNodeIsProject ?? false;
 	}
 }
 #endif

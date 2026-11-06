@@ -92,7 +92,13 @@ public partial class MainWindow : Window
 		xwtSolutionTree.Columns.Add (iconCol);
 		xwtSolutionTree.Columns.Add (textCol);
 		xwtSolutionTree.RowActivated += OnXwtSolutionRowActivated;
-		xwtSolutionTree.SelectionChanged += (_, _) => UpdatePropertiesPad ();
+		xwtSolutionTree.SelectionChanged += (_, _) => {
+			UpdatePropertiesPad ();
+			// Oleada 3 (slice 8, QA F-1): the pad selection gates the tracked
+			// Project menu items (Add Reference... via EditReferencesHandler),
+			// so a selection change must re-evaluate their enabled state.
+			NotifyCommandStateChanged ();
+		};
 		xwtSolutionTree.ButtonPressed += OnXwtSolutionContextMenu;
 
 		if (Xwt.Toolkit.CurrentEngine.GetNativeWidget (xwtSolutionTree) is Control native) {
@@ -1947,6 +1953,77 @@ public partial class MainWindow : Window
 					// notification) run before the final dump.
 					await System.Threading.Tasks.Task.Delay (300);
 					DumpCmdStates ("postop");
+					// Oleada 3 (slice 8): drive the solution-pad selection through
+					// the node types that exist in the loaded solution and dump the
+					// context-only gates (solItemOpts/editRefs) after each. The
+					// "no selection" state is every earlier phase (no row is
+					// auto-selected after the tree build).
+					if (loadedSolutionPath is not null) {
+						// QA (slice 8, F-1 regression): the real Project menu item's
+						// enabled state right after a selection change, WITHOUT a
+						// refresh — a stale value here means SelectionChanged did not
+						// re-evaluate the tracked items.
+						string ItemRefs () {
+							bool? Find (Avalonia.Controls.MenuItem mi) {
+								if (mi.Tag is string t && t == "MonoDevelop.Ide.Commands.ProjectCommands.AddReference")
+									return mi.IsEnabled;
+								foreach (var c in mi.Items.OfType<Avalonia.Controls.MenuItem> ())
+									if (Find (c) is { } r)
+										return r;
+								return null;
+							}
+							foreach (var top in MainMenu!.Items.OfType<Avalonia.Controls.MenuItem> ())
+								if (Find (top) is { } r)
+									return r ? "1" : "0";
+							return "?";
+						}
+						bool Sel (string tag) {
+							var ok = SelectXwtSolutionRow (tag);
+							Output ("[cmdstates] node select=" + ok + " tag=" + tag + " itemRefs=" + ItemRefs ());
+							return ok;
+						}
+						if (Sel ("solution:" + loadedSolutionPath))
+							DumpCmdStates ("node_solution");
+						// Project rows are picked from the store itself (solution
+						// order) — not from a disk scan — so the phase is
+						// deterministic regardless of readdir order.
+						var projectTags = new List<string> ();
+						void CollectProjects (Xwt.TreeNavigator nav) {
+							var tag = nav.GetValue (xwtSolTagField) as string;
+							if (tag is not null && tag.StartsWith ("project:", StringComparison.Ordinal))
+								projectTags.Add (tag);
+							if (nav.MoveToChild ()) {
+								do { CollectProjects (nav); } while (nav.MoveNext ());
+								nav.MoveToParent ();
+							}
+						}
+						var projRoot = xwtSolutionStore?.GetFirstNode ();
+						if (projRoot is not null)
+							do { CollectProjects (projRoot); } while (projRoot.MoveNext ());
+						string? nodeProjTag = null;
+						foreach (var pt in projectTags) {
+							if (Sel (pt)) {
+								nodeProjTag = pt;
+								break;
+							}
+						}
+						if (nodeProjTag is not null) {
+							DumpCmdStates ("node_project");
+							// File phase: the first .cs file under the selected
+							// project (file rows carry the bare disk path as tag).
+							var projDir = Path.GetDirectoryName (nodeProjTag ["project:".Length..]);
+							if (projDir is not null && Directory.Exists (projDir)) {
+								foreach (var f in Directory.EnumerateFiles (projDir, "*.cs", SearchOption.AllDirectories)
+									.OrderBy (p => p)
+									.Where (p => !p.Contains ("/obj/") && !p.Contains ("/bin/"))) {
+									if (Sel (f)) {
+										DumpCmdStates ("node_file");
+										break;
+									}
+								}
+							}
+						}
+					}
 					Output ("[cmdstates] done");
 				}, Avalonia.Threading.DispatcherPriority.Background);
 			} else if (qa == "--viewcmds") {
@@ -2879,6 +2956,10 @@ public partial class MainWindow : Window
 			+ " cleanProj=" + B (En (P + "Clean"))
 			+ " projOpts=" + B (En (P + "ProjectOptions"))
 			+ " setStartup=" + B (En (P + "SetStartupProjects"))
+			+ " solItemOpts=" + B (CEn (P + "Options"))
+			// editRefs mirrors the tracked Project menu item itself (the
+			// RefreshCommandStates above re-ran its Update), not just the handler.
+			+ " editRefs=" + B (En (P + "AddReference"))
 			+ " | docCount=" + DocumentCount
 			+ " isOp=" + (IsOperationRunning ? "1" : "0")
 			+ " projCount=" + ActiveProjectCount
@@ -3527,6 +3608,20 @@ public partial class MainWindow : Window
 	// document's content. Gates the Undo/Redo menu items.
 	internal bool CanUndo => ActiveTextEditor?.CanUndo ?? false;
 	internal bool CanRedo => ActiveTextEditor?.CanRedo ?? false;
+
+	// Oleada 3 (slice 8): the solution-pad selected node is a build target —
+	// the shell equivalent of the legacy CurrentSelectedBuildTarget != null
+	// (Solution/Project rows; the shell has no solution folders). Gates the
+	// context-only Options command (the pad menu "Properties").
+	internal bool SelectedNodeIsBuildTarget
+		=> SelectedNodeType ().NodeType is "Solution" or "Project";
+
+	// Oleada 3 (slice 8): the solution-pad selected node is a project row —
+	// the shell equivalent of the legacy CurrentSelectedProject is DotNetProject
+	// (every shell project row is a .csproj). Gates the context-only Add
+	// Reference command.
+	internal bool SelectedNodeIsProject
+		=> SelectedNodeType ().NodeType == "Project";
 
 	// Oleada 3: re-evaluates the command-bound menu items' enabled state after a
 	// document/workspace change (cheap: a handful of GetCommandInfo calls).
@@ -6347,8 +6442,13 @@ public partial class MainWindow : Window
 			return;
 
 		case "MonoDevelop.Ide.Commands.ProjectCommands.AddReference": {
-			// Legacy AddReferenceDialog: adds a <Reference> to the active project file.
-			var proj = ResolveActiveProject ();
+			// Legacy AddReferenceDialog: adds a <Reference> to the selected project —
+			// the pad's project node when the command carries one (the EditReferences
+			// gate is exactly that selection), otherwise the first project of the
+			// loaded solution.
+			var selProj = nodeContext is not null && nodeContext.StartsWith ("project:", StringComparison.Ordinal)
+				? nodeContext ["project:".Length..] : null;
+			var proj = selProj is not null && File.Exists (selProj) ? selProj : ResolveActiveProject ();
 			if (proj is null) {
 				Output ("[refs] no project loaded");
 				return;
@@ -6372,6 +6472,20 @@ public partial class MainWindow : Window
 			} else
 				Output ("[file] active document has no file to reload");
 			return;
+		case "MonoDevelop.Ide.Commands.ProjectCommands.Options": {
+			// Pad context "Properties" (legacy SolutionItemOptionsHandler.Run:
+			// ShowOptions of the selected pad item) — the node context arrives
+			// with the pad menu click.
+			var optNode = nodeContext;
+			if (optNode is not null)
+				foreach (var prefix in new[] { "solution:", "project:", "folder:" })
+					if (optNode.StartsWith (prefix, StringComparison.Ordinal))
+						optNode = optNode [prefix.Length..];
+			var optLabel = optNode is null ? Path.GetFileName (loadedSolutionPath ?? "(no solution)")
+				: (Path.IsPathRooted (optNode) ? Path.GetFileName (optNode) : optNode);
+			Output ($"[options] {optLabel} — options panel opens in Preferences");
+			return;
+		}
 		case "MonoDevelop.Ide.Commands.ProjectCommands.ProjectOptions":
 		case "MonoDevelop.Ide.Commands.ProjectCommands.SolutionOptions":
 			Output ($"[options] {Path.GetFileName (loadedSolutionPath ?? "(no solution")}" + " — options panel opens in Preferences");
