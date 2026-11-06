@@ -4096,3 +4096,46 @@ dependen de build/run in-progress o de selección de proyecto quedan diferidos
 `origin/agents/sub-agent-senior-dev-role-report`. Sin submódulos; la ruta
 `--old-gui` no se ve afectada (código nuevo bajo `#else`/`AVALONIA_SHELL`; el
 bloque legacy de `ProjectCommands.cs` es byte-igual al commit anterior).
+
+### Menú (follow-up) — Oleada 3, Slice 5: estado de habilitación de menú (overrides `Update`) — gates in-progress de build/run (2026-11-05)
+
+Quinta slice de la Oleada 3, sobre el mecanismo de Slice 1. Puntualiza el item
+(1) de "pendiente" de Slice 4: los **gates in-progress de build/run**. La shell
+no mantiene operaciones de build/run separadas (legacy
+`CurrentBuildOperation`/`CurrentRunOperation`), sino **un único proceso
+compartido** `runningProc` (`System.Diagnostics.Process?`): `RunBuildAsync` itera
+los proyectos de la solución llamando a `RunProcessAsync` (`dotnet build` por
+proyecto), `RunStartupProjectAsync` hace lo propio para run/debug, y
+`StopBuildOrRun` mata ese proceso. Por tanto
+`IsOperationRunning => runningProc is { HasExited: false }` es el mapeo limpio
+de "hay build o run in-progress".
+
+**Mapeo legacy → estado shell** (bloques Avalonia `#else`; legacy
+`#if !AVALONIA_SHELL` byte-igual):
+- `Stop` → `ShellCommandState.IsOperationRunning` (legacy: enabled si `!CurrentBuildOperation.IsCompleted || !CurrentRunOperation.IsCompleted` — **bridge exacto**: el proceso compartido cubre ambos).
+- `BuildSolution`/`RebuildSolution` → `ShellCommandState.HasWorkspace && !ShellCommandState.IsOperationRunning` (legacy: `CurrentSelectedSolution != null && CurrentBuildOperation.IsCompleted` — **bridge más grueso**: el proceso compartido también cubre run, así que un run en curso deshabilita build; documentado).
+- `Run` → `HasWorkspace && !IsOperationRunning` (legacy: `Workspace.IsOpen && CanRun` + diálogo de confirmación "already running" + etiqueta dinámica "Restart" — el diálogo y la etiqueta dinámica se sustituyen por el busy guard; `MenuBuilder` solo espeja `Enabled`).
+- `RunEntry` → `HasWorkspace && !IsOperationRunning` (legacy: `buildTarget != null && !(buildTarget is Workspace) && CanExecute` — la parte in-progress de `CanExecute` queda puenteada).
+- `CleanSolution`/`SolutionOptions` → sin busy guard (legacy no lo chequea — el bridge exacto de Slice 4 se mantiene).
+
+**Implementación** (3 ficheros, +77/−19):
+- `MainWindow.axaml.cs`: accessor `IsOperationRunning` (región de estado de Oleada 3, junto a `HasWorkspace`/`DocumentCount`); hooks `NotifyCommandStateChanged()` en `RunProcessAsync` — inicio (tras `runningProc = proc` + early-return null; no notifica si el proceso no arrancó) y fin (dentro del `Dispatcher.UIThread.Post` de completion, tras `RefreshCodeIssuesPad()`); `DumpCmdStates` añade `stop=` (vía `En()`, `Stop` es item del menú Run) e `isOp=` (lectura directa); driver `--cmdstates` añade las fases `preop` → `RunProcessAsync("sleep","3")` (mismo path de un build real, marco de tiempo determinista) → `operating` → espera salida + 300ms → `postop`.
+- `ShellCommandState.cs`: `IsOperationRunning => MainWindow.Instance?.IsOperationRunning ?? false`.
+- `ProjectCommands.cs` (solo el bloque `#else`): 4 `Update` refinados (`BuildSolution`/`RebuildSolution`/`Run`/`RunEntry`) + 1 nuevo (`StopHandler`) + comentario-header del bloque matizado.
+
+**Invariantes**: modelo de menú (`MenuService`) intacto → `--menudump` byte-igual (`menus=11 items=225 cmds=0 bindings=205`); catálogo sin cambios (`Count=461`, `LoadedCommands=475`, `ResolvedHandlers=111`, `menu ids total=196 resolved=172 missing=24`); `runningProc` no se limpia a null (el diseño depende de `HasExited`; evita carrera con el Post de completion); bloque legacy de `ProjectCommands.cs` byte-igual; la ruta `--old-gui` no se toca.
+
+**Validación / evidencia** (artefactos en `~/opencode/`):
+- Build `0 Errores` (net10.0 y net10.0-windows). Nota: el build compila las fuentes de `MonoDevelop.Ide` dentro de `MonoDevelop.AvaloniaShell.dll` (csproj `Compile Include` + `AVALONIA_SHELL`), así que los cambios de `MonoDevelop.Ide.Commands/*` van al assembly de la shell (`MonoDevelop.Ide.dll` de `main/build` es pre-Oleada 2 y solo alimenta `--old-gui`).
+- Oracle extendido (`~/opencode/catload_test/`, sección `oleada3` a 43 ids — añade `ProjectCommands.Stop`, expected false headless): `oleada3: ok=43 fail=0`.
+- Smoke (`~/opencode/smoke_oleada1.sh`): sin excepciones, `--menudump` byte-igual.
+- E2E (`~/opencode/oleada3_cmdstates.sh`, 2 casos con/sin soln × 10 fases): con soln — `preop`/`postop` `buildSol/rebuildSol/cleanSol/run/solOpts/runEntry=1 stop=0 isOp=0`, **`operating` `buildSol/rebuildSol=0 cleanSol=1 run=0 solOpts=1 runEntry=0 stop=1 isOp=1`** (busy guard solo en los 4 gateados; `CleanSolution`/`SolutionOptions` intactos); sin soln — todo `0` salvo `operating` (`stop=1 isOp=1`). 0 `?`, 0 warn/fatal/exception.
+
+**QA (§18.5)**: **subagente Tester QA Senior** (solo lectura, artefactos en `~/opencode/oleada3_slice5_qa/`). **CERRAR — P1–P4 OK, 0 hallazgos** (1 P5 preexistente, fuera de scope: al matar el proceso con `Stop`, la salida no es 0 y el Post de fin preexistente escribe "Build FAILED with exit code N" en el pad de errores — proponer como mejora). P1 `--old-gui` intacta (bloque legacy byte-igual; el diff empieza dentro del `#else`); P2 mapeo fiel y documentado (hooks en el sitio correcto; sin `runningProc=null` en el árbol; `CleanSolution`/`SolutionOptions` sin busy guard); P3 concurrencia coherente (multi-proyecto: los Posts se encadenan FIFO; Stop: `Kill(true)` → `WaitForExitAsync` → Post de fin → gates re-habilitados; `runningProc` escrito y leído solo en UI); P4 E2E sin regresión (2 × 10 fases + oracle 43/43 + menudump byte-igual); P5 aviso citado.
+
+**Queda pendiente (slices 6..n de la Oleada 3)**: (1) gates de **selección de build target** (`Build`/`Rebuild`/`ProjectOptions`/`SolutionItemOptions`/`EditReferences`/`SetStartupProjects`, requieren un modelo de proyecto seleccionado que la shell aún no tiene); (2) la **port de visibility/rename/dynamic** (`OpenDocument1..9`, `CanShowHelp`, `OpenDocumentList`, etiquetas dinámicas de `Run`/`RunEntry`/`Build`); (3) `Undo`/`Redo` (exigirían `CanUndo`/`CanRedo` real del editor, hoy no público en `SkTextEditor`); (4) `Tools` (visibility + dynamic-text, requiere el port de visibilidad) y `Navigation` (requiere historial back/forward de documentos); (5) mejora P5: mensaje de error tras `Stop` legítimo. Mecanismo, cableado y ciclo de QA ya quedaron cubiertos por Slice 1–5.
+
+**Cierre**: código en commit (3 ficheros) pushado a
+`origin/agents/sub-agent-senior-dev-role-report`. Sin submódulos; la ruta
+`--old-gui` no se ve afectada (código nuevo bajo `#else`/`AVALONIA_SHELL`; el
+bloque legacy de `ProjectCommands.cs` es byte-igual al commit anterior).

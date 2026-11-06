@@ -484,9 +484,39 @@ El bucle de migración Gtk → Avalonia continúa por módulos (detalle por hito
       QA Senior) **APROBADO, CERRAR, 0 hallazgos** (P1–P5 OK): build 0 errores
       (ambos TFMs), oracle headless `oleada3 42/42`, smoke sin excepciones, E2E
       `--cmdstates` los 6 gates =1 con soln / =0 sin soln en las 7 transiciones. Sin
+       submódulos; la ruta `--old-gui` no se toca. Detalle en `docs/interfaz-plan.md`
+       (follow-up "Oleada 3 — Slice 4") y `docs/session_summary.md` (2026-11-05 (6)).
+   - **Oleada 3 (Slice 5) de la integración total del backend (2026-11-05)**:
+      estado de habilitación de menú (overrides `Update`) — gates **in-progress de
+      build/run**, sobre el mecanismo de Slice 1. La shell mantiene un único proceso
+      compartido `runningProc` (build y run lo usan; `StopBuildOrRun` lo mata), así
+      que `MainWindow.IsOperationRunning => runningProc is { HasExited: false }` es
+      el espejo de los chequeos legacy `CurrentBuildOperation/CurrentRunOperation`
+      in-progress. `ShellCommandState.IsOperationRunning` lo expone a los handlers.
+      `ProjectCommands.cs` (bloques Avalonia `#else`, legacy byte-igual): 4 `Update`
+      refinados a `HasWorkspace && !IsOperationRunning` (`BuildSolution`/
+      `RebuildSolution`/`Run`/`RunEntry` — bridge más grueso documentado; `Run`
+      sustituye el diálogo "already running" + etiqueta "Restart" por el busy guard)
+      y 1 `Update` nuevo en `StopHandler` → `IsOperationRunning` (**bridge exacto**
+      del legacy `!buildOp.IsCompleted || !runOp.IsCompleted`). `CleanSolution`/
+      `SolutionOptions` sin busy guard (legacy no lo chequea — bridge exacto).
+      `MainWindow.axaml.cs`: hooks `NotifyCommandStateChanged()` en `RunProcessAsync`
+      (inicio tras check null; fin en el Post de completion, tras
+      `RefreshCodeIssuesPad()`); `DumpCmdStates` añade `stop=`/`isOp=`; driver
+      `--cmdstates` añade fases `preop`/`operating`/`postop` con `sleep 3` por el
+      mismo `RunProcessAsync` de un build real. **Invariante**: menudump byte-igual
+      (`menus=11 items=225 cmds=0 bindings=205`), catálogo sin cambios
+      (`Count=461 LoadedCommands=475 ResolvedHandlers=111`, menu ids 196/172/24),
+      bloque legacy de `ProjectCommands.cs` byte-igual. QA §18.5 (subagente Tester
+      QA Senior) **APROBADO, CERRAR, 0 hallazgos P1–P4** (1 P5 preexistente:
+      "Build FAILED" en el pad tras un `Stop` legítimo — mejora pendiente). Build 0
+      errores (ambos TFMs), oracle headless `oleada3 43/43`, smoke sin excepciones,
+      E2E `--cmdstates` 2 casos × 10 fases (con soln: busy guard solo en
+      `operating`, `stop` 0→1→0; sin soln: todo 0 salvo `operating`). Sin
       submódulos; la ruta `--old-gui` no se toca. Detalle en `docs/interfaz-plan.md`
-      (follow-up "Oleada 3 — Slice 4") y `docs/session_summary.md` (2026-11-05 (6)).
- 
+      (follow-up "Oleada 3 — Slice 5") y `docs/session_summary.md` (2026-11-05 (7)).
+  
+
 
 
 Nota operativa: el árbol de build único es `main/build/` (cualquier otra dirección de build en la documentación es obsoleta). El binario de la UI Avalonia es `main/build/MonoDevelop.AvaloniaShell.dll` y el IDE GTK legacy (`--old-gui`) es `main/build/MonoDevelop.dll`.
