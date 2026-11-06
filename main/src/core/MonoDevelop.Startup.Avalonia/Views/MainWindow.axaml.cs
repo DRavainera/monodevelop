@@ -2797,6 +2797,7 @@ public partial class MainWindow : Window
 		const string E = "MonoDevelop.Ide.Commands.EditCommands.";
 		const string W = "MonoDevelop.Ide.Commands.WindowCommands.";
 		const string V = "MonoDevelop.Ide.Commands.ViewCommands.";
+		const string P = "MonoDevelop.Ide.Commands.ProjectCommands.";
 		Output ("[cmdstates] (" + when + ") "
 			+ "saveAll=" + B (En (F + "SaveAll"))
 			+ " close=" + B (En (F + "CloseFile"))
@@ -2823,6 +2824,12 @@ public partial class MainWindow : Window
 			+ " zoomReset=" + B (En (V + "ZoomReset"))
 			+ " focusDoc=" + B (CEn (V + "FocusCurrentDocument"))
 			+ " centerFocus=" + B (En (V + "CenterAndFocusCurrentDocument"))
+			+ " | buildSol=" + B (En (P + "BuildSolution"))
+			+ " rebuildSol=" + B (En (P + "RebuildSolution"))
+			+ " cleanSol=" + B (En (P + "CleanSolution"))
+			+ " run=" + B (En (P + "Run"))
+			+ " solOpts=" + B (En (P + "SolutionOptions"))
+			+ " runEntry=" + B (CEn (P + "RunEntry"))
 			+ " | docCount=" + DocumentCount
 			+ " hasDocs=" + HasDocuments + " hasActive=" + HasActiveDocument
 			+ " hasActiveEditor=" + HasActiveEditor + " hasDirty=" + HasDirtyDocuments

@@ -631,14 +631,24 @@ namespace MonoDevelop.Ide.Commands
 	// Oleada 2: AVALONIA_SHELL ports of the legacy handlers above. Each one
 	// delegates to the shell's menu dispatcher (ShellCommandHandler) — the same
 	// OnMenuCommand endpoint the catalog router uses — so behavior is
-	// unchanged; the Update overrides (enabled/visible state) are not ported
-	// yet. ApplyPolicy/ExportPolicy forward their literal catalog id: the
+	// unchanged. Oleada 3 (slice 4) ports the solution-level enabled gates
+	// (Build/Rebuild/Clean Solution, Run, Run Entry, Solution Options) onto
+	// ShellCommandState.HasWorkspace; the remaining Update overrides (selected
+	// build target, build/run operation in-progress, dynamic labels) are not
+	// ported yet. ApplyPolicy/ExportPolicy forward their literal catalog id: the
 	// ProjectCommands enum has no members for them.
 	internal class SolutionOptionsHandler : CommandHandler
 	{
 		protected override void Run ()
 		{
 			ShellCommandHandler.Run (ProjectCommands.SolutionOptions);
+		}
+
+		// Oleada 3 (slice 4): enabled when a solution is loaded (legacy:
+		// CurrentSelectedSolution != null — exact bridge).
+		protected override void Update (CommandInfo info)
+		{
+			info.Enabled = ShellCommandState.HasWorkspace;
 		}
 	}
 
@@ -680,6 +690,14 @@ namespace MonoDevelop.Ide.Commands
 		{
 			ShellCommandHandler.Run (ProjectCommands.BuildSolution);
 		}
+
+		// Oleada 3 (slice 4): enabled when a solution is loaded (legacy:
+		// CurrentSelectedSolution != null && CurrentBuildOperation.IsCompleted —
+		// the in-progress check is deferred with the build operation state).
+		protected override void Update (CommandInfo info)
+		{
+			info.Enabled = ShellCommandState.HasWorkspace;
+		}
 	}
 
 	internal class BuildHandler : CommandHandler
@@ -695,6 +713,14 @@ namespace MonoDevelop.Ide.Commands
 		protected override void Run ()
 		{
 			ShellCommandHandler.Run (ProjectCommands.RebuildSolution);
+		}
+
+		// Oleada 3 (slice 4): enabled when a solution is loaded (legacy:
+		// CurrentSelectedSolution != null && CurrentBuildOperation.IsCompleted —
+		// the in-progress check is deferred with the build operation state).
+		protected override void Update (CommandInfo info)
+		{
+			info.Enabled = ShellCommandState.HasWorkspace;
 		}
 	}
 
@@ -712,6 +738,14 @@ namespace MonoDevelop.Ide.Commands
 		{
 			ShellCommandHandler.Run (ProjectCommands.Run);
 		}
+
+		// Oleada 3 (slice 4): enabled when a solution is loaded (legacy:
+		// Workspace.IsOpen && CanRun — the CanExecute / in-progress checks are
+		// deferred with the run operation state).
+		protected override void Update (CommandInfo info)
+		{
+			info.Enabled = ShellCommandState.HasWorkspace;
+		}
 	}
 
 	internal class RunWithHandler : CommandHandler
@@ -727,6 +761,14 @@ namespace MonoDevelop.Ide.Commands
 		protected override void Run ()
 		{
 			ShellCommandHandler.Run (ProjectCommands.RunEntry);
+		}
+
+		// Oleada 3 (slice 4): enabled when a solution is loaded (legacy:
+		// build target != null && CanExecute — the CanExecute / in-progress
+		// checks are deferred with the build/run operation state).
+		protected override void Update (CommandInfo info)
+		{
+			info.Enabled = ShellCommandState.HasWorkspace;
 		}
 	}
 
@@ -751,6 +793,13 @@ namespace MonoDevelop.Ide.Commands
 		protected override void Run ()
 		{
 			ShellCommandHandler.Run (ProjectCommands.CleanSolution);
+		}
+
+		// Oleada 3 (slice 4): enabled when a solution is loaded (legacy:
+		// CurrentSelectedSolution != null — exact bridge).
+		protected override void Update (CommandInfo info)
+		{
+			info.Enabled = ShellCommandState.HasWorkspace;
 		}
 	}
 
