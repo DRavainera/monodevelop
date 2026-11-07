@@ -4475,3 +4475,178 @@ el commit de docs que le sigue. Sin cambios en submódulos; la ruta `--old-gui`
 no se ve afectada (todo el diff cae en `#else`/`#if AVALONIA_SHELL` o en
 ficheros exclusivos del shell; los bloques legacy quedan byte-iguales a la
 base).
+
+### Menú (follow-up) — Oleada 3, Slice 11: estado de habilitación de menú (overrides `Update`) — port de Navigation (2026-11-07)
+
+Undécima slice de la Oleada 3, sobre el mecanismo de Slice 1. Cierra el item (1)
+de "pendiente" de Slice 10 (Tools se cerró ahí): el **port de Navigation** —
+los 4 `Update` de `NavigationCommands.cs`, que son los más ricos del bloque
+legacy `#else` porque incluyen el único **array** de la Oleada 3
+(`NavigateHistory`) y dependen de un servicio de historial que el legacy tiene
+GTK-scoped (`IdeServices.NavigationHistoryService`) y el shell debió construir
+propio.
+
+**Mapeo legacy → estado shell** (bloques Avalonia `#else`; legacy
+`#if !AVALONIA_SHELL` byte-igual):
+- `NavigateBack` → `info.Enabled = NavigationHistoryService.CanMoveBack` (el
+  servicio static `MonoDevelop.Ide.Services.NavigationHistoryService` — no
+  compila en la build legacy, que usa su
+  `MonoDevelop.Ide.Navigation.NavigationHistoryService` con `HistoryList`).
+- `NavigateForward` → `info.Enabled = CanMoveForward`.
+- `ClearNavigationHistory` → `info.Enabled = CanMoveForward || CanMoveBack`
+  (legacy idéntico).
+- `NavigateHistory.Update (CommandArrayInfo)` → `GetNavigationList (15)`:
+  puntos **newest-first** (bucle `i = count−1 → 0`), `item.Checked =
+  (i == currentIndex)`; **histórico vacío** → un único item checked con el
+  título del documento activo (`ShellCommandState.ActiveDocumentTitle`, null →
+  sin item — el master se oculta por el mecanismo de arrays vacío de Slice 9,
+  de modo que el master jamás renderiza un submenú vacío; el legacy hace
+  exactamente lo mismo con `doc.Window.Title`).
+- **dataItem `navpoint:<fullIndex>|<line>|<file>`**: el legacy `MoveTo`
+  resuelve la entrada clicada **por referencia** (`HistoryList.MoveTo(item)`);
+  los puntos del shell no llevan identidad, así que cada hijo codifica su
+  **índice completo** en el historial (`start + i`, donde `start` es el offset
+  de la ventana). El dispatch lee el índice (hasta el primer `|`) y hace
+  `MoveTo (fullIndex)` — misma semánta de entrada exacta, sin el defecto de
+  match por valor (duplicados) que el P3a de la QA encontró en la 1ª versión.
+  `line` y `file` viajan juntos para legibilidad del diagnóstico. Robustez:
+  probe QA T4 con nombres hostiles (`|`, `:`, subcadena `navpoint:`) — el
+  parse (primer `|` + `int.TryParse`) es exacto.
+
+**Implementación** (5 ficheros, +183/−18):
+- `NavigationCommands.cs` (solo `#else`; +48/−4): los 4 overrides `Update`
+  (strings/etiquetas del legacy; using nuevo `MonoDevelop.Ide.Services`).
+  Cabecera del bloque actualizada.
+- `Services/NavigationHistoryService.cs` (+29/−5): `MoveTo (int fullIndex)`
+  (no-op si ya es el current — sin `Changed`; `null` fuera de rango, mejor que
+  el `InvalidOperationException` legacy) y `GetNavigationList (count)`
+  **balanceado** alrededor de `position` (`half = (count−1)/2; start =
+  max(0, min(position−half, total−count))`), devuelve `(Points, Current,
+  Start)` — espejo del balance del `HistoryList.GetList` legacy: el current
+  siempre está dentro de la ventana (índice nunca negativo) y cada hijo mapea
+  a su índice completo.
+- `ShellCommandState.cs` (+7): `ActiveDocumentTitle` →
+  `MainWindow.Instance?.ActiveDocumentTitle`.
+- `ToolsCommands.cs` (+2/−2): fix P4 (QA): cabecera del bloque `#else` stale
+  ("not ported yet" → "slice 10 ported").
+- `MainWindow.axaml.cs` (+97/−7): (a) ctor `Changed +=
+  NotifyCommandStateChanged`; (b) `OnDocSelectionChanged` →
+  `if (!navSwitching) PushNavigationPoint ();` (feed de activación —
+  equivalente del `LogActiveDocument` legacy en activación); (c)
+  `PushNavigationPoint ()` solo docs con `FilePath` (untitled: no aterrizable);
+  (d) `NavigateToPoint` con `navSwitching` try/finally (flag legacy
+  `switching`; ruta síncrona open→select en UI thread → el guard siempre cubre
+  la selección; sin saltarse push legítimo — verificado por QA); (e) dispatch
+  `NavigateHistory`: `navpoint:` → `MoveTo` → `NavigateToPoint`, sin prefijo →
+  dump diagnóstico legacy; (f) dispatch `ClearNavigationHistory`: `Clear ()` +
+  `PushNavigationPoint ()` (ancla legacy: tras Clear + siguiente activación,
+  Back alcanza el doc pre-Clear); (g) `DumpCmdStates` +6 campos
+  (`backEn fwdEn clearEn histN hist0 histCur` — el ✓ se lee del icono del hijo
+  del menú construido real); (h) driver `--cmdstates`: 7 fases
+  `navCleared/navOpened/navJmp/navBack/navFwd/navSub/navClear2` sobre un
+  fichero probe de 12 líneas determinista; `PushNavigationPoint` explícitos
+  sustituyen al go-to-line logging que el shell no tiene aún; `finally Clear ()`
+  (historial process-local).
+
+**QA y fixes** (ciclo §18.5, 2 rondas — informe en
+`~/opencode/oleada3_slice11_qa/qa_report.md`):
+- **Ronda 1 (subagente, 2026-11-06 22:00): RECHAZADO** — 1×P2 + 2×P3 + 1×P4
+  preexistente + 4×P5, con probes de replicación propios (T1–T8):
+  - **P2**: la ventana era **tail** de los últimos N, no balanceada → 16 puntos
+    + 15 backs (`position=0`) daba `currentIndex=−1`: 15 hijos sin ✓ y sin el
+    punto actual. Fix: `GetNavigationList` balanceado (espejo legacy) + casos
+    oracle (16 pushes + 15 backs → `count=15 cur=0 start=0 first=f1.cs`,
+    checked en el último hijo).
+  - **P3a**: `MoveTo` por valor (File+Line) no distinguía duplicados (legacy:
+    por referencia; el propio `HistoryList` documenta que "equal items may
+    appear more than once"). Repro: `[a:1(0), b:2(1), a:1(2)]`, pos=2, clic en
+    la entrada ✓ → caía en idx 0. Fix: `MoveTo (int fullIndex)` + dataItem
+    `navpoint:<fullIndex>|...` + casos oracle (clic en duplicado current =
+    no-op; `MoveTo` al duplicado viejo mueve la posición y habilita fwd).
+  - **P3b**: `Clear` sin re-registrar el doc activo (legacy `Clear()` =
+    `history.Clear(); LogActiveDocument ();`). Repro: Clear + reactivación →
+    `CanMoveBack=false` (legacy: true). Fix: `PushNavigationPoint ()` tras
+    `Clear()` en el dispatch (donde se alcanza `MainWindow`); la expectativa
+    E2E `navClear2` pasa de fallback-título a punto real (`hist0=probe:1`).
+  - **P4** (preexistente de Slice 10): cabecera stale de `ToolsCommands.cs`;
+    corregida en este ciclo.
+- **Ronda 2 (subagente, pasada independiente, 2026-11-07)**: **APROBADO**
+  (informe en `~/opencode/oleada3_slice11_qa_round2/qa_report.md`; artefactos:
+  logs E2E de los 3 casos). El subagente re-verificó de forma independiente los
+  4 fixes (todos **CORREGIDOS**, con valores exactos de oracle y E2E), todas
+  las invariantes (builds 0 errores ambos TFMs, oracle `oleada3nav: ok=22
+  fail=0` con las regresiones P2/P3, smoke byte-identical, E2E con las 7 fases
+  nav idénticas en los 3 casos y valores exactos, catálogo, legacy intacto
+  línea a línea) y la exactitud de los 3 docs pendientes: **0 hallazgos P1–P4,
+  4 P5 informativos** (los mismos que la ronda 1). Nota: la build GTK legacy
+  no pudo re-ejecutarse en el entorno del subagente (fallo de restauración
+  MSBuild `NETSDK1005` ajeno a los cambios); la ronda 1 ya la verificó en 0
+  errores. Antes de la ronda 2 el dev hizo una re-verificación fresca
+  (`oleada3_slice11_oracle_final.txt`, `oleada3_slice11_e2e_final.txt` — 107
+  fases `[cmdstates]` byte-iguales a la corrida post-fixes, 0
+  `warn/fatal/Exception/Unhandled`). **Veredicto final: APROBADO tras 2
+  rondas, 0 hallazgos P1–P4 abiertos** (precedente: Slice 9).
+- **P5 (4, informativos)**: (1) **feed de caret**: el shell registra puntos en
+  activación y saltos explícitos, no en cada movimiento de caret (legacy:
+  `LogActiveDocument` en `Caret.PositionChanged`) → Back/Forward cae a la línea
+  de activación/salto; E2E compensa con pushes explícitos; pendiente;
+  (2) clic en el item fallback de título (historial vacío, dataItem=null) hace
+  `Output ("[nav] history empty")` en vez de no-op silencioso (ruido);
+  (3) `Changed += NotifyCommandStateChanged` sin unsubscribe (sin leak
+  realista: `MainWindow` single-instance + evento static de vida de proceso);
+  (4) la métrica "65 overrides acumulados" no es reproducible como conteo crudo
+  (parser de preprocesador: 46→50) — la métrica incluye el estado dinámico de
+  Slice 9 resuelto en `MenuBuilder`; el delta +4 se verifica en el diff.
+
+**Invariantes**: modelo de menú (`MenuService`) intacto → `--menudump`
+byte-igual (`menus=11 items=225 cmds=0 bindings=205`); catálogo sin cambios
+(`Count=461`, `LoadedCommands=475`, `ResolvedHandlers=111`); `NavigateHistory`
+conserva `type="radio|array"` en `Commands.addin.xml` (submenú dinámico por
+`MenuBuilder` desde Slice 9); bloques legacy byte-iguales (todo el diff cae en
+`#else`/`#if AVALONIA_SHELL` o en ficheros que no compilan en la build legacy)
+→ la ruta `--old-gui` no se toca (build GTK completa 0 errores, QA ronda 1).
+
+**Validación / evidencia** (artefactos en `~/opencode/`):
+- Build `0 Errores` (net10.0 y net10.0-windows; warnings preexistentes).
+- Oracle: `oleada3: ok=51 fail=0` + `oleada3dyn: ok=19 fail=0` +
+  `oleada3tools: ok=5 fail=0` + **`oleada3nav: ok=22 fail=0`** (gates
+  empty/1/2 puntos, array newest-first + dataItems `navpoint:`,
+  MoveBack/MoveForward con movimiento del ✓, truncación de forward en push
+  nuevo, `MoveTo` por índice, ventana P2 16+15, duplicados P3, estado tras
+  Clear) — `oleada3_slice11_oracle_final.txt`.
+- Smoke (`~/opencode/smoke_oleada1.sh`): `--menudump` byte-igual, 0
+  warn/Exception — `oleada3_slice11_smoke_final.log`.
+- E2E (`~/opencode/oleada3_cmdstates.sh`, **3 casos**): las 7 fases nav
+  **idénticas** en withsln/emptysl/nosln: `navCleared` 0/0/0 histN=0
+  histCur=-1 → `navOpened` backEn=1 clearEn=1 histN=2 hist0=probe:3
+  histCur=0 (histN=2 determinista: push en activación (línea 1, antes del
+  `GotoLine`) + push explícito (línea 3)) → `navJmp` histN=3 hist0=probe:7
+  → `navBack` histCur=1 fwdEn=1 → `navFwd` histCur=0 fwdEn=0 → `navSub`
+  histCur=2 backEn=0 (`[nav] → probe:1`) → `navClear2` 0/0/0 histN=1
+  hist0=probe:1 histCur=0 (re-push ancla el doc activo, fix P3b). 107 fases
+  `[cmdstates]` byte-iguales a la corrida post-fixes (regresión 0); 0
+  `warn/fatal/Exception`; `closeWs` 1/1/0 — `oleada3_slice11_e2e_final.txt`.
+
+**Queda pendiente (slices 12..n de la Oleada 3)**: (1) render legacy completo
+de los array commands (master oculto + hijos inline como hermanos — hoy
+submenu dinámico con master oculto cuando el array está vacío); (2) mejora P5:
+mensaje de error tras `Stop` legítimo; (3) P5 preexistente: el early-return de
+`OpenSolutionInWindow` traga el refresh; (4) P5 preexistente (Slice 7): los
+atajos Ctrl+Z/Ctrl+Y tragados por `isTextEditingCombo` del window; (5) P5 (QA
+F-5d, Slice 8): tejer la selección del pad en la dispatch del menú principal de
+"Add Reference..."; (6) cosmético (QA F-5e, Slice 8): renombrar
+`SolutionOptionsHandler` (rama `#else`); (7) P5 (QA F6, Slice 9): endurecer la
+regresión de los submenús dinámicos (dump del `Tag` del hijo o dispatch vía
+click real); (8) P5 (QA F3, Slice 9): exponer el proyecto del archivo
+seleccionado para las etiquetas file→proyecto; (9) P5 (QA F2, Slice 10):
+comentario stale de `BuildToolsWithExternal`; (10) **nuevo (QA Slice 11)**:
+feed de caret en el historial de navegación; (11) **nuevo (QA Slice 11)**:
+no-op silencioso del item fallback de título. El item (1) de la lista de
+Slice 10 (Navigation) queda **cerrado por esta slice** — no quedan comandos de
+menú con `Update` legacy sin portar.
+
+**Cierre**: código en commit (5 ficheros) pushado a
+`origin/agents/sub-agent-senior-dev-role-report`; handoff + veredicto del QA en
+el commit de docs que le sigue. Sin cambios en submódulos; la ruta `--old-gui`
+no se ve afectada (todo el diff cae en `#else`/ficheros exclusivos del shell;
+los bloques legacy quedan byte-iguales a la base).

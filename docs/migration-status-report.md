@@ -733,6 +733,49 @@ El bucle de migración Gtk → Avalonia continúa por módulos (detalle por hito
           íntegro bajo `#else`/`#if AVALONIA_SHELL` o en ficheros exclusivos
           del shell). Detalle en `docs/interfaz-plan.md` (follow-up "Oleada 3
           — Slice 10") y `docs/session_summary.md` (2026-11-06 (12)).
+      - **Oleada 3 (Slice 11) de la integración total del backend (2026-11-06/07)**:
+          estado de habilitación de menú (overrides `Update`) — **port de
+          Navigation** al shell Avalonia: 4 overrides de `NavigationCommands.cs`
+          (bloque `#else`, legacy byte-igual): `NavigateBack`/`NavigateForward`
+          (`NavigationHistoryService.CanMoveBack/CanMoveForward`),
+          `ClearNavigationHistory` (`CanMoveForward || CanMoveBack`) y
+          `NavigateHistory.Update (CommandArrayInfo)` (submenú dinámico: últimos
+          15 puntos **balanceados alrededor del actual** — espejo del
+          `HistoryList.GetList` legacy — newest-first con ✓ en el actual;
+          histórico vacío → título del doc activo como único item checked;
+          dataItem `navpoint:<fullIndex>|<line>|<file>` para el dispatch).
+          `Services/NavigationHistoryService.cs`: `MoveTo (int fullIndex)`
+          (equivalente del `MoveTo` por referencia legacy — clic en duplicado
+          exacto) + `GetNavigationList` balanceado devuelve `(Points, Current,
+          Start)`. `ShellCommandState.cs`: `ActiveDocumentTitle`.
+          `MainWindow.axaml.cs`: feed de activación (`PushNavigationPoint` en
+          `OnDocSelectionChanged`, solo docs con `FilePath`), guard
+          `navSwitching` en `NavigateToPoint` (el salto no re-registra el punto
+          aterrizado), dispatch `NavigateHistory` parsea `navpoint:` →
+          `MoveTo`, dispatch `Clear` re-push del doc activo (ancla legacy
+          `LogActiveDocument`), suscripción `Changed +=
+          NotifyCommandStateChanged`, `DumpCmdStates` +6 campos y 7 fases E2E
+          `navCleared..navClear2`. `ToolsCommands.cs`: fix de cabecera stale
+          (P4 QA, heredado de Slice 10). QA §18.5 (subagente Tester QA Senior):
+          ronda 1 **RECHAZADO** (P2 ventana no balanceada — sin ✓ con 16+
+          puntos + 15 backs; P3a `MoveTo` por valor con duplicados; P3b
+          `Clear` sin re-push; P4 cabecera stale) → fixes + re-corrida → ronda
+          2 (subagente, pasada independiente, 2026-11-07 — informe en
+          `~/opencode/oleada3_slice11_qa_round2/qa_report.md`): **APROBADO**,
+          0 hallazgos P1–P4, 4 P5 informativos (feed de caret, ruido `history
+          empty`, suscripción sin unsubscribe, métrica de overrides) — los 4
+          fixes re-verificados CORREGIDOS, todas las invariantes y los 3 docs
+          coherentes. Oracle: `oleada3 51/51` +
+          `oleada3dyn 19/19` + `oleada3tools 5/5` + sección nueva
+          `oleada3nav 22/22` (incluye los casos de regresión P2/P3). Smoke sin
+          excepciones; E2E `--cmdstates` 3 casos con las 7 fases nav idénticas
+          y prefijos previos byte-iguales (regresión 0). Sin cambios en
+          submódulos; la ruta `--old-gui` no se toca (los 2 ficheros con diff
+          que entran en la build legacy cambian solo en región `#else`,
+          excluida de la compilación; el servicio static `Ide.Services` no
+          compila en legacy). Detalle en `docs/interfaz-plan.md` (follow-up
+          "Oleada 3 — Slice 11") y `docs/session_summary.md` (2026-11-07 (13)).
+
 
    
 
