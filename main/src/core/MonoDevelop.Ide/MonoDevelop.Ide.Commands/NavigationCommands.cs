@@ -35,7 +35,8 @@ using MonoDevelop.Ide.Gui;
 using MonoDevelop.Components.Commands;
 using MonoDevelop.Ide.Navigation;
 #else
-using MonoDevelop.Components.Commands;
+	using MonoDevelop.Components.Commands;
+	using MonoDevelop.Ide.Services;
 #endif
 
 namespace MonoDevelop.Ide.Commands
@@ -120,14 +121,21 @@ namespace MonoDevelop.Ide.Commands
 #else
 	// Oleada 2: AVALONIA_SHELL ports of the legacy handlers above. Each one
 	// delegates to the shell's menu dispatcher (ShellCommandHandler) — the same
-	// OnMenuCommand endpoint the catalog router uses — so behavior is
-	// unchanged; the Update overrides (enabled/visible state) are not ported
-	// yet.
+	// OnMenuCommand endpoint the catalog router uses. Oleada 3 (slice 11): the
+	// Update overrides are ported on the shell's NavigationHistoryService
+	// (MonoDevelop.Ide.Services, static — the legacy IdeServices service is
+	// GTK-scoped); the dataItems are the "line|file" strings the shell bridge
+	// carries (legacy NavigationHistoryItem, same file+line payload).
 	internal class NavigateBack : CommandHandler
 	{
 		protected override void Run ()
 		{
 			ShellCommandHandler.Run (NavigationCommands.NavigateBack);
+		}
+
+		protected override void Update (CommandInfo info)
+		{
+			info.Enabled = NavigationHistoryService.CanMoveBack;
 		}
 	}
 
@@ -137,6 +145,11 @@ namespace MonoDevelop.Ide.Commands
 		{
 			ShellCommandHandler.Run (NavigationCommands.NavigateForward);
 		}
+
+		protected override void Update (CommandInfo info)
+		{
+			info.Enabled = NavigationHistoryService.CanMoveForward;
+		}
 	}
 
 	internal class NavigateHistory : CommandHandler
@@ -145,6 +158,32 @@ namespace MonoDevelop.Ide.Commands
 		{
 			ShellCommandHandler.Run (NavigationCommands.NavigateHistory, dataItem);
 		}
+
+		// Legacy Update(CommandArrayInfo): the last 15 points newest-first with
+		// the current one checked; with an empty history the active document's
+		// title stands in as the single checked entry (the master therefore
+		// never renders an empty submenu).
+		protected override void Update (CommandArrayInfo info)
+		{
+			var (points, currentIndex, start) = NavigationHistoryService.GetNavigationList (15);
+			if (points.Count < 1) {
+				var title = ShellCommandState.ActiveDocumentTitle;
+				if (title != null) {
+					CommandInfo item = info.Add (title, null);
+					item.Checked = true;
+				}
+				return;
+			}
+			for (int i = points.Count - 1; i >= 0; i--) {
+				// dataItem "navpoint:<fullIndex>|<line>|<file>" — fullIndex
+				// (start + windowIndex) names the exact entry so the dispatch
+				// resolves it like the legacy reference-based MoveTo; line and
+				// file ride along for readability. The dispatch reads the
+				// fullIndex (before the first '|').
+				CommandInfo item = info.Add (points [i].ToString (), "navpoint:" + (start + i) + "|" + points [i].Line + "|" + (points [i].File ?? string.Empty));
+				item.Checked = (i == currentIndex);
+			}
+		}
 	}
 
 	internal class ClearNavigationHistory : CommandHandler
@@ -152,6 +191,11 @@ namespace MonoDevelop.Ide.Commands
 		protected override void Run ()
 		{
 			ShellCommandHandler.Run (NavigationCommands.ClearNavigationHistory);
+		}
+
+		protected override void Update (CommandInfo info)
+		{
+			info.Enabled = NavigationHistoryService.CanMoveForward || NavigationHistoryService.CanMoveBack;
 		}
 	}
 #endif

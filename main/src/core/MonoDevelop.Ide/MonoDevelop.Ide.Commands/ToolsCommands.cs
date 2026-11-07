@@ -187,8 +187,8 @@ namespace MonoDevelop.Ide.Commands
 	// is not ported: it is constructed with an ExternalTool instance and is not
 	// referenced by any catalog defaultHandler). Each port delegates to the
 	// shell's menu dispatcher (ShellCommandHandler) — the same OnMenuCommand
-	// endpoint the catalog router uses — so behavior is unchanged; the Update
-	// overrides (enabled/visible state) are not ported yet.
+	// endpoint the catalog router uses. Oleada 3 (slice 10) ported the Update
+	// overrides (enabled/visible state) below.
 	internal class AddinManagerHandler : CommandHandler
 	{
 		protected override void Run ()

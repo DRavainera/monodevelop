@@ -116,6 +116,13 @@ namespace MonoDevelop.Ide.Commands
 		// label.
 		public static bool IsSessionRecording
 			=> MonoDevelop.AvaloniaShell.Views.MainWindow.Instance?.IsSessionRecording ?? false;
+
+		// Oleada 3 (slice 11): the active document's title (file name) — the
+		// legacy doc.Window.Title the NavigateHistory submenu shows as the
+		// single checked entry while the history is empty (null with no
+		// active text document: the legacy would then add no entry either).
+		public static string? ActiveDocumentTitle
+			=> MonoDevelop.AvaloniaShell.Views.MainWindow.Instance?.ActiveDocumentTitle;
 	}
 }
 #endif

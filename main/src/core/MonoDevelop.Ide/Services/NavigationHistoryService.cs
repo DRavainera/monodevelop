@@ -62,6 +62,23 @@ public static class NavigationHistoryService
 		return history [position];
 	}
 
+	/// <summary>Move the pointer to the point at the given full-history index —
+	/// the NavigateHistory submenu pick. The legacy MoveTo resolves the exact
+	/// clicked entry by reference; the shell's points carry no identity, so an
+	/// entry is named by its index (the submenu encodes it in the dataItem).
+	/// A no-op (already the current) fires no Changed, like MoveBack/MoveForward.
+	/// Returns the point, or null when the index is out of range.</summary>
+	public static NavigationPoint? MoveTo (int index)
+	{
+		if (index < 0 || index >= history.Count)
+			return null;
+		if (index == position)
+			return history [index];
+		position = index;
+		Changed?.Invoke ();
+		return history [index];
+	}
+
 	public static void Clear ()
 	{
 		history.Clear ();
@@ -69,11 +86,18 @@ public static class NavigationHistoryService
 		Changed?.Invoke ();
 	}
 
-	/// <summary>Last up-to-count points oldest→newest with the current index (for the menu).</summary>
-	public static (IReadOnlyList<NavigationPoint> Points, int Current) GetNavigationList (int count)
+	/// <summary>Up-to-count points balanced around the current one (oldest→newest),
+	/// with the current's index in the window and the window's start offset in the
+	/// full history. Mirrors the legacy HistoryList.GetList balance, so the current
+	/// is always inside the window (its index never negative) and each entry maps
+	/// back to its exact history index (start + windowIndex).</summary>
+	public static (IReadOnlyList<NavigationPoint> Points, int Current, int Start) GetNavigationList (int count)
 	{
-		var start = Math.Max (0, history.Count - count);
-		var points = history.GetRange (start, history.Count - start);
-		return (points, position - start);
+		if (history.Count == 0)
+			return (Array.Empty<NavigationPoint> (), -1, 0);
+		int half = (count - 1) / 2;
+		int start = Math.Max (0, Math.Min (position - half, history.Count - count));
+		int len = Math.Min (count, history.Count - start);
+		return (history.GetRange (start, len), position - start, start);
 	}
 }

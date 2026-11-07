@@ -163,6 +163,10 @@ public partial class MainWindow : Window
 		// host when the selection is cleared).
 		DocTabs.SelectionChanged += OnDocSelectionChanged;
 
+		// Oleada 3 (slice 11): the navigation history state (Navigate Back/Forward
+		// enabled, Navigate History submenu) re-evaluates on every history change.
+		MonoDevelop.Ide.Services.NavigationHistoryService.Changed += NotifyCommandStateChanged;
+
 		// Document strip nudge buttons (legacy DocumentPad ‹ ›): SHIFT the clipped tab
 		// row when the tabs' total width exceeds the strip viewport; the buttons only
 		// exist (IsVisible) while there is overflow. Template parts are reached through
@@ -2085,6 +2089,39 @@ public partial class MainWindow : Window
 						MonoDevelop.Ide.Services.SettingsStore.SetBool ("MonoDevelop.EnableAutomatedTesting", autoTestWas);
 						MonoDevelop.Ide.Services.SettingsStore.SaveTools (toolsWere);
 					}
+					// Oleada 3 (slice 11): drive the navigation history through
+					// clear -> jump -> back -> forward -> submenu pick -> clear,
+					// dumping the CanMoveBack/CanMoveForward gates and the
+					// Navigate History dynamic submenu after each. A dedicated
+					// 12-line probe file (deterministic in every case — the
+					// earlier phases closed all documents) is used; the explicit
+					// PushNavigationPoint calls stand in for the legacy
+					// go-to-line point logging the shell does not have yet.
+					// The history is process-local; the finally Clear leaves the
+					// process clean.
+					var navFile = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile), "opencode", "oleada3_nav_probe.txt");
+					try {
+						Directory.CreateDirectory (Path.GetDirectoryName (navFile)!);
+						File.WriteAllLines (navFile, Enumerable.Range (1, 12).Select (i => "nav line " + i));
+						MonoDevelop.Ide.Services.NavigationHistoryService.Clear ();
+						DumpCmdStates ("navCleared");
+						OpenFileDocumentAtLine (navFile, 3);
+						PushNavigationPoint ();
+						DumpCmdStates ("navOpened");
+						OpenFileDocumentAtLine (navFile, 7);
+						PushNavigationPoint ();
+						DumpCmdStates ("navJmp");
+						OnMenuCommand ("MonoDevelop.Ide.Commands.NavigationCommands.NavigateBack");
+						DumpCmdStates ("navBack");
+						OnMenuCommand ("MonoDevelop.Ide.Commands.NavigationCommands.NavigateForward");
+						DumpCmdStates ("navFwd");
+						OnMenuCommand ("MonoDevelop.Ide.Commands.NavigationCommands.NavigateHistory", "navpoint:0|1|" + navFile);
+						DumpCmdStates ("navSub");
+						OnMenuCommand ("MonoDevelop.Ide.Commands.NavigationCommands.ClearNavigationHistory");
+						DumpCmdStates ("navClear2");
+					} finally {
+						MonoDevelop.Ide.Services.NavigationHistoryService.Clear ();
+					}
 					Output ("[cmdstates] done");
 				}, Avalonia.Threading.DispatcherPriority.Background);
 			} else if (qa == "--viewcmds") {
@@ -3035,6 +3072,16 @@ public partial class MainWindow : Window
 		const string P = "MonoDevelop.Ide.Commands.ProjectCommands.";
 		const string H = "MonoDevelop.Ide.Commands.HelpCommands.";
 		const string T = "MonoDevelop.Ide.Commands.ToolCommands.";
+		const string NV = "MonoDevelop.Ide.Commands.NavigationCommands.";
+		// Oleada 3 (slice 11): the Navigate History dynamic submenu — child count,
+		// first (newest) child header and the checked child's index.
+		var histItems = Mi (NV + "NavigateHistory")?.Items.OfType<Avalonia.Controls.MenuItem> ().ToList () ?? new System.Collections.Generic.List<Avalonia.Controls.MenuItem> ();
+		int histCur = -1;
+		for (int i = 0; i < histItems.Count; i++)
+			if (histItems [i].Icon is Avalonia.Controls.TextBlock { Text: "\u2713" }) {
+				histCur = i;
+				break;
+			}
 		Output ("[cmdstates] (" + when + ") "
 			+ "saveAll=" + B (En (F + "SaveAll"))
 			+ " close=" + B (En (F + "CloseFile"))
@@ -3115,7 +3162,16 @@ public partial class MainWindow : Window
 			+ " sessVis=" + B (Vi (T + "ToggleSessionRecorder"))
 			+ " sessTxt=" + (Hdr (T + "ToggleSessionRecorder") ?? "-")
 			+ " replayVis=" + B (Vi (T + "ReplaySession"))
-			+ " sessSub=" + B (Sub ("Session Recorder")?.IsVisible));
+			+ " sessSub=" + B (Sub ("Session Recorder")?.IsVisible)
+			// Oleada 3 (slice 11): navigation — the CanMoveBack/CanMoveForward
+			// gates (Navigate Back/Forward, Clear) and the Navigate History
+			// dynamic submenu (count, newest child, checked index).
+			+ " | backEn=" + B (En (NV + "NavigateBack"))
+			+ " fwdEn=" + B (En (NV + "NavigateForward"))
+			+ " clearEn=" + B (En (NV + "ClearNavigationHistory"))
+			+ " histN=" + histItems.Count
+			+ " hist0=" + (histItems.Count > 0 ? histItems [0].Header as string ?? "-" : "-")
+			+ " histCur=" + histCur);
 	}
 
 	void UpdatePadChecks (System.Collections.Generic.IReadOnlyList<MenuService.MenuEntry> entries)
@@ -3941,6 +3997,8 @@ public partial class MainWindow : Window
 			}
 			lastBreadCaretLine = -1;
 			UpdateBreadcrumb ();
+			if (!navSwitching)
+				PushNavigationPoint (); // Oleada 3 (slice 11): legacy LogActiveDocument on activation
 		} else {
 			ShowEmptyEditorHost (); // legacy: editor pad stays open with no tabs
 		}
@@ -6466,6 +6524,11 @@ public partial class MainWindow : Window
 	bool suppressConfigSync;
 	string activeConfiguration = "Debug";
 
+	// Oleada 3 (slice 11): legacy NavigationHistoryService `switching` flag —
+	// set while a back/forward/history jump is mounting the target document,
+	// so the tab switch it causes does not re-log the landed point.
+	bool navSwitching;
+
 	/// <summary>Fills the toolbar configuration combo and the Project &gt; Active
 	/// Configuration submenu from the loaded .sln, selecting the configuration
 	/// persisted in .userprefs (legacy MainToolbarController + SelectActiveConfigurationHandler).</summary>
@@ -6789,7 +6852,21 @@ public partial class MainWindow : Window
 			return;
 		}
 		case "MonoDevelop.Ide.Commands.NavigationCommands.NavigateHistory": {
-			var (points, current) = MonoDevelop.Ide.Services.NavigationHistoryService.GetNavigationList (15);
+			// Submenu pick: the child dataItem is "navpoint:<fullIndex>|<line>|<file>"
+			// (the NavigateHistory Update encodes it). The legacy MoveTo resolves the
+			// exact clicked entry by reference — here the fullIndex does the same.
+			if (nodeContext is not null && nodeContext.StartsWith ("navpoint:", StringComparison.Ordinal)) {
+				var payload = nodeContext ["navpoint:".Length..];
+				var bar = payload.IndexOf ('|');
+				if (bar > 0 && int.TryParse (payload [..bar], out var fullIndex) &&
+					MonoDevelop.Ide.Services.NavigationHistoryService.MoveTo (fullIndex) is { } moved) {
+					NavigateToPoint (moved);
+					return;
+				}
+				Output ("[nav] history point not found: " + payload);
+				return;
+			}
+			var (points, current, _) = MonoDevelop.Ide.Services.NavigationHistoryService.GetNavigationList (15);
 			for (int i = 0; i < points.Count; i++)
 				Output ($"[nav] {(i == current ? "→" : " ")} {points [i]}");
 			if (points.Count == 0)
@@ -6798,6 +6875,10 @@ public partial class MainWindow : Window
 		}
 		case "MonoDevelop.Ide.Commands.NavigationCommands.ClearNavigationHistory":
 			MonoDevelop.Ide.Services.NavigationHistoryService.Clear ();
+			// The legacy Clear() re-logs the active document (LogActiveDocument)
+			// so it anchors as point 0 — keep that so Back still reaches the
+			// pre-Clear document after the next activation.
+			PushNavigationPoint ();
 			Output ("[nav] history cleared");
 			return;
 		case "MonoDevelop.Ide.Commands.ViewCommands.ZoomIn":
@@ -8894,17 +8975,26 @@ public partial class MainWindow : Window
 	// NavigationHistoryService jump: open the file (if needed) and restore the caret line.
 	void NavigateToPoint (MonoDevelop.Ide.Services.NavigationPoint p)
 	{
-		if (!string.IsNullOrEmpty (p.File) && File.Exists (p.File))
-			OpenFileDocumentAtLine (p.File, p.Line);
-		Output ("[nav] → " + p);
+		navSwitching = true; // Oleada 3 (slice 11): legacy `switching` guard
+		try {
+			if (!string.IsNullOrEmpty (p.File) && File.Exists (p.File))
+				OpenFileDocumentAtLine (p.File, p.Line);
+			Output ("[nav] → " + p);
+		} finally {
+			navSwitching = false;
+		}
 	}
 
 	// Records the current caret as a navigation point (called after user jumps).
+	// Oleada 3 (slice 11): only documents with a file path are recorded — the
+	// shell restores a point by opening its file (NavigateToPoint), so an
+	// untitled document's point (the legacy records it by document reference)
+	// could never be landed on and would dead-end the back/forward history.
 	void PushNavigationPoint ()
 	{
 		var tag = (DocTabs.SelectedItem as TabItem)?.Tag as string;
-		if (tag is not null && docs.TryGetValue (tag, out var ed))
-			MonoDevelop.Ide.Services.NavigationHistoryService.Push (ed.FilePath is { Length: > 0 } ? ed.FilePath : null, ed.CurrentLine + 1);
+		if (tag is not null && docs.TryGetValue (tag, out var ed) && ed.FilePath is { Length: > 0 })
+			MonoDevelop.Ide.Services.NavigationHistoryService.Push (ed.FilePath, ed.CurrentLine + 1);
 	}
 
 	// Runs an edit action on the active document when it is a text editor.
