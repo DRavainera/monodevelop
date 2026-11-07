@@ -4708,9 +4708,97 @@ re-verificado con réplica propia contra la DLL compilada real
 (`P4_REPLICA_PASS=True`), todas las invariantes re-corridas, 0 hallazgos
 P1–P4, 3 P5 no bloqueantes.
 
-**Queda pendiente (slices 2..n de la Oleada 4)**: modelo de proyecto
-`.csproj` real sin AddinManager (vía de carga AddinManager-free);
-árbol del pad sobre el modelo (con solution-folders como jerarquía);
+**Queda pendiente (slices 2..n de la Oleada 4, resuelto parcialmente en
+Slice 2)**: ~~modelo de proyecto `.csproj` real sin AddinManager~~ → resuelto
+(Slice 2, `ProjectFileModel` XML puro); ~~árbol del pad sobre el modelo~~ →
+resuelto (Slice 2, `BuildTree` + `AddXwtSolutionNode`); sigue pendiente:
 RunConfigurations reales; build vía modelo de configuraciones; Add Reference
 vía modelo. La lista pendiente de la Oleada 3 (items 2..11 de su entrada)
 sigue abierta.
+
+## 2026-11-07 — Follow-up: Oleada 4 (backend Avalonia) — Slice 2: modelo .csproj + árbol de solution-folders
+
+**Alcance**: (1) **modelo de proyecto .csproj** para la shell Avalonia
+(nombre, OutputType, TargetFrameworks, OutputPath, Configurations,
+referencias, conteo de items) y (2) **árbol completo de solution-folders a
+nesting arbitrario** (folder→folder→project) en el pad, con robustez de
+producción ante .sln corruptos. **Nota del operador**: la shell no utiliza
+Mono.Addins ni lo va a usar.
+
+**Decisiones de diseño**:
+- **`MSBuildProject` descartado**: su pipeline de carga (`WorkspaceObject`
+  static ctor → `AddinManager.CreateExtensionContext()`) lanza
+  `InvalidOperationException` sin Mono.Addins inicializado → `ProjectFileModel`
+  con parseo XML puro, caché por (ruta, mtime), y tolerancia (inexistente/no
+  parseable → `null`, nunca lanza).
+- **Hallazgo P3 (verificado en fuentes y por el QA)**: `Microsoft.Build.
+  SolutionFile.Parse` entra en recursión infinita en
+  `ProjectInSolution.GetUniqueProjectName` con auto-padre/ciclo en
+  `NestedProjects` → `StackOverflowException` **no atrapable** (SIGABRT,
+  rc 134). La ruta de producción (`OpenSolutionInWindow`) y los hooks YA NO
+  usan `SolutionFile.Parse`: nuevo `ConfigurationService.GetSolutionEntries`
+  sobre el modelo **SlnFile** (lector lineal, tolera ciclos). `SolutionLoader.
+  Load` conserva MSBuild con el pre-check `HasNestedProjectsCycle` (escaneo
+  de texto sin recursión) → `null` si hay ciclo.
+- **`HasNestedProjectsCycle` mezcla TODAS las secciones**
+  `GlobalSection(NestedProjects)` (last-wins en orden de fichero — el mismo
+  estado final que termina Microsoft.Build, cuyo diccionario interno también
+  hace overwrite) y detecta el ciclo sobre el mapa mezclado. Un .sln corrupto
+  puede declarar la sección varias veces (hallazgo P3-N1 de la ronda 2).
+- **Guardas del hook `--slnmodel`**: checks condicionales degradan a `skip`
+  (no fail) — parse cfgs solo si el fichero declara
+  `SolutionConfigurationPlatforms`, roundtrip bytes solo si VS-canónico (BOM
+  `EF BB BF`), cross-checks Microsoft.Build saltados si la fuente tiene ciclo
+  o no la parsea. El check `nested folder exists` del `--projmodel` solo se
+  exige si la solución **declara** nesting folder→folder.
+- **Quirk writer SlnFile (preexistente, compartido con el legacy)**: el
+  writer normaliza `postProject` (sección de solución) → `postSolution`;
+  los keywords de sección a nivel solución válidos son SOLO
+  `preSolution`/`preProject`/`postSolution`/`postProject` (`preSpawn`/
+  `postAction` son de proyecto y SlnFile los rechaza con
+  `InvalidSolutionFormatException`). El fixture de referencia del slice
+  (`~/opencode/ol4s2_nested/Nested.sln`) usa los keywords correctos.
+- **Invariante menudump corregida**: el componente `bindings=` del menudump
+  (`MenuCommandBindings()`) incluye 1 binding por entry del listado
+  persistido de `RecentSolutions` (`~/.config/MonoDevelop/9.0/
+  MonoDevelopProperties.xml`, mutado por cada apertura de solución). Base
+  **196** (solución abierta, recents vacío; 193 sin solución). El E2E hace
+  `reset_recents` antes del caso → invariante determinista
+  `menus=11 items=225 cmds=0 bindings=196`. Las lecturas históricas `205`
+  son válidas en su momento (196 + 9 recents).
+
+**Cambios** (4 ficheros, +674/−125):
+- `Services/ConfigurationService.cs`: `ProjectFileModel` + `LoadProjectModel`/
+  `ClearProjectModelCache` + `IsExecutable`; `SolutionFolderTypeGuidAlt`;
+  **`GetSolutionEntries`** + `BuildEntriesFromSln` (SlnFile → `SolutionEntry`
+  con Guid/ParentGuid).
+- `Services/SolutionLoader.cs`: `SolutionEntry` +Guid/+ParentGuid; `BuildTree`
+  (3 colores + anclaje de ciclos); `HasNestedProjectsCycle` (todas las
+  secciones, last-wins); `Load` con pre-check.
+- `Views/MainWindow.axaml.cs`: `OpenSolutionInWindow` vía
+  `GetSolutionEntries`+`BuildTree`+`AddXwtSolutionNode` recursiva (iconos
+  exe/lib vía `IsExecutable`); `PickStartupProject` y 4 comparaciones
+  case-sensitive → `IsExecutable`; hook `--projmodel` (13 checks);
+  guardas `--slnmodel`.
+- `Program.cs`: `--projmodel` en `QaDialogArg`.
+
+**Verificación** (valores exactos en `docs/session_summary.md`, entrada
+2026-11-07 (15)): build 0 errores (ambos TFMs); catálogo
+`Count=461 LoadedCommands=475`; menudump determinista `menus=11 items=225
+cmds=0 bindings=196`; oracle sección nueva **`oleada4s2 35/35`** (BuildTree
+nesting/ciclos/profundidad 200; LoadProjectModel tolerancias/caché;
+HasNestedProjectsCycle 7 casos incl. secciones duplicadas; GetSolutionEntries;
+IsExecutable minúsculas) + `oleada4 18/18` + `oleada3* 51/19/5/22` sin
+cambios; E2E 6 casos **ALL_PASS** (incl. `projmodel 13/13`); matriz corruptos
+7 fixtures × 2 hooks **14/14** rc=0 fail=0 (+ 9 fixtures propios del QA,
+incl. `DupSection`/`TripleCyc` de secciones duplicadas). QA §18.5 (3 rondas):
+ronda 1 **RECHAZADO** (P3-1 crash SOE rc 134 con auto-padre/ciclo; P4-1 falso
+positivo `nested folder exists`; P4-2 case-sensitivity) → 3 fixes → ronda 2
+**RECHAZADO** (P3-N1: pre-check solo con la primera sección `NestedProjects` —
+duplicada con ciclo en la 2ª → rc 134; fixes de r1 verificados FIXADO) → fix
+(merge last-wins de todas las secciones) + 3 checks oracle → ronda 3
+**APROBADO** (0 hallazgos P1–P4). Reportes: `~/opencode/oleada4_slice2_qa{1,2,3}/`.
+
+**Queda pendiente (slices 3..n de la Oleada 4)**: RunConfigurations reales
+sobre el modelo; build vía modelo de configuraciones; Add Reference vía
+modelo. La lista pendiente de la Oleada 3 (items 2..11) sigue abierta.

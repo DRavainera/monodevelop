@@ -816,6 +816,54 @@ El bucle de migración Gtk → Avalonia continúa por módulos (detalle por hito
         `ConfigurationService.cs`). Detalle en `docs/interfaz-plan.md`
         (follow-up "Oleada 4 — Slice 1") y `docs/session_summary.md`
         (2026-11-07 (14)).
+    - **Oleada 4 (Slice 2) de la integración total del backend (2026-11-07)**:
+        **modelo de proyecto .csproj + árbol completo de solution-folders**
+        en la shell Avalonia. `ProjectFileModel` (parseo XML **puro** —
+        `MSBuildProject` descartado: su pipeline de carga está acoplado a
+        Mono.Addins, que la shell no usa; caché por (ruta, mtime); inexistente
+        /no parseable → `null`, nunca lanza) con Name/OutputType/TARGETS
+        multi-TFM/OutputPath/Configurations/Package+Project+References/
+        conteo de items; `SolutionLoader.BuildTree` (nesting **arbitrario**
+        folder→folder→project, orden preservado, orphan→root, ciclo de
+        padres → anclaje + corte de back-edge). **Hallazgo P3 (verificado en
+        fuentes y por el QA)**: `Microsoft.Build.SolutionFile.Parse`
+        StackOverflows (**no atrapable**, SIGABRT rc 134) con auto-padre o
+        ciclo en `NestedProjects` → la ruta de producción
+        (`OpenSolutionInWindow`) y los hooks ya no la usan: nuevo
+        `ConfigurationService.GetSolutionEntries` sobre el modelo **SlnFile**
+        (lector lineal, tolera ciclos); `SolutionLoader.Load` conserva MSBuild
+        con pre-check `HasNestedProjectsCycle` (escaneo puro sin recursión;
+        mezcla **todas** las secciones `NestedProjects`, last-wins — el mismo
+        estado final que MSBuild — y devuelve `null` si hay ciclo).
+        `PickStartupProject`/iconos vía `ProjectFileModel.IsExecutable`
+        (OrdinalIgnoreCase). Hook QA `--projmodel` (13 checks) + guardas en
+        `--slnmodel` (checks condicionales degradan a `skip`).
+        **Invariante**: 0 errores de build (ambos TFMs); catálogo
+        `Count=461 LoadedCommands=475`; menudump `menus=11 items=225 cmds=0`
+        con base determinista **`bindings=196`** — invariante **corregida**:
+        el `bindings=` histórico `205` dependía del estado persistido de
+        `RecentSolutions` (base 196 + 1 por entry de recientes, que cada run
+        muta; 205 = 196 + 9 del momento); el E2E hace ahora `reset_recents`
+        antes del caso y la invariante es determinista. Oracle sección nueva
+        `oleada4s2 35/35` (+ `oleada4 18/18` y `oleada3* 51/19/5/22` sin
+        cambios); E2E 6 casos `ALL_PASS` (menudump, slnmodel 13/13,
+        activeconfig, newconfig-real, openimport, projmodel 13/13); matriz
+        corruptos 7 fixtures × 2 hooks `14/14 rc=0 fail=0`. QA §18.5
+        (subagente Tester QA Senior, 3 rondas; reportes en
+        `~/opencode/oleada4_slice2_qa{1,2,3}/report.md`): ronda 1
+        **RECHAZADO** (P3-1 crash SOE con auto-padre/ciclo — rc 134 no
+        atrapable; P4-1 falso positivo `nested folder exists` con 2 folders
+        planos; P4-2 `PickStartupProject` case-sensitive) → 3 fixes → ronda 2
+        **RECHAZADO** (P3-N1 nuevo: el pre-check solo escaneaba la primera
+        sección `NestedProjects` — sección duplicada con ciclo en la segunda →
+        `Parse` → rc 134; fixes de ronda 1 verificados FIXADO) → fix (merge
+        last-wins de todas las secciones) + 3 checks de regresión en el
+        oracle → ronda 3 **APROBADO** (0 hallazgos P1–P4; repro `DupSection`
+        rc=134→rc=0, fixture extra propio del QA —3 secciones, ciclo en la
+        3ª— pasa). Sin cambios en submódulos; la ruta `--old-gui` no se toca
+        (nada Gtk en el diff; el legacy no compila los nuevos métodos). Detalle
+        en `docs/interfaz-plan.md` (follow-up "Oleada 4 — Slice 2") y
+        `docs/session_summary.md` (2026-11-07 (15)).
 
    
    
