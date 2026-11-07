@@ -4983,3 +4983,103 @@ completo de los array commands (master oculto + hijos inline como
 hermanos) + endurecer la regresión de los submenús dinámicos (dump del
 `Tag` del hijo o dispatch vía click real). Slices D–F de la Oleada 4 sin
 cambios.
+## Follow-up — Oleada 3 (array commands): Slice C — items 1 y 7 (2026-11-07)
+
+**Estado: CERRADO.** Cierre de los 2 últimos items de la lista
+pendiente de la Oleada 3 (con esta slice sus 10 items quedan
+cerrados). Quedan abiertos los slices D–F de la Oleada 4
+(RunConfigurations vía modelo; build vía modelo; Add Reference vía
+modelo).
+
+**Item 1 — render legacy de array commands** (`MenuBuilder.cs`): port
+del `CommandMenuItem.Update` GTK. Antes: el master se renderizaba
+visible y, si el array no estaba vacío, sus hijos vivían **dentro**
+del master como submenú (render Avalonia propio, no el legacy).
+Ahora: el master queda **siempre oculto** (`master.IsVisible = false`
+al inicio de `RebuildArraySiblings(masterId)`, ANTES de resolver el
+padre — no depende del estado anterior ni del refresh de
+habilitación) y los hijos se insertan **inline como hermanos en el
+menú padre** (full rebuild desde `CommandArrayInfo` en cada refresh:
+los hijos preexistentes se eliminan guardados por
+`if (parent.IndexOf(c) >= 0)` para no borrar items del modelo; cada
+hijo lleva `Header` del texto del `DataItem`, `Tag = DataItem`
+(payload de dispatch) y `Click → CommandService.Dispatch(id, data,
+CommandSource.MainMenu)`). Resolución del padre: el `ItemsControl`
+capturado al build (`arrayMasterParent`) si aún contiene al master;
+si no, `master.Parent as ItemsControl`. Los **10 array masters
+reales** del catálogo pasan a este render: `ViewList`, `LayoutList`,
+`ToggleIssues` (Inline Messages), `NavigateHistory` (View >
+Navigation), `CustomCommandList` (Project), `RunTestWith`, `DebugTest`
+(Unit Testing), `ToolList` (Tools), `OpenWindowList`,
+`OpenDocumentList` (Window). `AppendEntry` registra los masters
+(`arrayMasters` id → `CommandArrayInfo`) y suprime su `Click` (como
+antes); `GetArrayChildren(id)` expone los hijos para el dump QA.
+
+**Item 7 — endurecer la regresión (QA F6, slice 8)**
+(`MainWindow.axaml.cs`, `DumpCmdStates`): el dump `--cmdstates` no
+veía el payload de dispatch de los hijos, así que un hijo que
+disparara el `DataItem` equivocado no habría sido detectable. Ahora
+`ListN`/`histItems` se obtienen vía `MenuBuilder.GetArrayChildren(...)`
+y el dump añade **4 campos**: `navMasterVis=` (`IsVisible` del master
+`NavigateHistory` — invariante 0), `docList0Tag=` (`Tag` del primer
+hijo de `OpenDocumentList`), `winList0Tag=` (primer hijo de
+`OpenWindowList`) y `hist0Tag=` (primer hijo de `NavigateHistory`).
+Cobertura de los 3 tipos de payload: string (`QA List10`/`QA
+List12`), `Window 1` y `navpoint:<idx>|<line>|<file>`.
+
+**Rastrero (Avalonia 12) — mutación de `ItemCollection`**: en
+Avalonia 12 `MenuItem.Items` devuelve `Avalonia.Controls.
+ItemCollection` (una `ItemsSourceView`); sus implementaciones
+**explícitas** de mutación `IList` (`Add`/`Insert`/`Remove`/
+`RemoveAt`/`Clear`) lanzan **siempre**
+`NotSupportedException: Collection is read-only.`, incluso en modo
+Items escribible. Verificado por decompilación de
+`Avalonia.Controls.dll` 12.1.2 con `ilspycmd` (dump en
+`~/opencode/avctl.cs`, clases `ItemCollection`/`ItemsSourceView` en
+L29576/L30640). Síntoma en la app: `Error loading solution:
+Collection is read-only.` en `OpenSolutionInWindow` vía
+`NotifyCommandStateChanged → RefreshCommandStates →
+RebuildArraySiblings` (mutar los `Items` del menú padre por el cast
+a `IList` explotaba). Fix: toda mutación de `Items` en `MenuBuilder`
+pasa por los helpers `InsertItem`/`RemoveItem`: si el contenedor es
+`ItemCollection` usan los **métodos públicos** `ic.Insert`/`ic.Remove`
+(delegan en `WritableSource`); si no, caen al `IList` genérico. El
+`target.Add(...)` de `AppendEntry` también es seguro: `ItemCollection`
+reimplementa `int IList.Add(object?)` redirigiendo al método público
+(verificado en la misma decompilación; también lo verificó el QA).
+
+**Cambios** (2 ficheros de código):
+- `MonoDevelop.Startup.Avalonia/Views/MenuBuilder.cs`
+  (reescrito del mecanismo de arrays: `arrayMasters`/
+  `arrayMasterParent`/`arrayChildren`, `AppendEntry`,
+  `RebuildArraySiblings`, `GetArrayChildren`, `InsertItem`/
+  `RemoveItem`)
+- `MonoDevelop.Startup.Avalonia/Views/MainWindow.axaml.cs`
+  (`DumpCmdStates`: `ListN`/`histItems` vía `GetArrayChildren` + 4
+  campos de Tag)
+- (QA, fuera del repo) `~/opencode/oleada3_cmdstates.sh` (4
+  aserciones slice C), `~/opencode/oleada3_sliceC_qa/{brief.md,
+  qa_prompt_r1.md}`
+
+**Verificación**: build 0 errores (net10.0, net10.0-windows **y
+legacy** `MonoDevelop.Ide.csproj` — los 2 ficheros solo entran en el
+build Avalonia vía el glob `Views/**`); catálogo `Count=461
+LoadedCommands=475 LastError=(null)`, `ResolvedHandlers=111`; menudump
+`menus=11 items=225 cmds=0` (19/35/39/27/13/7/35/14/8/15/13;
+bindings fluctuante, no invariante); smoke `Loaded Fixture.sln` sin
+`Error loading solution`; E2E `--cmdstates` 3 casos: 0
+warn/Exception + **12/12 aserciones** (4 slice A + 4 slice B de
+regresión + 4 slice C: `docList0Tag=QA List10` → `QA List12` en
+swap; `hist0Tag=navpoint:1|9|…/oleada3_nav_probe2.txt`;
+`navMasterVis=0` + `winList0Tag=Window 1` en todas las fases); probe
+slice A **ALL_PASS**; E2E regresión Oleada 4 **ALL_PASS**; oracle
+`oleada3 51/51`, `oleada3dyn 19/19`, `oleada3tools 5/5`,
+`oleada3nav 29/29`, `oleada4 18/18`, `oleada4s2 35/35` (valores
+exactos en `docs/session_summary.md`, entrada 2026-11-07 (18)).
+QA §18.5 (1 ronda, brief+reporte en `~/opencode/oleada3_sliceC_qa/`):
+**APROBADO**, 0 hallazgos P1–P4 y 0 P5 (revisión punto a punto de
+los 9 riesgos del brief).
+
+**Queda pendiente (slices D–F de la Oleada 4)**: RunConfigurations
+reales sobre el modelo (D); build vía modelo de configuraciones (E);
+Add Reference vía modelo (F).

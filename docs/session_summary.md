@@ -3907,3 +3907,160 @@ Commits de código (3 ficheros) + docs pushados a
 submódulos. La ruta `--old-gui` no se toca: ninguno de los 3 ficheros
 del slice se compila en el build legacy (verificado con build legacy 0
 errores + lista explícita del csproj).
+## 2026-11-07 (18) — Oleada 3 (array commands): Slice C — items 1 y 7
+
+### Contexto
+
+Último slice de la Oleada 3. Item 1: **render legacy completo de los
+array commands** — el legacy GTK (`CommandMenuItem.Update`) renderiza el
+menú de un array command con el **master siempre oculto** y los **hijos
+inline como hermanos** en el menú padre (no como submenú del master).
+Item 7 (QA F6 del slice 8): **endurecer la regresión** de los submenús
+dinámicos — el dump `--cmdstates` no veía el payload de dispatch (`Tag`
+del hijo), así que un hijo que disparara el `DataItem` equivocado no
+habría sido detectable por el E2E.
+
+Los **10 array masters reales** del catálogo (verificado en vivo):
+`ViewList`, `LayoutList`, `ToggleIssues` (Inline Messages),
+`NavigateHistory` (View > Navigation), `CustomCommandList` (Project),
+`RunTestWith`, `DebugTest` (Unit Testing), `ToolList` (Tools),
+`OpenWindowList`, `OpenDocumentList` (Window).
+
+### Qué se hizo (2 ficheros de código)
+
+**`MonoDevelop.Startup.Avalonia/Views/MenuBuilder.cs`** (reescrito del
+mecanismo de arrays):
+- `arrayMasters` (id → `CommandArrayInfo`), `arrayMasterParent`
+  (id → `ItemsControl` capturado al build) y `arrayChildren`
+  (id → hijos actuales).
+- `AppendEntry`: al construir el menú, un item cuyo id es array master
+  se registra como tal (y como antes se suprime su `Click`); ya no se
+  construye un submenú propio.
+- `RebuildArraySiblings(masterId)`: **full rebuild desde
+  `CommandArrayInfo`** en cada refresh (mismo patrón que el antiguo
+  `RebuildArrayChildren`, pero los hijos son **hermanos en el menú
+  padre**, no hijos del master). Primero `master.IsVisible = false`
+  **antes** de resolver el padre (el master nunca es visible, ni con
+  array vacío). Resolución del padre: el `ItemsControl` capturado en
+  `arrayMasterParent` si aún contiene al master; si no,
+  `master.Parent as ItemsControl` (fallback defensivo). Cada hijo:
+  `Header` del texto del `DataItem`, `Tag = DataItem` (payload de
+  dispatch) y `Click → CommandService.Dispatch(id, data,
+  CommandSource.MainMenu)`. Los hijos preexistentes se eliminan con
+  `if (parent.IndexOf(c) >= 0)` para no borrar items del modelo.
+- `GetArrayChildren(id)`: expone `List<MenuItem>` para el dump QA.
+- **Helpers `InsertItem`/`RemoveItem`** (raíz del rastrero, ver
+  hallazgos): si el contenedor es `Avalonia.Controls.ItemCollection`
+  usan los **métodos públicos** `ic.Insert`/`ic.Remove` (que delegan en
+  `WritableSource`); si no, caen al `IList` genérico.
+
+**`MonoDevelop.Startup.Avalonia/Views/MainWindow.axaml.cs`** (dump
+`--cmdstates`, `DumpCmdStates`): `ListN` y `histItems` pasan a
+obtenerse vía `MenuBuilder.GetArrayChildren(...)` (antes navegaban el
+submenú del master) y se añaden **4 campos**:
+- `navMasterVis=`: `IsVisible` del master `NavigateHistory` (invariante
+  0).
+- `docList0Tag=`: `Tag` del primer hijo de `OpenDocumentList` (string
+  `DataItem`).
+- `winList0Tag=`: `Tag` del primer hijo de `OpenWindowList`.
+- `hist0Tag=`: `Tag` del primer hijo de `NavigateHistory`
+  (`navpoint:<idx>|<line>|<file>`).
+
+### Hallazgos y decisiones
+
+- **ROOT CAUSE (rastrero Avalonia 12 — mutación de `ItemCollection`)**:
+  en Avalonia 12 `MenuItem.Items` devuelve `Avalonia.Controls.
+  ItemCollection` (una `ItemsSourceView`); sus implementaciones
+  **explícitas** de mutación `IList` (`Add`/`Insert`/`Remove`/
+  `RemoveAt`/`Clear`) lanzan **siempre**
+  `NotSupportedException: Collection is read-only.`, incluso en modo
+  Items escribible. Verificado por decompilación de
+  `Avalonia.Controls.dll` 12.1.2 (`~/.nuget/packages/avalonia/12.1.2/
+  lib/net10.0/Avalonia.Controls.dll` con `ilspycmd`; dump en
+  `~/opencode/avctl.cs`, clases en L29576/L30640). El síntoma era
+  `Error loading solution: Collection is read-only.` en
+  `OpenSolutionInWindow` vía `NotifyCommandStateChanged →
+  RefreshCommandStates → RebuildArraySiblings` (mutar los `Items` del
+  menú padre por el cast a `IList` explotaba). Fix: toda mutación de
+  `Items` en `MenuBuilder` pasa por `InsertItem`/`RemoveItem`
+  (métodos públicos de `ItemCollection` → `WritableSource`).
+- **Master SIEMPRE oculto**: el legacy oculta el master con array
+  vacío y el master de array inline **no es visible nunca** (los hijos
+  son los ítems visibles). Se fija `master.IsVisible = false` al
+  inicio de cada rebuild, por lo que no depende del estado anterior ni
+  del refresh de habilitación.
+- **Tag como contrato de dispatch**: el hijo lleva `Tag = DataItem` y
+  el click dispara `Dispatch(id, Tag)`. El dump expone el `Tag` del
+  primer hijo de 3 familias (docs/windows/nav) para que el E2E
+  aserte el payload, no solo la visibilidad.
+- Sin acoplamiento a `Mono.Addins` y sin archivos nuevos; el diff se
+  limita a los 2 ficheros (ambos solo entran en el build Avalonia vía
+  el glob `Views/**` del csproj Avalonia — el build legacy
+  `MonoDevelop.Ide.csproj` usa lista explícita y no los compila).
+
+### Números clave
+
+- Build: net10.0, net10.0-windows y legacy `MonoDevelop.Ide.csproj` →
+  **0 errores** (3/3).
+- Oracle (`~/opencode/catload_test`): catálogo `Count=461
+  LoadedCommands=475 LastError=(null)`, `ResolvedHandlers=111`;
+  secciones `oleada3 ok=51`, `oleada3dyn ok=19`, `oleada3tools ok=5`,
+  `oleada3nav ok=29`, `oleada4 ok=18`, `oleada4s2 ok=35` — todo
+  `fail=0`.
+- E2E `~/opencode/oleada3_cmdstates.sh` (3 casos): `SLICEA_ALL_PASS`,
+  **12/12 aserciones** (4 slice A + 4 slice B de regresión + 4 slice
+  C): `docList0Tag docs12=QA List10`, `docList0Tag swap=QA List12`,
+  `hist0Tag navfeed=navpoint:1|9|…/oleada3_nav_probe2.txt`,
+  `navMasterVis=0` + `winList0Tag=Window 1`; **0** líneas
+  `[warn]`/`[fatal]`/`Exception` en los 3 logs.
+- Smoke (`~/opencode/smoke_oleada1.sh`): `Loaded Fixture.sln` **sin**
+  `Error loading solution`; menudump `menus=11 items=225 cmds=0`
+  (19/35/39/27/13/7/35/14/8/15/13); `bindings=202` (fluctuante por
+  entorno, no invariante).
+- Probe slice A: `ALL_PASS`. E2E regresión Oleada 4: `ALL_PASS`.
+
+### Cómo validar
+
+1. Los 3 builds de arriba (nunca `--no-incremental`).
+2. `cd ~/opencode/catload_test && dotnet run -c Debug` (todo `fail=0`).
+3. `bash ~/opencode/oleada3_cmdstates.sh` → `SLICEA_ALL_PASS` + 12
+   aserciones PASS.
+4. `bash ~/opencode/smoke_oleada1.sh` → `Loaded Fixture.sln` sin error
+   + menudump 11/225/0.
+
+### QA (§18.5)
+
+Subagente Tester QA Senior, **1 ronda**: **APROBADO**, **0 hallazgos
+P1–P4 y 0 P5**. Revisión punto a punto de los 9 riesgos del brief
+(master nunca visible; payload de dispatch `Tag`; colisión de ids en
+`Mi`/`En`; menudump del modelo intacto; `--old-gui` no rota; rastrera
+`ItemCollection` — verificó por decompilación que `ItemCollection`
+reimplementa `int IList.Add(object?)` redirigiendo al método público,
+por lo que el `target.Add` de `AppendEntry` tampoco explota; carga de
+solución; idempotencia del rebuild; sin acoplamiento `Mono.Addins` ni
+archivos nuevos). Brief + prompt + logs + reporte en
+`~/opencode/oleada3_sliceC_qa/` (`qa_report_r1.md`).
+
+Nota operativa: `opencode run` (v2.2.6) lee el config de
+`~/.config/opencode/opencode.json`, pero el provider `logfare` vivía en
+`~/.config/opencode-cli/opencode.json` → "Model unavailable" al
+lanzar la QA; se copió el config a la ruta correcta (chmod 600). El
+cliente de la QA fue SIGKILL 3 veces por causa externa sin rastro de
+OOM (journal limpio); el 3.º lanzamiento (cliente delgado, sin
+`--standalone`) dejó la sesión corriendo en el daemon
+`opencode serve --service`, que completó el veredicto de forma
+autónoma.
+
+### Queda pendiente
+
+- **Slices D–F (Oleada 4)**: RunConfigurations vía modelo (D); build
+  vía modelo de configuraciones (E); Add Reference vía modelo (F).
+- Con este slice quedan **cerrados los 10 items de la lista pendiente
+  de la Oleada 3**.
+
+### Cierre
+
+Commits de código (2 ficheros) + docs pushados a
+`origin/agents/sub-agent-senior-dev-role-report`. Sin cambios en
+submódulos. La ruta `--old-gui` no se toca (build legacy 0 errores +
+los 2 ficheros no se compilan en el csproj legacy).

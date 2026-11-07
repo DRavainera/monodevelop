@@ -980,6 +980,72 @@ El bucle de migración Gtk → Avalonia continúa por módulos (detalle por hito
    
    
    
+    - **Oleada 3 (array commands, Slice C) de la integración total del
+        backend (2026-11-07)**:
+        **cierre de los items 1 y 7** — los últimos de la lista
+        pendiente de la Oleada 3 (con esta slice, sus 10 items quedan
+        cerrados). Item 1 (render legacy de array commands): port del
+        `CommandMenuItem.Update` GTK — el master del array command
+        queda **siempre oculto** (`master.IsVisible = false` al inicio
+        de cada rebuild, antes de resolver el padre) y sus hijos se
+        renderizan **inline como hermanos en el menú padre** (full
+        rebuild desde `CommandArrayInfo` en cada refresh: hijos con
+        `Header` del texto del `DataItem`, `Tag = DataItem` y click →
+        `CommandService.Dispatch(id, data, CommandSource.MainMenu)`);
+        los **10 array masters reales** del catálogo pasan a este
+        render (ViewList, LayoutList, ToggleIssues, NavigateHistory,
+        CustomCommandList, RunTestWith, DebugTest, ToolList,
+        OpenWindowList, OpenDocumentList). Item 7 (endurecer
+        regresión, QA F6 del slice 8): el dump `--cmdstates` expone el
+        **payload de dispatch** con 4 campos nuevos — `navMasterVis=`
+        (IsVisible del master NavigateHistory, invariante 0),
+        `docList0Tag=`, `winList0Tag=`, `hist0Tag=` (`Tag` del primer
+        hijo de OpenDocumentList/OpenWindowList/NavigateHistory:
+        `QA List10/12`, `Window 1`,
+        `navpoint:<idx>|<line>|<file>`), así que el E2E aserta el
+        payload, no solo la visibilidad. **Raíz del rastrero
+        (Avalonia 12)**: `MenuItem.Items` devuelve
+        `Avalonia.Controls.ItemCollection` (una `ItemsSourceView`)
+        cuyas implementaciones explícitas de mutación `IList` lanzan
+        **siempre** `NotSupportedException: Collection is read-only.`
+        incluso en modo escribible (verificado por decompilación de
+        `Avalonia.Controls.dll` 12.1.2; dump en
+        `~/opencode/avctl.cs`); síntoma: `Error loading solution:
+        Collection is read-only.` vía
+        `NotifyCommandStateChanged → RefreshCommandStates →
+        RebuildArraySiblings`. Fix: toda mutación de `Items` en
+        `MenuBuilder` pasa por los helpers `InsertItem`/`RemoveItem`
+        (métodos públicos de `ItemCollection` → `WritableSource`;
+        fallback `IList` para otros contenedores). **Invariantes**: 0
+        errores en net10.0, net10.0-windows **y el build legacy**
+        `MonoDevelop.Ide.csproj` (los 2 ficheros del diff solo entran
+        en el build Avalonia vía el glob `Views/**`; el legacy usa
+        lista explícita); catálogo `Count=461 LoadedCommands=475
+        ResolvedHandlers=111`; menudump `menus=11 items=225 cmds=0`
+        (bindings fluctuante, no invariante); smoke `Loaded
+        Fixture.sln` sin `Error loading solution`; E2E `--cmdstates` 3
+        casos: 0 warn/Exception + **12/12 aserciones** (4 slice A + 4
+        slice B de regresión + 4 slice C: `docList0Tag=QA List10` →
+        `QA List12` en swap, `hist0Tag=navpoint:1|9|…probe2.txt`,
+        `navMasterVis=0` + `winList0Tag=Window 1`); probe slice A
+        **ALL_PASS**; E2E regresión Oleada 4 **ALL_PASS**; oracle
+        `oleada3 51/51`, `oleada3dyn 19/19`, `oleada3tools 5/5`,
+        `oleada3nav 29/29`, `oleada4 18/18`, `oleada4s2 35/35`.
+        QA §18.5 (subagente Tester QA Senior, 1 ronda; brief+reporte
+        en `~/opencode/oleada3_sliceC_qa/`): **APROBADO**, 0
+        hallazgos P1–P4 y 0 P5 (revisión punto a punto de los 9
+        riesgos del brief, incluida la rastrera `ItemCollection`).
+        Nota: `opencode` v2.2.6 lee el config de
+        `~/.config/opencode/opencode.json` (el provider `logfare`
+        vivía en `~/.config/opencode-cli/` → "Model unavailable"; se
+        copió el config a la ruta correcta) y la sesión QA completó
+        el veredicto en el daemon `opencode serve --service` tras 3
+        SIGKILL externos del cliente sin rastro de OOM. Sin cambios
+        en submódulos; la ruta `--old-gui` no se toca (build legacy 0
+        errores). Detalle en `docs/interfaz-plan.md` (follow-up
+        "Oleada 3 — array commands Slice C") y
+        `docs/session_summary.md` (2026-11-07 (18)).
+
 Nota operativa: el árbol de build único es `main/build/` (cualquier otra dirección de build en la documentación es obsoleta). El binario de la UI Avalonia es `main/build/MonoDevelop.AvaloniaShell.dll` y el IDE GTK legacy (`--old-gui`) es `main/build/MonoDevelop.dll`.
 
 ## 9. Conclusión
