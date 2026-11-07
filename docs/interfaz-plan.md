@@ -4650,3 +4650,67 @@ menú con `Update` legacy sin portar.
 el commit de docs que le sigue. Sin cambios en submódulos; la ruta `--old-gui`
 no se ve afectada (todo el diff cae en `#else`/ficheros exclusivos del shell;
 los bloques legacy quedan byte-iguales a la base).
+
+## 2026-11-07 — Follow-up: Oleada 4 (backend Avalonia) — Slice 1: modelo .sln real (`SlnFile`)
+
+Primera slice de la **Oleada 4** (continuación de la integración total del
+backend). La capa de solución de la shell ahora opera sobre el **modelo .sln
+real** `MonoDevelop.Projects.MSBuild.SlnFile` (0 GTK, 0 Mono.Addins — el mismo
+reader/writer que el `ProjectService` legacy; `MonoDevelop.Core` ya compila
+entero vía `ProjectReference`), en lugar de la edición ad-hoc de líneas
+(`ConfigurationService` línea a línea; `SolutionProjects` con regex).
+**Nota del operador**: la shell no utiliza Mono.Addins ni lo va a usar — se
+descarta el pipeline de carga de proyectos reales (acoplado a
+`AddinManager.GetExtensionNodes`); se opera a nivel `SlnFile` (API pública
+completa; `Solution.WriteSolution` es `internal`).
+
+**Cambios** (3 ficheros, +225/−186):
+- `Services/ConfigurationService.cs`: todas las operaciones .sln sobre el
+  modelo — `GetSolutionConfigurations` (sección del modelo),
+  `AddSolutionConfiguration` (duplicado con semánta legacy
+  `ProjectOperations.AddConfiguration`; mappings por proyecto vía
+  `GetOrCreatePropertySet` con GUID **con llaves**; **solution-folders
+  omitidos** como el writer legacy; `createChildren` solo .csprojs
+  referenciados), `AppendProjectToSolution` (SlnProject C# + mappings),
+  `AddProjectToSolution` (sln nuevo vía `MSBuildFileFormat.DefaultFormat`
+  VS2012: 12.00 + "# Visual Studio 15" + `HideSolutionNode=FALSE`); **nuevo**
+  `GetSolutionProjects` (SlnFile.Projects + fallback scan). Sin cambios:
+  `AddProjectConfiguration` (.csproj), `Get/SetActiveConfiguration`
+  (.userprefs).
+- `Views/MainWindow.axaml.cs`: `SolutionProjects` delega a
+  `ConfigurationService.GetSolutionProjects` (0 cambios en call sites);
+  **hook QA `--slnmodel`** (copias temporales del directorio fixture;
+  round-trip byte-identical; addcfg/append/newcsln; **cross-check de reparse
+  con Microsoft.Build** vía `SolutionLoader` en cada fichero escrito).
+- `Program.cs`: `--slnmodel` en `QaDialogArg`.
+
+**Invariante de formato**: round-trip no-op **byte-identical** (el modelo
+preserva BOM/newlines detectados por `FileUtil.GetTextFormatInfo`;
+el fixture real BOM+CRLF se conserva byte a byte).
+
+**Verificación** (valores exactos en `docs/session_summary.md`, entrada
+2026-11-07 (14)): build 0 errores (ambos TFMs); catálogo
+`Count=461 LoadedCommands=475 ResolvedHandlers=111`; menudump **byte-igual**
+`menus=11 items=225 cmds=0 bindings=205`; oracle sección nueva
+`oleada4 18/18` (incl. 2 casos de regresión P4 del QA: .sln sin
+`SolutionConfigurationPlatforms` → append con mappings Debug/Release
+[fallback]; + `oleada3* 51/19/5/22` sin cambios, fail=0, exit 0);
+E2E 5 casos **ALL_PASS** (`~/opencode/oleada4_slice1_e2e.sh`: menudump,
+slnmodel 13/13, activeconfig, newconfig-real, openimport) con el fixture
+real intacto; `grep AddinManager` en los 3 ficheros → 0. QA §18.5:
+ronda 1 RECHAZADO (P4: fallback Debug/Release perdido en
+`AppendProjectToSolution` con .sln sin configuraciones; réplica mínima en
+`~/opencode/oleada4_slice1_qa/p4probe/`) → fix (fallback restaurado + 2
+checks oracle de regresión + P5b cosmético) → re-verificado (builds, oracle
+18/18, E2E ALL_PASS) → ronda 2 (pasada independiente, informe en
+`~/opencode/oleada4_slice1_qa_round2/qa_report.md`): **APROBADO** — fix P4
+re-verificado con réplica propia contra la DLL compilada real
+(`P4_REPLICA_PASS=True`), todas las invariantes re-corridas, 0 hallazgos
+P1–P4, 3 P5 no bloqueantes.
+
+**Queda pendiente (slices 2..n de la Oleada 4)**: modelo de proyecto
+`.csproj` real sin AddinManager (vía de carga AddinManager-free);
+árbol del pad sobre el modelo (con solution-folders como jerarquía);
+RunConfigurations reales; build vía modelo de configuraciones; Add Reference
+vía modelo. La lista pendiente de la Oleada 3 (items 2..11 de su entrada)
+sigue abierta.

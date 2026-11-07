@@ -773,14 +773,53 @@ El bucle de migración Gtk → Avalonia continúa por módulos (detalle por hito
           submódulos; la ruta `--old-gui` no se toca (los 2 ficheros con diff
           que entran en la build legacy cambian solo en región `#else`,
           excluida de la compilación; el servicio static `Ide.Services` no
-          compila en legacy). Detalle en `docs/interfaz-plan.md` (follow-up
-          "Oleada 3 — Slice 11") y `docs/session_summary.md` (2026-11-07 (13)).
-
+          compila en legacy). Detalle en `docs/interfaz-plan.md` (follow-up          "Oleada 3 — Slice 11") y `docs/session_summary.md` (2026-11-07 (13)).
+    - **Oleada 4 (Slice 1) de la integración total del backend (2026-11-07)**:
+        **modelo de solución .sln real** en la shell Avalonia: la capa de
+        solución (`ConfigurationService` + `MainWindow.SolutionProjects`) ahora
+        opera sobre `MonoDevelop.Projects.MSBuild.SlnFile` (el mismo
+        reader/writer que el `ProjectService` legacy; 0 GTK, 0 Mono.Addins) en
+        lugar de la edición ad-hoc de líneas: `GetSolutionConfigurations`,
+        `AddSolutionConfiguration` (duplicado con semánta legacy
+        `ProjectOperations.AddConfiguration`, mappings por proyecto vía
+        `GetOrCreatePropertySet` con GUID con llaves, **solución-folders
+        omitidos** como en el writer legacy, `createChildren` solo .csprojs
+        referenciados), `AppendProjectToSolution` y `AddProjectToSolution`
+        (sln nuevo generado vía `MSBuildFileFormat.DefaultFormat` VS2012:
+        12.00 + "# Visual Studio 15" + `HideSolutionNode=FALSE`); nuevo
+        `GetSolutionProjects` (SlnFile.Projects + fallback scan) al que
+        delega `MainWindow.SolutionProjects` (Build/Run). **Invariante**:
+        round-trip no-op **byte-identical** (el modelo preserva BOM/newlines).
+        Nota del operador respetada: la shell no utiliza Mono.Addins — se
+        descarta el pipeline de carga de proyectos reales (acoplado a
+        `AddinManager.GetExtensionNodes`); pendiente para slices 2..n. Hook QA
+        `--slnmodel` (copias temporales + cross-check de reparse con
+        Microsoft.Build vía `SolutionLoader`). Build 0 errores (ambos TFMs);
+        catálogo `Count=461 LoadedCommands=475 ResolvedHandlers=111`;
+        menudump **byte-igual** `menus=11 items=225 cmds=0 bindings=205`;
+        oracle sección nueva `oleada4 18/18` (incluye 2 casos de regresión P4;
+        + `oleada3* 51/19/5/22` sin cambios, fail=0); E2E 5 casos `ALL_PASS`
+        (menudump, slnmodel 13/13, activeconfig, newconfig-real, openimport)
+        con el fixture real intacto. QA §18.5 (subagente Tester QA Senior):
+        ronda 1 **RECHAZADO** (P4: `AppendProjectToSolution` sin fallback
+        Debug/Release en .sln sin configuraciones; réplica mínima en
+        `~/opencode/oleada4_slice1_qa/p4probe/`) → **fix** (fallback
+        restaurado + 2 checks oracle de regresión; P5b cosmético corregido)
+        + re-verificación (builds, oracle 18/18, E2E ALL_PASS) → ronda 2
+        (pasada independiente; informe en
+        `~/opencode/oleada4_slice1_qa_round2/qa_report.md`): **APROBADO**,
+        fix P4 re-verificado con réplica propia contra la DLL compilada real
+        (`P4_REPLICA_PASS=True`), todas las invariantes re-corridas, 0
+        hallazgos P1–P4, P5b corregido y 3 P5 no bloqueantes. Sin cambios en
+        submódulos; la ruta `--old-gui` no se toca (los 3 ficheros con diff
+        son exclusivos del shell Avalonia; el legacy no compila
+        `ConfigurationService.cs`). Detalle en `docs/interfaz-plan.md`
+        (follow-up "Oleada 4 — Slice 1") y `docs/session_summary.md`
+        (2026-11-07 (14)).
 
    
-
-
-
+   
+   
 Nota operativa: el árbol de build único es `main/build/` (cualquier otra dirección de build en la documentación es obsoleta). El binario de la UI Avalonia es `main/build/MonoDevelop.AvaloniaShell.dll` y el IDE GTK legacy (`--old-gui`) es `main/build/MonoDevelop.dll`.
 
 ## 9. Conclusión
