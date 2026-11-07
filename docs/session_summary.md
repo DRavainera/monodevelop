@@ -3555,3 +3555,178 @@ shell Avalonia + 1 entrada de mapa de iconos en core).
 **Queda pendiente (slices 3..n de la Oleada 4)**: RunConfigurations reales sobre el modelo; build vía modelo de configuraciones; Add Reference vía modelo. La lista pendiente de la Oleada 3 (items 2..11) sigue abierta.
 
 **Cierre**: código en commit (4 ficheros) pushado a `origin/agents/sub-agent-senior-dev-role-report`; handoff + veredicto del QA (3 rondas: RECHAZADO P3-1/P4-1/P4-2 → fixes → RECHAZADO P3-N1 → fix + 3 checks oracle → APROBADO) en el commit de docs que le sigue. Sin cambios en submódulos; la ruta `--old-gui` no se ve afectada (los 4 ficheros con diff: 2 de `MonoDevelop.Ide/Services` — el legacy usa lista explícita de compilación y no incluye los nuevos métodos, y los bloques legacy son byte-iguales — y 2 exclusivos del shell Avalonia).
+
+## 2026-11-07 (16) — Oleada 3 (cleanup): Slice A — items 2, 3, 5, 6, 8, 9 y 11
+
+### Contexto
+
+La lista pendiente de la Oleada 3 (items 2..11 de `docs/interfaz-plan.md`)
+quedó abierta tras los slices 1-11. El plan de cierre la divide en slices:
+**A (este): items 2, 3, 5, 6, 8, 9, 11** (cleanup + pad); B: items 4+10
+(editor Ctrl+Z/Y + feed caret); C: items 1+7 (render legacy array commands +
+endurecer regresión). Este slice no toca el modelo de soluciones ni los
+comandos: son 7 items de comportamiento/cleanup en el shell.
+
+### Qué se hizo (5 ficheros de código)
+
+**`MainWindow.axaml.cs`** (todos los items del shell):
+- **Item 2 (Stop sin "Build FAILED")**: el proceso de build/run se mata con
+  `Kill()` (SIGKILL en Linux → código 137), y el exit handler compartía el
+  camino `code != 0` → `SetErrors("Build FAILED...")` con un fallo de build
+  real. Nuevo campo `stoppedByUserProc`; `StopBuildOrRun` lo fija antes del
+  `Kill()`; el exit handler compara `ReferenceEquals(proc,
+  stoppedByUserProc)` y, si coincide, escribe `"[process] stopped by user
+  (exit code N)"` y **salta** el `SetErrors` de Build FAILED (el proceso fue
+  interrumpido, no falló). `code == 0` y la salida natural por error de
+  build (código real de dotnet) siguen por su camino.
+- **Item 3 (refresh del pad en add/remove/rename)**: el poblado del árbol del
+  pad se extrajo de `OpenSolutionInWindow` a `RebuildXwtSolutionTree(path)`
+  (misma lógica: `GetSolutionEntries` → `BuildTree` → nodos Xwt; `path` es el
+  tag de la raíz — en el flujo completo `loadedSolutionPath == path` en ese
+  punto, así que la tag es idéntica a la anterior). `OpenSolutionInWindow`
+  ganó `forceRefresh = false`: el early-return de solución ya cargada
+  (mismo-path) ahora re-puebla el árbol si `forceRefresh` (el proyecto set
+  cambió bajo el mismo .sln), sin re-ejecutar recents/watches/menú.
+  Consumidores de `forceRefresh: true`: `RefreshSolutionTree()` (flujos de
+  rename/borrar/añadir), la ruta de producción de añadir proyecto
+  (`NewSolutionDialog` → `AppendProjectToSolution`) y el driver QA
+  `--newproject`. El primer open (startup/QA/`OpenFileOrProject`/`recent:`/
+  welcome) conserva `false` — el early-return = no-op, coherente con el
+  legacy "la solución ya está abierta".
+- **Items 5+8 (selección de fila de file → proyecto contenedor)**: nuevo
+  `ResolveSelectedProjectPath()`: la fila seleccionada es `project:` → sí
+  misma; cualquier otra fila (`file:`/`folder:`/`reference:`) → sube por el
+  store (`TreeStore.GetParent`) hasta el ancestro `project:` más cercano (el
+  tag de nodo guarda la ruta del proyecto). Reemplaza `ActiveProjectPath()`
+  (primer proyecto de la solución — el bug: seleccionar un file dejaba el
+  target en el proyecto primero) en 4 consumidores: `SelectedNodeIsBuildTarget`
+  (gates `buildSol`/`rebuildSol`/`cleanSol`/`runEntry`/`stop`...),
+  `SelectedNodeIsProject` (gate `editRefs`), `SelectedBuildTargetName`
+  (labels `B_uild App`/`Run Project`/`App _Options`) y el dispatch
+  `AddReference` cuando `nodeContext is null` (menú principal). El dispatch de
+  menú contextual (`nodeContext != null`) no se toca: ese menú solo se ofrece
+  en filas de proyecto (`BuildProjectPadMenu` gatea por nodeType), así que no
+  hay regresión. El bridge legacy (seleccionar file fija el selected build
+  target al proyecto contenedor) se recupera exacto.
+- **Item 11 (nav con historial vacío)**: el dispatch `NavigateBack`/
+  `NavigateForward` con `CanMoveBack/Forward == false` antes emitía
+  `"[nav] history empty"` (ruido de log sin valor de diagnóstico); ahora es
+  no-op silencioso. El dump de la lista de navegación con puntos del
+  `--cmdstates` se conserva.
+- **Driver `--cmdstates`**: fase stop (prestop → arrancar `sleep 30` vía
+  `RunProcessAsync` → esperar `IsOperationRunning` → `StopBuildOrRun()` →
+  esperar salida → poststop) que ejercita el item 2 de verdad (el botón de
+  stop con un proceso corriendo no se podía ejercer antes sin ese driver).
+- **Hook `--newproject`**: aserción `pad-tree=` (el `xwtSolutionNodes`
+  contiene `project:<csproj>` tras el force-refresh — verifica el item 3 en
+  la ruta de añadir proyecto) y `OpenSolutionInWindow(..., forceRefresh:
+  true)` (antes: open de mismo-path silencioso, árbol stale).
+
+**`ProjectCommands.cs`** — **item 6 (F-5e QA slice 10)**: rename
+`SolutionOptionsHandler` → `SolutionOptionsMenuHandler` en **ambas** ramas
+(`#if AVALONIA_SHELL` y legacy) + comentario. La XML de extensión
+(`Commands.addin.xml`) es **compartida** entre ambos binarios y el
+`defaultHandler` se resuelve **por string en runtime**: renombrar solo una
+rama rompería el otro binario.
+
+**`Commands.addin.xml`**: `defaultHandler` de `Solution.Options` →
+`SolutionOptionsMenuHandler`.
+
+**`MenuService.cs`** — **item 9**: comentario de `BuildToolsWithExternal`
+corregido (citaba un item "Preferences" inexistente en Tools > Options).
+
+**`ShellCommandState.cs`**: 3 comentarios stale actualizados (
+`ActiveProjectCount`, `SelectedNodeIsBuildTarget`, `SelectedNodeIsProject`).
+
+### Hallazgos y decisiones
+
+- **El rename exige build legacy como check P1**: como la XML es compartida,
+  la prueba fuerte es que `MonoDevelop.Ide.csproj` (sin `AVALONIA_SHELL`)
+  compile → 0 errores. También 0 referencias residuales al nombre antiguo.
+- **El early-return de `OpenSolutionInWindow` no es nuevo** (era el
+  comportamiento desde hace slices): el bug del item 3 es que
+  `RefreshSolutionTree`/add-project dependían de él para refrescar el árbol y
+  el early-return hacía no-op. El fix es el flag, no quitar el early-return
+  (los opens de mismo-path del menú File > Open / recents / welcome siguen
+  siendo no-ops correctos).
+- **El dispatch `AddReference` del menú contextual no cambia**: `nodeContext`
+  no es null solo en filas de proyecto (el menú contextual gatea por
+  nodeType), así que `ResolveSelectedProjectPath` solo afecta al menú
+  principal — exactamente el bug reportado (F3 del QA slice 10: seleccionar
+  file → el target era el primer proyecto).
+- **La aserción del item 2 en el log es `stopped by user`**: el
+  `SetErrors("Build FAILED...")` escribe en el pad de errores, no en la
+  consola, así que el log de consola solo muestra la línea del process.
+
+### Números clave
+
+- Build net10.0 y net10.0-windows: **0 errores**.
+- Build **legacy** `MonoDevelop.Ide.csproj` (sin `AVALONIA_SHELL`): **0
+  errores** (check P1 del rename).
+- Catálogo: `Count=461 LoadedCommands=475 ResolvedHandlers=111` (sin cambio;
+  el handler renombrado sigue resolviéndose).
+- Menudump (tras `reset_recents`): `menus=11 items=225 cmds=0 bindings=196`
+  (byte-igual a HEAD).
+- E2E `--cmdstates` (3 casos): 0 `[warn]`/`[fatal]`/Exception + 4 aserciones
+  slice A PASS (`stop`: log con `stopped by user` y sin `Build FAILED`;
+  `poststop`: fase corrió + `stop=0` + `buildSol=1`; `node_file F3`: la fase
+  `(node_file)` muestra `editRefs=1 solItemOpts=1 buildTxt=B_uild App
+  runEntryTxt=Run Project projOptsTxt=App _Options` — proyecto contenedor,
+  no LibA; `rename`: `(node_solution)` mantiene `solOpts=1`).
+- Log real de la fase stop: `[run] stopped` → `[process] stopped by user
+  (exit code 137)`.
+- Probe `--newproject` (copia del fixture; console + library):
+  `created=True sln-entry=True mappings=True pad-tree=True` → **ALL_PASS**.
+- E2E oleada4 (6 casos, binario final): **ALL_PASS**.
+- Oracle: `oleada3 ok=51`, `oleada3dyn ok=19`, `oleada3tools ok=5`,
+  `oleada3nav ok=22`, `oleada4 ok=18`, `oleada4s2 ok=35`, `fail=0` en todo,
+  exit 0.
+
+### Cómo validar
+
+- Builds: `dotnet build main/src/core/MonoDevelop.Startup.Avalonia/MonoDevelop.Startup.Avalonia.csproj -c Debug -f net10.0 --nologo` (y `-f net10.0-windows`); legacy: `dotnet build main/src/core/MonoDevelop.Ide/MonoDevelop.Ide.csproj -c Debug -f net10.0 --nologo` (sin `AVALONIA_SHELL`).
+- E2E: `bash ~/opencode/oleada3_cmdstates.sh` → `SLICEA_ALL_PASS` (4
+  aserciones sobre el log con-solución) + `E2E_DONE` + 0 warn en los 3 logs.
+- Probe: `bash ~/opencode/oleada3_sliceA_probe.sh` → `ALL_PASS`
+  (`pad-tree=True` en console y library).
+- E2E Oleada 4: `bash ~/opencode/oleada4_slice1_e2e.sh` → `ALL_PASS`.
+- Oracle: `cd ~/opencode/catload_test && dotnet run -c Debug --nologo` →
+  exit 0, todas las secciones `fail=0`.
+- 0 referencias residuales: `grep -rn "SolutionOptionsHandler" main/src`
+  → solo el comentario del rename en `ProjectCommands.cs`.
+
+### QA (§18.5)
+
+Brief + reporte en `~/opencode/oleada3_sliceA_qa/` (`brief.md`,
+`qa_report_r1.md`). **Ronda 1: APROBADO — 0 hallazgos P1-P4**, 2 P5 no
+bloqueantes:
+- **P5-1 (preexistente)**: el hook interactivo `--newconfig` llama a
+  `OpenSolutionInWindow(loadedSolutionPath)` sin `forceRefresh` tras
+  `AddSolutionConfiguration` → el combo de configuraciones no se refresca
+  hasta el siguiente open completo. Solo afecta al diálogo QA interactivo;
+  el hook automatizado `--newconfig-real` aserta sobre disco. No se corrige
+  en este slice (fuera de alcance; documentado).
+- **P5-2 (carrera milisegundos)**: si el proceso terminara de forma natural
+  entre el chequeo `HasExited == false` y el `Kill()` en `StopBuildOrRun`,
+  el log diría "stopped by user" sobre una salida natural. El guard
+  `HasExited` cierra la ventana realista; el efecto residual es una línea de
+  log inexacta.
+
+### Queda pendiente
+
+- **Slice B (Oleada 3)**: items 4+10 — Ctrl+Z/Y en el editor (undo/redo del
+  backend) + feed caret en el historial de navegación.
+- **Slice C (Oleada 3)**: items 1+7 — render de array commands en legacy +
+  endurecer la regresión.
+- **Slices D-F (Oleada 4)**: RunConfigurations vía modelo (D); build vía
+  modelo de configuraciones (E); Add Reference vía modelo (F).
+
+### Cierre
+
+Commit de código (5 ficheros) pushado a
+`origin/agents/sub-agent-senior-dev-role-report`; docs en este commit.
+Sin cambios en submódulos. La ruta `--old-gui` no se toca: el único fichero
+con diff que entra en la build legacy es `ProjectCommands.cs` (rename puro
+verificado con build legacy 0 errores) y `Commands.addin.xml` (string
+resuelta en runtime, verificada por el catálogo 475/111 en runtime y el
+menudump).

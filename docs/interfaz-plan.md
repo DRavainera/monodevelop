@@ -4802,3 +4802,96 @@ duplicada con ciclo en la 2ª → rc 134; fixes de r1 verificados FIXADO) → fi
 **Queda pendiente (slices 3..n de la Oleada 4)**: RunConfigurations reales
 sobre el modelo; build vía modelo de configuraciones; Add Reference vía
 modelo. La lista pendiente de la Oleada 3 (items 2..11) sigue abierta.
+
+---
+
+## Follow-up — Oleada 3 cleanup: Slice A — items 2, 3, 5, 6, 8, 9 y 11 (2026-11-07)
+
+**Estado: CERRADO.** Cierre de 7 de los 10 items pendientes de la Oleada 3
+(los que no requieren el modelo de soluciones ni cambios de editor). Quedan
+abiertos: item 1 (render de array commands en legacy), items 4+10 (editor
+Ctrl+Z/Y + feed caret) y item 7 (endurecer regresión).
+
+**Item 2 — Stop sin "Build FAILED"** (`MainWindow.axaml.cs`): el proceso de
+build/run se interrumpe con `Kill()` (SIGKILL → código 137) y el exit
+handler, al ver `code != 0`, escribía `SetErrors("Build FAILED...")` en el
+pad de errores — el usuario veía un build fallido cuando solo había hecho
+Stop. Fix: campo `stoppedByUserProc`; `StopBuildOrRun` lo fija antes del
+`Kill()` y el exit handler compara `ReferenceEquals(proc,
+stoppedByUserProc)`: si coincide, la línea es `"[process] stopped by user
+(exit code N)"` y **salta** el `SetErrors` de Build FAILED. Salida natural
+(código real de dotnet, 0 o fallo) sin cambio.
+
+**Item 3 — refresh del pad en add/remove/rename** (`MainWindow.axaml.cs`):
+`RefreshSolutionTree()` (y la ruta de producción de añadir proyecto)
+llamaban `OpenSolutionInWindow(loadedSolutionPath)`, cuyo early-return de
+mismo-path (preexistente) hacía no-op → el árbol del pad se quedaba stale
+tras añadir/borrar/renombrar proyectos. Fix: extraído el poblado a
+`RebuildXwtSolutionTree(path)` y `OpenSolutionInWindow(path,
+forceRefresh=false)` — con `forceRefresh: true` el early-return re-puebla el
+árbol (sin re-ejecutar recents/watches/menú). Consumidores `true`:
+`RefreshSolutionTree()`, la ruta de producción de añadir proyecto
+(`NewSolutionDialog` → `AppendProjectToSolution`) y el driver `--newproject`.
+Los primeros opens (startup/QA/File > Open/recents/welcome) conservan
+`false` (no-op correcto: la solución ya está abierta, igual que el legacy).
+Verificado con el hook `--newproject` (copia del fixture, console+library):
+`pad-tree=True` (el `xwtSolutionNodes` contiene el proyecto nuevo).
+
+**Items 5+8 — selección de fila de file → proyecto contenedor**
+(`MainWindow.axaml.cs`): nuevo `ResolveSelectedProjectPath()`: fila
+`project:` → sí misma; cualquier otra fila → ancestro `project:` más cercano
+subiendo por `TreeStore.GetParent` (el tag de nodo guarda la ruta del
+proyecto). Reemplaza `ActiveProjectPath()` (primer proyecto de la solución)
+en 4 consumidores: `SelectedNodeIsBuildTarget`, `SelectedNodeIsProject`,
+`SelectedBuildTargetName` y el dispatch `AddReference` con `nodeContext is
+null` (menú principal). El bridge legacy se recupera exacto: seleccionar un
+file fija el selected build target al proyecto contenedor. El dispatch de
+menú contextual (`nodeContext != null`) no se toca: `BuildProjectPadMenu`
+solo lo ofrece en filas de proyecto. E2E: fila `App/Program.cs` →
+`buildTxt=B_uild App` / `runEntryTxt=Run Project` / `projOptsTxt=App
+_Options` (antes: LibA, el primero).
+
+**Item 6 — rename F-5e del QA slice 10** (`ProjectCommands.cs` +
+`Commands.addin.xml`): `SolutionOptionsHandler` →
+`SolutionOptionsMenuHandler` en **ambas** ramas (`#if AVALONIA_SHELL` y
+legacy). La XML de extensión es compartida y el `defaultHandler` se resuelve
+por string en runtime: renombrar una sola rama rompería el otro binario →
+build legacy `MonoDevelop.Ide.csproj` 0 errores como check P1; 0
+referencias residuales; catálogo 475/111 inmutable.
+
+**Item 9** (`MenuService.cs`): comentario de `BuildToolsWithExternal`
+corregido (citaba un item "Preferences" inexistente en Tools > Options).
+
+**Item 11** (`MainWindow.axaml.cs`): `NavigateBack`/`NavigateForward` con
+historial vacío → no-op silencioso (quitada la línea de log
+`"[nav] history empty"`); el dump de diagnóstico del `--cmdstates` se
+conserva.
+
+**Drivers QA**: fase stop en el `--cmdstates` (prestop → `sleep 30` vía
+`RunProcessAsync` → `StopBuildOrRun()` → poststop) + 4 aserciones slice A en
+`~/opencode/oleada3_cmdstates.sh` (`stop`, `poststop`, `node_file F3`,
+`rename`) + probe `~/opencode/oleada3_sliceA_probe.sh` (pad-tree).
+
+**Cambios** (5 ficheros de código):
+- `Views/MainWindow.axaml.cs` (items 2, 3, 5, 8, 11 + drivers)
+- `Views/MenuService.cs` (comentario, item 9)
+- `MonoDevelop.Ide.Commands/ProjectCommands.cs` (rename, item 6)
+- `MonoDevelop.Ide.Commands/ShellCommandState.cs` (comentarios)
+- `ExtensionModel/Commands.addin.xml` (defaultHandler, item 6)
+- (QA, fuera del repo) `~/opencode/oleada3_cmdstates.sh`,
+  `~/opencode/oleada3_sliceA_probe.sh`
+
+**Verificación**: build 0 errores (net10.0, net10.0-windows **y legacy**
+`MonoDevelop.Ide.csproj`); catálogo `Count=461 LoadedCommands=475
+ResolvedHandlers=111`; menudump `menus=11 items=225 cmds=0 bindings=196`;
+E2E `--cmdstates` 3 casos + 4 aserciones **PASS** (0 warn/Exception; log
+real `[run] stopped` → `[process] stopped by user (exit code 137)`); probe
+`--newproject` **ALL_PASS**; E2E oleada4 6 casos **ALL_PASS**; oracle
+completo `fail=0` (valores exactos en `docs/session_summary.md`, entrada
+2026-11-07 (16)). QA §18.5 (1 ronda, brief+reporte en
+`~/opencode/oleada3_sliceA_qa/`): **APROBADO**, 0 hallazgos P1–P4, 2 P5 no
+bloqueantes.
+
+**Queda pendiente (slices B y C de la Oleada 3)**: Slice B — items 4+10
+(editor Ctrl+Z/Y + feed caret); Slice C — items 1+7 (render legacy array
+commands + endurecer regresión). Slices D–F de la Oleada 4 sin cambios.

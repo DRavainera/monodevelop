@@ -864,6 +864,58 @@ El bucle de migración Gtk → Avalonia continúa por módulos (detalle por hito
         (nada Gtk en el diff; el legacy no compila los nuevos métodos). Detalle
         en `docs/interfaz-plan.md` (follow-up "Oleada 4 — Slice 2") y
         `docs/session_summary.md` (2026-11-07 (15)).
+    - **Oleada 3 (cleanup, Slice A) de la integración total del backend (2026-11-07)**:
+        **cierre de los items 2, 3, 5, 6, 8, 9 y 11** de la lista pendiente de
+        la Oleada 3 (lo que quedaba abierto tras los slices 1-11). Item 2
+        (Stop): el exit handler del proceso compartido distingue un kill de
+        usuario (`stoppedByUserProc` + `ReferenceEquals` tras `Kill()`) y
+        reporta `[process] stopped by user (exit code N)` **sin** levantar
+        `Build FAILED` (el proceso matado sale 137; antes caía en el camino
+        `code != 0` de build fallido). Item 3 (refresh del pad): extraído el
+        poblado del árbol a `RebuildXwtSolutionTree`; `OpenSolutionInWindow
+        (path, forceRefresh=false)` - el early-return de mismo-path
+        (preexistente) re-puebla el árbol solo con `forceRefresh: true`
+        (usado por `RefreshSolutionTree` -rename/borrar/añadir-, la ruta de
+        producción de añadir proyecto y el driver `--newproject`), sin
+        re-ejecutar recents/watches/menú; los opens de mismo-path de File >
+        Open/recents/welcome siguen siendo no-ops correctos. Items 5+8
+        (selección file→proyecto): `ResolveSelectedProjectPath()` (fila de
+        proyecto → sí misma; cualquier fila bajo un proyecto -file/folder/
+        referencia- → ancestro `project:` más cercano por
+        `TreeStore.GetParent`) con 4 consumidores (`SelectedNodeIsBuildTarget`,
+        `SelectedNodeIsProject`, `SelectedBuildTargetName`, dispatch
+        `AddReference` desde menú principal) - recupera el bridge legacy:
+        seleccionar un file fija el selected build target al proyecto
+        contenedor (antes: primer proyecto de la solución). Item 6 (F-5e del
+        QA slice 10): rename `SolutionOptionsHandler` →
+        `SolutionOptionsMenuHandler` en **ambas** ramas de
+        `ProjectCommands.cs` + `Commands.addin.xml` (XML **compartida**; el
+        `defaultHandler` se resuelve por string en runtime - renombrar una
+        sola rama rompería el otro binario); rename puro. Item 9: comentario
+        de `BuildToolsWithExternal` (citaba un item Preferences inexistente).
+        Item 11: nav con historial vacío = no-op silencioso (quitada la línea
+        `[nav] history empty`; el dump de diagnóstico del `--cmdstates` se
+        conserva). Drivers QA: fase stop del `--cmdstates` (prestop/
+        operating-stop/poststop con `sleep 30` real) + 4 aserciones slice A
+        en el E2E + aserción `pad-tree` del `--newproject`. **Invariantes**:
+        0 errores de build en net10.0, net10.0-windows **y el build legacy**
+        `MonoDevelop.Ide.csproj` (check P1 del rename, XML compartida); 0
+        referencias residuales al nombre antiguo; catálogo `Count=461
+        LoadedCommands=475 ResolvedHandlers=111`; menudump `menus=11
+        items=225 cmds=0 bindings=196`; E2E `--cmdstates` 3 casos + 4
+        aserciones PASS con 0 warn/Exception (log real: `[run] stopped` →
+        `[process] stopped by user (exit code 137)`); probe `--newproject`
+        (copia del fixture, console+library) `pad-tree=True` **ALL_PASS**;
+        E2E oleada4 6 casos **ALL_PASS**; oracle completo `fail=0` (incl.
+        `oleada4s2 35/35`). QA §18.5 (1 ronda; brief+reporte en
+        `~/opencode/oleada3_sliceA_qa/`): **APROBADO**, 0 hallazgos P1-P4, 2
+        P5 no bloqueantes (hook interactivo `--newconfig` preexistente sin
+        forceRefresh - combo no se refresca hasta el siguiente open completo,
+        solo diálogo QA; carrera milisegundos en el label de stop). Sin
+        cambios en submódulos; la ruta `--old-gui` no se toca (el único
+        fichero legacy del diff es el rename, verificado con build legacy 0
+        errores). Detalle en `docs/interfaz-plan.md` (follow-up "Oleada 3 —
+        cleanup Slice A") y `docs/session_summary.md` (2026-11-07 (16)).
 
    
    
