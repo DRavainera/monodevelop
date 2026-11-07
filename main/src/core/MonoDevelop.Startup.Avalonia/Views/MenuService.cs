@@ -493,8 +493,10 @@ public static class MenuService
 		}
 	};
 
-	// Builds the Tools menu with the external tool items inserted before Preferences
-	// (legacy ToolService.AddMenuItems). Called from BuildMainMenu.
+	// Builds the Tools menu with the external tool items appended after the
+	// built-in items (legacy ToolService.AddMenuItems inserted them before the
+	// Preferences item — the shell's Tools menu has no Preferences entry, so
+	// they land at the end, after a separator). Called from BuildMainMenu.
 	internal static MenuEntry BuildToolsWithExternal ()
 	{
 		var tools = BuildTools ();

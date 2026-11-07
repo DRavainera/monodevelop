@@ -226,7 +226,7 @@
 			_label = "Se_t Startup Projects..."
 			_description = "Set multiple startup projects" />
 	<Command id = "MonoDevelop.Ide.Commands.ProjectCommands.SolutionOptions"
-			defaultHandler = "MonoDevelop.Ide.Commands.SolutionOptionsHandler"
+			defaultHandler = "MonoDevelop.Ide.Commands.SolutionOptionsMenuHandler"
 			icon = "gtk-preferences"
 			_label = "_Solution Options"
 			_description = "Show solution options window" />

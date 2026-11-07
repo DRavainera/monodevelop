@@ -52,8 +52,9 @@ namespace MonoDevelop.Ide.Commands
 
 		// Oleada 3 (slice 6): the number of projects of the loaded solution — the
 		// shell equivalent of the legacy "a build target is selected" presence
-		// check (coarser bridge: the shell has no pad selection, so "the solution
-		// has projects" stands in for CurrentSelectedBuildTarget != null).
+		// check for the main-menu gates (the coarser, solution-level bridge: "the
+		// solution has projects"; the pad-SELECTION state itself lives in
+		// SelectedNodeIsBuildTarget, slice 8+ cleanup F3).
 		public static int ActiveProjectCount
 			=> MonoDevelop.AvaloniaShell.Views.MainWindow.Instance?.ActiveProjectCount ?? 0;
 
@@ -67,15 +68,19 @@ namespace MonoDevelop.Ide.Commands
 			=> MonoDevelop.AvaloniaShell.Views.MainWindow.Instance?.CanRedo ?? false;
 
 		// Oleada 3 (slice 8): the solution-pad selected node is a build target
-		// (Solution/Project row) — the shell equivalent of the legacy
-		// CurrentSelectedBuildTarget != null that gated the context-only Options
-		// command (the pad menu "Properties").
+		// (Solution/Project row; Oleada 3 cleanup QA F3: any row under a project
+		// — file, folder, reference — resolves to the containing project) — the
+		// shell equivalent of the legacy CurrentSelectedBuildTarget != null that
+		// gated the context-only Options command (the pad menu "Properties").
 		public static bool SelectedNodeIsBuildTarget
 			=> MonoDevelop.AvaloniaShell.Views.MainWindow.Instance?.SelectedNodeIsBuildTarget ?? false;
 
-		// Oleada 3 (slice 8): the solution-pad selected node is a project row —
-		// the shell equivalent of the legacy CurrentSelectedProject is DotNetProject
-		// that gated the context-only Add Reference command.
+		// Oleada 3 (slice 8): the solution-pad selected node is a project (a
+		// project row, or any row under one — cleanup QA F3: the selection pins
+		// the target to the containing project, so a selected file counts as its
+		// project) — the shell equivalent of the legacy
+		// CurrentSelectedProject is DotNetProject that gated the context-only
+		// Add Reference command.
 		public static bool SelectedNodeIsProject
 			=> MonoDevelop.AvaloniaShell.Views.MainWindow.Instance?.SelectedNodeIsProject ?? false;
 

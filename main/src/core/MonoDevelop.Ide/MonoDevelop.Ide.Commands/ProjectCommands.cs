@@ -103,7 +103,11 @@ namespace MonoDevelop.Ide.Commands
 	}
 
 #if !AVALONIA_SHELL
-	internal class SolutionOptionsHandler : CommandHandler
+	// Oleada 3 (cleanup, QA F-5e): renamed SolutionOptionsHandler →
+	// SolutionOptionsMenuHandler to stop the class name reading as the
+	// ProjectCommands.SolutionOptions command itself (and to keep it apart
+	// from SolutionItemOptionsHandler, which gates the pad "Properties").
+	internal class SolutionOptionsMenuHandler : CommandHandler
 	{
 		protected override void Update (CommandInfo info)
 		{
@@ -658,8 +662,11 @@ namespace MonoDevelop.Ide.Commands
 	// legacy underscore escapes (Name.Replace ("_","__")) are not portable —
 	// Avalonia renders headers literally, so the names go in as-is.
 	// ApplyPolicy/ExportPolicy forward their literal catalog id: the
-	// ProjectCommands enum has no members for them.
-	internal class SolutionOptionsHandler : CommandHandler
+	// ProjectCommands enum has no members for them. Oleada 3 (cleanup, QA
+	// F-5e): SolutionOptionsMenuHandler (was SolutionOptionsHandler) — the
+	// class name must not read as the SolutionOptions command it backs, and
+	// the rename also clears the clash with SolutionItemOptionsHandler below.
+	internal class SolutionOptionsMenuHandler : CommandHandler
 	{
 		protected override void Run ()
 		{

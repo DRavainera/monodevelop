@@ -740,16 +740,22 @@ public partial class MainWindow : Window
 					var projPath = dlg.CreatedProjectPath;
 					if (projPath is not null)
 						MonoDevelop.Ide.Services.ConfigurationService.AppendProjectToSolution (projPath, loadedSolutionPath);
-					// Oleada 3 (slice 6): the project set changed outside
-					// RefreshSolutionTree (OpenSolutionInWindow below early-returns
-					// on the same path) — drop the memoized ActiveProjectCount.
+					// Oleada 3 (slice 6): the project set changed on the same path —
+					// drop the memoized ActiveProjectCount; Oleada 3 (cleanup, P5):
+					// force-refresh so the pad tree shows the new project (a plain
+					// open early-returns on the same path) — same pattern as the
+					// production path.
 					if (projPath is not null) {
 						activeProjectCountSln = null;
 						buildTargetNameSln = null; // Oleada 3 (slice 9): same invalidation
 					}
 					var slnText = File.ReadAllText (loadedSolutionPath);
 					Output ("[newproject] template=" + newProjTemplate + " created=" + (projPath is not null) + " path=" + projPath + " sln-entry=" + slnText.Contains ("QAAdded") + " mappings=" + slnText.Contains (".Debug|AnyCPU.Build.0"));
-					OpenSolutionInWindow (loadedSolutionPath);
+					OpenSolutionInWindow (loadedSolutionPath, forceRefresh: true);
+					// Oleada 3 (cleanup, item 3): the force refresh re-populated
+					// the pad tree with the new project (a plain open would have
+					// early-returned on the same path and kept the stale tree).
+					Output ("[newproject] pad-tree=" + (projPath is not null && xwtSolutionNodes.ContainsKey ("project:" + projPath)));
 				}
 			} else if (qa == "--dupdocs") {
 				// QA: two files with the SAME name in different directories must open
@@ -2255,6 +2261,20 @@ public partial class MainWindow : Window
 					// notification) run before the final dump.
 					await System.Threading.Tasks.Task.Delay (300);
 					DumpCmdStates ("postop");
+					// Oleada 3 (cleanup, item 2): a user Stop of the shared
+					// process — the exit handler must report the stop ("[process]
+					// stopped by user (exit code N)") and must NOT raise "Build
+					// FAILED" (the killed process exits non-zero; a plain
+					// non-zero exit would still be reported as a failure).
+					DumpCmdStates ("prestop");
+					_ = RunProcessAsync ("sleep", "30");
+					for (int i = 0; i < 50 && !IsOperationRunning; i++)
+						await System.Threading.Tasks.Task.Delay (100);
+					StopBuildOrRun ();
+					while (IsOperationRunning)
+						await System.Threading.Tasks.Task.Delay (100);
+					await System.Threading.Tasks.Task.Delay (300);
+					DumpCmdStates ("poststop");
 					// Oleada 3 (slice 8): drive the solution-pad selection through
 					// the node types that exist in the loaded solution and dump the
 					// context-only gates (solItemOpts/editRefs) after each. The
@@ -4057,6 +4077,80 @@ public partial class MainWindow : Window
 	// set the build iterates (SolutionProjects). Memoized by solution path: the
 	// gates read it on every command-state refresh (including per-keystroke
 	// dirty changes), so a rescan per refresh would hit the disk each time.
+	// Solution pad = the REAL Xwt.TreeView (ProjectPad): solution ▸ solution
+	// folders ▸ projects ▸ [References, files…]. Folder nesting = legacy
+	// solution-folder dependencies (ParentProjectGuid).
+	// Oleada 3 (cleanup, P5): extracted from OpenSolutionInWindow so the
+	// same-path force refresh (add/remove project) can re-populate the visible
+	// tree without re-running the full open flow (RecentSolutions, watches,
+	// menu rebuild — all keyed to the first open).
+	void RebuildXwtSolutionTree (string path)
+	{
+		var projects = MonoDevelop.Ide.Services.ConfigurationService.GetSolutionEntries (path);
+		if (projects is null) {
+			Output ("Failed to refresh solution tree: " + path);
+			return;
+		}
+		RebuildXwtSolutionTree (Path.GetFileNameWithoutExtension (path), projects);
+	}
+
+	void RebuildXwtSolutionTree (string title, IReadOnlyList<MonoDevelop.Ide.Services.SolutionEntry> projects)
+	{
+		EnsureXwtSolutionTree ();
+		if (xwtSolutionStore is not null && xwtSolutionTree is not null) {
+			xwtSolutionStore.Clear ();
+			xwtSolutionNodes.Clear ();
+
+			// Position-based population (TreeNavigator.AddChild MUTATES the nav to
+			// the new child — reusing a nav in a loop chained every row into a
+			// single branch). AddNode(parentPos) returns an independent nav each
+			// time; we keep TreePositions and re-wrap when needed.
+			var rootPos = xwtSolutionStore.AddNode ().CurrentPosition;
+			var rootNav = xwtSolutionStore.GetNavigatorAt (rootPos);
+			rootNav.SetValues (xwtSolIconField, XwtStockIcon ("solution-16.png"),
+				xwtSolTextField, title, xwtSolTagField, "solution:" + loadedSolutionPath);
+			xwtSolutionNodes ["solution"] = rootNav;
+
+			// Oleada 4 (slice 2): FULL solution tree — solution folders at any
+			// depth, linked by GUID (the .sln NestedProjects section; folder
+			// NAMES may collide across the tree, GUIDs cannot), in .sln file
+			// order, with model-driven icons (console vs library) and the
+			// project model feeding the Dependencies children.
+			var roots = MonoDevelop.Ide.Services.SolutionLoader.BuildTree (projects);
+			void AddXwtSolutionNode (Xwt.TreePosition parentPos, MonoDevelop.Ide.Services.SolutionLoader.SolutionTreeNode node)
+			{
+				if (node.IsFolder) {
+					var fnav = xwtSolutionStore.AddNode (parentPos);
+					fnav.SetValues (xwtSolIconField, XwtStockIcon ("folder-solution-16.png"),
+						xwtSolTextField, node.Name, xwtSolTagField, "folder:" + node.Name);
+					foreach (var child in node.Children)
+						AddXwtSolutionNode (fnav.CurrentPosition, child);
+					return;
+				}
+				var model = MonoDevelop.Ide.Services.ConfigurationService.LoadProjectModel (node.ProjectPath);
+				var isExe = model?.IsExecutable == true;
+				var nav = xwtSolutionStore.AddNode (parentPos);
+				nav.SetValues (xwtSolIconField, XwtStockIcon (isExe ? "project-console-32.png" : "project-16.png"),
+					xwtSolTextField, node.Name, xwtSolTagField, "project:" + node.ProjectPath);
+				xwtSolutionNodes ["project:" + node.ProjectPath] = nav;
+				var projPos = nav.CurrentPosition;
+
+				var dir = Path.GetDirectoryName (node.ProjectPath);
+				if (!string.IsNullOrEmpty (dir) && Directory.Exists (dir)) {
+					projectFileBeingLoaded = node.ProjectPath;
+					// Dependencies (DependenciesNodeBuilder, sort -600), then
+					// folders/files (ProjectFolderNodeBuilder, sort -100).
+					AddXwtDependenciesNode (projPos, node.ProjectPath);
+					BuildXwtFolderChildren (projPos, dir, 0);
+				}
+				xwtSolutionTree.ExpandRow (projPos, false);
+			}
+			foreach (var root in roots)
+				AddXwtSolutionNode (rootPos, root);
+			xwtSolutionTree.ExpandRow (rootPos, false);
+		}
+	}
+
 	// Invalidated on RefreshSolutionTree (project add/remove/rename) and
 	// workspace close; opening a (possibly different) solution re-keys the
 	// cache automatically.
@@ -4087,19 +4181,54 @@ public partial class MainWindow : Window
 	internal bool CanUndo => ActiveTextEditor?.CanUndo ?? false;
 	internal bool CanRedo => ActiveTextEditor?.CanRedo ?? false;
 
+	// Oleada 3 (cleanup, QA F3): the selected node's containing project path —
+	// a project row → itself; any row UNDER a project (file, folder, reference,
+	// TFM/dependency rows) → the nearest project ancestor in the store. The
+	// legacy bridge: selecting a file pins CurrentSelectedBuildTarget / 
+	// CurrentSelectedSolutionItem to the CONTAINING project, so the menu labels
+	// ("B_uild {0}", "{0} _Options", "Run Project") and the context gates resolve
+	// file→project instead of falling back to the solution's first project.
+	// Solution rows and solution folders (no project ancestor) → null.
+	string? ResolveSelectedProjectPath ()
+	{
+		if (xwtSolutionTree is null || xwtSolutionStore is null)
+			return null;
+		try {
+			var pos = xwtSolutionTree.SelectedRow;
+			if (pos is null)
+				return null;
+			var nav = xwtSolutionStore.GetNavigatorAt (pos);
+			var tag = nav.GetValue (xwtSolTagField) as string;
+			if (tag is null)
+				return null;
+			if (tag.StartsWith ("project:", StringComparison.Ordinal))
+				return tag ["project:".Length..];
+			while (nav.MoveToParent ()) {
+				var ptag = nav.GetValue (xwtSolTagField) as string;
+				if (ptag is not null && ptag.StartsWith ("project:", StringComparison.Ordinal))
+					return ptag ["project:".Length..];
+			}
+		} catch (Exception ex) {
+			Output ("[selpad] resolve failed: " + ex.Message);
+		}
+		return null;
+	}
+
 	// Oleada 3 (slice 8): the solution-pad selected node is a build target —
 	// the shell equivalent of the legacy CurrentSelectedBuildTarget != null
-	// (Solution/Project rows; the shell has no solution folders). Gates the
-	// context-only Options command (the pad menu "Properties").
+	// (Solution/Project rows; Oleada 3 cleanup QA F3: any row under a project
+	// resolves to that project, like the legacy containing-target bridge).
+	// Gates the context-only Options command (the pad menu "Properties").
 	internal bool SelectedNodeIsBuildTarget
-		=> SelectedNodeType ().NodeType is "Solution" or "Project";
+		=> SelectedNodeType ().NodeType is "Solution" or "Project" || ResolveSelectedProjectPath () is not null;
 
-	// Oleada 3 (slice 8): the solution-pad selected node is a project row —
-	// the shell equivalent of the legacy CurrentSelectedProject is DotNetProject
-	// (every shell project row is a .csproj). Gates the context-only Add
-	// Reference command.
+	// Oleada 3 (slice 8): the solution-pad selected node is a project — the
+	// shell equivalent of the legacy CurrentSelectedProject is DotNetProject
+	// (every shell project row is a .csproj; Oleada 3 cleanup QA F3: rows under
+	// a project resolve to the containing project, so a selected file counts
+	// as its project). Gates the context-only Add Reference command.
 	internal bool SelectedNodeIsProject
-		=> SelectedNodeType ().NodeType == "Project";
+		=> ResolveSelectedProjectPath () is not null;
 
 	// Oleada 3 (slice 9): the solution-pad selected node is the solution row —
 	// the shell equivalent of the legacy "the selected build target is the
@@ -4149,6 +4278,12 @@ public partial class MainWindow : Window
 			var (nodeType, path) = SelectedNodeType ();
 			if (nodeType is "Solution" or "Project" && path is not null)
 				return System.IO.Path.GetFileNameWithoutExtension (path);
+			// Oleada 3 (cleanup, QA F3): file/reference rows resolve to the
+			// CONTAINING project's name (legacy: the selection pins the build
+			// target to that project) — before the first-project fallback.
+			var resolved = ResolveSelectedProjectPath ();
+			if (resolved is not null)
+				return System.IO.Path.GetFileNameWithoutExtension (resolved);
 			var sln = loadedSolutionPath;
 			if (sln is null)
 				return null;
@@ -4876,7 +5011,9 @@ public partial class MainWindow : Window
 		activeProjectCountSln = null;
 		buildTargetNameSln = null; // Oleada 3 (slice 9): same invalidation
 		if (!string.IsNullOrEmpty (loadedSolutionPath) && File.Exists (loadedSolutionPath))
-			OpenSolutionInWindow (loadedSolutionPath);
+			// Oleada 3 (cleanup, P5): force the same-path early-return to
+			// re-populate the pad tree — a plain open was a silent no-op here.
+			OpenSolutionInWindow (loadedSolutionPath, forceRefresh: true);
 	}
 
 	// ----- Solution pad incremental search (legacy SearchEntry over the ProjectPad
@@ -5037,13 +5174,19 @@ public partial class MainWindow : Window
 		}
 	}
 
-	public void OpenSolutionInWindow (string path)
+	public void OpenSolutionInWindow (string path, bool forceRefresh = false)
 	{
 		Console.WriteLine ("[solution] opening: " + path);
 		// Startup and the QA flows both open Program.SolutionArg: skip the
-		// reload when it is already the loaded solution.
-		if (solutionLoaded && loadedSolutionPath == path)
+		// reload when it is already the loaded solution. Oleada 3 (cleanup,
+		// P5): forceRefresh re-populates the pad tree for a project set that
+		// changed on the SAME path (add/remove project) — without it the early
+		// return swallowed every refresh and the visible tree went stale.
+		if (solutionLoaded && loadedSolutionPath == path) {
+			if (forceRefresh)
+				RebuildXwtSolutionTree (path);
 			return;
+		}
 		try {
 			// SlnFile-based entries (0 Microsoft.Build in the production path):
 			// a corrupt .sln whose NestedProjects section carries a parent cycle
@@ -5065,62 +5208,7 @@ public partial class MainWindow : Window
 			// OpenFileDocument then sees welcomeVisible==false and never dismisses it.
 			HideWelcomePage ();
 
-			// Solution pad = the REAL Xwt.TreeView (ProjectPad): solution ▸ solution
-			// folders ▸ projects ▸ [References, files…]. Folder nesting = legacy
-			// solution-folder dependencies (ParentProjectGuid).
-			EnsureXwtSolutionTree ();
-			if (xwtSolutionStore is not null && xwtSolutionTree is not null) {
-				xwtSolutionStore.Clear ();
-				xwtSolutionNodes.Clear ();
-
-				// Position-based population (TreeNavigator.AddChild MUTATES the nav to
-				// the new child — reusing a nav in a loop chained every row into a
-				// single branch). AddNode(parentPos) returns an independent nav each
-				// time; we keep TreePositions and re-wrap when needed.
-				var rootPos = xwtSolutionStore.AddNode ().CurrentPosition;
-				var rootNav = xwtSolutionStore.GetNavigatorAt (rootPos);
-				rootNav.SetValues (xwtSolIconField, XwtStockIcon ("solution-16.png"),
-					xwtSolTextField, title, xwtSolTagField, "solution:" + path);
-				xwtSolutionNodes ["solution"] = rootNav;
-
-				// Oleada 4 (slice 2): FULL solution tree — solution folders at any
-				// depth, linked by GUID (the .sln NestedProjects section; folder
-				// NAMES may collide across the tree, GUIDs cannot), in .sln file
-				// order, with model-driven icons (console vs library) and the
-				// project model feeding the Dependencies children.
-				var roots = MonoDevelop.Ide.Services.SolutionLoader.BuildTree (projects);
-				void AddXwtSolutionNode (Xwt.TreePosition parentPos, MonoDevelop.Ide.Services.SolutionLoader.SolutionTreeNode node)
-				{
-					if (node.IsFolder) {
-						var fnav = xwtSolutionStore.AddNode (parentPos);
-						fnav.SetValues (xwtSolIconField, XwtStockIcon ("folder-solution-16.png"),
-							xwtSolTextField, node.Name, xwtSolTagField, "folder:" + node.Name);
-						foreach (var child in node.Children)
-							AddXwtSolutionNode (fnav.CurrentPosition, child);
-						return;
-					}
-					var model = MonoDevelop.Ide.Services.ConfigurationService.LoadProjectModel (node.ProjectPath);
-					var isExe = model?.IsExecutable == true;
-					var nav = xwtSolutionStore.AddNode (parentPos);
-					nav.SetValues (xwtSolIconField, XwtStockIcon (isExe ? "project-console-32.png" : "project-16.png"),
-						xwtSolTextField, node.Name, xwtSolTagField, "project:" + node.ProjectPath);
-					xwtSolutionNodes ["project:" + node.ProjectPath] = nav;
-					var projPos = nav.CurrentPosition;
-
-					var dir = Path.GetDirectoryName (node.ProjectPath);
-					if (!string.IsNullOrEmpty (dir) && Directory.Exists (dir)) {
-						projectFileBeingLoaded = node.ProjectPath;
-						// Dependencies (DependenciesNodeBuilder, sort -600), then
-						// folders/files (ProjectFolderNodeBuilder, sort -100).
-						AddXwtDependenciesNode (projPos, node.ProjectPath);
-						BuildXwtFolderChildren (projPos, dir, 0);
-					}
-					xwtSolutionTree.ExpandRow (projPos, false);
-				}
-				foreach (var root in roots)
-					AddXwtSolutionNode (rootPos, root);
-				xwtSolutionTree.ExpandRow (rootPos, false);
-			}
+			RebuildXwtSolutionTree (title, projects);
 			RecentSolutions.Add (path);
 			NotifyCommandStateChanged (); // Oleada 3 (slice 2): a recent solution was added
 			// Restore the persisted watch expressions (legacy PinnedWatches user
@@ -6135,12 +6223,13 @@ public partial class MainWindow : Window
 				// mappings in the .sln, then reload the tree.
 				MonoDevelop.Ide.Services.ConfigurationService.AppendProjectToSolution (dlg.CreatedProjectPath, loadedSolutionPath);
 				Output ("[newproject] added " + Path.GetFileName (dlg.CreatedProjectPath) + " to " + Path.GetFileName (loadedSolutionPath));
-				// Oleada 3 (slice 6): the project set changed outside
-				// RefreshSolutionTree (OpenSolutionInWindow early-returns on the
-				// same path) — drop the memoized ActiveProjectCount.
+				// Oleada 3 (slice 6): the project set changed on the same path —
+				// drop the memoized ActiveProjectCount; Oleada 3 (cleanup, P5):
+				// force-refresh so the pad tree shows the new project (a plain
+				// open early-returns on the same path).
 				activeProjectCountSln = null;
 				buildTargetNameSln = null; // Oleada 3 (slice 9): same invalidation
-				OpenSolutionInWindow (loadedSolutionPath);
+				OpenSolutionInWindow (loadedSolutionPath, forceRefresh: true);
 				return;
 			}
 			if (!string.IsNullOrEmpty (dlg.CreatedSolutionPath)) {
@@ -6946,10 +7035,13 @@ public partial class MainWindow : Window
 		case "MonoDevelop.Ide.Commands.ProjectCommands.AddReference": {
 			// Legacy AddReferenceDialog: adds a <Reference> to the selected project —
 			// the pad's project node when the command carries one (the EditReferences
-			// gate is exactly that selection), otherwise the first project of the
-			// loaded solution.
+			// gate is exactly that selection), otherwise the currently SELECTED pad
+			// node's project (Oleada 3 cleanup, QA F-5d: the main-menu dispatch used
+			// to ignore the selection and jump to the solution's first project —
+			// the gate-vs-execution inconsistency), last resort the first project.
 			var selProj = nodeContext is not null && nodeContext.StartsWith ("project:", StringComparison.Ordinal)
-				? nodeContext ["project:".Length..] : null;
+				? nodeContext ["project:".Length..]
+				: nodeContext is null ? ResolveSelectedProjectPath () : null;
 			var proj = selProj is not null && File.Exists (selProj) ? selProj : ResolveActiveProject ();
 			if (proj is null) {
 				Output ("[refs] no project loaded");
@@ -7081,8 +7173,9 @@ public partial class MainWindow : Window
 			var (points, current, _) = MonoDevelop.Ide.Services.NavigationHistoryService.GetNavigationList (15);
 			for (int i = 0; i < points.Count; i++)
 				Output ($"[nav] {(i == current ? "→" : " ")} {points [i]}");
-			if (points.Count == 0)
-				Output ("[nav] history empty");
+			// Oleada 3 (cleanup, QA Slice 11): the fallback title item (empty
+			// history, dataItem=null) is a silent no-op — the legacy does
+			// nothing, the old "[nav] history empty" line was log noise.
 			return;
 		}
 		case "MonoDevelop.Ide.Commands.NavigationCommands.ClearNavigationHistory":
@@ -10172,10 +10265,19 @@ public partial class MainWindow : Window
 		Output ("[frame] locals of " + frame.Method + " — " + locals.Length + " rows");
 	}
 
+	// Oleada 3 (cleanup, P5): the process killed by a legitimate Stop — the
+	// exit handler must not report a user stop as "Build FAILED with exit code
+	// 137" (the killed process exits non-zero; legacy reported the stop, not a
+	// failure).
+	System.Diagnostics.Process? stoppedByUserProc;
+
 	void StopBuildOrRun ()
 	{
 		if (runningProc is { HasExited: false } p) {
-			try { p.Kill (true); } catch { }
+			try {
+				stoppedByUserProc = p;
+				p.Kill (true);
+			} catch { }
 			Output ("[run] stopped");
 		}
 	}
@@ -10214,8 +10316,14 @@ public partial class MainWindow : Window
 			proc.BeginErrorReadLine ();
 			await proc.WaitForExitAsync ();
 			var code = proc.ExitCode;
+			// Oleada 3 (cleanup, P5): a user Stop is a stop, not a failure —
+			// the killed process exits non-zero (137/SIGKILL on Linux) and the
+			// legacy shell did not report it as a build failure either.
+			var wasStopped = ReferenceEquals (proc, stoppedByUserProc);
+			if (wasStopped)
+				stoppedByUserProc = null;
 			Avalonia.Threading.Dispatcher.UIThread.Post (() => {
-				Output ($"[process] exited with {code}");
+				Output (wasStopped ? $"[process] stopped by user (exit code {code})" : $"[process] exited with {code}");
 				// SetErrors and RefreshCodeIssuesPad both read buildErrors, so the pads
 				// are filled here and the collections are reset by the caller that owns
 				// the build (RunBuildAsync), not per process — otherwise the Errors pad
@@ -10223,7 +10331,7 @@ public partial class MainWindow : Window
 				// the finished build on screen).
 				if (code == 0)
 					SetErrors ("Build succeeded.");
-				else if (buildErrors.Count == 0)
+				else if (!wasStopped && buildErrors.Count == 0)
 					SetErrors ($"Build FAILED with exit code {code}.");
 				RefreshCodeIssuesPad ();
 				// Oleada 3 (slice 5): the process exited — re-enable the
