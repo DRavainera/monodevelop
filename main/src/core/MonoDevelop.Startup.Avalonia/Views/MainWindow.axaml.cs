@@ -2377,38 +2377,66 @@ public partial class MainWindow : Window
 						MonoDevelop.Ide.Services.SettingsStore.SetBool ("MonoDevelop.EnableAutomatedTesting", autoTestWas);
 						MonoDevelop.Ide.Services.SettingsStore.SaveTools (toolsWere);
 					}
-					// Oleada 3 (slice 11): drive the navigation history through
-					// clear -> jump -> back -> forward -> submenu pick -> clear,
-					// dumping the CanMoveBack/CanMoveForward gates and the
-					// Navigate History dynamic submenu after each. A dedicated
-					// 12-line probe file (deterministic in every case — the
-					// earlier phases closed all documents) is used; the explicit
-					// PushNavigationPoint calls stand in for the legacy
-					// go-to-line point logging the shell does not have yet.
-					// The history is process-local; the finally Clear leaves the
-					// process clean.
+					// Oleada 3 (slice B, item 10): drive the navigation history
+					// through open -> jump (second file) -> CARET FEED -> back ->
+					// forward -> submenu pick -> clear, dumping the gates and the
+					// Navigate History dynamic submenu after each. The caret feeds
+					// the current point IN PLACE (legacy Caret.PositionChanged →
+					// LogActiveDocument), so the activation point is never a stacked
+					// line-1 point and the Forward after a Back lands on the CARET
+					// line (9), not the original jump line (5). Two dedicated 12-line
+					// probe files (deterministic in every case — the earlier phases
+					// closed all documents). The explicit PushNavigationPoint calls
+					// stay: duplicates are ignored, so they are no-ops under the
+					// feed. The history is process-local; the finally Clear leaves it
+					// clean.
 					var navFile = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile), "opencode", "oleada3_nav_probe.txt");
+					var navFile2 = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile), "opencode", "oleada3_nav_probe2.txt");
 					try {
 						Directory.CreateDirectory (Path.GetDirectoryName (navFile)!);
 						File.WriteAllLines (navFile, Enumerable.Range (1, 12).Select (i => "nav line " + i));
+						File.WriteAllLines (navFile2, Enumerable.Range (1, 12).Select (i => "nav2 line " + i));
 						MonoDevelop.Ide.Services.NavigationHistoryService.Clear ();
 						DumpCmdStates ("navCleared");
 						OpenFileDocumentAtLine (navFile, 3);
 						PushNavigationPoint ();
-						DumpCmdStates ("navOpened");
-						OpenFileDocumentAtLine (navFile, 7);
+						DumpCmdStates ("navOpened"); // [probe:3] — the feed collapsed the activation point
+						OpenFileDocumentAtLine (navFile2, 5);
 						PushNavigationPoint ();
-						DumpCmdStates ("navJmp");
+						DumpCmdStates ("navJmp"); // [probe:3, probe2:5]
+						if (docs.TryGetValue (DocKey (navFile2), out var feedEd))
+							feedEd.GotoLine (8); // caret feed on the ACTIVE doc (line 9)
+						DumpCmdStates ("navFeed"); // [probe:3, probe2:9] — histN stays 2
 						OnMenuCommand ("MonoDevelop.Ide.Commands.NavigationCommands.NavigateBack");
-						DumpCmdStates ("navBack");
+						DumpCmdStates ("navBack"); // current = probe:3, fwdEn=1
 						OnMenuCommand ("MonoDevelop.Ide.Commands.NavigationCommands.NavigateForward");
-						DumpCmdStates ("navFwd");
-						OnMenuCommand ("MonoDevelop.Ide.Commands.NavigationCommands.NavigateHistory", "navpoint:0|1|" + navFile);
-						DumpCmdStates ("navSub");
+						DumpCmdStates ("navFwd"); // current = probe2:9 (the caret-fed line)
+						OnMenuCommand ("MonoDevelop.Ide.Commands.NavigationCommands.NavigateHistory", "navpoint:0|3|" + navFile);
+						DumpCmdStates ("navSub"); // MoveTo(0) → probe:3
 						OnMenuCommand ("MonoDevelop.Ide.Commands.NavigationCommands.ClearNavigationHistory");
 						DumpCmdStates ("navClear2");
 					} finally {
 						MonoDevelop.Ide.Services.NavigationHistoryService.Clear ();
+					}
+					// Oleada 3 (slice B, item 4): the Ctrl+Z/Ctrl+Y key path in the
+					// editor (the window's isTextEditingCombo early-return used to
+					// swallow them). Insert at the caret, undo with a SYNTHETIC
+					// Ctrl+Z through the real OnKeyDown, redo with Ctrl+Y, and check
+					// a bare Z is not an undo (no ctrl → not handled). navFile is
+					// the active tab after the nav phase.
+					if (docs.TryGetValue (DocKey (navFile), out var keyEd)) {
+						OpenFileDocumentAtLine (navFile, 1);
+						var before = keyEd.Text;
+						keyEd.InsertAtCaret ("_qa");
+						var inserted = keyEd.Text.Contains ("_qa");
+						var hZ = keyEd.SendKeyForQa (Key.Z, KeyModifiers.Control);
+						var undone = hZ && keyEd.Text == before;
+						var hY = keyEd.SendKeyForQa (Key.Y, KeyModifiers.Control);
+						var redone = hY && keyEd.Text.Contains ("_qa");
+						var bareZ = keyEd.SendKeyForQa (Key.Z, KeyModifiers.None);
+						var bareOk = !bareZ && keyEd.Text.Contains ("_qa");
+						Output ("[undoredox] inserted=" + inserted + " ctrlZ=" + undone + " ctrlY=" + redone + " bareZ=" + bareOk);
+						keyEd.Undo (); // leave the probe document clean
 					}
 					Output ("[cmdstates] done");
 				}, Avalonia.Threading.DispatcherPriority.Background);
@@ -4402,10 +4430,37 @@ public partial class MainWindow : Window
 			UpdateBreadcrumb ();
 			if (!navSwitching)
 				PushNavigationPoint (); // Oleada 3 (slice 11): legacy LogActiveDocument on activation
+			AttachNavigationCaretFeed (); // Oleada 3 (slice B, item 10): caret feeds the history
 		} else {
 			ShowEmptyEditorHost (); // legacy: editor pad stays open with no tabs
+			AttachNavigationCaretFeed (); // detach (no selection → no editor)
 		}
 		NotifyCommandStateChanged (); // Oleada 3: active document changed
+	}
+
+	// Oleada 3 (slice B, item 10): the ACTIVE editor's caret feeds the navigation
+	// history — port of the legacy AttachToDoc (Caret.PositionChanged →
+	// LogActiveDocument): the current point follows the caret in place. Re-attached
+	// on every tab selection (the legacy AttachToDoc/DetachFromCurrentDoc pair);
+	// detached when no document is left. Idempotent.
+	MonoDevelop.Ide.Controls.SkTextEditor? navCaretEditor;
+
+	void AttachNavigationCaretFeed ()
+	{
+		if (navCaretEditor is not null)
+			navCaretEditor.CaretMoved -= EditorCaretMoved;
+		navCaretEditor = null;
+		if (DocTabs.SelectedItem is TabItem { Tag: string tag } &&
+			docs.TryGetValue (tag, out var ed) && ed.FilePath is { Length: > 0 }) {
+			ed.CaretMoved += EditorCaretMoved;
+			navCaretEditor = ed;
+		}
+	}
+
+	void EditorCaretMoved ()
+	{
+		if (navCaretEditor is { } ed)
+			MonoDevelop.Ide.Services.NavigationHistoryService.FeedCaret (ed.FilePath, ed.CurrentLine + 1);
 	}
 
 	public void SelectDocument (string tag)

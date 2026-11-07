@@ -33,7 +33,32 @@ public class SkTextEditor : Control
 	}
 
 	readonly List<string> lines = new ();
-	int caretLine, caretCol;
+	int _caretLine, _caretCol;
+	// Oleada 3 (slice B, item 10): every caret move (keys, clicks, gutter,
+	// goto, search, inserts, backspace) goes through these two fields, so the
+	// properties are the single CaretMoved hook — the navigation-history feed
+	// subscribes to it (port of the legacy ITextView.Caret.PositionChanged).
+	int caretLine {
+		get => _caretLine;
+		set {
+			if (_caretLine != value) {
+				_caretLine = value;
+				CaretMoved?.Invoke ();
+			}
+		}
+	}
+	int caretCol {
+		get => _caretCol;
+		set {
+			if (_caretCol != value) {
+				_caretCol = value;
+				CaretMoved?.Invoke ();
+			}
+		}
+	}
+	/// <summary>Fired on any caret line/column change (legacy
+	/// ITextView.Caret.PositionChanged).</summary>
+	public event Action? CaretMoved;
 	double scrollLines;
 
 	// CPU raster buffer: Skia draws straight into the memory of an Avalonia
@@ -689,6 +714,20 @@ public class SkTextEditor : Control
 			DuplicateLine ();
 			e.Handled = true;
 			return;
+		case Key.Z when ctrl:
+			// Oleada 3 (slice B, item 4): legacy EditCommands.Undo (Ctrl+Z).
+			// The window's isTextEditingCombo early-return used to swallow the
+			// key before anything handled it; now the editor owns it. The gate
+			// is the editor's own stack (Undo is a no-op when empty, like the
+			// command's Enabled=CanUndo).
+			Undo ();
+			e.Handled = true;
+			return;
+		case Key.Y when ctrl:
+			// Oleada 3 (slice B, item 4): legacy EditCommands.Redo (Ctrl+Y).
+			Redo ();
+			e.Handled = true;
+			return;
 		case Key.Up when e.KeyModifiers.HasFlag (KeyModifiers.Alt):
 			MoveBlockUp ();
 			e.Handled = true;
@@ -1318,6 +1357,17 @@ public class SkTextEditor : Control
 	/// <summary>Programmatic Backspace (the Key.Back handler path without a key
 	/// event) — used by QA to exercise deletion deterministically.</summary>
 	public void BackspaceForQa () => DeleteBackwardAtCarets ();
+
+	/// <summary>QA: routes a synthetic key press through the REAL OnKeyDown
+	/// path (the headless shell cannot synthesize physical input). Avalonia 12
+	/// exposes no parameterized KeyEventArgs constructor, so the event is
+	/// built from its public setters. Returns the event's Handled flag.</summary>
+	public bool SendKeyForQa (Key key, KeyModifiers mods)
+	{
+		var e = new KeyEventArgs { Key = key, PhysicalKey = PhysicalKey.None, KeyModifiers = mods };
+		OnKeyDown (e);
+		return e.Handled;
+	}
 
 	/// <summary>Backspace at every caret, bottom-up (the Key.Back handler path;
 	/// shared with QA and tests so the model has a single source of truth).</summary>

@@ -79,6 +79,27 @@ public static class NavigationHistoryService
 		return history [index];
 	}
 
+	/// <summary>Caret feed (port of the legacy LogActiveDocument (true) on
+	/// ITextView.Caret.PositionChanged): when the caret moves inside the file
+	/// of the current point, that point's line is updated IN PLACE — the back
+	/// point follows the caret without adding a point or truncating the forward
+	/// branch (the legacy transient-point collapse, minus the 10 s promotion:
+	/// the shell's points are all permanent from birth). A different file — or
+	/// an empty history — records a new point like a jump/activation.
+	/// Same-point moves fire no Changed.</summary>
+	public static void FeedCaret (string? file, int line1Based)
+	{
+		int line = Math.Max (1, line1Based);
+		if (position >= 0 && history [position].File == file) {
+			if (history [position].Line != line) {
+				history [position] = new NavigationPoint { File = file, Line = line };
+				Changed?.Invoke ();
+			}
+			return;
+		}
+		Push (file, line);
+	}
+
 	public static void Clear ()
 	{
 		history.Clear ();
