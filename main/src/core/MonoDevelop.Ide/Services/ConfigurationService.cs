@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using MonoDevelop.Projects.MSBuild;
 
 namespace MonoDevelop.Ide.Services;
 
@@ -12,11 +13,42 @@ namespace MonoDevelop.Ide.Services;
 /// the .sln global section, and PropertyGroup Condition entries in each .csproj
 /// ('Name|Platform'). "Any CPU" maps to the MSBuild platform "AnyCPU" in project
 /// files and "Any CPU" in the solution file (the legacy ItemConfiguration mapping).
+/// Oleada 4: the .sln side runs on the real legacy model
+/// (MonoDevelop.Projects.MSBuild.SlnFile — the same reader/writer the GTK
+/// ProjectService uses; non-GTK, no Mono.Addins), so the shell never hand-edits
+/// solution file lines. A no-op Read+Write round-trip reproduces the file
+/// byte-identical (format info — BOM/newlines — is preserved by the model).
 /// </summary>
 public static class ConfigurationService
 {
 	public const string AnyCpuSolution = "Any CPU";
 	public const string AnyCpuProject = "AnyCPU";
+
+	// C# project type GUID (the FAE04EC0 the legacy CSharpBinding registers) and
+	// the solution folder type GUID: folders reference no project file and the
+	// legacy writer skips them for build configurations (SupportsBuild == false).
+	// SlnFile stores TypeGuid verbatim as the quoted text of the Project line —
+	// braces included, exactly as the .sln format writes it.
+	const string CSharpProjectTypeGuid = "{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}";
+	const string SolutionFolderTypeGuid = "{2150E333-8FDC-42A3-9474-1A3956D4EEDE}";
+
+	static SlnFile ReadSln (string slnPath)
+	{
+		if (!File.Exists (slnPath))
+			throw new FileNotFoundException (slnPath);
+		var sln = new SlnFile ();
+		sln.Read (slnPath);
+		return sln;
+	}
+
+	static bool IsSolutionFolder (SlnProject p)
+		=> p.TypeGuid != null && p.TypeGuid.Equals (SolutionFolderTypeGuid, StringComparison.OrdinalIgnoreCase);
+
+	static string ResolveProjectPath (string slnPath, string relPath)
+	{
+		var dir = Path.GetDirectoryName (slnPath)!;
+		return Path.GetFullPath (Path.Combine (dir, relPath.Replace ('\\', '/')));
+	}
 
 	/// <summary>Solution configuration ids, e.g. "Debug|Any CPU" keys minus the
 	/// platform → "Debug", "Debug|x86" (legacy ItemConfigurationCollection keys).</summary>
@@ -25,27 +57,40 @@ public static class ConfigurationService
 		var result = new List<string> ();
 		if (!File.Exists (slnPath))
 			return result;
-		bool inSection = false;
-		foreach (var raw in File.ReadAllLines (slnPath)) {
-			var line = raw.Trim ();
-			if (line.StartsWith ("GlobalSection(SolutionConfigurationPlatforms", StringComparison.Ordinal)) {
-				inSection = true;
-				continue;
-			}
-			if (inSection && line.StartsWith ("EndGlobalSection", StringComparison.Ordinal))
-				break;
-			if (inSection) {
-				var eq = line.IndexOf (" = ", StringComparison.Ordinal);
-				if (eq > 0) {
-					var id = line.Substring (0, eq).Trim ();
-					var bar = id.IndexOf ('|');
-					var name = bar < 0 ? id : id.Substring (0, bar);
-					if (!result.Contains (name, StringComparer.OrdinalIgnoreCase))
-						result.Add (name);
-				}
-			}
+		// Real model: the SolutionConfigurationPlatforms section of the .sln.
+		foreach (var key in ReadSln (slnPath).SolutionConfigurationsSection.Keys) {
+			var bar = key.IndexOf ('|');
+			var name = bar < 0 ? key : key.Substring (0, bar);
+			if (!result.Contains (name, StringComparer.OrdinalIgnoreCase))
+				result.Add (name);
 		}
 		return result;
+	}
+
+	/// <summary>Absolute paths of the .csproj projects referenced by the .sln
+	/// (real model: SlnFile.Projects, paths resolved against the solution
+	/// directory). A directory scan is only a fallback for slns that yield
+	/// nothing — a referenced project may live outside the solution dir.</summary>
+	public static List<string> GetSolutionProjects (string slnPath)
+	{
+		var slnDir = Path.GetDirectoryName (slnPath)!;
+		var projs = new List<string> ();
+		try {
+			foreach (var p in ReadSln (slnPath).Projects) {
+				if (p.FilePath == null || !p.FilePath.EndsWith (".csproj", StringComparison.OrdinalIgnoreCase))
+					continue;
+				var full = ResolveProjectPath (slnPath, p.FilePath);
+				if (File.Exists (full))
+					projs.Add (full);
+			}
+		} catch (Exception) {
+			projs.Clear ();
+		}
+		if (projs.Count == 0)
+			projs = Directory.GetFiles (slnDir, "*.csproj", SearchOption.AllDirectories)
+				.Where (p => !p.Contains ("/obj/") && !p.Contains ("/bin/"))
+				.ToList ();
+		return projs;
 	}
 
 	/// <summary>Creates the configuration in the .sln (solution config + project
@@ -54,85 +99,34 @@ public static class ConfigurationService
 	/// Returns false when the config already exists.</summary>
 	public static bool AddSolutionConfiguration (string slnPath, string name, string platformDisplayName, bool createChildren)
 	{
-		if (!File.Exists (slnPath))
-			throw new FileNotFoundException (slnPath);
+		var sln = ReadSln (slnPath);
 		var platform = platformDisplayName == AnyCpuSolution ? AnyCpuSolution : platformDisplayName;
-		var slnId = $"{name}|{platform}";
+		var slnId = $@"{name}|{platform}";
 		var projPlatform = platform == AnyCpuSolution ? AnyCpuProject : platform;
-		var projId = $"{name}|{projPlatform}";
+		var projId = $@"{name}|{projPlatform}";
 
-		var lines = File.ReadAllLines (slnPath).ToList ();
-		var existing = new HashSet<string> (StringComparer.OrdinalIgnoreCase);
-		int globalSection = -1, endGlobal = -1;
-		bool inCfgSection = false, inProjCfgSection = false;
-		int projCfgInsert = -1;
-		var projectGuids = new List<string> ();
-
-		for (int i = 0; i < lines.Count; i++) {
-			var t = lines [i].Trim ();
-			if (t.StartsWith ("GlobalSection(SolutionConfigurationPlatforms", StringComparison.Ordinal)) {
-				inCfgSection = true;
-				globalSection = i;
-				continue;
-			}
-			if (t.StartsWith ("GlobalSection(ProjectConfigurationPlatforms", StringComparison.Ordinal)) {
-				inProjCfgSection = true;
-				projCfgInsert = i + 1;
-				continue;
-			}
-			if (t.StartsWith ("EndGlobalSection", StringComparison.Ordinal)) {
-				inCfgSection = inCfgSection && false;
-				if (inProjCfgSection) {
-					inProjCfgSection = false;
-					projCfgInsert = i;
-				}
-				continue;
-			}
-			if (inCfgSection && t.Contains (" = ")) {
-				existing.Add (t.Substring (0, t.IndexOf (" = ", StringComparison.Ordinal)).Trim ());
-				if (globalSection >= 0 && lines [i].EndsWith ("EndGlobalSection", StringComparison.Ordinal))
-					globalSection = i;
-			}
-			if (inProjCfgSection && t.Contains (" = ")) {
-				existing.Add (t.Substring (0, t.IndexOf (" = ", StringComparison.Ordinal)).Trim ());
-				projCfgInsert = i + 1;
-			}
-			if (t.StartsWith ("Project(", StringComparison.Ordinal)) {
-				// Project("{TYPE-GUID}") = "Name", "path", "{PROJECT-GUID}"
-				var open = t.LastIndexOf ("{", StringComparison.Ordinal);
-				var close = t.LastIndexOf ("}", StringComparison.Ordinal);
-				if (open > 0 && close > open)
-					projectGuids.Add (t.Substring (open, close - open + 1));
-			}
-			if (t.StartsWith ("EndGlobal", StringComparison.Ordinal))
-				endGlobal = i;
-		}
-
-		if (existing.Contains (slnId) || existing.Contains (projId))
+		// The real "already exists" test (legacy ProjectOperations.AddConfiguration):
+		// the solution configuration id, or a per-project ActiveCfg entry for it.
+		if (sln.SolutionConfigurationsSection.ContainsKey (slnId))
 			return false;
+		foreach (var set in sln.ProjectConfigurationsSection)
+			if (set.ContainsKey ($"{projId}.ActiveCfg"))
+				return false;
 
-		var outLines = new List<string> (lines);
-		// Solution config entry right before EndGlobalSection of the configs.
-		int cfgEnd = FindSectionEnd (outLines, "GlobalSection(SolutionConfigurationPlatforms");
-		if (cfgEnd > 0)
-			outLines.Insert (cfgEnd, $"\t\t{slnId} = {slnId}");
-
-		// Per-project mapping entries (legacy copies the Debug template: build+deploy flags).
-		int prjEnd = FindSectionEnd (outLines, "GlobalSection(ProjectConfigurationPlatforms");
-		if (prjEnd > 0) {
-			var block = new List<string> ();
-			foreach (var g in projectGuids) {
-				block.Add ($"\t\t{{{g.Trim ('{', '}')}}}.{projId}.ActiveCfg = {projId}");
-				block.Add ($"\t\t{{{g.Trim ('{', '}')}}}.{projId}.Build.0 = {projId}");
-			}
-			outLines.InsertRange (prjEnd, block);
+		sln.SolutionConfigurationsSection [slnId] = slnId;
+		foreach (var p in sln.Projects) {
+			if (IsSolutionFolder (p))
+				continue; // folders don't support build configurations
+			var set = sln.ProjectConfigurationsSection.GetOrCreatePropertySet (p.Id, true);
+			set [$"{projId}.ActiveCfg"] = projId;
+			set [$"{projId}.Build.0"] = projId;
 		}
-		File.WriteAllLines (slnPath, outLines, Encoding.UTF8);
+		sln.Write (slnPath);
 
 		if (createChildren)
-			foreach (var csproj in Directory.GetFiles (Path.GetDirectoryName (slnPath)!, "*.csproj", SearchOption.AllDirectories)
-				.Where (p => !p.Contains ("/obj/") && !p.Contains ("/bin/")))
-				AddProjectConfiguration (csproj, name, projPlatform);
+			foreach (var p in sln.Projects.Where (p => !IsSolutionFolder (p) && p.FilePath != null
+				&& p.FilePath.EndsWith (".csproj", StringComparison.OrdinalIgnoreCase)))
+				AddProjectConfiguration (ResolveProjectPath (slnPath, p.FilePath), name, projPlatform);
 		return true;
 	}
 
@@ -208,93 +202,66 @@ public static class ConfigurationService
 		doc.Save (prefs);
 	}
 
-	static int FindSectionEnd (List<string> lines, string sectionStart)
-	{
-		bool inside = false;
-		for (int i = 0; i < lines.Count; i++) {
-			var t = lines [i].Trim ();
-			if (!inside && t.StartsWith (sectionStart, StringComparison.Ordinal))
-				inside = true;
-			else if (inside && t.StartsWith ("EndGlobalSection", StringComparison.Ordinal))
-				return i;
-		}
-		return -1;
-	}
-
 	/// <summary>Adds an existing .csproj into an existing .sln (legacy
 	/// ProjectOperations.AddSolutionItem): Project entry with a fresh GUID plus the
-	/// Debug/Release ActiveCfg/Build.0 mappings per configuration.</summary>
+	/// ActiveCfg/Build.0 mappings per existing configuration.</summary>
 	public static void AppendProjectToSolution (string csprojPath, string slnPath)
 	{
-		var guid = Guid.NewGuid ().ToString ("B").ToUpperInvariant ();
+		var sln = ReadSln (slnPath);
+		var guid = Guid.NewGuid ().ToString ("B").ToUpperInvariant (); // braced, as the .sln format stores it
 		var projName = Path.GetFileNameWithoutExtension (csprojPath);
 		var projRel = Path.GetRelativePath (Path.GetDirectoryName (slnPath)!, csprojPath).Replace ('\\', '/');
-		var lines = File.ReadAllLines (slnPath).ToList ();
-		int firstEndProject = lines.FindIndex (l => l.Trim () == "EndProject");
-		if (firstEndProject < 0)
-			throw new InvalidOperationException ("Malformed solution (no EndProject)");
-		lines.Insert (firstEndProject + 1, $"Project(\"{{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}}\") = \"{projName}\", \"{projRel}\", \"{guid}\"");
-		lines.Insert (firstEndProject + 2, "EndProject");
-
-		var g = guid.Trim ('{', '}');
-		var block = new List<string> ();
-		var solConfigs = GetSolutionConfigurations (slnPath);
-		foreach (var cfg in solConfigs.Count > 0 ? solConfigs : new List<string> { "Debug", "Release" }) {
-			block.Add ($"\t\t{g}.{cfg}|AnyCPU.ActiveCfg = {cfg}|AnyCPU");
-			block.Add ($"\t\t{g}.{cfg}|AnyCPU.Build.0 = {cfg}|AnyCPU");
+		sln.Projects.Add (new SlnProject {
+			TypeGuid = CSharpProjectTypeGuid,
+			Name = projName,
+			FilePath = projRel,
+			Id = guid
+		});
+		// Project-level mappings use the MSBuild platform (AnyCPU), like the legacy
+		// ItemConfiguration mapping for the "Any CPU" solution platform. A solution
+		// without configurations gets the Debug/Release defaults (previous behavior).
+		var cfgs = GetSolutionConfigurations (slnPath).ToList ();
+		if (cfgs.Count == 0)
+			cfgs = new List<string> { "Debug", "Release" };
+		var set = sln.ProjectConfigurationsSection.GetOrCreatePropertySet (guid, true);
+		foreach (var cfg in cfgs) {
+			set [$"{cfg}|AnyCPU.ActiveCfg"] = $@"{cfg}|AnyCPU";
+			set [$"{cfg}|AnyCPU.Build.0"] = $@"{cfg}|AnyCPU";
 		}
-		int prjCfg = lines.FindIndex (l => l.Trim ().StartsWith ("GlobalSection(ProjectConfigurationPlatforms", StringComparison.Ordinal));
-		if (prjCfg >= 0) {
-			int endSection = prjCfg + 1;
-			while (endSection < lines.Count && !lines [endSection].Trim ().StartsWith ("EndGlobalSection", StringComparison.Ordinal))
-				endSection++;
-			lines.InsertRange (endSection, block);
-		} else {
-			// Solutions without per-project mappings (hand-written slns): add the section.
-			int global = lines.FindIndex (l => l.Trim () == "Global");
-			if (global < 0)
-				throw new InvalidOperationException ("Malformed solution (no Global)");
-			lines.InsertRange (global + 1, new List<string> {
-				"\tGlobalSection(ProjectConfigurationPlatforms) = postSolution",
-			});
-			lines.InsertRange (global + 2, block);
-			lines.Insert (global + 2 + block.Count, "\tEndGlobalSection");
-		}
-		File.WriteAllLines (slnPath, lines, System.Text.Encoding.UTF8);
+		sln.Write (slnPath);
 	}
 
 	/// <summary>Imports a loose .csproj as a new .sln next to it (legacy
 	/// ProjectOperations.ImportProject → creates the solution file with one
 	/// project entry, its GUID, and Debug/Release config mappings). Returns the
-	/// created .sln path.</summary>
+	/// created .sln path. The file is produced by the legacy SlnFile writer with
+	/// the VS2012 format (12.00) and its product comment, like SlnFileFormat.</summary>
 	public static string AddProjectToSolution (string csprojPath, string slnPath)
 	{
-		var guid = Guid.NewGuid ().ToString ("B").ToUpperInvariant ();
+		var guid = Guid.NewGuid ().ToString ("B").ToUpperInvariant (); // braced, as the .sln format stores it
 		var projName = Path.GetFileNameWithoutExtension (csprojPath);
 		var projRel = Path.GetRelativePath (Path.GetDirectoryName (slnPath)!, csprojPath).Replace ('\\', '/');
-		var projGuid = Guid.NewGuid ().ToString ("B").ToUpperInvariant (); // C# project type
-		_ = guid;
-		var sln = new StringBuilder ();
-		sln.AppendLine ("");
-		sln.AppendLine ("Microsoft Visual Studio Solution File, Format Version 12.00");
-		sln.AppendLine ($"Project(\"{{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}}\") = \"{projName}\", \"{projRel}\", \"{projGuid}\"");
-		sln.AppendLine ("EndProject");
-		sln.AppendLine ("Global");
-		sln.AppendLine ("\tGlobalSection(SolutionConfigurationPlatforms) = preSolution");
-		sln.AppendLine ("\t\tDebug|Any CPU = Debug|Any CPU");
-		sln.AppendLine ("\t\tRelease|Any CPU = Release|Any CPU");
-		sln.AppendLine ("\tEndGlobalSection");
-		sln.AppendLine ("\tGlobalSection(ProjectConfigurationPlatforms) = postSolution");
-		var g = projGuid.Trim ('{', '}');
-		foreach (var cfg in new[] { "Debug", "Release" })
-			foreach (var flag in new[] { "ActiveCfg", "Build.0" })
-				sln.AppendLine ($"\t\t{g}.{cfg}|AnyCPU.{flag} = {cfg}|AnyCPU");
-		sln.AppendLine ("\tEndGlobalSection");
-		sln.AppendLine ("\tGlobalSection(SolutionProperties) = preSolution");
-		sln.AppendLine ("\t\tHideSolutionNode = FALSE");
-		sln.AppendLine ("\tEndGlobalSection");
-		sln.AppendLine ("EndGlobal");
-		File.WriteAllText (slnPath, sln.ToString ().Replace ("\r\n", "\n"), Encoding.UTF8);
+
+		var sln = new SlnFile {
+			FileName = slnPath,
+			FormatVersion = MSBuildFileFormat.DefaultFormat.SlnVersion,
+			ProductDescription = MSBuildFileFormat.DefaultFormat.ProductDescriptionComment
+		};
+		sln.Projects.Add (new SlnProject {
+			TypeGuid = CSharpProjectTypeGuid,
+			Name = projName,
+			FilePath = projRel,
+			Id = guid
+		});
+		foreach (var cfg in new[] { "Debug", "Release" }) {
+			sln.SolutionConfigurationsSection [$@"{cfg}|Any CPU"] = $@"{cfg}|Any CPU";
+			var set = sln.ProjectConfigurationsSection.GetOrCreatePropertySet (guid, true);
+			set [$"{cfg}|AnyCPU.ActiveCfg"] = $@"{cfg}|AnyCPU";
+			set [$"{cfg}|AnyCPU.Build.0"] = $@"{cfg}|AnyCPU";
+		}
+		var props = sln.Sections.GetOrCreateSection ("SolutionProperties", SlnSectionType.PreProcess);
+		props.Properties ["HideSolutionNode"] = "FALSE";
+		sln.Write (slnPath);
 		return slnPath;
 	}
 }

@@ -1900,6 +1900,103 @@ public partial class MainWindow : Window
 						Avalonia.Threading.Dispatcher.UIThread.Post (LogPadButtons, Avalonia.Threading.DispatcherPriority.Loaded);
 					}
 				};
+			} else if (qa == "--slnmodel") {
+				// QA (Oleada 4 slice 1): the solution layer is now driven by the real
+				// MonoDevelop.Projects.MSBuild.SlnFile model (ConfigurationService), not
+				// by hand-rolled line editing. On TEMP copies of the --sln fixture:
+				//   parse:    configs/projects via the model
+				//   roundtrip: a no-op Read+Write must be byte-identical
+				//   addcfg:   AddSolutionConfiguration must land in the real sections
+				//             (and be refused when the config already exists)
+				//   append:   AppendProjectToSolution must add a Project line + mappings
+				//   newcsln:  AddProjectToSolution must produce a model-parseable sln
+				//   crosscheck: Microsoft.Build's SolutionFile (SolutionLoader) must
+				//             re-parse every file the model wrote
+				Avalonia.Threading.Dispatcher.UIThread.Post (() => {
+					int ok = 0, fail = 0;
+					void Check (string what, bool cond) {
+						Output ("[slnmodel] " + (cond ? "ok" : "FAIL") + " " + what);
+						if (cond) ok++; else fail++;
+					}
+					var src = loadedSolutionPath;
+					if (src is null || !File.Exists (src)) {
+						Output ("[slnmodel] FAIL missing --sln fixture");
+						Close ();
+						return;
+					}
+					var tmp = Path.Combine (Path.GetTempPath (), "slnmodel_" + Guid.NewGuid ().ToString ("N"));
+					Directory.CreateDirectory (tmp);
+					string T (string n) => Path.Combine (tmp, n);
+					// Copy the whole solution directory (not just the .sln) so the
+					// projects' relative paths keep resolving next to each copy.
+					void CopyDir (string s, string d) {
+						Directory.CreateDirectory (d);
+						foreach (var f in Directory.GetFiles (s))
+							File.Copy (f, Path.Combine (d, Path.GetFileName (f)), true);
+						foreach (var x in Directory.GetDirectories (s))
+							CopyDir (x, Path.Combine (d, Path.GetFileName (x)));
+					}
+					CopyDir (Path.GetDirectoryName (src)!, tmp);
+					var slnSrc = Path.Combine (tmp, Path.GetFileName (src));
+					string Copy (string n) { File.Copy (slnSrc, T (n)); return T (n); }
+					try {
+						// 1) parse via the real model
+						var cfgs = MonoDevelop.Ide.Services.ConfigurationService.GetSolutionConfigurations (slnSrc);
+						Output ("[slnmodel] cfgs=" + string.Join (",", cfgs));
+						Check ("parse cfgs", cfgs.Count > 0);
+						var projs = MonoDevelop.Ide.Services.ConfigurationService.GetSolutionProjects (slnSrc);
+						Output ("[slnmodel] projs=" + projs.Count);
+						Check ("parse projs", projs.Count > 0);
+
+						// 2) no-op round-trip on a copy: byte-identical
+						var rt = Copy ("rt.sln");
+						var orig = File.ReadAllBytes (rt);
+						var slnRt = new MonoDevelop.Projects.MSBuild.SlnFile ();
+						slnRt.Read (rt);
+						slnRt.Write (rt);
+						Check ("roundtrip bytes", File.ReadAllBytes (rt).SequenceEqual (orig));
+
+						// 3) AddSolutionConfiguration on a copy
+						var m1 = Copy ("mod.sln");
+						var created = MonoDevelop.Ide.Services.ConfigurationService.AddSolutionConfiguration (m1, "QAExtra", "Any CPU", false);
+						Check ("addcfg created", created);
+						var cfgs2 = MonoDevelop.Ide.Services.ConfigurationService.GetSolutionConfigurations (m1);
+						Output ("[slnmodel] cfgs after add=" + string.Join (",", cfgs2));
+						Check ("addcfg visible", cfgs2.Contains ("QAExtra", StringComparer.OrdinalIgnoreCase));
+						Check ("addcfg dup refused", !MonoDevelop.Ide.Services.ConfigurationService.AddSolutionConfiguration (m1, "QAExtra", "Any CPU", false));
+						var file = File.ReadAllText (m1);
+						Check ("addcfg mapping", file.Contains ("QAExtra|AnyCPU.ActiveCfg", StringComparison.Ordinal) || file.Contains ("QAExtra|Any CPU.ActiveCfg", StringComparison.Ordinal));
+						var x1 = SolutionLoader.Load (m1);
+						Check ("msbuild reparse addcfg", x1 is not null && x1.Value.Projects.Count == projs.Count);
+
+						// 4) AppendProjectToSolution on a copy
+						var m2 = Copy ("app.sln");
+						var newProj = T ("Extra.csproj");
+						File.WriteAllText (newProj, "<Project Sdk=\"Microsoft.NET.Sdk\">\n  <PropertyGroup>\n    <TargetFramework>net10.0</TargetFramework>\n  </PropertyGroup>\n</Project>\n");
+						MonoDevelop.Ide.Services.ConfigurationService.AppendProjectToSolution (newProj, m2);
+						var projs2 = MonoDevelop.Ide.Services.ConfigurationService.GetSolutionProjects (m2);
+						Check ("append visible", projs2.Count == projs.Count + 1);
+						var x2 = SolutionLoader.Load (m2);
+						Check ("msbuild reparse append", x2 is not null && x2.Value.Projects.Count == projs.Count + 1);
+
+						// 5) AddProjectToSolution: a new sln from a loose csproj
+						var loose = T ("Loose.csproj");
+						File.WriteAllText (loose, "<Project Sdk=\"Microsoft.NET.Sdk\">\n  <PropertyGroup>\n    <TargetFramework>net10.0</TargetFramework>\n  </PropertyGroup>\n</Project>\n");
+						var newSln = T ("Loose.sln");
+						MonoDevelop.Ide.Services.ConfigurationService.AddProjectToSolution (loose, newSln);
+						var newCfgs = MonoDevelop.Ide.Services.ConfigurationService.GetSolutionConfigurations (newSln);
+						Check ("newcsln cfgs", newCfgs.Count >= 2);
+						var newProjs = MonoDevelop.Ide.Services.ConfigurationService.GetSolutionProjects (newSln);
+						Check ("newcsln projs", newProjs.Count == 1 && newProjs [0] == loose);
+						var x3 = SolutionLoader.Load (newSln);
+						Check ("msbuild reparse newcsln", x3 is not null && x3.Value.Projects.Count == 1);
+					} catch (Exception ex) {
+						fail++;
+						Output ("[slnmodel] FAIL exception: " + ex.Message);
+					}
+					Output ("[slnmodel] total ok=" + ok + " fail=" + fail);
+					Close ();
+				});
 			} else if (qa == "--cmdstates") {
 				// QA (Oleada 3): drive the shell through every document/workspace state
 				// transition and dump the command-bound File items' enabled state after
@@ -9165,31 +9262,10 @@ public partial class MainWindow : Window
 
 	System.Diagnostics.Process? runningProc;
 
-	// Referenced .csproj files of a .sln (relative paths resolved against the
-	// solution directory). A directory scan is only a fallback for slns that
-	// yield nothing — a referenced project may live outside the solution dir.
+	// Referenced .csproj files of a .sln — Oleada 4: the real model
+	// (ConfigurationService/SlnFile.Projects) instead of a hand-rolled regex.
 	List<string> SolutionProjects (string sln)
-	{
-		var slnDir = Path.GetDirectoryName (sln)!;
-		var projs = new List<string> ();
-		foreach (var line in File.ReadAllLines (sln)) {
-			var m = System.Text.RegularExpressions.Regex.Match (line,
-				@"^Project\(""[^""]+""\)\s*=\s*""[^""]+""\s*,\s*""([^""]+)""");
-			if (!m.Success)
-				continue;
-			var rel = m.Groups [1].Value.Replace ('\\', '/');
-			if (!rel.EndsWith (".csproj", StringComparison.OrdinalIgnoreCase))
-				continue;
-			var full = Path.GetFullPath (Path.Combine (slnDir, rel));
-			if (File.Exists (full))
-				projs.Add (full);
-		}
-		if (projs.Count == 0)
-			projs = Directory.GetFiles (slnDir, "*.csproj", SearchOption.AllDirectories)
-				.Where (p => !p.Contains ("/obj/") && !p.Contains ("/bin/"))
-				.ToList ();
-		return projs;
-	}
+		=> MonoDevelop.Ide.Services.ConfigurationService.GetSolutionProjects (sln);
 
 	// Legacy RunSingleStartupProject runs the console project: prefer the first
 	// referenced project with <OutputType>Exe</OutputType>, fall back to the
