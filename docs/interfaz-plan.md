@@ -4895,3 +4895,91 @@ bloqueantes.
 **Queda pendiente (slices B y C de la Oleada 3)**: Slice B — items 4+10
 (editor Ctrl+Z/Y + feed caret); Slice C — items 1+7 (render legacy array
 commands + endurecer regresión). Slices D–F de la Oleada 4 sin cambios.
+
+---
+
+## Follow-up — Oleada 3 editor: Slice B — items 4 y 10 (2026-11-07)
+
+**Estado: CERRADO.** Cierre de los items de editor de la lista pendiente
+de la Oleada 3. Queda abierto el Slice C (items 1+7: render legacy array
+commands + endurecer regresión).
+
+**Item 4 — Ctrl+Z/Ctrl+Y en el editor** (`SkTextEditor.cs`): el
+early-return de `isTextEditingCombo` en `MainWindow.OnKeyDown` (traga
+X/C/V/Z/A con Ctrl cuando el foco no es un control de texto) se llevaba
+el atajo de undo/redo y el `OnKeyDown` del editor no tenía casos Z/Y —
+el undo/redo solo funcionaba por menú (slice 7 portó los comandos;
+este P5 portó los atajos). Fix: casos `Key.Z when ctrl → Undo()` y
+`Key.Y when ctrl → Redo()` en `SkTextEditor.OnKeyDown` (mismo patrón que
+X/C/V/A/K/D; `e.Handled = true`). El gate es la propia pila del editor
+(`Undo`/`Redo` no-op con pila vacía — el mismo `CanUndo`/`CanRedo` que
+usan los comandos de menú). `isTextEditingCombo` no se toca: un
+combobox editable con foco conserva su Ctrl+Z nativo. Hook QA
+`SendKeyForQa(Key, KeyModifiers)`: enruta teclas sintéticas por el
+`OnKeyDown` real (Avalonia 12.1.2 no expone ctor parametrizado de
+`KeyEventArgs` — verificado por reflexión —; ctor vacío + setters
+públicos) y devuelve `Handled`.
+
+**Item 10 — feed caret en la navegación** (`SkTextEditor.cs` +
+`Services/NavigationHistoryService.cs` + `MainWindow.axaml.cs`): port
+del `Caret.PositionChanged → LogActiveDocument(true)` legacy. (a) Los
+campos `caretLine`/`caretCol` del editor pasan a propiedades (backing
+`_caretLine`/`_caretCol`) que disparan `public event Action? CaretMoved`
+en cualquier cambio — los dos campos son el punto de paso único de
+TODO movimiento de caret (teclas, clicks, gutter, goto, búsqueda,
+inserts, backspace), así que el evento es el único hook (equivalente al
+`ITextView.Caret.PositionChanged`) y 0 call-sites tocados. (b)
+`NavigationHistoryService.FeedCaret(file, line1Based)`: mismo file que
+el punto actual → actualiza la línea IN-PLACE (`Changed` solo si cambió;
+nunca trunca el forward-branch); file distinto o historial vacío →
+`Push` (como una activación); clamp ≥ 1. Sin timers transient de 10 s
+— los puntos del shell son permanentes de nacimiento (el legacy hacía el
+colapso vía `ShouldReplace`/`ReplaceCurrent`). (c)
+`MainWindow.AttachNavigationCaretFeed()` en `OnDocSelectionChanged`
+(ambas ramas): desuscribe el editor anterior y suscribe al activo
+(port del par `AttachToDoc`/`DetachFromCurrentDoc`); el handler hace
+`FeedCaret(ed.FilePath, ed.CurrentLine + 1)`. El feed continuo hace
+innecesario el `LogActiveDocument()` que el legacy `MoveBack`/
+`MoveForward` hacían antes de mover: al pulsar Back el punto actual ya
+lleva la línea del caret.
+
+**Comportamiento observable (E2E, 2 probe files de 12 líneas)**:
+- Open en línea 3: punto único `probe:3` (el feed colapsa in-place el
+  punto de activación — antes se apilaba `:1`+`:3`).
+- GotoLine(8) en el doc activo: el punto actual pasa a línea 9 SIN
+  añadir puntos (`histN` constante).
+- Back → current = `probe:3`; Forward → regresa a **línea 9** (la de
+  caret), no la 5 del salto.
+- `undoredox`: insert → `SendKeyForQa(Z, Control)` undo → `SendKeyForQa(Y,
+  Control)` redo → Z sin Ctrl no-op; `[undoredox] inserted=True
+  ctrlZ=True ctrlY=True bareZ=True` en los 3 casos del E2E.
+
+**Cambios** (3 ficheros de código):
+- `MonoDevelop.Ide/Controls/SkTextEditor.cs` (props caret + `CaretMoved`,
+  casos Z/Y, `SendKeyForQa`)
+- `MonoDevelop.Ide/Services/NavigationHistoryService.cs` (`FeedCaret`)
+- `MonoDevelop.Startup.Avalonia/Views/MainWindow.axaml.cs`
+  (`AttachNavigationCaretFeed`/`EditorCaretMoved` + fases nav/undoredox
+  del driver `--cmdstates`)
+- (QA, fuera del repo) `~/opencode/oleada3_cmdstates.sh` (aserciones B),
+  `~/opencode/catload_test/Program.cs` (7 checks `FeedCaret`)
+
+**Verificación**: build 0 errores (net10.0, net10.0-windows **y legacy**
+`MonoDevelop.Ide.csproj` — los 3 ficheros solo entran en el build
+Avalonia vía glob); catálogo `Count=461 LoadedCommands=475
+ResolvedHandlers=111`; menudump `menus=11 items=225 cmds=0 bindings=196`;
+E2E `--cmdstates` 3 casos: 0 warn/Exception + 4 aserciones slice A
+(regresión) + 4 slice B PASS; probe `--newproject` **ALL_PASS**; E2E
+oleada4 6 casos **ALL_PASS**; oracle `oleada3nav 29/29` (22 previos + 7
+`FeedCaret`) y resto `fail=0` (valores exactos en
+`docs/session_summary.md`, entrada 2026-11-07 (17)). QA §18.5 (1 ronda,
+brief+reporte en `~/opencode/oleada3_sliceB_qa/`): **APROBADO**, 0
+hallazgos P1–P4, 3 P5 no bloqueantes (ruido `Terminado (killed)` del
+harness, `SendKeyForQa` sin `RoutedEvent` — limitación de Avalonia 12,
+`CaretMoved` pre-suscripción no-op).
+
+**Queda pendiente (slice C de la Oleada 3)**: items 1+7 — render legacy
+completo de los array commands (master oculto + hijos inline como
+hermanos) + endurecer la regresión de los submenús dinámicos (dump del
+`Tag` del hijo o dispatch vía click real). Slices D–F de la Oleada 4 sin
+cambios.

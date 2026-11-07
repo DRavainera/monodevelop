@@ -3730,3 +3730,180 @@ con diff que entra en la build legacy es `ProjectCommands.cs` (rename puro
 verificado con build legacy 0 errores) y `Commands.addin.xml` (string
 resuelta en runtime, verificada por el catálogo 475/111 en runtime y el
 menudump).
+
+## 2026-11-07 (17) — Oleada 3 (editor): Slice B — items 4 y 10
+
+### Contexto
+
+El plan de cierre de la Oleada 3 reparte lo que quedaba tras el Slice A:
+**B (este): items 4+10** (Ctrl+Z/Y en el editor + feed caret en el
+historial de navegación); C: items 1+7 (render legacy array commands +
+endurecer regresión). El item 4 era el P5 del slice 7 ("los atajos
+Ctrl+Z/Ctrl+Y están tragados por isTextEditingCombo del window y no
+existen en SkTextEditor.OnKeyDown") y el item 10 el P5 del slice 11
+("Feed solo en activación de documento; sin feed de movimiento de caret").
+El slice no toca el modelo: solo el editor, el servicio de navegación del
+shell y el main window.
+
+### Qué se hizo (3 ficheros de código)
+
+**`SkTextEditor.cs`** (editor):
+- **Item 10 (evento caret)**: los campos `caretLine`/`caretCol` pasan a
+  propiedades (backing `_caretLine`/`_caretCol`) que disparan
+  `public event Action? CaretMoved` en CUALQUIER cambio. Todos los
+  movimientos de caret (teclas, clicks, gutter, goto, búsqueda, inserts,
+  backspace) pasan por esos dos campos, así que el evento es el único
+  punto de enganche — port del `ITextView.Caret.PositionChanged` legacy.
+  Mismo nombre y tipo en las ~20 asignaciones: 0 call-sites tocados.
+- **Item 4 (Ctrl+Z/Ctrl+Y)**: casos en `OnKeyDown`: `Key.Z when ctrl →
+  Undo()`, `Key.Y when ctrl → Redo()` (mismo patrón que los casos
+  X/C/V/A/K/D existentes; `e.Handled = true`). El gate es la propia pila
+  del editor: `Undo()`/`Redo()` no-op con pila vacía — el mismo gate que
+  los comandos de menú (`CanUndo`/`CanRedo` = `undoStack/redoStack.Count >
+  0`). `isTextEditingCombo` del window NO se toca: un combobox editable
+  con foco conserva su Ctrl+Z nativo.
+- **`SendKeyForQa(Key, KeyModifiers)`**: hook QA que enruta una tecla
+  sintética por el `OnKeyDown` REAL (Avalonia 12.1.2 no expone ctor
+  parametrizado de `KeyEventArgs` — verificado por reflexión —; el evento
+  se construye con ctor vacío + setters públicos Key/PhysicalKey/
+  KeyModifiers) y devuelve `e.Handled`.
+
+**`Services/NavigationHistoryService.cs`** (servicio del shell):
+- **`FeedCaret(file, line1Based)`**: port del `LogActiveDocument(true)`
+  legacy sobre `Caret.PositionChanged`: si el punto actual es el mismo
+  file → actualiza la línea IN-PLACE (`Changed` solo si cambió; NUNCA
+  trunca el forward-branch); file distinto o historial vacío → `Push`
+  (como una activación); línea clamp ≥ 1. Sin timers transient de 10 s:
+  los puntos del shell son permanentes de nacimiento (el legacy hacía el
+  colapso vía `ShouldReplace`/`ReplaceCurrent`).
+
+**`MainWindow.axaml.cs`** (wiring shell + driver):
+- **`AttachNavigationCaretFeed()`** en las dos ramas de
+  `OnDocSelectionChanged` (selección y vacía): desuscribe el editor
+  anterior (`CaretMoved -= EditorCaretMoved`) y suscribe al editor del tab
+  seleccionado si existe con `FilePath` no vacío. `EditorCaretMoved()` →
+  `FeedCaret(ed.FilePath, ed.CurrentLine + 1)`. Port del par legacy
+  `AttachToDoc`/`DetachFromCurrentDoc`; idempotente. El feed continuo
+  hace innecesario el `LogActiveDocument()` que el legacy
+  `MoveBack`/`MoveForward` hacen antes de mover: al pulsar Back el punto
+  actual ya lleva la línea del caret.
+- **Driver `--cmdstates`**: fase nav reescrita con 2 probe files (12
+  líneas cada uno, deterministas): open `probe.txt:3` (el feed colapsa el
+  punto de activación in-place — `histN=1 hist0=probe:3`, sin apilar
+  `:1`+`:3`), salto a `probe2.txt:5`, `GotoLine(8)` en el doc activo
+  (feed in-place → línea 9, `histN` se mantiene 2), `NavigateBack`
+  (current = probe:3, `fwdEn=1`), `NavigateForward` (regresa a
+  probe2:**9** — la línea de caret, NO la 5 del salto), submenu
+  `navpoint:0|3|`, clear. Los `PushNavigationPoint()` explícitos se
+  quedan: los duplicados se ignoran, así que son no-ops bajo el feed.
+  Fase nueva `undoredox`: insertar `_qa` en el caret →
+  `SendKeyForQa(Z, Control)` (undo) → `SendKeyForQa(Y, Control)` (redo) →
+  `SendKeyForQa(Z, None)` (debe NO undo) → `Undo()` final que deja el
+  probe limpio; emite `[undoredox] inserted=… ctrlZ=… ctrlY=… bareZ=…`.
+
+### Hallazgos y decisiones
+
+- **Propiedades en vez de llamadas explícitas en cada sitio**: los dos
+  campos son el punto de paso único de cualquier movimiento de caret
+  (teclado, ratón, gutter, programático), así que el hook único en los
+  setters es equivalente al `Caret.PositionChanged` legacy sin tocar los
+  ~20 call-sites.
+- **Double-fire benigno**: un movimiento que cambia línea Y columna
+  dispara el evento dos veces; la segunda `FeedCaret` ve mismo file +
+  misma línea → no-op sin `Changed` (sin rebuild del submenú Navigate
+  History).
+- **`navSwitching` no puede corromper un aterrizaje**: `MoveBack`/
+  `MoveForward`/`MoveTo` actualizan `position` ANTES de ejecutar
+  `NavigateToPoint`, y `OpenFileDocumentAtLine` aterriza exactamente en
+  `p.Line` (`GotoLine(p.Line)`) → cualquier feed que dispare durante el
+  switch ve mismo file + misma línea = no-op. Confirmado en el E2E:
+  `histN` se mantiene 2 durante back/fwd/submenú.
+- **El undo/redo por tecla mueve el caret** (el stack restaura
+  `(text, line, col)`) → el feed actualiza el punto de navegación a la
+  línea post-undo: comportamiento EXACTO del legacy (undo mueve el caret
+  → `Caret.PositionChanged` → `LogActiveDocument`).
+- **Builds**: `SkTextEditor.cs` y `Services/NavigationHistoryService.cs`
+  solo entran en el build Avalonia vía los glob `Controls/**` y
+  `Services/**` del `MonoDevelop.Startup.Avalonia.csproj`; el legacy
+  `MonoDevelop.Ide.csproj` (lista explícita,
+  `EnableDefaultCompileItems=false`) NO los incluye → la ruta
+  `--old-gui` no compila los ficheros de este slice (build legacy 0
+  errores).
+
+### Números clave
+
+- Builds: net10.0 **0 errores**; net10.0-windows **0 errores**; legacy
+  `MonoDevelop.Ide.csproj` **0 errores** (solo warnings preexistentes).
+- Catálogo: `Count=461 LoadedCommands=475 ResolvedHandlers=111` (sin
+  cambio).
+- Menudump (tras `reset_recents`): `menus=11 items=225 cmds=0
+  bindings=196` (sin cambio).
+- E2E `--cmdstates` (3 casos): 0 `[warn]`/`[fatal]`/Exception en los 3
+  logs; 4 aserciones slice A PASS (regresión: stop, poststop, node_file
+  F3, solution-options rename) + **4 aserciones slice B PASS**:
+  `navopened fed` (`histN=1 hist0=oleada3_nav_probe.txt:3 backEn=0`),
+  `navfeed` (`histN=2 hist0=oleada3_nav_probe2.txt:9 backEn=1`),
+  `navfwd fed line` (`hist0=oleada3_nav_probe2.txt:9 backEn=1 fwdEn=0`),
+  `ctrl+Z/Y keys` (`[undoredox] inserted=True ctrlZ=True ctrlY=True
+  bareZ=True` — idéntico en los 3 casos).
+- Probe `--newproject` (copia del fixture): **ALL_PASS** (regresión del
+  pad).
+- E2E oleada4 (6 casos): **ALL_PASS** (incluye menudump determinista).
+- Oracle: `oleada3 51`, `oleada3dyn 19`, `oleada3tools 5`, **`oleada3nav
+  29`** (22 previos + 7 `FeedCaret` nuevos: push-vacío con `Changed`,
+  no-op mismo punto sin `Changed`, in-place con `Changed`, clamp ≥ 1,
+  file distinto → push, back-point in-place con forward intacto,
+  `MoveForward` tras back-feed), `oleada4 18`, `oleada4s2 35`, `fail=0`
+  en todo, exit 0.
+
+### Cómo validar
+
+- Builds: `dotnet build main/src/core/MonoDevelop.Startup.Avalonia/MonoDevelop.Startup.Avalonia.csproj -c Debug -f net10.0 --nologo` (y `-f net10.0-windows`); legacy: `dotnet build main/src/core/MonoDevelop.Ide/MonoDevelop.Ide.csproj -c Debug --nologo`.
+- E2E: `bash ~/opencode/oleada3_cmdstates.sh` → `SLICEA_ALL_PASS` +
+  `E2E_DONE` + 0 warn/Exception en los 3 logs (4 aserciones slice A + 4
+  slice B).
+- Probe: `bash ~/opencode/oleada3_sliceA_probe.sh` → `ALL_PASS`.
+- E2E Oleada 4: `bash ~/opencode/oleada4_slice1_e2e.sh` → `ALL_PASS`.
+- Oracle: `cd ~/opencode/catload_test && dotnet run -c Debug` → exit 0,
+  `oleada3nav: ok=29 fail=0`.
+- Nota: no ejecutar dos harness E2E a la vez (cada caso mata
+  `main/build/MonoDevelop.AvaloniaShell.dll`).
+
+### QA (§18.5)
+
+Brief + reporte en `~/opencode/oleada3_sliceB_qa/` (`brief.md`,
+`qa_report_r1.md`, logs `run_r1.log`/`run_r1b.log`). **Ronda 1:
+APROBADO — 0 hallazgos P1–P4**, 3 P5 no bloqueantes:
+- **P5-1 (harness)**: líneas `Terminado (killed)` de job-control de bash
+  en la salida del E2E al matar los procesos `nohup` de los scripts — no
+  son `[warn]`/`[fatal]`/Exception de la aplicación (los 3 logs limpios).
+- **P5-2 (API)**: `SendKeyForQa` construye `KeyEventArgs` sin
+  `RoutedEvent` (limitación del API de Avalonia 12 — no hay ctor
+  parametrizado); funciona (E2E verde) pero una futura versión de
+  Avalonia podría ser más estricta en `base.OnKeyDown`.
+- **P5-3 (diseño)**: `CaretMoved` dispara desde constructor/`SetLines`
+  sin suscriptores: no-op null-conditional, protegido, documentado.
+
+Nota operativa: el subagente QA corrió con `logfare/kimi-k2.7-code` (vía
+`opencode run --standalone`): el modelo por defecto de opencode local
+(`iceman-free`) tenía la **API key expirada** (OpenCode Console), y el
+provider `logfare` requirió registrar los modelos en el catálogo de la
+config + `env: ["LOGFARE_API_KEY"]` (la key vive en
+`~/.config/opencode-cli/opencode.json`). La sesión se cortó una vez
+(tras el oracle, sin error registrado) y se reanudó con `--session` para
+completar los E2E y el veredicto.
+
+### Queda pendiente
+
+- **Slice C (Oleada 3)**: items 1+7 — render legacy array commands +
+  endurecer regresión.
+- **Slices D-F (Oleada 4)**: RunConfigurations vía modelo (D); build vía
+  modelo de configuraciones (E); Add Reference vía modelo (F).
+
+### Cierre
+
+Commits de código (3 ficheros) + docs pushados a
+`origin/agents/sub-agent-senior-dev-role-report`. Sin cambios en
+submódulos. La ruta `--old-gui` no se toca: ninguno de los 3 ficheros
+del slice se compila en el build legacy (verificado con build legacy 0
+errores + lista explícita del csproj).

@@ -916,6 +916,66 @@ El bucle de migración Gtk → Avalonia continúa por módulos (detalle por hito
         fichero legacy del diff es el rename, verificado con build legacy 0
         errores). Detalle en `docs/interfaz-plan.md` (follow-up "Oleada 3 —
         cleanup Slice A") y `docs/session_summary.md` (2026-11-07 (16)).
+    - **Oleada 3 (editor, Slice B) de la integración total del backend (2026-11-07)**:
+        **cierre de los items 4 y 10** (los de editor) de la lista pendiente
+        de la Oleada 3. Item 4 (Ctrl+Z/Ctrl+Y): el early-return de
+        `isTextEditingCombo` del window (traga Ctrl+Z cuando el foco no es
+        un control de texto) se llevaba el atajo de undo/redo y
+        `SkTextEditor.OnKeyDown` no tenía casos Z/Y — el undo/redo solo
+        funcionaba por menú. Fix: casos `Key.Z when ctrl → Undo()` y
+        `Key.Y when ctrl → Redo()` en el editor (mismo patrón que los
+        casos X/C/V/A/K/D; `e.Handled = true`); el gate es la propia pila
+        del editor (`Undo`/`Redo` no-op con pila vacía — el mismo gate
+        `CanUndo`/`CanRedo` que usan los comandos de menú);
+        `isTextEditingCombo` no se toca (un combobox editable con foco
+        conserva su Ctrl+Z nativo). Hook QA `SendKeyForQa(Key,
+        KeyModifiers)` que enruta teclas sintéticas por el `OnKeyDown`
+        real (Avalonia 12 no expone ctor parametrizado de
+        `KeyEventArgs`). Item 10 (feed caret): port del
+        `Caret.PositionChanged → LogActiveDocument(true)` legacy: los
+        campos `caretLine`/`caretCol` del editor pasan a propiedades que
+        disparan `CaretMoved` en cualquier cambio (los dos campos son el
+        punto de paso único de todo movimiento de caret — teclas, clicks,
+        gutter, goto, inserts, backspace — y 0 call-sites tocados) y
+        `NavigationHistoryService.FeedCaret(file, line1Based)` actualiza
+        la línea del punto actual **in-place** cuando es el mismo file
+        (sin apilar puntos ni truncar el forward-branch) y hace `Push`
+        como una activación si el file cambia o el historial está vacío;
+        wired en `MainWindow.OnDocSelectionChanged`
+        (`AttachNavigationCaretFeed`, port del par
+        `AttachToDoc`/`DetachFromCurrentDoc` legacy, idempotente). El
+        feed continuo hace innecesario el `LogActiveDocument()` que el
+        legacy `MoveBack`/`MoveForward` hacían antes de mover: el
+        Forward tras un Back ahora regresa a la **línea de caret** (E2E:
+        línea 9, no la 5 del salto). **Invariantes**: 0 errores de build
+        en net10.0, net10.0-windows **y el build legacy**
+        `MonoDevelop.Ide.csproj` (los 3 ficheros del diff solo entran en
+        el build Avalonia vía los glob `Controls/**`/`Services/**` del
+        csproj Avalonia; el legacy usa lista explícita y no los compila);
+        catálogo `Count=461 LoadedCommands=475 ResolvedHandlers=111`;
+        menudump `menus=11 items=225 cmds=0 bindings=196`; E2E
+        `--cmdstates` 3 casos: 0 warn/Exception + 4 aserciones slice A
+        (regresión) + **4 slice B PASS** (`navopened fed`: punto único
+        `probe:3`, el feed colapsa la activación in-place; `navfeed`:
+        in-place 5→9 sin apilar; `navfwd fed line`: forward a la línea 9
+        de caret; `ctrl+Z/Y keys`: `inserted=True ctrlZ=True ctrlY=True
+        bareZ=True` — Z sin Ctrl no undo); probe `--newproject`
+        **ALL_PASS**; E2E oleada4 6 casos **ALL_PASS**; oracle
+        `oleada3nav 29/29` (22 previos + 7 `FeedCaret` nuevos: push-vacío,
+        no-op sin `Changed`, in-place con `Changed`, clamp, file
+        distinto→push, back-point con forward intacto, `MoveForward`
+        tras back-feed) y resto `fail=0`. QA §18.5 (subagente Tester QA
+        Senior, 1 ronda; brief+reporte en `~/opencode/oleada3_sliceB_qa/`):
+        **APROBADO**, 0 hallazgos P1–P4, 3 P5 no bloqueantes (ruido
+        `Terminado (killed)` del job-control bash en el harness,
+        `SendKeyForQa` sin `RoutedEvent` — limitación del API de Avalonia
+        12, y `CaretMoved` pre-suscripción no-op). Nota: el subagente
+        corrió con `logfare/kimi-k2.7-code` (la API key del modelo por
+        defecto local `iceman-free` está expirada — pendiente de renovar
+        en OpenCode Console). Sin cambios en submódulos; la ruta
+        `--old-gui` no se toca (build legacy 0 errores). Detalle en
+        `docs/interfaz-plan.md` (follow-up "Oleada 3 — editor Slice B") y
+        `docs/session_summary.md` (2026-11-07 (17)).
 
    
    
