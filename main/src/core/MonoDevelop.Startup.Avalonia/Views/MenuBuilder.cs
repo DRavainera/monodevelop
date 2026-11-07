@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using Avalonia;
@@ -31,10 +32,23 @@ public static class MenuBuilder
 	// model check keep theirs).
 	static readonly HashSet<Avalonia.Controls.MenuItem> checkEligible = new ();
 
-	// Oleada 3 (slice 9): command-bound items whose catalog command is an array
-	// command (type="...|array"): rendered as dynamic submenus rebuilt from the
-	// CommandArrayInfo on every refresh (legacy GTK array menu items).
-	static readonly List<Avalonia.Controls.MenuItem> dynamicSubmenus = new ();
+	// Oleada 3 (slice C): command-bound items whose catalog command is an array
+	// command (type="...|array"). Legacy GTK renders the master hidden and
+	// inlines the array children as siblings right after the master in the
+	// parent menu (CommandMenuItem.Update: Visible=false + menu.Insert), so the
+	// master is never a submenu: its children are rebuilt into the parent
+	// collection on every refresh from the CommandArrayInfo.
+	static readonly List<Avalonia.Controls.MenuItem> arrayMasters = new ();
+
+	// Oleada 3 (slice C): the parent Items collection captured at build time
+	// (top-level list or the parent submenu's Items). At refresh the master's
+	// parent is re-resolved from it (falling back to the visual parent).
+	static readonly Dictionary<Avalonia.Controls.MenuItem, IList> arrayMasterParent = new ();
+
+
+	// Oleada 3 (slice C): the inline children currently rendered for each
+	// array master (MenuItems + array separators).
+	static readonly Dictionary<Avalonia.Controls.MenuItem, List<Control>> arrayChildren = new ();
 
 	// Oleada 3 (slice 10): submenus carrying the model's AutoHide flag — hidden
 	// while every one of their children is invisible (the model's "an empty
@@ -48,11 +62,12 @@ public static class MenuBuilder
 		commandItems.Clear (); // the menu is rebuilt: refresh the tracked set
 		originalHeaders.Clear ();
 		checkEligible.Clear ();
-		dynamicSubmenus.Clear ();
-		autoHideSubs.Clear ();
+		arrayMasters.Clear ();
+		arrayMasterParent.Clear ();
+		arrayChildren.Clear ();
 		var items = new List<Control> ();
 		foreach (var entry in entries)
-			items.Add (BuildItem (entry, topLevel: true));
+			AppendEntry (entry, items, topLevel: true);
 		return items;
 	}
 
@@ -82,10 +97,12 @@ public static class MenuBuilder
 					item.Icon = info.Checked ? CheckGlyph () : null;
 			}
 		}
-		// Oleada 3 (slice 9): rebuild the dynamic array submenus (Window >
-		// Document List, Window List) from their current CommandArrayInfo.
-		foreach (var item in dynamicSubmenus)
-			RebuildArrayChildren (item, (string)item.Tag!);
+		// Oleada 3 (slice C): re-inline the array children as siblings of their
+		// always-hidden master (Window > Document List / Window List, the
+		// Navigate History points, View List / Layout List) from the current
+		// CommandArrayInfo.
+		foreach (var item in arrayMasters)
+			RebuildArraySiblings (item, (string)item.Tag!);
 		// Oleada 3 (slice 10): apply the AutoHide model flag — a sub disappears
 		// while all of its child items are invisible (separators are not
 		// counted as children). Runs after the per-item visibility mirror.
@@ -97,10 +114,29 @@ public static class MenuBuilder
 	public static string? GetCommandId (Delegate? action)
 		=> action?.Target is CommandAction ca ? ca.Id : null;
 
-	static Control BuildItem (MenuService.MenuEntry entry, bool topLevel = false)
+	/// <summary>
+	/// Oleada 3 (slice C, item 7): the inline children (MenuItems only, array
+	/// separators excluded) currently rendered for the array command `id` — the
+	/// QA dump verifies their dispatch payload (Tag) alongside their headers.
+	/// </summary>
+	public static List<Avalonia.Controls.MenuItem> GetArrayChildren (string id)
 	{
-		if (entry.IsSeparator)
-			return new Separator ();
+		var master = arrayMasters.FirstOrDefault (m => (string)m.Tag! == id);
+		if (master is null || !arrayChildren.TryGetValue (master, out var list))
+			return new ();
+		return list.OfType<Avalonia.Controls.MenuItem> ().ToList ();
+	}
+
+	// Oleada 3 (slice C): appends one model entry to `target` (the caller's
+	// container — the top-level list or the parent submenu's Items). Array
+	// command leaves register their master plus the captured parent; the
+	// children themselves only exist once the refresh has inlined them.
+	static void AppendEntry (MenuService.MenuEntry entry, IList target, bool topLevel = false)
+	{
+		if (entry.IsSeparator) {
+			target.Add (new Separator ());
+			return;
+		}
 
 		var item = new MenuItem {
 			Header = FormatHeader (entry.Label),
@@ -113,21 +149,22 @@ public static class MenuBuilder
 
 		if (entry.IsHeader) {
 			item.IsEnabled = false;
-			return item;
+			target.Add (item);
+			return;
 		}
 
 		if (entry.Children.Count > 0) {
+			target.Add (item);
 			foreach (var child in entry.Children)
-				item.Items.Add (BuildItem (child));
+				AppendEntry (child, item.Items);
 			if (entry.AutoHide)
 				autoHideSubs.Add (item); // Oleada 3 (slice 10): track for the visibility sweep
 		} else if (entry.OnClick is not null) {
 			var click = entry.OnClick;
-			// Oleada 3 (slice 9): array commands (catalog type="...|array",
-			// e.g. OpenDocumentList / OpenWindowList) are dynamic submenus —
-			// their children are rebuilt on every refresh, so the leaf click
-			// action is suppressed (legacy GTK renders them as array menu
-			// items, not clickable leaves).
+			// Oleada 3 (slice 9 / slice C): array commands (catalog
+			// type="...|array", e.g. OpenDocumentList / OpenWindowList) are
+			// legacy array menu items — their leaf click is suppressed (the
+			// children, inlined by the refresh, dispatch with their dataItem).
 			bool isArrayCommand = click.Target is CommandAction arrayCa
 				&& MonoDevelop.Components.Commands.CommandService.Manager.GetActionCommand (arrayCa.Id)?.CommandArray == true;
 			if (!isArrayCommand)
@@ -139,49 +176,102 @@ public static class MenuBuilder
 				originalHeaders[item] = (string)item.Header!; // slice 9: label restore source
 				if (entry.Icon is null && !entry.Checked)
 					checkEligible.Add (item); // slice 9: the ✓ glyph slot is free
-				if (isArrayCommand)
-					dynamicSubmenus.Add (item); // slice 9: dynamic submenu
+				if (isArrayCommand) {
+					// Legacy: the master is never rendered — its children are
+					// inlined as siblings by RefreshCommandStates.
+					item.IsVisible = false;
+					arrayMasters.Add (item);
+					arrayMasterParent[item] = target;
+				}
 			}
 			// Make the legacy shortcut a real accelerator: parse it into a KeyGesture so
 			// KeyboardShortcutRegistry.AttachHotKeys binds it and the menu shows it.
 			if (!string.IsNullOrEmpty (entry.Shortcut))
 				item.InputGesture = ParseGesture (entry.Shortcut);
+			target.Add (item);
+		} else {
+			target.Add (item);
 		}
-		return item;
 	}
 
 	/// <summary>
-	/// Oleada 3 (slice 9): (re)builds a dynamic array submenu's children from the
-	/// command's current CommandArrayInfo. A child click dispatches the array
-	/// command with the child's DataItem (the legacy GTK array menu item
-	/// behavior). Full rebuild on every refresh: the headers, checked state and
-	/// the dispatch DataItem all come from the current array — an in-place
-	/// update would keep the captured DataItem of the document that used to
-	/// occupy the slot after a same-count document swap (QA F1). The master
-	/// mirrors the legacy array item's empty state: hidden while the array has
-	/// no children (legacy inlines the children as siblings instead of a
-	/// submenu — documented slice design, deferred to a future slice).
+	/// Oleada 3 (slice C): (re)builds an array command's inline children in the
+	/// parent menu, right after the (always-hidden) master, from the command's
+	/// current CommandArrayInfo — the legacy GTK array rendering
+	/// (CommandMenuItem.Update: master Visible=false, children Inserted after
+	/// the master, IsArraySeparator → separator). Full rebuild on every
+	/// refresh: the headers, checked state, visibility and the dispatch Tag
+	/// all come from the current array. Child visibility mirrors the legacy
+	/// array children (created with disabledVisible=false):
+	/// ci.Visible && ci.Enabled.
 	/// </summary>
-	static void RebuildArrayChildren (Avalonia.Controls.MenuItem item, string id)
+	static void RebuildArraySiblings (Avalonia.Controls.MenuItem master, string id)
 	{
-		var arr = MonoDevelop.Components.Commands.CommandService.GetCommandInfo (id).ArrayInfo;
-		var children = item.Items;
-		children.Clear ();
-		item.IsVisible = arr is { Count: > 0 };
-		if (arr is not { Count: > 0 })
+		// Legacy: the array master is never visible, empty array or not (the
+		// scalar mirror above may have set info.Visible — force the legacy state).
+		master.IsVisible = false;
+
+		IList? parent = arrayMasterParent.TryGetValue (master, out var captured) && captured.Contains (master)
+			? captured
+			: (master.Parent as ItemsControl)?.Items;
+		if (parent is null)
 			return;
-		foreach (var ci in arr) {
-			var child = new Avalonia.Controls.MenuItem {
-				Header = ci.Text,
-				IsEnabled = ci.Enabled,
-				Tag = ci.DataItem,
-			};
-			if (ci.Checked)
-				child.Icon = CheckGlyph ();
-			var data = ci.DataItem;
-			child.Click += (_, _) => MonoDevelop.Components.Commands.CommandService.Dispatch (id, data, MonoDevelop.Components.Commands.CommandSource.MainMenu);
-			children.Add (child);
-		}
+		int idx = parent.IndexOf (master);
+		if (idx < 0)
+			return;
+
+		// Drop the previous inline children (they were rebuilt from a stale
+		// CommandArrayInfo on the last refresh).
+		if (arrayChildren.TryGetValue (master, out var old))
+			foreach (var c in old)
+				if (parent.IndexOf (c) >= 0)
+					RemoveItem (parent, c);
+
+		var arr = MonoDevelop.Components.Commands.CommandService.GetCommandInfo (id).ArrayInfo;
+		var children = new List<Control> ();
+		if (arr is { Count: > 0 })
+			foreach (var ci in arr) {
+				if (ci.IsArraySeparator) {
+					var sep = new Separator ();
+					InsertItem (parent, idx + 1 + children.Count, sep);
+					children.Add (sep);
+					continue;
+				}
+				var child = new Avalonia.Controls.MenuItem {
+					Header = ci.Text,
+					IsEnabled = ci.Enabled,
+					// Legacy array children are created with disabledVisible=false.
+					IsVisible = ci.Visible && ci.Enabled,
+					Tag = ci.DataItem,
+				};
+				if (ci.Checked)
+					child.Icon = CheckGlyph ();
+				var data = ci.DataItem;
+				child.Click += (_, _) => MonoDevelop.Components.Commands.CommandService.Dispatch (id, data, MonoDevelop.Components.Commands.CommandSource.MainMenu);
+				InsertItem (parent, idx + 1 + children.Count, child);
+				children.Add (child);
+			}
+		arrayChildren[master] = children;
+	}
+
+	// Oleada 3 (slice C): Avalonia 12's ItemCollection (ItemsSourceView) throws
+	// "Collection is read-only." from its EXPLICIT IList mutation methods even
+	// in writable Items mode — mutation must go through the concrete public
+	// methods, which route to the backing collection. Plain lists keep IList.
+	static void InsertItem (IList parent, int index, Control item)
+	{
+		if (parent is ItemCollection ic)
+			ic.Insert (index, item);
+		else
+			parent.Insert (index, item);
+	}
+
+	static void RemoveItem (IList parent, Control item)
+	{
+		if (parent is ItemCollection ic)
+			ic.Remove (item);
+		else
+			parent.Remove (item);
 	}
 
 	// The checked-state glyph (legacy CheckMenuItem.Active parity) — a fresh

@@ -3351,7 +3351,9 @@ public partial class MainWindow : Window
 			var mi = Mi (fullId);
 			return mi is null ? null : mi.Icon is Avalonia.Controls.TextBlock tb && tb.Text == "\u2713";
 		}
-		int? ListN (string fullId) => Mi (fullId)?.Items.Count;
+		// Oleada 3 (slice C): the array children are inlined as siblings of the
+		// hidden master, not in its Items — count them through MenuBuilder.
+		int? ListN (string fullId) => MenuBuilder.GetArrayChildren (fullId).Count;
 		// Direct command-state read for commands with no menu item (RunEntry).
 		string? CTxt (string fullId)
 		{
@@ -3389,9 +3391,11 @@ public partial class MainWindow : Window
 		const string H = "MonoDevelop.Ide.Commands.HelpCommands.";
 		const string T = "MonoDevelop.Ide.Commands.ToolCommands.";
 		const string NV = "MonoDevelop.Ide.Commands.NavigationCommands.";
-		// Oleada 3 (slice 11): the Navigate History dynamic submenu — child count,
-		// first (newest) child header and the checked child's index.
-		var histItems = Mi (NV + "NavigateHistory")?.Items.OfType<Avalonia.Controls.MenuItem> ().ToList () ?? new System.Collections.Generic.List<Avalonia.Controls.MenuItem> ();
+		// Oleada 3 (slice 11, re-sourced in slice C): the Navigate History
+		// array — child count, first (newest) child header and the checked
+		// child's index; the children are inlined siblings of the hidden
+		// master (legacy rendering), so MenuBuilder owns them.
+		var histItems = MenuBuilder.GetArrayChildren (NV + "NavigateHistory");
 		int histCur = -1;
 		for (int i = 0; i < histItems.Count; i++)
 			if (histItems [i].Icon is Avalonia.Controls.TextBlock { Text: "\u2713" }) {
@@ -3487,7 +3491,15 @@ public partial class MainWindow : Window
 			+ " clearEn=" + B (En (NV + "ClearNavigationHistory"))
 			+ " histN=" + histItems.Count
 			+ " hist0=" + (histItems.Count > 0 ? histItems [0].Header as string ?? "-" : "-")
-			+ " histCur=" + histCur);
+			+ " histCur=" + histCur
+			// Oleada 3 (slice C, item 7): the array master is never rendered
+			// (navMasterVis=0) and the inline children's Tag — the payload a
+			// click dispatches with — is dumped, hardening the regression the
+			// header-only fields could not see (QA F6, Slice 9).
+			+ " | navMasterVis=" + B (Vi (NV + "NavigateHistory"))
+			+ " docList0Tag=" + (MenuBuilder.GetArrayChildren (W + "OpenDocumentList").FirstOrDefault ()?.Tag as string ?? "-")
+			+ " winList0Tag=" + (MenuBuilder.GetArrayChildren (W + "OpenWindowList").FirstOrDefault ()?.Tag as string ?? "-")
+			+ " hist0Tag=" + (histItems.Count > 0 ? histItems [0].Tag as string ?? "-" : "-"));
 	}
 
 	void UpdatePadChecks (System.Collections.Generic.IReadOnlyList<MenuService.MenuEntry> entries)
