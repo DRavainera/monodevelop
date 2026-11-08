@@ -548,4 +548,192 @@ public static class ConfigurationService
 			projectRefs: projRefs,
 			itemCounts: itemCounts);
 	}
+
+	// ------------------------------------------------------------------
+	// Oleada 4 (slice D): run configurations via model. The legacy stores a
+	// project's run configurations as <PropertyGroup
+	// Condition="'$(RunConfiguration)' == 'X'"> in the .csproj AND the
+	// .csproj.user (Project.OnReadProject reads both; same name -> the user
+	// group wins, "set the new group"), and the solution's startup item as
+	// MonoDevelop.Ide.Workspace/Property name="StartupItem" in the solution
+	// user file (Solution.OnEndLoad) - here .userprefs, like ActiveConfiguration.
+	// ------------------------------------------------------------------
+
+	/// <summary>One run configuration of a project, reduced to the properties
+	/// the execution layer consumes (legacy ProcessRunConfiguration [ItemProperty]
+	/// StartArguments/StartWorkingDirectory/ConsolePause/ExternalConsole).</summary>
+	public sealed class RunConfigurationEntry
+	{
+		public string Name { get; }
+		public string? StartArguments { get; internal set; }
+		public string? WorkingDirectory { get; internal set; }
+		public bool? PauseConsoleOutput { get; internal set; }
+		public bool? ExternalConsole { get; internal set; }
+
+		public RunConfigurationEntry (string name) => Name = name;
+	}
+
+	/// <summary>Legacy ParseRunConfigurationCondition + ExtractConfigName:
+	/// the left side of '==' must be exactly '$(RunConfiguration)' (trimmed,
+	/// single-quoted) and the right side a single-quoted name without an inner
+	/// quote. Anything else (build groups, double quotes, bare $()...) -> null.</summary>
+	static string? ParseRunCondition (string? cond)
+	{
+		if (string.IsNullOrEmpty (cond))
+			return null;
+		int i = cond.IndexOf ("==", StringComparison.Ordinal);
+		if (i == -1)
+			return null;
+		if (cond.Substring (0, i).Trim () != "'$(RunConfiguration)'")
+			return null;
+		var rhs = cond.Substring (i + 2).Trim (' ');
+		if (rhs.Length <= 2 || rhs [0] != '\'' || rhs [rhs.Length - 1] != '\'')
+			return null;
+		var name = rhs.Substring (1, rhs.Length - 2);
+		return name.IndexOf ('\'') == -1 ? name : null;
+	}
+
+	/// <summary>Run configurations of a project, in document order: the .csproj
+	/// groups first, then the .csproj.user groups (legacy read order). A name
+	/// present in both is a single entry whose properties are merged as the
+	/// legacy evaluation does: per property the later group (user file) wins,
+	/// earlier groups provide fallbacks. A corrupt or missing file contributes
+	/// nothing (legacy tolerance).</summary>
+	public static IReadOnlyList<RunConfigurationEntry> GetProjectRunConfigurations (string csprojPath)
+	{
+		var full = Path.GetFullPath (csprojPath);
+		var entries = new List<RunConfigurationEntry> ();
+		var groups = new Dictionary<string, Dictionary<string, string?>> (StringComparer.Ordinal);
+
+		void ScanFile (string path)
+		{
+			if (!File.Exists (path))
+				return;
+			System.Xml.Linq.XDocument doc;
+			try {
+				doc = System.Xml.Linq.XDocument.Load (path);
+			} catch {
+				return; // corrupt: the file contributes no run configurations
+			}
+			var root = doc.Root;
+			if (root is null)
+				return;
+			var ns = root.Name.Namespace;
+			foreach (var pg in root.Elements (ns + "PropertyGroup")) {
+				var name = ParseRunCondition ((string?)pg.Attribute ("Condition"));
+				if (name is null)
+					continue;
+				// Legacy evaluation: with RunConfiguration=name both files' groups
+				// are active, so per property the later group (user file, scanned
+				// second) overrides and earlier groups provide fallbacks.
+				if (!groups.TryGetValue (name, out var group)) {
+					group = new Dictionary<string, string?> (StringComparer.Ordinal);
+					groups [name] = group;
+					entries.Add (new RunConfigurationEntry (name));
+				}
+				foreach (var el in pg.Elements ())
+					group [el.Name.LocalName] = (string?)el;
+			}
+		}
+
+		ScanFile (full);
+		ScanFile (full + ".user");
+
+		foreach (var entry in entries) {
+			var g = groups [entry.Name];
+			if (g.TryGetValue ("StartArguments", out var args) && !string.IsNullOrWhiteSpace (args))
+				entry.StartArguments = args;
+			if (g.TryGetValue ("StartWorkingDirectory", out var wd) && !string.IsNullOrWhiteSpace (wd))
+				entry.WorkingDirectory = wd;
+			if (g.TryGetValue ("ConsolePause", out var pause))
+				entry.PauseConsoleOutput = pause?.Trim () is "true" ? true : pause?.Trim () is "false" ? false : null;
+			if (g.TryGetValue ("ExternalConsole", out var ext))
+				entry.ExternalConsole = ext?.Trim () is "true" ? true : ext?.Trim () is "false" ? false : null;
+		}
+		return entries;
+	}
+
+	static string PrefsPath (string slnPath)
+		=> slnPath.Substring (0, slnPath.Length - Path.GetExtension (slnPath).Length) + ".userprefs";
+
+	/// <summary>The startup project of the solution as a path relative to the
+	/// .sln (legacy Solution.OnEndLoad: MonoDevelop.Ide.Workspace/Property
+	/// name="StartupItem" in the solution user file - here .userprefs).
+	/// null when absent or the file is corrupt.</summary>
+	public static string? GetSolutionStartupItem (string slnPath)
+	{
+		var prefs = PrefsPath (slnPath);
+		if (!File.Exists (prefs))
+			return null;
+		try {
+			var doc = System.Xml.Linq.XDocument.Load (prefs);
+			return doc.Descendants ("Property")
+				.Where (p => (string?)p.Attribute ("name") == "StartupItem")
+				.Select (p => (string?)p.Attribute ("value"))
+				.FirstOrDefault ();
+		} catch {
+			return null;
+		}
+	}
+
+	/// <summary>Persists the startup project (legacy WorkspaceUserData
+	/// StartupItem) into <sln>.userprefs; replaces any previous value.</summary>
+	public static void SetSolutionStartupItem (string slnPath, string relativePath)
+	{
+		var prefs = PrefsPath (slnPath);
+		System.Xml.Linq.XDocument doc;
+		if (File.Exists (prefs)) {
+			try {
+				doc = System.Xml.Linq.XDocument.Load (prefs);
+			} catch {
+				doc = new System.Xml.Linq.XDocument (new System.Xml.Linq.XElement ("Properties"));
+			}
+		} else
+			doc = new System.Xml.Linq.XDocument (new System.Xml.Linq.XElement ("Properties"));
+		var root = doc.Root!;
+		var ws = root.Element ("MonoDevelop.Ide.Workspace");
+		if (ws is null) {
+			ws = new System.Xml.Linq.XElement ("MonoDevelop.Ide.Workspace");
+			root.Add (ws);
+		}
+		var prop = ws.Elements ("Property").FirstOrDefault (p => (string?)p.Attribute ("name") == "StartupItem");
+		if (prop is null) {
+			prop = new System.Xml.Linq.XElement ("Property");
+			prop.SetAttributeValue ("name", "StartupItem");
+			ws.Add (prop);
+		}
+		prop.SetAttributeValue ("value", relativePath);
+		doc.Save (prefs);
+	}
+
+	/// <summary>Drops the persisted startup item; returns whether it existed.</summary>
+	public static bool RemoveSolutionStartupItem (string slnPath)
+	{
+		var prefs = PrefsPath (slnPath);
+		if (!File.Exists (prefs))
+			return false;
+		System.Xml.Linq.XDocument doc;
+		try {
+			doc = System.Xml.Linq.XDocument.Load (prefs);
+		} catch {
+			return false;
+		}
+		var prop = doc.Descendants ("Property")
+			.FirstOrDefault (p => (string?)p.Attribute ("name") == "StartupItem");
+		if (prop is null)
+			return false;
+		prop.Remove ();
+		doc.Save (prefs);
+		return true;
+	}
+
+	/// <summary>Run configurations of every project of the solution, in .sln
+	/// order (projects without run configurations contribute nothing).</summary>
+	public static IReadOnlyList<RunConfigurationEntry> GetSolutionRunConfigurations (string slnPath)
+	{
+		var list = new List<RunConfigurationEntry> ();
+		foreach (var proj in GetSolutionProjects (slnPath))
+			list.AddRange (GetProjectRunConfigurations (proj));
+		return list;
+	}
 }

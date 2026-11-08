@@ -269,9 +269,11 @@ public partial class MainWindow : Window
 
 		// Toolbar content mirrors the GTK MainToolbar: run button, configuration/run
 		// configuration/runtime combos and the search box on the right.
+		// Oleada 4 (slice D): the run-configuration combo starts with the legacy
+		// in-memory "Default"; opening a solution re-populates it from the
+		// startup project's real run configurations (RefreshConfigurationSelectors).
 		RunConfigCombo!.PlaceholderText = "Default";
-		foreach (var rc in new[] { "Default", "Debug", "Release" })
-			RunConfigCombo.Items.Add (rc);
+		RunConfigCombo.Items.Add ("Default");
 		// Default toolbar configs (the legacy combo shows the workspace configs when
 		// a solution opens — see RefreshConfigurationSelectors).
 		ConfigCombo!.Items.Add ("Debug");
@@ -722,6 +724,41 @@ public partial class MainWindow : Window
 					Output ("[activeconfig] after-switch=" + after + " persisted=" + File.ReadAllText (loadedSolutionPath.Substring (0, loadedSolutionPath.Length - 4) + ".userprefs").Contains ("Release") + " combo=" + (ConfigCombo?.SelectedItem as string ?? "?"));
 					OnMenuCommand ("MonoDevelop.Ide.Commands.ProjectCommands.SelectActiveConfiguration:Debug");
 					Output ("[activeconfig] restored=" + MonoDevelop.Ide.Services.ConfigurationService.GetActiveConfiguration (loadedSolutionPath));
+				}
+			} else if (qa == "--runcfg") {
+				// Oleada 4 (slice D) QA: run configurations via model — the
+				// startup project's run configs, the persisted StartupItem
+				// round-trip (set/replace/invalid-fallback/remove) on the loaded
+				// .sln userprefs.
+				if (loadedSolutionPath is null) {
+					Output ("[runcfg] no solution loaded");
+				} else {
+					int ok = 0, fail = 0;
+					void R (bool pass, string what) { if (pass) ok++; else fail++; Output ("[runcfg] " + (pass ? "ok  " : "FAIL") + " " + what); }
+					var sln = loadedSolutionPath;
+					var projs = SolutionProjects (sln);
+					R (MonoDevelop.Ide.Services.ConfigurationService.GetSolutionStartupItem (sln) is null, "initial: no StartupItem persisted");
+					var p1 = PickStartupProject (projs);
+					R (p1 is not null && p1.EndsWith ("App.csproj", StringComparison.Ordinal), "startup fallback (no persisted item) -> App: " + (p1 ?? "null"));
+					var cfgs = p1 is null ? new List<string> () : MonoDevelop.Ide.Services.ConfigurationService.GetProjectRunConfigurations (p1).Select (c => c.Name).ToList ();
+					R (cfgs.Count == 0, "plain fixture: no run configs in the model: " + string.Join (",", cfgs));
+					R (RunConfigCombo?.Items.OfType<string> ().Single () == "Default", "combo shows the legacy Default fallback: " + (RunConfigCombo?.SelectedItem as string ?? "?"));
+					// set -> resolves
+					MonoDevelop.Ide.Services.ConfigurationService.SetSolutionStartupItem (sln, "LibA/LibA.csproj");
+					R (MonoDevelop.Ide.Services.ConfigurationService.GetSolutionStartupItem (sln) == "LibA/LibA.csproj", "set: StartupItem=LibA/LibA.csproj");
+					R (PickStartupProject (SolutionProjects (sln))?.EndsWith ("LibA.csproj", StringComparison.Ordinal) == true, "pick: persisted item wins (LibA)");
+					// replace (no append)
+					MonoDevelop.Ide.Services.ConfigurationService.SetSolutionStartupItem (sln, "App/App.csproj");
+					var prefText = File.ReadAllText (sln.Substring (0, sln.Length - 4) + ".userprefs");
+					R (!prefText.Contains ("LibA/LibA.csproj") && prefText.Contains ("App/App.csproj"), "replace: single StartupItem property (no append)");
+					// invalid -> fallback
+					MonoDevelop.Ide.Services.ConfigurationService.SetSolutionStartupItem (sln, "Missing/X.csproj");
+					R (PickStartupProject (SolutionProjects (sln))?.EndsWith ("App.csproj", StringComparison.Ordinal) == true, "invalid persisted item -> fallback to App");
+					// remove
+					R (MonoDevelop.Ide.Services.ConfigurationService.RemoveSolutionStartupItem (sln), "remove: property existed");
+					R (MonoDevelop.Ide.Services.ConfigurationService.GetSolutionStartupItem (sln) is null, "remove: StartupItem gone");
+					R (!MonoDevelop.Ide.Services.ConfigurationService.RemoveSolutionStartupItem (sln), "remove again: no-op");
+					Output ("[runcfg] " + (fail == 0 ? "all pass" : "FAIL " + fail));
 				}
 			} else if (qa == "--newproject" || qa.StartsWith ("--newproject=", StringComparison.Ordinal)) {
 				// QA: New Project dialog in add-to-solution mode — creates a project
@@ -3124,23 +3161,16 @@ public partial class MainWindow : Window
 	void ShowExecutionModeSelector ()
 	{
 		var proj = ResolveActiveProject ();
-		var runConfigs = new System.Collections.Generic.List<ExecutionModeSelectorDialog.RunConfig> {
-			new () { Name = string.IsNullOrEmpty (activeConfiguration) ? "Default" : activeConfiguration },
-		};
+		// Oleada 4 (slice D): the project's real run configurations via model
+		// ($(RunConfiguration) groups in csproj + csproj.user, legacy read order);
+		// the legacy in-memory "Default" when the project defines none.
+		var runConfigs = new System.Collections.Generic.List<ExecutionModeSelectorDialog.RunConfig> ();
 		if (proj is not null) {
-			// Project configuration names straight from the csproj (Configuration|Platform
-			// property groups) — the legacy listConfigs.Fill(item.GetRunConfigurations()).
-			try {
-				var doc = System.Xml.Linq.XDocument.Load (proj);
-				foreach (var el in doc.Descendants ().Where (d => d.Name.LocalName == "PropertyGroup")) {
-					var cond = (string?)el.Attribute ("Condition");
-					var eq = cond?.IndexOf ("==", StringComparison.Ordinal) ?? -1;
-					var namePart = eq > 0 ? cond! [(eq + 2)..].Split ('|') [0].Trim ('\'', ' ') : null;
-					if (!string.IsNullOrEmpty (namePart) && runConfigs.All (r => r.Name != namePart))
-						runConfigs.Add (new () { Name = namePart });
-				}
-			} catch { }
+			foreach (var c in MonoDevelop.Ide.Services.ConfigurationService.GetProjectRunConfigurations (proj))
+				runConfigs.Add (new () { Name = c.Name });
 		}
+		if (runConfigs.Count == 0)
+			runConfigs.Add (new () { Name = "Default" });
 		var dlg = new ExecutionModeSelectorDialog ();
 		dlg.Load (
 			runConfigs,
@@ -6918,6 +6948,20 @@ public partial class MainWindow : Window
 		} finally {
 			suppressConfigSync = false;
 		}
+		// Oleada 4 (slice D): the run-configuration combo shows the startup
+		// project's real run configurations (legacy RunConfigurationComboMenu).
+		var startupProj = PickStartupProject (SolutionProjects (loadedSolutionPath));
+		var runCfgs = new List<string> ();
+		if (startupProj is not null)
+			foreach (var rc in MonoDevelop.Ide.Services.ConfigurationService.GetProjectRunConfigurations (startupProj))
+				runCfgs.Add (rc.Name);
+		if (runCfgs.Count == 0)
+			runCfgs.Add ("Default"); // legacy ImportDefaultRunConfiguration
+		var prevRunCfg = RunConfigCombo?.SelectedItem as string;
+		RunConfigCombo!.Items.Clear ();
+		foreach (var rc in runCfgs)
+			RunConfigCombo.Items.Add (rc);
+		RunConfigCombo.SelectedItem = runCfgs.Contains (prevRunCfg) ? prevRunCfg : runCfgs [0];
 		BuildMenu ();
 	}
 
@@ -9550,6 +9594,15 @@ public partial class MainWindow : Window
 	// longer pick a library as the startup project.
 	string? PickStartupProject (IReadOnlyList<string> projs)
 	{
+		// Oleada 4 (slice D): a persisted startup item (legacy Solution
+		// StartupConfiguration in the solution user file) wins when it resolves
+		// to a project of the solution; otherwise the first executable project.
+		if (!string.IsNullOrEmpty (loadedSolutionPath) &&
+			MonoDevelop.Ide.Services.ConfigurationService.GetSolutionStartupItem (loadedSolutionPath) is { } startupItem) {
+			var resolved = Path.GetFullPath (Path.Combine (Path.GetDirectoryName (loadedSolutionPath)!, startupItem.Replace ('\\', '/')));
+			if (projs.Contains (resolved, StringComparer.OrdinalIgnoreCase))
+				return resolved;
+		}
 		var exe = projs.FirstOrDefault (p =>
 			MonoDevelop.Ide.Services.ConfigurationService.LoadProjectModel (p)?.IsExecutable == true);
 		return exe ?? projs.FirstOrDefault ();
@@ -9603,8 +9656,16 @@ public partial class MainWindow : Window
 			Output ("[run] no runnable project found");
 			return;
 		}
+		// Oleada 4 (slice D): the selected run configuration (toolbar combo) —
+		// its persisted StartArguments (model) become the process arguments.
+		var runCfgName = RunConfigCombo?.SelectedItem as string is { Length: > 0 } rcn ? rcn : "Default";
+		var runCfg = MonoDevelop.Ide.Services.ConfigurationService
+			.GetProjectRunConfigurations (proj).FirstOrDefault (c => c.Name == runCfgName);
+		var runArgs = string.IsNullOrWhiteSpace (runCfg?.StartArguments) ? null : runCfg!.StartArguments;
+		var argsSuffix = runArgs is null ? "" : $" --args \"{runArgs}\"";
 		Output ("[run] startup project " + Path.GetFileName (proj)
-			+ (File.ReadAllText (proj).Contains ("<OutputType>Exe</OutputType>", StringComparison.OrdinalIgnoreCase) ? " (Exe)" : " (no OutputType=Exe)"));
+			+ (File.ReadAllText (proj).Contains ("<OutputType>Exe</OutputType>", StringComparison.OrdinalIgnoreCase) ? " (Exe)" : " (no OutputType=Exe)")
+			+ " runcfg=" + runCfgName);
 		var runConfig = !string.IsNullOrEmpty (loadedSolutionPath) && File.Exists (loadedSolutionPath)
 			? MonoDevelop.Ide.Services.ConfigurationService.GetActiveConfiguration (loadedSolutionPath)
 			: activeConfiguration;
@@ -9618,7 +9679,7 @@ public partial class MainWindow : Window
 				await RunBuildAsync (rebuild: false);
 				var dllM = Path.Combine (Path.GetDirectoryName (proj)!, "bin", runConfig, "net10.0", Path.GetFileNameWithoutExtension (proj) + ".dll");
 				if (File.Exists (dllM)) {
-					await RunProcessAsync ("mono", $"\"{dllM}\"");
+					await RunProcessAsync ("mono", $"\"{dllM}\"" + (runArgs is null ? "" : " " + runArgs));
 					return;
 				}
 				Output ("[run] mono: built dll not found, falling back to dotnet run");
@@ -9627,7 +9688,7 @@ public partial class MainWindow : Window
 				try {
 					System.Diagnostics.Process.Start (new System.Diagnostics.ProcessStartInfo {
 						FileName = "xterm",
-						Arguments = $"-e dotnet run -c \"{runConfig}\" --project \"{proj}\"",
+						Arguments = $"-e dotnet run -c \"{runConfig}\" --project \"{proj}\"{argsSuffix}",
 						UseShellExecute = false,
 					});
 					return;
@@ -9635,8 +9696,8 @@ public partial class MainWindow : Window
 					Output ("[run] xterm not available (" + ex.Message + "), running inline");
 				}
 			}
-			Output ($"[run] dotnet run -c {runConfig} — " + Path.GetFileName (proj));
-			await RunProcessAsync ("dotnet", $"run -c \"{runConfig}\" --project \"{proj}\"");
+			Output ($"[run] dotnet run -c {runConfig} runcfg={runCfgName} — " + Path.GetFileName (proj));
+			await RunProcessAsync ("dotnet", $"run -c \"{runConfig}\" --project \"{proj}\"{argsSuffix}");
 			return;
 		}
 		// Legacy DebugHandler.Debug: build first, then launch under the debugger with
