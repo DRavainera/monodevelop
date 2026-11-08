@@ -1093,6 +1093,47 @@ El bucle de migración Gtk → Avalonia continúa por módulos (detalle por hito
         0 errores). Detalle en `docs/interfaz-plan.md` (follow-up "Oleada
         4 — Slice D") y `docs/session_summary.md` (2026-11-08 (19)).
 
+    - **Oleada 4 (build vía modelo de configuraciones, Slice E) de la
+        integración total del backend (2026-11-08)**: cierre del item (4)
+        de la lista pendiente de la Oleada 4. El build de la shell Avalonia
+        consume ahora el mapeo solución→proyecto de configuraciones (sección
+        `ProjectConfigurationPlatforms` del .sln) en vez de pasar la
+        configuración de solución cruda a todos los proyectos: nuevo
+        `GetProjectConfigurationFor` en `ConfigurationService` (coda del
+        archivo, sin ficheros nuevos) que lee **solo**
+        `"{guid}.{slnCfg}|{slnPlat}.ActiveCfg"` del set del proyecto
+        (`Build.0` se ignora — decide SI se builda, no CON QUÉ
+        configuración), match case-insensitive (nombre simple o clave
+        completa), valor sin `|` → "Any CPU", GUID normalizado
+        (braces/espacios/case) y fallback `(solutionConfig, "Any CPU")`
+        **sin throw** (sln ausente/corrupto, proyecto no listado, sin
+        entrada). La shell `RunBuildAsync` builda cada proyecto con la
+        configuración **mapeada**: `dotnet <target> -c "<mapped>"` +
+        `-p:Platform="<plat>"` solo si no es AnyCPU (fixture plano →
+        comandos byte-idénticos al pre-E), línea `[build] project <X>
+        cfg=.. plat=..` + `[build] <t> done failed=<bool>`; driver QA
+        `--buildmap` + allow-list. **Invariantes**: 0 errores en net10.0,
+        net10.0-windows **y el build legacy** `MonoDevelop.Ide.csproj`
+        (los ficheros del diff no entran en el csproj legacy —
+        `ConfigurationService.cs` solo lo compila el csproj Avalonia vía el
+        glob `Services/**`); catálogo `Count=461 LoadedCommands=475
+        ResolvedHandlers=111`; menudump `menus=11 items=225 cmds=0`; oracle
+        sección nueva **`oleada4e 13/13`** + todas las anteriores intactas
+        (`oleada3 51`, `oleada3dyn 19`, `oleada3tools 5`, `oleada3nav 29`,
+        `oleada4 18`, `oleada4d 21`, `oleada4s2 35`); E2E nuevo
+        `~/opencode/oleada4_sliceE_e2e.sh` **ALL_PASS** (buildplain 3x
+        `cfg=Debug` + buildmap con **LibA en Release** vía el mapeo del
+        .sln, `failed=False`, 3x exit 0 por caso; parches
+        `A.cs`/`Program.cs` solo en la copia — el fixture tiene bugs de
+        compilación preexistentes independientes del slice, documentados);
+        regresión slice D **ALL_PASS**; `--cmdstates` **SLICEA_ALL_PASS**;
+        smoke OK; fixture real intacto. QA §18.5 (1 ronda; brief+reporte en
+        `~/opencode/oleada4_sliceE_qa/`): **APROBADO**, 0 hallazgos P1–P4 y
+        0 P5. Sin cambios en submódulos; la ruta `--old-gui` no se toca.
+        Detalle en `docs/interfaz-plan.md` (follow-up "Oleada 4 — Slice E")
+        y `docs/session_summary.md` (2026-11-08 (20)).
+
+
 Nota operativa: el árbol de build único es `main/build/` (cualquier otra dirección de build en la documentación es obsoleta). El binario de la UI Avalonia es `main/build/MonoDevelop.AvaloniaShell.dll` y el IDE GTK legacy (`--old-gui`) es `main/build/MonoDevelop.dll`.
 
 ## 9. Conclusión
