@@ -1134,6 +1134,48 @@ El bucle de migración Gtk → Avalonia continúa por módulos (detalle por hito
         y `docs/session_summary.md` (2026-11-08 (20)).
 
 
+    - **Oleada 4 (Add Reference vía modelo, Slice F) de la
+        integración total del backend (2026-11-08)**: cierre del último
+        item de la Oleada 4. El diálogo Add Reference pasa al modelo de
+        proyecto de `ConfigurationService`: nueva propiedad
+        `ProjectFileModel.References` (`IReadOnlyList<ReferenceItem>` —
+        los tres tipos editables PackageReference/ProjectReference/
+        Reference en orden de documento con **Include RAW**, nunca
+        resuelto) + `record ReferenceItem(Kind, Include, Version?,
+        HintPath?)` + writer `SaveProjectReferences(csproj, refs)`
+        (semántica del save legacy de ReferenceInformations: borra los
+        items de los 3 tipos — el ItemGroup solo si queda vacío **y** sin
+        atributos, FrameworkReference/PropertyGroups intactos — y añade
+        un ItemGroup con el set; save fiel al formato: detecta BOM/
+        declaración XML/newlines del original; corrupto/ausente → false
+        **sin throw** y sin tocar el fichero, política slice D).
+        `AddReferenceDialog`: `LoadProject` vía `LoadProjectModel`,
+        pestaña Projects con los proyectos de la **solución** vía
+        `GetSolutionProjects` (fallback disk scan solo sin solución),
+        `Apply` vía `SaveProjectReferences`, y nuevos públicos
+        `TryAddProjectReference` (include relativo) /
+        `TryRemoveReference`. Driver QA `--addref` ampliado (model-check
+        + ciclo package/project add/remove; `ADDFR_QA_KEEP=1` salta
+        removals; programa el **primer proyecto de la solución** —
+        determinista — en vez del activo). **Invariantes**: 0 errores en
+        net10.0, net10.0-windows **y el build legacy**
+        `MonoDevelop.Ide.csproj`; catálogo `Count=461
+        LoadedCommands=475 ResolvedHandlers=111`; menudump `menus=11
+        items=225 cmds=0`; oracle sección nueva **`oleada4f 14/14`** +
+        todas las anteriores intactas; E2E nuevo
+        `~/opencode/oleada4_sliceF_e2e.sh` **ALL_PASS** (addrefpkg: ciclo
+        completo vía modelo + copia limpia; addrefproj: referencia a LibB
+        persistente + `dotnet build App` exit 0; fixture real intacto);
+        regresión slice E **ALL_PASS**; slice D **ALL_PASS**;
+        `--cmdstates` **SLICEA_ALL_PASS**; smoke OK. QA §18.5 (1 ronda en dos
+        fases — la primera murió por SIGKILL del cliente tras builds+
+        oracle, patrón conocido; la continuación completó la batería y el
+        reporte; brief+reporte en `~/opencode/oleada4_sliceF_qa/`):
+        **APROBADO**, 0 hallazgos P1–P4 y 0 P5. Sin cambios en submódulos; la ruta
+        `--old-gui` no se toca. Detalle en `docs/interfaz-plan.md`
+        (follow-up "Oleada 4 — Slice F") y `docs/session_summary.md`
+        (2026-11-08 (21)).
+
 Nota operativa: el árbol de build único es `main/build/` (cualquier otra dirección de build en la documentación es obsoleta). El binario de la UI Avalonia es `main/build/MonoDevelop.AvaloniaShell.dll` y el IDE GTK legacy (`--old-gui`) es `main/build/MonoDevelop.dll`.
 
 ## 9. Conclusión
