@@ -4223,3 +4223,24 @@ Commits de código (3 ficheros) + docs pushados a `origin/agents/sub-agent-senio
 ### Cierre
 
 Commits de código (3 ficheros) + docs pushados a `origin/agents/sub-agent-senior-dev-role-report`. Sin cambios en submódulos. La ruta `--old-gui` no se toca (build legacy 0 errores + los ficheros no se compilan en el csproj legacy).
+
+## 2026-11-08 (22) — Oleada 5: Slice A (re-scopeado) — NuGet 7.9.0 en la shell Avalonia
+
+**Estado: CERRADO (QA APROBADO).** El operador decidió que **los addins GTK no se tocan** (congelados pre-oleadas; la shell Avalonia usa sus propios addins) y ordenó reverter todos los cambios de oleadas/slices en `main/src/addins/` antes de continuar.
+
+**Revert (verificado)**: las oleadas 1–4 NO tocaron nada bajo `main/src/addins/` (su diff = core `MonoDevelop.Ide/**`, `MonoDevelop.Startup.Avalonia/**`, submódulo `xwt`, docs) — lo único que existía eran los cambios no commiteados del Slice A original (bump del property `$(NuGetVersionNuGet)` 6.11.2→7.9.0 + 5 ficheros del addin PackageManagement + el borrado de `MonoDevelopPluginFactory.cs`). `git restore main/Directory.Build.props main/src/addins/MonoDevelop.PackageManagement/` → árbol limpio (0 ficheros; `NuGetVersionNuGet` de vuelta a 6.11.2). Builds de verificación del revert: addin 0 errores (37 s), legacy 0 errores, shell net10.0 0 errores (`~/opencode/oleada5_revert_builds.log`). El submódulo `main/external/xwt` (puntero cambiado en Oleada 3 Slice 8) NO es un addin: no revertido, señalado al operador.
+
+**Re-scope del item 15**: 7.9.0 SOLO en el lado Avalonia. Consumo NuGet actual del lado Avalonia: el panel **NuGet > Sources** de Preferences (backend `NuGet.Configuration`/`NuGet.Common`; `using` en `Views/MainWindow.axaml.cs`, `Views/PreferencesDialog.axaml.cs`, `Views/AddReferenceDialog.axaml.cs`).
+
+**Cambio** (1 fichero, sin submódulos, addins intactos):
+1. `main/src/core/MonoDevelop.Startup.Avalonia/MonoDevelop.Startup.Avalonia.csproj` — `PackageReference NuGet.Configuration` de `$(NuGetVersionNuGet)` (6.11.2) a **`7.9.0` explícito** con comentario (el property compartido NO se toca: lo usan los addins GTK congelados). La shell es el único consumidor 7.9.0 y stagea su propio closure en la raíz de `main/build/`.
+
+**Coexistencia 6.11.2/7.9.0 en el staging unificado (resuelto, sin staging por modo ni ALC)**: el closure 6.11.2 del addin PackageManagement vive en `main/build/AddIns/MonoDevelop.PackageManagement/` (14 DLLs NuGet.* junto con el addin; staging `IncludeCopyLocal` del csproj del addin), NO en la raíz; la raíz solo lleva las 3 DLLs del closure de la shell (hoy 7.9.0). El relay `--old-gui` es un proceso hijo (`dotnet main/build/MonoDevelop.dll` + `MONODEVELOP_LEGACY_UI=1`, `Program.cs:LaunchLegacyGtk`) y en `/proc/<pid>/maps` del legacy **todas** las NuGet.* mapeadas vienen de `AddIns/…` (6.11.2) — ninguna de la raíz: el loader de Mono.Addins resuelve dependencias de cada addin desde su propio directorio. Cada proceso resuelve su closure de su sitio → sin colisión de nombre simple en runtime, sin cruce de tipos entre versiones.
+
+**Verificación (valores medidos)**: 0 errores en shell `net10.0` (12 s) + `net10.0-windows` (10 s) + addin PackageManagement (sin `-f`) + legacy `MonoDevelop.Ide.csproj` (`~/opencode/oleada5_pin79_builds.log` + `~/opencode/oleada5_sliceA_qa/qa_build_*.log`); staged `main/build/NuGet.Configuration.dll` sha256 `6566f9cc2a6db205…` = paquete 7.9.0 `lib/net8.0` exacto (assembly version 7.9.0.83); smoke `--prefs=packagesources` → `[prefs-sources] count=1` + `[prefs-nuget] restore=True updates=True`, 0 FATAL/Unhandled (el panel lee las sources vía **7.9.0 a runtime**); smoke `--prefs-tree` 0 FATAL/Unhandled (árbol completo); menudump `menus=11 items=225 cmds=0 bindings=199`; catálogo `catalog loaded: 475 commands, 111 with resolvable default handler`; `git status` = solo el csproj modificado; maps legacy = solo 6.11.2 desde `AddIns/` (el QA lo reprodujo lanzando el relay por sí mismo). Known issue preexistente (no del change): el runtime legacy no abre ventana en esta máquina (~10 min, muere solo; verificado antes y después del pin; las oleadas 1–4 verifican legacy solo por compilación).
+
+**QA §18.5** (subagente Tester QA Senior, 1 ronda; brief+reporte en `~/opencode/oleada5_sliceA_qa/`): **APROBADO**, 0 hallazgos P1–P4; 1 P5 opcional no bloqueante: `Fixture.userprefs` se genera/reescribe como side-effect al abrir la solución en los smokes (el `.sln` queda intacto; sugerencia: aislar el userprefs fuera del fixture).
+
+### Cierre
+
+Commits de código (1 fichero) + docs pushados a `origin/agents/sub-agent-senior-dev-role-report`. Sin cambios en submódulos. Los addins GTK quedan congelados en 6.11.2 (0 ficheros tocados bajo `main/src/addins/`); la ruta `--old-gui` no se ve afectada (build legacy 0 errores + maps sin NuGet 7.9.0). Queda pendiente en la Oleada 5 el Slice B (gate M6 — compila completo con builder del SDK 10 real, sin bloqueos; item 14 del checklist de Extras).

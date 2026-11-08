@@ -1176,6 +1176,45 @@ El bucle de migración Gtk → Avalonia continúa por módulos (detalle por hito
         (follow-up "Oleada 4 — Slice F") y `docs/session_summary.md`
         (2026-11-08 (21)).
 
+    - **Oleada 5 (Slice A, re-scopeado) de la migración (2026-11-08)**:
+        decisión del operador — **los addins GTK no se tocan** (congelados
+        pre-oleadas; la shell Avalonia usa sus propios addins) — y revert de
+        todo cambio de oleadas/slices en `main/src/addins/`. Verificado: las
+        oleadas 1–4 no tocaron nada bajo `main/src/addins/` (su diff = core
+        `MonoDevelop.Ide/**`, `MonoDevelop.Startup.Avalonia/**`, submódulo
+        `xwt`, docs); lo reversionado fue solo el trabajo no commiteado del
+        Slice A original (property `$(NuGetVersionNuGet)` 6.11.2→7.9.0 + 5
+        ficheros del addin PackageManagement + `MonoDevelopPluginFactory.cs`)
+        vía `git restore` (árbol limpio; `~/opencode/oleada5_revert_builds.log`).
+        Re-scope del item 15 del checklist de Extras: **7.9.0 solo en el lado
+        Avalonia**, cuyo único consumo NuGet hoy es el panel NuGet > Sources
+        (backend `NuGet.Configuration`). Cambio: 1 fichero —
+        `MonoDevelop.Startup.Avalonia.csproj` pin **explícito**
+        `NuGet.Configuration 7.9.0` (el property compartido queda en 6.11.2
+        para los addins congelados). Coexistencia 6.11.2/7.9.0 en el staging
+        unificado resuelta por la estructura real: el closure 6.11.2 del addin
+        vive en `main/build/AddIns/MonoDevelop.PackageManagement/` (junto con
+        el addin) y la raíz de `main/build/` solo lleva el closure de la shell
+        (hoy 7.9.0); verificado en `/proc/<pid>/maps` del proceso legacy
+        (relay `--old-gui` = hijo `dotnet MonoDevelop.dll`): **todas** las
+        `NuGet.*` mapeadas del legacy vienen de `AddIns/…` (6.11.2), ninguna
+        de la raíz — no hay colisión en runtime y no hace falta staging por
+        modo ni ALC. **Invariantes**: 0 errores en net10.0, net10.0-windows,
+        addin PackageManagement (sin `-f`) **y legacy** `MonoDevelop.Ide.csproj`;
+        staged `NuGet.Configuration.dll` = hash del 7.9.0 `net8.0` exacto
+        (6566f9cc2a6db205, av. 7.9.0.83); smoke `--prefs=packagesources`
+        `[prefs-sources] count=1` (backend 7.9.0 a runtime), 0 FATAL/Unhandled;
+        menudump `menus=11 items=225 cmds=0`; catálogo 475/111; `git status`
+        = solo el csproj. Known issue preexistente (no del change): el runtime
+        legacy no abre ventana en esta máquina (~10 min, muere solo; las
+        oleadas 1–4 verifican legacy por compilación). QA §18.5 (1 ronda;
+        brief+reporte en `~/opencode/oleada5_sliceA_qa/`): **APROBADO**, 0
+        hallazgos P1–P4, 1 P5 opcional (side-effect `Fixture.userprefs` al
+        abrir la solución — `.sln` intacto). Pendiente de la Oleada 5:
+        Slice B (gate M6 — compila completo con builder del SDK 10 real).
+        Detalle en `docs/interfaz-plan.md` (follow-up "Oleada 5 — Slice A",
+        2026-11-08) y `docs/session_summary.md` (2026-11-08 (22)).
+
 Nota operativa: el árbol de build único es `main/build/` (cualquier otra dirección de build en la documentación es obsoleta). El binario de la UI Avalonia es `main/build/MonoDevelop.AvaloniaShell.dll` y el IDE GTK legacy (`--old-gui`) es `main/build/MonoDevelop.dll`.
 
 ## 9. Conclusión
