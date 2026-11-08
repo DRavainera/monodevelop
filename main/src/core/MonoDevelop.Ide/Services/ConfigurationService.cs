@@ -397,6 +397,12 @@ public static class ConfigurationService
 		/// <summary>ProjectReference: ruta absoluta si el fichero existe, si no
 		/// el valor de Include literal.</summary>
 		public IReadOnlyList<string> ProjectReferences { get; }
+		/// <summary>Oleada 4 (slice F): reference items editables (los tres
+		/// tipos que edita el diálogo Add Reference) en orden de documento,
+		/// con el Include RAW (un ProjectReference conserva su include
+		/// relativo, nunca resuelto). Distinto de las listas resueltas que
+		/// consume el árbol de dependencias.</summary>
+		public IReadOnlyList<ReferenceItem> References { get; }
 		/// <summary>Conteo de items DECLARADOS en el fichero (no evaluados por
 		/// MSBuild): Compile/None/Content/EmbeddedResource, solo los > 0.</summary>
 		public IReadOnlyDictionary<string, int> ItemCounts { get; }
@@ -405,7 +411,8 @@ public static class ConfigurationService
 			IReadOnlyList<string> targetFrameworks, string? outputPath, string? baseOutputPath,
 			IReadOnlyList<string> configurations, IReadOnlyList<string> frameworkRefs,
 			IReadOnlyList<string> packageRefs, IReadOnlyList<string> assemblyRefs,
-			IReadOnlyList<string> projectRefs, IReadOnlyDictionary<string, int> itemCounts)
+			IReadOnlyList<string> projectRefs, IReadOnlyList<ReferenceItem> references,
+			IReadOnlyDictionary<string, int> itemCounts)
 		{
 			Path = path;
 			Name = name;
@@ -418,8 +425,85 @@ public static class ConfigurationService
 			PackageReferences = packageRefs;
 			AssemblyReferences = assemblyRefs;
 			ProjectReferences = projectRefs;
+			References = references;
 			ItemCounts = itemCounts;
 		}
+	}
+
+	/// <summary>Oleada 4 (slice F): one editable reference item (the three
+	/// kinds the legacy Add Reference dialog edits). <see cref="Include"/> is
+	/// the RAW value declared in the file (a ProjectReference keeps its
+	/// relative include, never resolved); <see cref="Version"/> only applies
+	/// to PackageReference; <see cref="HintPath"/> only to Reference
+	/// (display — the save does not write it, like the legacy rewrite).</summary>
+	public sealed record ReferenceItem (string Kind, string Include, string? Version = null, string? HintPath = null);
+
+	/// <summary>Oleada 4 (slice F): rewrites the project's editable reference
+	/// items (PackageReference / ProjectReference / Reference) exactly as the
+	/// legacy ReferenceInformations save: every item of the three kinds is
+	/// removed (an ItemGroup is dropped only when it becomes empty AND keeps
+	/// no attributes — a group with other items, e.g. FrameworkReference,
+	/// survives) and one ItemGroup with the new set, in the given order, is
+	/// appended to the root. The rest of the file is untouched; the document
+	/// keeps its detected settings on save (no BOM / LF on the fixture).
+	/// Returns false without touching the file when it cannot be loaded or
+	/// saved (slice D policy: corrupt contributes nothing, never throws).</summary>
+	public static bool SaveProjectReferences (string csprojPath, IReadOnlyList<ReferenceItem> refs)
+	{
+		System.Xml.Linq.XDocument doc;
+		try {
+			doc = System.Xml.Linq.XDocument.Load (csprojPath);
+		} catch {
+			return false;
+		}
+		var root = doc.Root;
+		if (root is null)
+			return false;
+		var ns = root.Name.Namespace;
+		foreach (var el in doc.Descendants ()
+			.Where (e => e.Name.LocalName is "PackageReference" or "Reference" or "ProjectReference")
+			.ToList ()) {
+			var parent = el.Parent;
+			el.Remove ();
+			if (parent is not null && parent.Name.LocalName == "ItemGroup" && !parent.Nodes ().Any () && !parent.HasAttributes)
+				parent.Remove ();
+		}
+		if (refs.Count > 0) {
+			var itemGroup = new System.Xml.Linq.XElement (ns + "ItemGroup");
+			foreach (var r in refs) {
+				var attrs = new List<System.Xml.Linq.XAttribute> { new ("Include", r.Include) };
+				if (r.Version is not null)
+					attrs.Add (new ("Version", r.Version));
+				itemGroup.Add (new System.Xml.Linq.XElement (ns + r.Kind, attrs.ToArray ()));
+			}
+			root.Add (itemGroup);
+		}
+		// Save with the file's detected format (BOM / XML declaration /
+		// newlines), not the XmlWriter defaults: doc.Save(path) would add a
+		// UTF-8 BOM and an <?xml ...?> declaration the fixture does not have.
+		byte [] orig;
+		try {
+			orig = File.ReadAllBytes (csprojPath);
+		} catch {
+			return false;
+		}
+		bool bom = orig.Length >= 3 && orig [0] == 0xEF && orig [1] == 0xBB && orig [2] == 0xBF;
+		var head = System.Text.Encoding.UTF8.GetString (orig, bom ? 3 : 0, Math.Min (orig.Length - (bom ? 3 : 0), 200));
+		bool decl = head.StartsWith ("<?xml", StringComparison.Ordinal);
+		string newlines = Array.IndexOf (orig, (byte)'\r') >= 0 ? "\r\n" : "\n";
+		try {
+			using (var stream = new FileStream (csprojPath, FileMode.Create, FileAccess.Write))
+			using (var writer = System.Xml.XmlWriter.Create (stream, new System.Xml.XmlWriterSettings {
+				Encoding = new System.Text.UTF8Encoding (bom),
+				OmitXmlDeclaration = !decl,
+				Indent = false,
+				NewLineChars = newlines
+			}))
+				doc.Save (writer);
+		} catch {
+			return false;
+		}
+		return true;
 	}
 
 	// Model cache keyed by full path + last-write time: the pad loads every
@@ -534,6 +618,33 @@ public static class ConfigurationService
 			?? FirstValue (root, ns, "RootNamespace")
 			?? Path.GetFileNameWithoutExtension (full);
 
+		// Oleada 4 (slice F): the three item kinds the Add Reference dialog
+		// edits, in document order, raw Include (ProjectReference keeps its
+		// relative include); Version/HintPath kept for the dialog display.
+		var references = new List<ReferenceItem> ();
+		foreach (var el in root.Descendants ()) {
+			string kind;
+			switch (el.Name.LocalName) {
+			case "PackageReference":
+				kind = "PackageReference";
+				break;
+			case "ProjectReference":
+				kind = "ProjectReference";
+				break;
+			case "Reference":
+				kind = "Reference";
+				break;
+			default:
+				continue;
+			}
+			var inc = (string?)el.Attribute ("Include");
+			if (string.IsNullOrWhiteSpace (inc))
+				continue;
+			references.Add (new ReferenceItem (kind, inc.Trim (),
+				(string?)el.Attribute ("Version"),
+				(string?)el.Element (ns + "HintPath")?.Value));
+		}
+
 		return new ProjectFileModel (
 			path: full,
 			name: name,
@@ -546,6 +657,7 @@ public static class ConfigurationService
 			packageRefs: ItemIncludes ("PackageReference"),
 			assemblyRefs: ItemIncludes ("Reference"),
 			projectRefs: projRefs,
+			references: references,
 			itemCounts: itemCounts);
 	}
 

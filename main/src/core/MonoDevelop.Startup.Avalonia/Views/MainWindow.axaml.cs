@@ -2872,20 +2872,57 @@ public partial class MainWindow : Window
 					}, Avalonia.Threading.DispatcherPriority.Background);
 				}, Avalonia.Threading.DispatcherPriority.Background);
 			} else if (qa == "--addref") {
-				// QA: exercise AddReference against the real csproj.
-				var proj = ResolveActiveProject ();
+				// QA: exercise AddReference through the project model (Oleada 4
+				// slice F): model check + package add/remove cycle + project
+				// add/remove, all through ConfigurationService.
+				// ADDREF_QA_KEEP=1 skips the removals (leaves the project
+				// reference in place for the E2E build case).
+				// Deterministic target: the FIRST solution project (App in the
+				// fixture); the active project depends on pad state.
+				var proj = loadedSolutionPath.Length > 0
+					? ConfigurationService.GetSolutionProjects (loadedSolutionPath).FirstOrDefault ()
+					: null;
+				if (string.IsNullOrEmpty (proj))
+					proj = ResolveActiveProject ();
 				if (proj is not null) {
+					bool keep = Environment.GetEnvironmentVariable ("ADDFR_QA_KEEP") == "1";
+					var model = ConfigurationService.LoadProjectModel (proj);
+					Output ($"[addref-qa] model {Path.GetFileNameWithoutExtension (proj)} refs={model?.References.Count ?? 0} " +
+						$"project={model?.ProjectReferences.Count ?? 0} package={model?.PackageReferences.Count ?? 0} asm={model?.AssemblyReferences.Count ?? 0}");
+					foreach (var ri in model?.References ?? Array.Empty<ConfigurationService.ReferenceItem> ())
+						Output ($"[addref-qa] model ref {ri.Kind} {ri.Include}");
 					var dlg = new AddReferenceDialog (proj, loadedSolutionPath);
-					// Deterministic QA path: add a known reference programmatically.
-					bool ok = dlg.TryAddReference ("System.Json");
-				Output ($"[addref-qa] TryAddReference(System.Json) → {ok}");
-				var text = File.ReadAllText (proj);
-				Output ($"[addref-qa] csproj contains reference: {text.Contains ("System.Json")}");
-					// Revert so the project stays clean.
-					var clean = System.Text.RegularExpressions.Regex.Replace (
-						text, "\\s*<Reference Include=\"System.Json\" />", "");
-					File.WriteAllText (proj, clean);
-					Output ("[addref-qa] csproj reverted");
+					if (!keep) {
+						// Deterministic QA path: add a known package reference.
+						bool ok = dlg.TryAddReference ("System.Json");
+						Output ($"[addref-qa] TryAddReference(System.Json) → {ok}");
+						var text = File.ReadAllText (proj);
+						Output ($"[addref-qa] csproj contains reference: {text.Contains ("System.Json")}");
+						bool rm = dlg.TryRemoveReference ("System.Json");
+						Output ($"[addref-qa] TryRemoveReference(System.Json) → {rm}");
+						ConfigurationService.ClearProjectModelCache ();
+						var m2 = ConfigurationService.LoadProjectModel (proj);
+						Output ($"[addref-qa] model after-remove refs={m2?.References.Count ?? 0}");
+					}
+					var libB = Path.Combine (Path.GetDirectoryName (loadedSolutionPath) ?? "", "LibB", "LibB.csproj");
+					if (!File.Exists (libB)) {
+						Output ("[addref-qa] no LibB sibling");
+					} else {
+						bool okp = dlg.TryAddProjectReference (libB);
+						Output ($"[addref-qa] TryAddProjectReference(LibB) → {okp}");
+						var text2 = File.ReadAllText (proj);
+						Output ($"[addref-qa] csproj contains projectref: {text2.Contains ("LibB.csproj")}");
+						ConfigurationService.ClearProjectModelCache ();
+						var m3 = ConfigurationService.LoadProjectModel (proj);
+						Output ($"[addref-qa] model after-add refs={m3?.References.Count ?? 0} project={m3?.ProjectReferences.Count ?? 0}");
+						if (!keep) {
+							bool rmp = dlg.TryRemoveReference ("LibB");
+							Output ($"[addref-qa] TryRemoveReference(LibB) → {rmp}");
+							ConfigurationService.ClearProjectModelCache ();
+							var m4 = ConfigurationService.LoadProjectModel (proj);
+							Output ($"[addref-qa] model after-clean refs={m4?.References.Count ?? 0}");
+						}
+					}
 				} else
 					Output ("[addref-qa] no project");
 			} else if (qa == "--addrefdlg") {

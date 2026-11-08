@@ -159,26 +159,30 @@ public class AddReferenceDialog : DialogWindow
 	void LoadProject ()
 	{
 		refs.Clear ();
-		try {
-			var doc = XDocument.Load (projectPath);
-			var ns = doc.Root?.Name.Namespace ?? XNamespace.None;
-			foreach (var pr in doc.Descendants (ns + "PackageReference")) {
-				var inc = pr.Attribute ("Include")?.Value ?? pr.Attribute ("Update")?.Value ?? "";
-				if (inc.Length > 0)
-					refs.Add (new RefRow { Name = inc.Split (',') [0], Secondary = pr.Attribute ("Version")?.Value ?? "", Type = "Package", Kind = "PackageReference", Raw = inc });
+		// Oleada 4 (slice F): the references come from the project model
+		// (ConfigurationService, slice 2) — the same source the pad and
+		// Build/Run consume — instead of a private XDocument scan. Items
+		// with only an Update attribute do not enter the model (the shell's
+		// fixtures and flow do not use them).
+		var model = ConfigurationService.LoadProjectModel (projectPath);
+		if (model is not null) {
+			foreach (var ri in model.References) {
+				switch (ri.Kind) {
+				case "PackageReference":
+					refs.Add (new RefRow { Name = ri.Include.Split (',') [0], Secondary = ri.Version ?? "", Type = "Package", Kind = "PackageReference", Raw = ri.Include });
+					break;
+				case "ProjectReference":
+					refs.Add (new RefRow { Name = Path.GetFileNameWithoutExtension (ri.Include.Replace ('\\', Path.DirectorySeparatorChar)), Secondary = ri.Include, Type = "Project", Kind = "ProjectReference", Raw = ri.Include });
+					break;
+				default:
+					refs.Add (new RefRow { Name = ri.Include.Split (',') [0], Secondary = ri.HintPath ?? "", Type = "Assembly", Kind = "Reference", Raw = ri.Include });
+					break;
+				}
 			}
-			foreach (var r in doc.Descendants (ns + "Reference")) {
-				var inc = r.Attribute ("Include")?.Value ?? "";
-				if (inc.Length > 0)
-					refs.Add (new RefRow { Name = inc.Split (',') [0], Secondary = r.Element (ns + "HintPath")?.Value ?? "", Type = "Assembly", Kind = "Reference", Raw = inc });
-			}
-			foreach (var pr in doc.Descendants (ns + "ProjectReference")) {
-				var inc = pr.Attribute ("Include")?.Value ?? "";
-				if (inc.Length > 0)
-					refs.Add (new RefRow { Name = Path.GetFileNameWithoutExtension (inc), Secondary = inc, Type = "Project", Kind = "ProjectReference", Raw = inc });
-			}
-		} catch (Exception ex) {
-			Console.WriteLine ("[addref] load error: " + ex.Message);
+		} else if (File.Exists (projectPath)) {
+			// Model null with the file present: unparseable csproj — legacy
+			// tolerance (dialog lists nothing, like the broken pad node).
+			Console.WriteLine ("[addref] load error: unparseable csproj");
 		}
 		RefreshRefs ();
 		DiscoverCandidates ();
@@ -197,11 +201,18 @@ public class AddReferenceDialog : DialogWindow
 			candidateKind [p] = "PackageReference";
 		}
 
-		// Projects: siblings under the solution directory (legacy ProjectReferencePanel).
+		// Projects: the SOLUTION's projects (legacy ProjectReferencePanel lists
+		// the solution, not the disk) via the sln model (slice 1); the disk
+		// scan stays only for a standalone project without a solution.
 		var dir = Path.GetDirectoryName (projectPath) ?? "";
 		var slnDir = solutionPath.Length > 0 ? Path.GetDirectoryName (solutionPath) ?? dir : dir;
+		List<string> solutionProjects = new ();
+		if (solutionPath.Length > 0)
+			solutionProjects = ConfigurationService.GetSolutionProjects (solutionPath);
 		try {
-			foreach (var csproj in Directory.EnumerateFiles (slnDir, "*.csproj", SearchOption.AllDirectories)) {
+			var sources = solutionPath.Length > 0 ? solutionProjects :
+				Directory.EnumerateFiles (slnDir, "*.csproj", SearchOption.AllDirectories).ToList ();
+			foreach (var csproj in sources) {
 				if (!string.Equals (csproj, projectPath, StringComparison.OrdinalIgnoreCase)) {
 					var name = Path.GetFileNameWithoutExtension (csproj);
 					if (!candidateNames.Contains (name)) {
@@ -372,53 +383,68 @@ public class AddReferenceDialog : DialogWindow
 		return Apply ();
 	}
 
-	/// <summary>OK: rewrite the csproj reference items (keep everything else intact).</summary>
+	/// <summary>OK: rewrite the csproj reference items via the model writer
+	/// (Oleada 4 slice F; legacy ReferenceInformations semantics, everything
+	/// else kept intact).</summary>
 	bool Apply ()
 	{
+		var items = refs.OrderBy (r => r.Name, StringComparer.OrdinalIgnoreCase)
+			.Select (r => new ConfigurationService.ReferenceItem (
+				r.Kind,
+				r.Raw,
+				r.Kind == "PackageReference" && r.Secondary.Length > 0 ? r.Secondary : null,
+				null))
+			.ToList ();
+		bool ok;
 		try {
-			var doc = XDocument.Load (projectPath);
-			var ns = doc.Root?.Name.Namespace ?? XNamespace.None;
-
-			// Remove existing reference items (with their now-empty ItemGroups), then
-			// append one ItemGroup with the new set (legacy ReferenceInformations is
-			// saved wholesale).
-			var toRemove = doc.Descendants ()
-				.Where (e => e.Name.LocalName is "PackageReference" or "Reference" or "ProjectReference")
-				.ToList ();
-			foreach (var e in toRemove) {
-				var parent = e.Parent;
-				e.Remove ();
-				if (parent is not null && parent.Name.LocalName == "ItemGroup" && !parent.Nodes ().Any () && !parent.HasAttributes)
-					parent.Remove ();
-			}
-
-			var itemGroup = new XElement (ns + "ItemGroup");
-			bool any = false;
-			foreach (var r in refs.OrderBy (r => r.Name, StringComparer.OrdinalIgnoreCase)) {
-				switch (r.Kind) {
-					case "PackageReference":
-						itemGroup.Add (new XElement (ns + "PackageReference",
-							new XAttribute ("Include", r.Name),
-							r.Secondary.Length > 0 ? new XAttribute ("Version", r.Secondary) : null));
-						break;
-					case "ProjectReference":
-						itemGroup.Add (new XElement (ns + "ProjectReference", new XAttribute ("Include", r.Raw)));
-						break;
-					default:
-						itemGroup.Add (new XElement (ns + "Reference", new XAttribute ("Include", r.Raw)));
-						break;
-				}
-				any = true;
-			}
-			if (any)
-				doc.Root!.Add (itemGroup);
-			doc.Save (projectPath);
-			Close ();
-			return true;
+			ok = ConfigurationService.SaveProjectReferences (projectPath, items);
 		} catch (Exception ex) {
 			if (MainWindow.Instance is not null)
 				MainWindow.Instance.Output ("[refs] error saving: " + ex.Message);
 			return false;
 		}
+		if (!ok) {
+			if (MainWindow.Instance is not null)
+				MainWindow.Instance.Output ("[refs] error saving");
+			return false;
+		}
+		Close ();
+		return true;
+	}
+
+	/// <summary>Programmatic project-reference add (QA + reuse): adds a
+	/// ProjectReference with a relative include like the double-click on a
+	/// solution candidate, and saves.</summary>
+	public bool TryAddProjectReference (string projectFile)
+	{
+		var include = MakeProjectInclude (projectFile);
+		if (refs.Any (r => r.Kind == "ProjectReference" &&
+			string.Equals (r.Raw.Replace ('\\', Path.DirectorySeparatorChar), include, StringComparison.OrdinalIgnoreCase))) {
+			if (MainWindow.Instance is not null)
+				MainWindow.Instance.Output ("[refs] '" + Path.GetFileNameWithoutExtension (include) + "' is already referenced");
+			return false;
+		}
+		refs.Add (new RefRow {
+			Name = Path.GetFileNameWithoutExtension (include),
+			Secondary = include,
+			Type = "Project",
+			Kind = "ProjectReference",
+			Raw = include
+		});
+		AddedReference = Path.GetFileNameWithoutExtension (include);
+		return Apply ();
+	}
+
+	/// <summary>Programmatic remove by name (QA): drops the reference and
+	/// saves; false when the name matches no reference.</summary>
+	public bool TryRemoveReference (string name)
+	{
+		var target = refs.FirstOrDefault (r =>
+			string.Equals (r.Name, name, StringComparison.OrdinalIgnoreCase)
+			|| (r.Kind == "ProjectReference" && string.Equals (Path.GetFileNameWithoutExtension (r.Raw), name, StringComparison.OrdinalIgnoreCase)));
+		if (target is null)
+			return false;
+		refs.Remove (target);
+		return Apply ();
 	}
 }
