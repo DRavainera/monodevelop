@@ -1046,6 +1046,53 @@ El bucle de migración Gtk → Avalonia continúa por módulos (detalle por hito
         "Oleada 3 — array commands Slice C") y
         `docs/session_summary.md` (2026-11-07 (18)).
 
+    - **Oleada 4 (RunConfigurations vía modelo, Slice D) de la
+        integración total del backend (2026-11-08)**: cierre del item (3)
+        de la lista pendiente de la Oleada 4. La shell ya no hace parseo
+        inline ad-hoc del csproj (que confundía build configs
+        `$(Configuration)` con run configs `$(RunConfiguration)`): nuevo
+        modelo en `ConfigurationService` (coda del archivo, sin ficheros
+        nuevos) con **fidelidad al legacy** — LHS de la condición
+        EXACTAMENTE `'$(RunConfiguration)'` (trim solo fuera de comillas),
+        RHS entre comillas simples sin comilla interior — y **semántica de
+        props igual a la evaluación legacy**: un nombre en `.csproj` y
+        `.csproj.user` es una sola entrada con merge prop-a-prop (gana el
+        grupo posterior, el anterior da fallback — verificado contra
+        `GetPropertiesLinkedToGroup`, que devuelve la colección evaluada
+        completa). Persistencia del **StartupItem** en `<sln-sin-ext>.
+        userprefs` (p. ej. `Fixture.userprefs`) con la forma legacy
+        (sección `MonoDevelop.Ide.Workspace`, `Property name="StartupItem"`,
+        replace sin append, recrea corrupto, crea si no existe). Shell:
+        `RunConfigCombo` repoblado vía modelo al abrir (fixture plano →
+        ["Default"]), `PickStartupProject` respeta el item persistido
+        (rel→abs; inválido → fallback 1er Exe), `Run With` sin parse
+        inline, y `dotnet run` añade `--args "…"` SOLO si la runcfg elegida
+        define StartArguments (línea `[run]` + `runcfg=<name>`). Driver QA
+        `--runcfg` (11 aserciones) + `--runcfg` en la allow-list de
+        `QaDialogArg` (Program.cs, 1 línea). **Invariantes**: 0 errores en
+        net10.0, net10.0-windows **y el build legacy** `MonoDevelop.Ide.csproj`
+        (los 3 ficheros del diff no entran en el csproj legacy —
+        `ConfigurationService.cs` solo lo compila el csproj Avalonia vía el
+        glob `Services/**`); catálogo `Count=461 LoadedCommands=475
+        ResolvedHandlers=111`; menudump `menus=11 items=225 cmds=0`; oracle
+        sección nueva **`oleada4d 21/21`** + todas las anteriores intactas
+        (`oleada3 51`, `oleada3dyn 19`, `oleada3tools 5`, `oleada3nav 29`,
+        `oleada4 18`, `oleada4s2 35`); E2E nuevo
+        `~/opencode/oleada4_sliceD_e2e.sh` **ALL_PASS** (runcfg 11/11,
+        menudump `bindings=196` con recents reseteados, activeconfig
+        `restored=Debug`); regresión E2E Oleada 4 **ALL_PASS** (6 casos);
+        E2E `--cmdstates` **SLICEA_ALL_PASS** (12 aserciones); smoke
+        `Loaded Fixture.sln` sin error. QA §18.5 (subagente Tester QA
+        Senior, 1 ronda; brief+reporte en
+        `~/opencode/oleada4_sliceD_qa/`): **APROBADO**, 0 hallazgos P1–P4
+        y 2 P5 (revisión punto a punto de los 10 riesgos del brief; P5-a
+        indentación de 2 líneas de `RunStartupProjectAsync`, corregida en la
+        misma ronda con re-verificación de builds/oracle/smoke; P5-b falso
+        positivo — el `IndexOf` del diff ya era ordinal). Sin
+        cambios en submódulos; la ruta `--old-gui` no se toca (build legacy
+        0 errores). Detalle en `docs/interfaz-plan.md` (follow-up "Oleada
+        4 — Slice D") y `docs/session_summary.md` (2026-11-08 (19)).
+
 Nota operativa: el árbol de build único es `main/build/` (cualquier otra dirección de build en la documentación es obsoleta). El binario de la UI Avalonia es `main/build/MonoDevelop.AvaloniaShell.dll` y el IDE GTK legacy (`--old-gui`) es `main/build/MonoDevelop.dll`.
 
 ## 9. Conclusión

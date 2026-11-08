@@ -5083,3 +5083,99 @@ los 9 riesgos del brief).
 **Queda pendiente (slices D–F de la Oleada 4)**: RunConfigurations
 reales sobre el modelo (D); build vía modelo de configuraciones (E);
 Add Reference vía modelo (F).
+
+## 2026-11-08 — Follow-up: Oleada 4 (backend Avalonia) — Slice D: RunConfigurations vía modelo + StartupItem en .userprefs
+
+**Estado: CERRADO.** Cierre del item (3) de la lista pendiente de la
+Oleada 4 (RunConfigurations reales sobre el modelo) más el cableado del
+proyecto de arranque.
+
+**Alcance**: la shell deja de hacer parseo inline ad-hoc del csproj (el
+anterior `ShowExecutionModeSelector` leía cualquier
+`PropertyGroup Condition` y confundía build configs `$(Configuration)` con
+run configs `$(RunConfiguration)`) y todo el flujo de ejecución pasa por
+`ConfigurationService`: combo de run configs, proyecto de arranque
+persistido (StartupItem) y los argumentos de `dotnet run`.
+
+**Decisiones de diseño**:
+- **Fidelidad al parse legacy** (`ParseRunConfigurationCondition` +
+  `ExtractConfigName`, `MonoDevelop.Projects/Project.cs`): el LHS de la
+  condición debe ser EXACTAMENTE `'$(RunConfiguration)'` (el `Trim()` solo
+  actúa fuera de las comillas — un espacio interior al LHS se rechaza, como
+  en el legacy; el oracle lo cubre con X6 rechazada / X7 aceptada) y el RHS
+  un nombre entre comillas simples, longitud >2, sin comilla interior. Los
+  grupos de build (`$(Configuration)`, `$(Platform)`) y las condiciones
+  inválidas quedan fuera de la lista de run configs.
+- **Semántica de props = la evaluación legacy (merge prop-a-prop)**: un
+  nombre presente en el `.csproj` y en el `.csproj.user` es UNA sola entrada
+  (orden de documento, primera aparición) cuyas props se resuelven como en
+  la evaluación: prop-a-prop gana el grupo posterior (user) y el anterior da
+  fallback. Verificado contra `MSBuildProjectInstance.GetPropertiesLinkedToGroup`
+  (`evaluatedProperties.LinkToGroup(group)` devuelve la **colección
+  evaluada completa**, no solo el último grupo). El primer intento del dev
+  ("el último grupo reemplaza todo", `group.Clear()`) era incorrecto y se
+  corrigió tras leer ese código.
+- **StartupItem en el user file de la solución**: forma legacy
+  (`Solution.OnEndLoad`: sección `MonoDevelop.Ide.Workspace`,
+  `Property name="StartupItem"`, path relativo al .sln) en
+  `<sln-sin-ext>.userprefs` — `Fixture.userprefs`, NO `Fixture.sln.userprefs`
+  (confirmado con el fixture real, que shipping `Fixture.userprefs`). Set:
+  replace (una sola prop, sin append), recrea un .userprefs corrupto, crea
+  el fichero si no existe. Remove: devuelve true si existía. Get: corrupto →
+  null.
+- **`--runcfg` en la allow-list de `QaDialogArg`** (Program.cs, 1 línea):
+  sin ella `qa` queda `""` y el driver no se ejecuta (hallado en el primer
+  E2E: el caso no emitía ninguna línea, ni siquiera el fallback).
+
+**Cambios** (3 ficheros):
+- `Services/ConfigurationService.cs` (coda, sin ficheros nuevos):
+  `RunConfigurationEntry{Name, StartArguments?, WorkingDirectory?,
+  PauseConsoleOutput?, ExternalConsole?}` (las 4 props que consume la capa
+  de ejecución, legacy `ProcessRunConfiguration` [ItemProperty]);
+  `ParseRunCondition`; `GetProjectRunConfigurations` (csproj + .user; orden
+  de documento; merge prop-a-prop; corrupto/ausente → contribuye nada, sin
+  throw); `PrefsPath` (extensión reemplazada por `.userprefs`);
+  `Get/Set/RemoveSolutionStartupItem`; `GetSolutionRunConfigurations`
+  (agregado por `GetSolutionProjects`, orden .sln).
+- `Views/MainWindow.axaml.cs` (6 cambios): ctor `RunConfigCombo` solo
+  "Default" (eliminado Debug/Release hardcoded); `RefreshConfigurationSelectors`
+  repuebla el combo vía modelo (vacío → ["Default"]); `PickStartupProject`
+  respeta el StartupItem persistido (rel→abs contra el dir del .sln; debe
+  estar en la lista de proyectos del modelo; si no, fallback 1er Exe sin
+  romper run); `ShowExecutionModeSelector` sin parse inline (modelo);
+  `RunStartupProjectAsync` — nombre desde el combo, `--args "…"` SOLO si la
+  runcfg elegida define StartArguments (también en modo mono/external),
+  línea `[run]` + `runcfg=<name>`; driver QA `--runcfg` (11 aserciones).
+- `Program.cs`: `--runcfg` en `QaDialogArg`.
+
+**Verificación** (valores exactos en `docs/session_summary.md`, entrada
+2026-11-08 (19)): build 0 errores (net10.0, net10.0-windows **y legacy**
+`MonoDevelop.Ide.csproj` — los 3 ficheros del diff no entran en el csproj
+legacy: lista explícita; `ConfigurationService.cs` solo lo compila el
+csproj Avalonia vía el glob `Services/**`); catálogo `Count=461
+LoadedCommands=475 LastError=(null)`, `ResolvedHandlers=111`; menudump
+`menus=11 items=225 cmds=0` (bindings=196 determinista con recents
+reseteados); oracle sección nueva **`oleada4d 21/21`** + todas las
+anteriores intactas (`oleada3 51`, `oleada3dyn 19`, `oleada3tools 5`,
+`oleada3nav 29`, `oleada4 18`, `oleada4s2 35`); E2E nuevo
+`~/opencode/oleada4_sliceD_e2e.sh` (3 casos sobre copias del fixture)
+**ALL_PASS** (`runcfg` 11/11: initial sin StartupItem, fallback App, sin run
+configs en fixture plano, combo ["Default"], set LibA → pick respeta,
+replace sin append, item inválido → fallback App, remove existed/gone/no-op;
+`menudump` 11/225/0 bindings=196; `activeconfig` restored=Debug); regresión
+E2E Oleada 4 slice1 (6 casos) **ALL_PASS**; E2E `--cmdstates` (3 casos)
+**SLICEA_ALL_PASS** (12 aserciones); smoke `Loaded Fixture.sln` sin `Error
+loading solution` + menudump 11/225/0 (19/35/39/27/13/7/35/14/8/15/13);
+fixture de referencia intacto. QA §18.5 (1 ronda, brief+reporte en
+`~/opencode/oleada4_sliceD_qa/`): **APROBADO**, 0 hallazgos P1–P4 y 2 P5
+(revisión punto a punto de los 10 riesgos del brief, incluido que no queda
+`group.Clear()` en el diff y que `OnToolbarConfigChanged` sigue
+persistiendo solo el ConfigCombo). P5-a: indentación desalineada en 2
+líneas de `RunStartupProjectAsync` (bloque mono y `ProcessStartInfo` de
+xterm) → corregida en la misma ronda y re-verificado (3 builds 0 errores,
+oracle `oleada4d 21/21` exit 0, smoke `Loaded Fixture.sln`). P5-b: falso
+positivo — señalaba `IndexOf("==")` sin ordinal, pero el diff ya lo
+llevaba.
+
+**Queda pendiente (slices E–F de la Oleada 4)**: build vía modelo de
+configuraciones (E); Add Reference vía modelo (F).

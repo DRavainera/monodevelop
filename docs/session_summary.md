@@ -4064,3 +4064,118 @@ Commits de código (2 ficheros) + docs pushados a
 `origin/agents/sub-agent-senior-dev-role-report`. Sin cambios en
 submódulos. La ruta `--old-gui` no se toca (build legacy 0 errores +
 los 2 ficheros no se compilan en el csproj legacy).
+
+## 2026-11-08 (19) — Oleada 4 (backend Avalonia): RunConfigurations vía modelo — Slice D
+
+**Contexto**: tercera slice de la **Oleada 4** (Slice 1: capa .sln sobre
+`SlnFile`; Slice 2: modelo .csproj + árbol de solution-folders). Alcance: el
+item (3) de la lista pendiente — **RunConfigurations reales sobre el modelo**
+— más el cableado del proyecto de arranque: la shell ya no lleva un parseo
+inline ad-hoc del csproj (que confundía build configs `$(Configuration)` con
+run configs `$(RunConfiguration)`); todo pasa por `ConfigurationService`.
+**Nota del operador (en vigor)**: la shell no utiliza Mono.Addins.
+
+**Decisiones de diseño** (detalle en `~/opencode/oleada4_sliceD_design.md`):
+- **Modelo fiel al legacy** (`ParseRunConfigurationCondition`/
+  `ExtractConfigName` de `Project.cs`): LHS de la condición debe ser
+  EXACTAMENTE `'$(RunConfiguration)'` (el trim solo actúa fuera de las
+  comillas — un espacio interior al LHS se rechaza, como en el legacy) y el
+  RHS un nombre entre comillas simples sin comilla interior y longitud >2.
+  Los build groups (`$(Configuration)`, `$(Platform)`) quedan fuera.
+- **Semántica de props = la evaluación legacy (merge prop-a-prop)**: un
+  nombre presente en el `.csproj` y en el `.csproj.user` es una sola entrada;
+  prop-a-prop gana el grupo posterior (user) y el anterior da fallback.
+  Verificado contra `MSBuildProjectInstance.GetPropertiesLinkedToGroup`, que
+  devuelve la **colección evaluada completa** (linkada al grupo, no limitada
+  a él). El primer intento del dev ("el último grupo reemplaza todo" con
+  `group.Clear()`) era incorrecto y se corrigió al leer el código legacy.
+- **StartupItem en `.userprefs`**: la forma legacy
+  (`Solution.OnEndLoad`: sección `MonoDevelop.Ide.Workspace`,
+  `Property name="StartupItem"`, path relativo al .sln) en el user file de la
+  solución, que es `<sln-sin-ext>.userprefs` — p. ej. `Fixture.userprefs`,
+  NO `Fixture.sln.userprefs` (confirmado con el fixture real). Set hace
+  replace (una sola prop, sin append), recrea un .userprefs corrupto, crea el
+  fichero si no existe; Remove devuelve si existía.
+- **`--runcfg` en la allow-list de `QaDialogArg`** (Program.cs, 1 línea): sin
+  ella `qa` queda `""` y el driver no se ejecuta (hallado en el primer E2E:
+  el caso no emitía ni la línea de fallback).
+
+**Cambios** (3 ficheros):
+- `MonoDevelop.Ide/Services/ConfigurationService.cs` (coda, sin ficheros
+  nuevos): `RunConfigurationEntry{Name, StartArguments?, WorkingDirectory?,
+  PauseConsoleOutput?, ExternalConsole?}`; `ParseRunCondition`;
+  `GetProjectRunConfigurations` (csproj + .user; orden de documento; merge
+  prop-a-prop; corrupto/ausente → contribuye nada, sin throw); `PrefsPath`;
+  `Get/Set/RemoveSolutionStartupItem`; `GetSolutionRunConfigurations`
+  (agregado por `GetSolutionProjects`, orden .sln).
+- `MonoDevelop.Startup.Avalonia/Views/MainWindow.axaml.cs` (6 cambios): ctor
+  `RunConfigCombo` solo "Default" (sin Debug/Release hardcoded);
+  `RefreshConfigurationSelectors` repuebla el combo vía modelo (vacío →
+  ["Default"]); `PickStartupProject` respeta el StartupItem persistido
+  (rel→abs contra el dir del .sln; debe estar en la lista de proyectos; si
+  no, fallback 1er Exe); `ShowExecutionModeSelector` sustituye el parse
+  inline por `GetProjectRunConfigurations`; `RunStartupProjectAsync` toma el
+  nombre del combo y añade `--args "…"` SOLO si la runcfg elegida define
+  StartArguments (también en modo mono/external); línea `[run]` +
+  `runcfg=<name>`; driver QA `--runcfg` (11 aserciones).
+- `MonoDevelop.Startup.Avalonia/Program.cs`: `--runcfg` en `QaDialogArg`.
+
+**Verificación** (ejecutada en dev, antes de QA):
+- Builds 0 errores: net10.0, net10.0-windows y el build legacy
+  `MonoDevelop.Ide.csproj` (los 3 ficheros del diff NO entran en el csproj
+  legacy — lista explícita; `ConfigurationService.cs` solo lo compila el
+  csproj Avalonia vía el glob `Services/**` → `--old-gui` no toca nada del
+  diff).
+- Oracle `catload_test` exit 0: catálogo `Count=461 LoadedCommands=475
+  LastError=(null)`, `ResolvedHandlers=111`; secciones `oleada3 51/51`,
+  `oleada3dyn 19/19`, `oleada3tools 5/5`, `oleada3nav 29/29`, `oleada4
+  18/18`, **`oleada4d 21/21`** (nueva: nombres/orden de documento; user-wins
+  prop-a-prop — Default: args del user + ConsolePause del csproj; grupo puro
+  MyCfg; grupo solo-user UserOnly; build group `$(Configuration)` rechazado;
+  condiciones inválidas X1–X6 rechazadas y X7 aceptada por el trim exterior;
+  corruptos csproj/user/.userprefs sin throw; agregado por solución en orden
+  .sln; round-trip StartupItem set/replace/remove/recreate/sin .userprefs) y
+  `oleada4s2 35/35`.
+- E2E nuevo `bash ~/opencode/oleada4_sliceD_e2e.sh` (3 casos sobre copias del
+  fixture) → **ALL_PASS**: `runcfg` 11/11 (initial sin StartupItem; fallback
+  App; sin run configs en fixture plano; combo ["Default"]; set LibA → pick
+  respeta; replace sin append en el .userprefs; item inválido → fallback
+  App; remove existed/gone/no-op); `menudump` `menus=11 items=225 cmds=0
+  bindings=196`; `activeconfig` `restored=Debug` (regresión: el path de
+  config activo no se tocó).
+- Regresiones: `bash ~/opencode/oleada4_slice1_e2e.sh` (6 casos) →
+  **ALL_PASS**; `bash ~/opencode/oleada3_cmdstates.sh` (3 casos) →
+  **SLICEA_ALL_PASS** (12 aserciones); `bash ~/opencode/smoke_oleada1.sh` →
+  `Loaded Fixture.sln` sin `Error loading solution` + menudump 11/225/0 con
+  conteos 19/35/39/27/13/7/35/14/8/15/13.
+- Fixture de referencia intacto (`~/opencode/solpad_deps/` sin mutar: los
+  E2E trabajan sobre copias).
+
+### QA (§18.5)
+
+Subagente Tester QA Senior, **1 ronda**: **APROBADO**, 0 hallazgos P1–P4,
+2 P5 (revisión punto a punto de los 10 riesgos del brief: fidelidad del
+parse; user-wins prop-a-prop — verificó que no queda `group.Clear()` en el
+diff; corruptos; forma legacy del StartupItem; PickStartupProject con
+fallback; RunConfigCombo y OnToolbarConfigChanged; Run With sin parse
+inline; `--args` condicional; sin acoplamiento legacy ni Mono.Addins;
+fixture intacto). P5-a: indentación desalineada en 2 líneas de
+`RunStartupProjectAsync` (bloque mono y `ProcessStartInfo` de xterm) →
+corregida en esta misma ronda. P5-b: falsamente positivo — señalaba
+`IndexOf("==")` sin `StringComparison.Ordinal`, pero el código ya lo llevaba
+(verificado en la línea real del diff). Tras el fix de indentación,
+re-verificado: 3 builds 0 errores, oracle `oleada4d 21/21` exit 0 y smoke
+`Loaded Fixture.sln` sin error. Brief + prompt + reporte en
+`~/opencode/oleada4_sliceD_qa/` (`qa_report_r1.md`).
+
+### Queda pendiente (slices E–F de la Oleada 4)
+
+- **Slice E**: build vía modelo de configuraciones.
+- **Slice F**: Add Reference vía modelo.
+
+### Cierre
+
+Commits de código (3 ficheros) + docs pushados a
+`origin/agents/sub-agent-senior-dev-role-report`. Sin cambios en submódulos.
+La ruta `--old-gui` no se toca (build legacy 0 errores + ninguno de los 3
+ficheros del diff entra en el csproj legacy).
