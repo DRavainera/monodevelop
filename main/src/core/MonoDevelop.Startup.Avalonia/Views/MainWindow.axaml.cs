@@ -760,6 +760,30 @@ public partial class MainWindow : Window
 					R (!MonoDevelop.Ide.Services.ConfigurationService.RemoveSolutionStartupItem (sln), "remove again: no-op");
 					Output ("[runcfg] " + (fail == 0 ? "all pass" : "FAIL " + fail));
 				}
+			} else if (qa == "--buildmap") {
+				// Oleada 4 (slice E) QA: build via the configuration model —
+				// the active solution configuration maps to a per-project
+				// configuration (ProjectConfigurationPlatforms). Model checks
+				// per project, then a real build through the production path.
+				if (loadedSolutionPath is null) {
+					Output ("[buildmap] no solution loaded");
+				} else {
+					int ok = 0, fail = 0;
+					void R (bool pass, string what) { if (pass) ok++; else fail++; Output ("[buildmap] " + (pass ? "ok  " : "FAIL") + " " + what); }
+					var sln = loadedSolutionPath;
+					var config = MonoDevelop.Ide.Services.ConfigurationService.GetActiveConfiguration (sln);
+					Output ("[buildmap] active=" + config);
+					var projs = SolutionProjects (sln);
+					foreach (var proj in projs) {
+						var m = MonoDevelop.Ide.Services.ConfigurationService.GetProjectConfigurationFor (sln, config, proj);
+						Output ("[buildmap] model " + Path.GetFileName (proj) + " cfg=" + m.Configuration + " plat=" + m.Platform);
+						R (!string.IsNullOrEmpty (m.Configuration) && !string.IsNullOrEmpty (m.Platform),
+							"model: " + Path.GetFileName (proj) + " cfg='" + m.Configuration + "' plat='" + m.Platform + "'");
+					}
+					await RunBuildAsync ();
+					Output ("[buildmap] done projs=" + projs.Count);
+					Output ("[buildmap] " + (fail == 0 ? "all pass" : "FAIL " + fail));
+				}
 			} else if (qa == "--newproject" || qa.StartsWith ("--newproject=", StringComparison.Ordinal)) {
 				// QA: New Project dialog in add-to-solution mode — creates a project
 				// in a temp dir, wires it into the loaded .sln, reloads the tree.
@@ -9633,12 +9657,26 @@ public partial class MainWindow : Window
 			: activeConfiguration;
 		Output ($"[build] configuration {config}");
 		foreach (var proj in projs.ToList ()) {
-			Output ($"[build] project {Path.GetFileName (proj)}");
-			await RunProcessAsync ("dotnet", $"{target} -c \"{config}\" \"{proj}\"");
+			// Oleada 4 (slice E): the solution configuration maps to a
+			// per-project configuration through the .sln
+			// ProjectConfigurationPlatforms section (model) — a project may
+			// build with a different configuration than the solution name.
+			var mapped = MonoDevelop.Ide.Services.ConfigurationService.GetProjectConfigurationFor (sln, config, proj);
+			var platArg = IsAnyCpuPlatform (mapped.Platform) ? "" : $" -p:Platform=\"{mapped.Platform}\"";
+			Output ($"[build] project {Path.GetFileName (proj)} cfg={mapped.Configuration} plat={mapped.Platform}");
+			await RunProcessAsync ("dotnet", $"{target} -c \"{mapped.Configuration}\"{platArg} \"{proj}\"");
 			if (runningProc is { HasExited: true } p && p.ExitCode != 0)
 				failed = true;
 		}
+		Output ($"[build] {target} done failed={failed}");
 		buildsCounter.Inc (target);
+	}
+
+	static bool IsAnyCpuPlatform (string platform)
+	{
+		if (string.IsNullOrWhiteSpace (platform))
+			return true;
+		return platform.Replace (" ", "").Equals ("AnyCPU", StringComparison.OrdinalIgnoreCase);
 	}
 
 	async System.Threading.Tasks.Task RunStartupProjectAsync (bool debug = false)

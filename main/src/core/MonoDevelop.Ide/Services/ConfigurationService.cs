@@ -734,6 +734,84 @@ public static class ConfigurationService
 		var list = new List<RunConfigurationEntry> ();
 		foreach (var proj in GetSolutionProjects (slnPath))
 			list.AddRange (GetProjectRunConfigurations (proj));
-		return list;
+	return list;
 	}
+
+	/// <summary>Project configuration (name + platform) that a solution
+	/// configuration maps to for one project, through the .sln
+	/// ProjectConfigurationPlatforms section (the mapping the legacy solution
+	/// build consumes: "{projGuid}.{slnCfg}|{slnPlat}.ActiveCfg =
+	/// {projCfg}|{projPlat}"). When no mapping entry exists the project
+	/// adopts the solution configuration name and "Any CPU" (a missing or
+	/// corrupt .sln never breaks the build — it contributes nothing, slice D
+	/// policy).</summary>
+	public static ProjectConfigurationMapping GetProjectConfigurationFor (string slnPath, string solutionConfig, string projectPath)
+	{
+		var fallback = new ProjectConfigurationMapping (solutionConfig, "Any CPU");
+		if (!File.Exists (slnPath) || string.IsNullOrEmpty (solutionConfig) || string.IsNullOrEmpty (projectPath))
+			return fallback;
+		SlnFile sln;
+		try {
+			sln = ReadSln (slnPath);
+		} catch (Exception) {
+			return fallback;
+		}
+		// Project GUID of the .csproj (same path resolution as GetSolutionProjects).
+		string? projId = null;
+		var target = Path.GetFullPath (projectPath);
+		foreach (var p in sln.Projects) {
+			if (p.FilePath == null || !p.FilePath.EndsWith (".csproj", StringComparison.OrdinalIgnoreCase))
+				continue;
+			if (Path.GetFullPath (Path.Combine (Path.GetDirectoryName (slnPath)!, p.FilePath.Replace ('\\', '/'))) == target) {
+				projId = p.Id;
+				break;
+			}
+		}
+		if (projId is null)
+			return fallback;
+		SlnPropertySet? set = null;
+		foreach (var s in sln.ProjectConfigurationsSection) {
+			if (SameGuid (s.Id, projId)) {
+				set = s;
+				break;
+			}
+		}
+		if (set is null)
+			return fallback;
+		// solutionConfig is normally a bare name ("Debug", GetSolutionConfigurations
+		// shape); a full "Cfg|Platform" key compares against the whole key.
+		var cfgName = solutionConfig.Contains ('|') ? null : solutionConfig;
+		foreach (var kv in set) {
+			var key = kv.Key;
+			if (key is null || !key.EndsWith (".ActiveCfg", StringComparison.OrdinalIgnoreCase))
+				continue;
+			var slnCKey = key.Substring (0, key.Length - ".ActiveCfg".Length);
+			bool match = cfgName is null
+				? slnCKey.Equals (solutionConfig, StringComparison.OrdinalIgnoreCase)
+				: SlnCfgPart (slnCKey).Equals (cfgName, StringComparison.OrdinalIgnoreCase);
+			if (!match)
+				continue;
+			var val = kv.Value ?? string.Empty;
+			var bar = val.IndexOf ('|');
+			if (bar < 0)
+				return new ProjectConfigurationMapping (val, "Any CPU");
+			return new ProjectConfigurationMapping (val.Substring (0, bar), val.Substring (bar + 1));
+		}
+		return fallback;
+	}
+
+	static bool SameGuid (string? a, string? b)
+		=> a is not null && b is not null
+			&& a.Replace ("{", "").Replace ("}", "").Replace (" ", "").Equals (
+				b.Replace ("{", "").Replace ("}", "").Replace (" ", ""), StringComparison.OrdinalIgnoreCase);
+
+	static string SlnCfgPart (string slnCKey)
+	{
+		var bar = slnCKey.IndexOf ('|');
+		return bar < 0 ? slnCKey : slnCKey.Substring (0, bar);
+	}
+
+	/// <summary>Per-project configuration (name + platform) resolved from a
+	/// solution configuration (see <see cref="GetProjectConfigurationFor"/>).</summary>
+	public sealed record ProjectConfigurationMapping (string Configuration, string Platform);
 }
