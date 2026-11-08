@@ -5236,3 +5236,27 @@ La shell `RunBuildAsync` builda cada proyecto con la configuración **mapeada**:
 **QA §18.5** (subagente Tester QA Senior, 1 ronda; brief+reporte en `~/opencode/oleada5_sliceA_qa/`): **APROBADO**, 0 hallazgos P1–P4; 1 P5 opcional no bloqueante (`Fixture.userprefs` se re-crea como side-effect al abrir la solución en los smokes — el `.sln` queda intacto; sugerencia: aislar el userprefs fuera del fixture).
 
 **Queda pendiente**: Slice B de la Oleada 5 (gate M6 — compila completo con el builder del SDK 10 real, sin bloqueos; item 14 del checklist de Extras). El scope grande de un addin Avalonia propio de package management sobre 7.9.0 (reutilizando el mapeo de roturas de API 7.9.0 de `~/opencode/nuget79_probe/`) no está pedido: el pin de la shell cierra "7.9.0 en el lado Avalonia" en su mínima expresión actual.
+
+## 2026-11-08 — Follow-up: Oleada 5 — Slice B (gate M6): compila completo con el builder del SDK 10 real, sin bloqueos
+
+**Estado: CERRADO (QA APROBADO).** Último slice de la Oleada 5: el **gate de cierre de la fase de migración** (item 14 del checklist de Extras, M6): que `Main.sln` compile completo con el builder del SDK 10 real, sin bloqueos.
+
+**Naturaleza del slice**: verificación, **sin cambio de código**. El gate ya estaba verde desde los cierres de ondas 2–4 del lote net10 (2026-10-24/26/28, `docs/handoff-sub-agent-senior-dev-role-report-lote2-net10.md`: conversión de los ~77 proyectos old-style a SDK-style net10.0 por la decisión fila B del operador 2026-10-22) y las oleadas de backend 1–4 (2026-11-07/08) se construyeron sobre ese estado; la cifra histórica de 126 NU1201 (2026-10-17) estaba superada. El slice consiste en re-ejecutar el gate de forma independiente (incremental + clean-room) y comprobar que no quedó regresión alguna de las oleadas anteriores. `git status` limpio al inicio y al final (0 ficheros tocados; `main/src/addins/` intacta).
+
+**Evidencia del gate** (logs en `~/opencode/`):
+- Incremental: `dotnet build main/Main.sln -c DebugLinux -m:1 --nologo` → **`0 Errores`**, `exit=0` (1:49; `oleada5_sliceB_gate1.log`).
+- Clean-room: mismo con `--no-incremental` → **`0 Errores`**, `exit=0` (2:04; 7067 warnings preexistentes — CS8012/MSB3277/NETSDK1206/NU1701/obsoletos; `oleada5_sliceB_gate_cleanroom.log`).
+- Cobertura: el clean-room lista **110 proyectos únicos con salida** (111 líneas: `MonoDevelop.Startup.Avalonia` dos veces, una por TFM net10.0 y net10.0-windows); `Main.sln` lleva 109 entradas `Build.0` para `DebugLinux` — los proyectos Windows/Mac-only (WindowsPlatform, Xwt.WPF, Xwt.Gtk.Mac, TextUICocoa, MacPlatform.Tests, WindowsAPICodePack×2, WindowsPlatform.Tests) quedan excluidos por diseño (sin `Build.0`), hallazgo documentado del lote 2. Staging unificado `main/build/` regenerado.
+
+**Batería de regresión (valores medidos)**:
+- Builds 0 errores: shell `net10.0` + `net10.0-windows` (16 s) y legacy `MonoDevelop.Ide.csproj` (7 s) (`oleada5_sliceB_build_*.log`).
+- Tests `AvaloniaShell.Editor.Tests`: **103/103** superados, 0 fallidos.
+- Smoke: `Loaded Fixture.sln`, catálogo `catalog loaded: 475 commands, 111 with resolvable default handler`, menudump `menus=11 items=225 cmds=0` (bindings=199 sin reset de recents — fluctuación conocida 196+recents), 0 FATAL/Unhandled.
+- Oráculos (`~/opencode/catload_test`): `catalog: Count=461 LoadedCommands=475 LastError=(null)`; `oleada3 51`, `oleada3dyn 19`, `oleada3tools 5`, `oleada3nav 29`, `oleada4 18`, `oleada4d 21`, `oleada4e 13`, `oleada4f 14`, `oleada4s2 35` — todos **fail=0**, exit 0.
+- E2E: `--cmdstates` 3 casos **SLICEA_ALL_PASS** (12 aserciones sliceA/B/C); slice D **ALL_PASS** (runcfg 11/11 + menudump `bindings=196` con recents reseteados + activeconfig `restored=Debug`); slice E **ALL_PASS** (buildmap: LibA en Release vía mapeo del .sln, `failed=False`, exit 0 ×3); slice F **ALL_PASS** (ciclo addref vía modelo + `dotnet build App` exit 0).
+
+**QA §18.5** (subagente Tester QA Senior, 1 ronda; brief+reporte en `~/opencode/oleada5_sliceB_qa/`): **APROBADO**, 0 hallazgos P1–P4, 2 P5 informativas sin acción (fluctuación de `bindings` ya documentada — la smoke dio 202 sin reset de recents — y conteo de advertencias incremental 2925 vs clean-room 7067, comportamiento esperado de MSBuild). El subagente re-ejecutó las 11 partes de la batería de forma independiente con los valores exactos esperados; `git status` limpio al inicio y al final; fixture byte-idéntico (55 ficheros, md5, incluido `Fixture.userprefs`).
+
+**Nota**: por instrucción del operador, el item 14 del checklist de Extras y la fila B del inventario quedan **sin editar** (ambas arrastran otros pendientes que no corresponden cerrar con esta verificación); este follow-up es la evidencia de cierre del gate M6.
+
+**Queda pendiente**: nada dentro de la Oleada 5 (Slice A + Slice B cerrados). El gate M6 queda **CERRADO**. Pendientes de la fase (fuera de la Oleada 5): rebranding (fila E — después de completar la paridad de UI), redibujo de iconos Fluent (fila F, en curso) y la paridad de UI restante (M5/M6 del plan).
