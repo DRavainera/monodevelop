@@ -487,10 +487,59 @@ namespace MonoDevelop.Ide.Commands
 			ShellCommandHandler.Run (ViewCommands.ViewList, dataItem);
 		}
 
-		// Ronda 3: el legacy ViewList inlineaba aquí la lista de pads (uno
-		// checked por pad visible). En la shell Avalonia ese rol lo cubre el
-		// submenu "Pads" (exclusivo de la shell, no existe en GTK), así que este
-		// array queda deliberadamente vacío para no duplicar los pads.
+		// Ronda 6 (BUG 1): port del legacy Update(CommandArrayInfo) — el array
+		// View List inlinea los submenús de pads (uno CommandInfoSet por
+		// categoría, como el legacy agrupaba por pad.Categories). La shell no
+		// tiene el modelo GTK de pads, así que los grupos se derivan del
+		// inventario de pads de la propia shell — el mismo conjunto y orden que
+		// el antiguo submenu "_Pads", ahora repartido en Pads / Debug Pads como
+		// en GTK (decisión de Ronda 6: paridad GTK + quitar _Pads, conservando
+		// el inventario y las separadoras de _Pads). Cada entrada es un toggle
+		// (dataItem "pad:<id>") y su Checked refleja la visibilidad real del pad
+		// (ShellCommandState.IsPadVisible, el equivalente de que el legacy
+		// marcara ci.Checked por pad.Visible). El click llega a OnMenuCommand
+		// como "ViewList" + "pad:<id>" y hace TogglePad.
+		static void AddPad (CommandArrayInfo list, string id, string label)
+		{
+			var ci = list.Add (label, "pad:" + id);
+			ci.Checked = ShellCommandState.IsPadVisible (id);
+			ci.Description = "Show " + label;
+		}
+
+		protected override void Update (CommandArrayInfo info)
+		{
+			// "Pads": los pads de solución / diseño / logs (las tres subgrupos
+			// de _Pads, con sus separadoras).
+			var pads = new CommandInfoSet { Text = "Pads" };
+			pads.Description = "Show Pads";
+			info.Add (pads);
+			var pl = pads.CommandInfos;
+			AddPad (pl, "solution", "Solution");
+			AddPad (pl, "classes", "Classes");
+			AddPad (pl, "help", "Help");
+			pl.AddSeparator ();
+			AddPad (pl, "toolbox", "Toolbox");
+			AddPad (pl, "properties", "Properties");
+			AddPad (pl, "documentoutline", "Document Outline");
+			AddPad (pl, "unittests", "Unit Tests");
+			pl.AddSeparator ();
+			AddPad (pl, "output", "Output");
+			AddPad (pl, "errors", "Errors");
+			AddPad (pl, "tasks", "Tasks");
+			AddPad (pl, "codeissues", "Code Issues");
+			AddPad (pl, "searchresults", "Search Results");
+
+			// "Debug Pads": el grupo de depuración de _Pads.
+			var debug = new CommandInfoSet { Text = "Debug Pads" };
+			debug.Description = "Show Debug Pads";
+			info.Add (debug);
+			var dl = debug.CommandInfos;
+			AddPad (dl, "callstack", "Call Stack");
+			AddPad (dl, "locals", "Locals");
+			AddPad (dl, "watch", "Watch");
+			AddPad (dl, "breakpoints", "Breakpoints");
+			AddPad (dl, "threads", "Threads");
+		}
 	}
 
 	public class LayoutListHandler : CommandHandler

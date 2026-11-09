@@ -10,6 +10,10 @@
 // mapping point the handlers consult instead of the GTK-only IdeApp surface.
 //
 
+using System;
+using System.Collections.Generic;
+using MonoDevelop.Ide.Services;
+
 namespace MonoDevelop.Ide.Commands
 {
 	static class ShellCommandState
@@ -128,6 +132,28 @@ namespace MonoDevelop.Ide.Commands
 		// active text document: the legacy would then add no entry either).
 		public static string? ActiveDocumentTitle
 			=> MonoDevelop.AvaloniaShell.Views.MainWindow.Instance?.ActiveDocumentTitle;
+
+		// Ronda 6 (BUG 1): whether the named pad is currently visible — the shell
+		// equivalent of the legacy ViewListHandler setting each pad's CommandInfo
+		// Checked from the pad's actual visibility. Consumed by the View List
+		// array (Pads / Debug Pads) to mirror the check state of each pad toggle.
+		public static bool IsPadVisible (string padId)
+			=> MonoDevelop.AvaloniaShell.Views.MainWindow.Instance?.IsPadVisible (padId) ?? false;
+
+		// Ronda 6 (BUG 3): the custom commands (Type == Custom) of the selected
+		// project, resolved the same way the Add Reference / Options gates
+		// resolve their target — the pad-selected project row (or the
+		// containing project of a selected file), falling back to the
+		// solution's active project. This is the shell equivalent of the legacy
+		// CustomCommandListHandler reading
+		// IConfigurationTarget.DefaultConfiguration.CustomCommands off the
+		// CurrentSelectedBuildTarget; the shell reads them from its own project
+		// model (ConfigurationService) instead of the GTK model. Empty (never
+		// null) when there is no selected project, mirroring the legacy
+		// "no build target selected -> no commands" branch.
+		public static IReadOnlyList<ConfigurationService.CustomCommandEntry> SelectedProjectCustomCommands
+			=> MonoDevelop.AvaloniaShell.Views.MainWindow.Instance?.SelectedProjectCustomCommands
+				?? Array.Empty<ConfigurationService.CustomCommandEntry> ();
 	}
 }
 #endif

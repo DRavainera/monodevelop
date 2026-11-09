@@ -969,6 +969,21 @@ namespace MonoDevelop.Ide.Commands
 		{
 			ShellCommandHandler.Run (ProjectCommands.CustomCommandList, dataItem);
 		}
+
+		// Ronda 6 (BUG 3): port del legacy Update(CommandArrayInfo) — una entrada
+		// por CustomCommand de Type == Custom del proyecto seleccionado (el
+		// legacy lee IConfigurationTarget.DefaultConfiguration.CustomCommands del
+		// CurrentSelectedBuildTarget). La shell no tiene el modelo GTK, así que
+		// los lee de su propio modelo de proyecto a través del puente
+		// ShellCommandState (ResolveSelectedProjectPath/ResolveActiveProject ->
+		// ConfigurationService). El dataItem es la llave "customcmd:<Name>"
+		// (string, porque el puente hace dataItem as string); el MainWindow la
+		// resuelve de vuelta al CustomCommandEntry por nombre para ejecutarla.
+		protected override void Update (CommandArrayInfo info)
+		{
+			foreach (var cmd in ShellCommandState.SelectedProjectCustomCommands)
+				info.Add (cmd.Name, "customcmd:" + cmd.Name);
+		}
 	}
 
 	internal class ExportSolutionHandler : CommandHandler

@@ -448,16 +448,23 @@ public partial class MainWindow : Window
 				// los MenuItem. El popup es una ventana top-level propia (override-
 				// redirect) que la captura lee con import -window <id>.
 				var openMenuName = qa.Substring ("--openmenu=".Length);
+				// Comma-separated chain: "--openmenu=View,Pads" opens the top-level
+				// menu, then the named child (a submenu), so the capture shows the
+				// nested contents (e.g. the View List Pads group). A single name
+				// behaves exactly as before (top-level only).
+				var openChain = openMenuName.Split (',').Select (s => s.Trim ()).Where (s => s.Length > 0).ToList ();
 				Avalonia.Threading.Dispatcher.UIThread.Post (async () => {
 					await System.Threading.Tasks.Task.Delay (1500); // el menubar termina su primer render
 					MenuBuilder.RefreshCommandStates ();
+					bool Match (Avalonia.Controls.MenuItem m, string name)
+					{
+						var h = m.Header as string ?? "";
+						return h == name || h == "_" + name || h.Replace ("_", "") == name;
+					}
 					var target = MainMenu.Items.OfType<Avalonia.Controls.MenuItem> ()
-						.FirstOrDefault (m => {
-							var h = m.Header as string ?? "";
-							return h == openMenuName || h == "_" + openMenuName || h.Replace ("_", "") == openMenuName;
-						});
+						.FirstOrDefault (m => Match (m, openChain [0]));
 					if (target is null) {
-						Output ($"[openmenu] menu '{openMenuName}' no encontrado entre {MainMenu.Items.OfType<Avalonia.Controls.MenuItem>().Count()} tops");
+						Output ($"[openmenu] menu '{openChain [0]}' no encontrado entre {MainMenu.Items.OfType<Avalonia.Controls.MenuItem>().Count()} tops");
 						return;
 					}
 					// El popup solo se abre con la ventana activa (el menú entra en
@@ -467,6 +474,21 @@ public partial class MainWindow : Window
 					target.Focus ();
 					target.IsSubMenuOpen = true;
 					Output ($"[openmenu] '{target.Header}' IsSubMenuOpen=true (abierto para captura)");
+					await System.Threading.Tasks.Task.Delay (400);
+					// Drill into the named child submenus (chain[1..]).
+					var cur = target;
+					foreach (var sub in openChain.Skip (1)) {
+						var child = cur.Items.OfType<Avalonia.Controls.MenuItem> ().FirstOrDefault (c => Match (c, sub));
+						if (child is null) {
+							Output ($"[openmenu] submenu '{sub}' no encontrado bajo '{(cur.Header as string)}'");
+							break;
+						}
+						child.Focus ();
+						child.IsSubMenuOpen = true;
+						Output ($"[openmenu]   '{(cur.Header as string)} > {child.Header}' IsSubMenuOpen=true");
+						await System.Threading.Tasks.Task.Delay (400);
+						cur = child;
+					}
 				}, Avalonia.Threading.DispatcherPriority.Background);
 			} else if (qa == "--iconsqa") {
 				// QA: dump IconService resolution (Fluent family preferred, legacy
@@ -2264,6 +2286,20 @@ public partial class MainWindow : Window
 							?? projs.FirstOrDefault ();
 						Check ("startup pick", pick is not null && (firstExe is null ? pick == projs [0] : pick == firstExe));
 
+						// Ronda 6 (BUG 3): the legacy CustomCommand entries (Type ==
+						// Custom) the Project > Custom command list shows — parsed from
+						// the csproj by the model. Assert the parse: the right count
+						// (non-Custom types are filtered), the expected names present,
+						// and a command string survives intact. Only meaningful for
+						// fixtures that declare a CustomCommands block.
+						var ccModel = MonoDevelop.Ide.Services.ConfigurationService.LoadProjectModel (projs [0]);
+						var cc = ccModel?.CustomCommands ?? System.Array.Empty<ConfigurationService.CustomCommandEntry> ();
+						Output ("[projmodel] customcommands=" + cc.Count + " names=" + string.Join (",", cc.Select (c => c.Name)));
+						Check ("customcommands parsed", cc.Count == 2);
+						Check ("customcommands names", cc.Any (c => c.Name == "R6 QA Marker") && cc.Any (c => c.Name == "R6 QA Env"));
+						Check ("customcommands build-filtered", cc.All (c => c.Name != "R6 QA Build (must be filtered out - Type != Custom)"));
+						Check ("customcommands command-intact", cc.Any (c => c.Command.Contains ("touch \"${ProjectDir}/r6_marker.txt\"")));
+
 						// Full tree: every entry exactly once, GUID-linked at any depth.
 						var roots = MonoDevelop.Ide.Services.SolutionLoader.BuildTree (entries);
 						int total = 0, folderNodes = 0;
@@ -3033,6 +3069,128 @@ public partial class MainWindow : Window
 					_ = new AddReferenceDialog (proj, loadedSolutionPath).ShowDialog (this);
 				else
 					Output ("[addrefdlg-qa] no project");
+			} else if (qa == "--autoselectqa") {
+				// QA (Ronda 6, BUG 2): direct evidence of the auto-select fix. The
+				// legacy ProjectSolutionPad auto-selects the active document's node on
+				// activation (OnWindowChanged -> SelectActiveFile), which keeps the
+				// pad-selection gates (Add Reference) enabled in the natural flow. The
+				// shell's pad did not, so a freshly opened document left no selection.
+				// This opens a file of the loaded solution and reports the resulting pad
+				// selection WITHOUT any manual pad click, then a file OUTSIDE the solution
+				// (no tree row) to prove the containing-project fallback still resolves.
+				string? SelTag ()
+				{
+					if (xwtSolutionTree?.SelectedRow is { } p)
+						try { return xwtSolutionStore!.GetNavigatorAt (p).GetValue (xwtSolTagField) as string; }
+						catch { return null; }
+					return null;
+				}
+				string? ActiveRefGate ()
+				{
+					// The real Add Reference command's computed enabled state (the full
+					// gate: SelectedNodeIsProject -> EditReferencesHandler.Update).
+					var info = MonoDevelop.Components.Commands.CommandService.GetCommandInfo ("MonoDevelop.Ide.Commands.ProjectCommands.AddReference");
+					return info.Enabled ? "ENABLED" : "disabled";
+				}
+				Avalonia.Threading.Dispatcher.UIThread.Post (async () => {
+					Output ("[autoselectqa] BASE sel='" + (SelTag () ?? "<none>") + "' SelectedNodeIsProject=" + SelectedNodeIsProject + " addref=" + ActiveRefGate ());
+					// A file of the loaded solution: must auto-select its own tree row.
+					var inSol = Path.Combine (Environment.GetEnvironmentVariable ("HOME")!, "opencode", "r6_bugfix", "AutoSelectProbe.cs");
+					if (!File.Exists (inSol)) { File.WriteAllText (inSol, "class AutoSelectProbe { }\n"); }
+					OpenFileDocument (inSol);
+					SelectDocument (DocKey (inSol));
+					await System.Threading.Tasks.Task.Delay (400);
+					Output ("[autoselectqa] INSIDE sel='" + (SelTag () ?? "<none>") + "' SelectedNodeIsProject=" + SelectedNodeIsProject + " addref=" + ActiveRefGate ());
+					// A file outside the solution (no tree row): the containing-project
+					// fallback (active project) must still resolve the gate.
+					var qaDir = Path.Combine (Environment.GetEnvironmentVariable ("HOME")!, "opencode", "r6_bugfix");
+					var outSol = Path.Combine (qaDir, "outside_probe.cs");
+					File.WriteAllText (outSol, "class OutsideProbe { }\n");
+					OpenFileDocument (outSol);
+					SelectDocument (DocKey (outSol));
+					await System.Threading.Tasks.Task.Delay (400);
+					Output ("[autoselectqa] OUTSIDE sel='" + (SelTag () ?? "<none>") + "' SelectedNodeIsProject=" + SelectedNodeIsProject + " addref=" + ActiveRefGate ());
+					Output ("AUTOSELECT_DONE");
+				}, Avalonia.Threading.DispatcherPriority.Background);
+			} else if (qa == "--dispatchaddref") {
+				// QA (Ronda 6, BUG "Add Reference no conecta con el diálogo"):
+				// exercise the EXACT Project > Add Reference menu-click path —
+				// select a project row, then fire the built MenuItem's Click
+				// routed event (the same handler MenuBuilder attached:
+				// CommandAction.Run -> CommandService.Dispatch), and report
+				// whether the dialog window actually opens. --addrefdlg builds
+				// the dialog directly and bypasses the dispatch, so it cannot
+				// catch a dispatch regression.
+				var dproj = ResolveActiveProject ();
+				if (dproj is null) {
+					Output ("[dispatchaddref] no project");
+					return;
+				}
+				if (Environment.GetEnvironmentVariable ("DISPATCH_NOSSEL") == "1") {
+					// operator scenario: solution loaded, NO node selected (the pad
+					// does not auto-select) — fire the click as-is.
+					Output ("[dispatchaddref] NOSSEL: no row selected (pad default state)");
+				} else if (!SelectXwtSolutionRow ("project:" + dproj)) {
+					Output ("[dispatchaddref] select project row failed");
+					return;
+				}
+				const string dId = "MonoDevelop.Ide.Commands.ProjectCommands.AddReference";
+				Avalonia.Controls.MenuItem? dmi = null;
+				void DWalk (System.Collections.Generic.IEnumerable<Avalonia.Controls.MenuItem> items) {
+					foreach (var m in items) {
+						if (dmi is not null)
+							return;
+						if (m.Tag is string t && t == dId) {
+							dmi = m;
+							return;
+						}
+						DWalk (m.Items.OfType<Avalonia.Controls.MenuItem> ());
+					}
+				}
+				DWalk (MainMenu!.Items.OfType<Avalonia.Controls.MenuItem> ());
+				if (dmi is null) {
+					Output ("[dispatchaddref] menu item not found");
+					return;
+				}
+				Output ($"[dispatchaddref] sel={SelectedNodeIsProject} catalog={MonoDevelop.Components.Commands.CommandService.GetCommand (dId) is not null} itemEnabled={dmi.IsEnabled} -> post Click (the menu-click dispatch, exactly as MenuBuilder wired it)");
+				// Post (do NOT raise inline): if the dispatch opens the dialog, the
+				// modal ShowDialog blocks the UI thread in its nested loop, so an
+				// inline raise would deadlock this flag's continuation. The QA
+				// script watches X11 for the "Add Reference" window.
+				Avalonia.Threading.Dispatcher.UIThread.Post (() =>
+					dmi.RaiseEvent (new Avalonia.Interactivity.RoutedEventArgs (Avalonia.Controls.MenuItem.ClickEvent)));
+			} else if (qa.StartsWith ("--runcustom=", StringComparison.Ordinal)) {
+				// QA (Ronda 6, BUG 3): deterministic end-to-end check of the Custom
+				// command list — (1) parse the project's CustomCommands through the
+				// real ConfigurationService model and report what the menu would list,
+				// (2) drive the EXACT menu dispatch path (Project > Custom command
+				// list > the named item) by firing RunCustomCommand, (3) verify the
+				// process actually ran by checking the side-effect file it produces.
+				// --projmodel has no custom-command checks and the menu is visual, so
+				// this is the only deterministic parse+execute evidence.
+				string rcName = qa.Substring ("--runcustom=".Length);
+				Avalonia.Threading.Dispatcher.UIThread.Post (async () => {
+					// (1) parse
+					var cc = SelectedProjectCustomCommands;
+					Output ("[runcustom] parsed " + cc.Count + " custom commands: " +
+						string.Join (", ", cc.Select (c => c.Name)));
+					foreach (var c in cc)
+						Output ("[runcustom]   '" + c.Name + "' cmd='" + c.Command + "' wd='" + (c.WorkingDir ?? "<default>") +
+							"' env=" + c.Environment.Count + " ext=" + c.ExternalConsole + " pause=" + c.PauseExternalConsole);
+					// (2) drive the dispatch path (same call the menu item's click makes).
+					// Await it (unlike the real menu click, which fire-and-forgets): the
+					// QA flag must see the child process finish before it reports and the
+					// runner kills the app.
+					await RunCustomCommand (rcName);
+					await System.Threading.Tasks.Task.Delay (300); // settle
+					// (3) verify the side effect. "R6 QA Marker" creates a file in the
+					// project dir (proves real execution + ${ProjectDir} substitution +
+					// working dir); "R6 QA Env" streams the declared env var to stdout,
+					// so the QA script greps the captured log for its value instead.
+					var marker = Path.Combine (Environment.GetEnvironmentVariable ("HOME")!, "opencode", "r6_bugfix", "r6_marker.txt");
+					Output ("[runcustom] marker exists=" + File.Exists (marker));
+					Output ("RUNCUSTOM_DONE");
+				}, Avalonia.Threading.DispatcherPriority.Background);
 			} else if (qa == "--managepkgdlg") {
 				// QA: show the Manage NuGet Packages dialog for visual inspection.
 				var mp = ResolveActiveProject ();
@@ -4494,6 +4652,28 @@ public partial class MainWindow : Window
 	internal bool SelectedNodeIsProject
 		=> ResolveSelectedProjectPath () is not null;
 
+	// Ronda 6 (BUG 3): the custom commands (Type == Custom) of the selected
+	// project — the shell equivalent of the legacy CustomCommandListHandler
+	// reading IConfigurationTarget.DefaultConfiguration.CustomCommands off the
+	// CurrentSelectedBuildTarget. The target resolves like the Add Reference
+	// execution does: the pad-selected project (or the containing project of a
+	// selected file), falling back to the solution's active project so the list
+	// is populated while a document is open (auto-selected, BUG 2) even before
+	// the user clicks a pad row. The commands come from the project's own model
+	// (ConfigurationService, mtime-cached) rather than the GTK model. Empty when
+	// there is no resolvable project or the model has no Custom commands — the
+	// same result the legacy gives for a build target with no Custom entries.
+	internal IReadOnlyList<ConfigurationService.CustomCommandEntry> SelectedProjectCustomCommands
+	{
+		get {
+			var proj = ResolveSelectedProjectPath () ?? ResolveActiveProject ();
+			if (proj is null)
+				return Array.Empty<ConfigurationService.CustomCommandEntry> ();
+			return ConfigurationService.LoadProjectModel (proj)?.CustomCommands
+				?? Array.Empty<ConfigurationService.CustomCommandEntry> ();
+		}
+	}
+
 	// Oleada 3 (slice 9): the solution-pad selected node is the solution row —
 	// the shell equivalent of the legacy "the selected build target is the
 	// Solution" branch of the Run Entry / Build label updates.
@@ -4671,7 +4851,41 @@ public partial class MainWindow : Window
 			ShowEmptyEditorHost (); // legacy: editor pad stays open with no tabs
 			AttachNavigationCaretFeed (); // detach (no selection → no editor)
 		}
+		AutoSelectSolutionNodeForActiveDocument (); // Ronda 6 (BUG 2)
 		NotifyCommandStateChanged (); // Oleada 3: active document changed
+	}
+
+	// Ronda 6 (BUG 2): legacy ProjectSolutionPad parity — when a document becomes
+	// active, the GTK solution pad auto-selects the file's node
+	// (IdeApp.Workbench.ActiveDocumentChanged → OnWindowChanged → SelectActiveFile),
+	// which is what keeps the pad-SELECTION gates (Add Reference via
+	// EditReferencesHandler) enabled in the natural flow. The shell's pad did not
+	// auto-select, so a freshly opened document left no selection and "Add
+	// Reference" stayed disabled. Port of that behavior: select the file row of
+	// the active document in the solution pad (its tag is the full file path,
+	// the same the tree build stores for file rows), falling back to the
+	// containing project row when the file is not a node of the loaded solution
+	// (a document outside the tree, or a file whose row was not realized).
+	// Untitled / non-file documents and the no-solution state are no-ops.
+	void AutoSelectSolutionNodeForActiveDocument ()
+	{
+		if (loadedSolutionPath is null || xwtSolutionStore is null)
+			return;
+		if (DocTabs?.SelectedItem is not TabItem { Tag: string tag })
+			return;
+		if (!docs.TryGetValue (tag, out var ed) || ed.FilePath is not { Length: > 0 } path)
+			return; // untitled / non-file document: nothing to select
+		if (SelectXwtSolutionRow (path))
+			return;
+		// The file is not a solution node (outside the tree, or a row not
+		// built yet): select the containing project so the gate still
+		// resolves (the legacy pins the target to the containing project).
+		var fileDir = Path.GetDirectoryName (path)!;
+		foreach (var p in GetSolutionProjectPaths ()) {
+			var pdir = Path.GetDirectoryName (p)!;
+			if (fileDir.StartsWith (pdir, StringComparison.Ordinal) && SelectXwtSolutionRow ("project:" + p))
+				return;
+		}
 	}
 
 	// Oleada 3 (slice B, item 10): the ACTIVE editor's caret feeds the navigation
@@ -7546,11 +7760,18 @@ public partial class MainWindow : Window
 		case "MonoDevelop.Ide.Editor.MessageBubbleCommands.HideIssues":
 			MonoDevelop.Ide.Editor.MessageBubbleState.ToggleHideAll ();
 			return;
-		case "MonoDevelop.Ide.Commands.ViewCommands.ViewList":
-			// Legacy View List: check list of pads with their visibility — the new shell
-			// keeps them always visible in the Pads submenu, so this opens the same list.
-			Output ("[view] pads: Solution, Classes, Help, Properties, Errors, Tasks, Search Results, Output");
+		case "MonoDevelop.Ide.Commands.ViewCommands.ViewList": {
+			// Ronda 6 (BUG 1): the View List array (Pads / Debug Pads submenus)
+			// dispatches the master id with a "pad:<id>" dataItem — the toggle
+			// equivalent of the legacy pad click. nodeContext carries the dataItem.
+			if (nodeContext is not null && nodeContext.StartsWith ("pad:", StringComparison.Ordinal)) {
+				TogglePad (nodeContext ["pad:".Length..]);
+				return;
+			}
+			// The (always-hidden) master itself: no dataItem. Legacy showed the
+			// pad list inline; the array children now do, so this is a no-op.
 			return;
+		}
 		case "MonoDevelop.Ide.Commands.ViewCommands.LayoutList":
 			// Ronda 3: el hijo inlineado del array (dataItem "layout:Solution")
 			// activa un layout — el legacy fija CurrentLayout; la shell tiene un
@@ -8019,9 +8240,19 @@ public partial class MainWindow : Window
 			return;
 		case "MonoDevelop.Ide.Commands.ProjectCommands.ApplyPolicy":
 		case "MonoDevelop.Ide.Commands.ProjectCommands.ExportPolicy":
-		case "MonoDevelop.Ide.Commands.ProjectCommands.CustomCommandList":
-			Output ("[policies] policy panels are available in Project Options (not yet migrated)");
+		case "MonoDevelop.Ide.Commands.ProjectCommands.CustomCommandList": {
+			// Ronda 6 (BUG 3): real execution — nodeContext is the "customcmd:<Name>"
+			// dataItem the no-Gtk CustomCommandListHandler array put on the item.
+			// Resolve the entry by name off the selected project and run it (a
+			// dedicated process, streamed to the Output pad — the legacy
+			// CustomCommandListHandler.Run ran cmd.Execute off a background thread
+			// with a progress monitor; here the process is its own, not the shared
+			// build/run one, so it does not trip the Stop/IsOperationRunning gates).
+			if (nodeContext is not null && nodeContext.StartsWith ("customcmd:", StringComparison.Ordinal)) {
+				RunCustomCommand (nodeContext ["customcmd:".Length..]);
+			}
 			return;
+		}
 		case "MonoDevelop.Ide.Commands.FileCommands.PrintPageSetup":
 		case "MonoDevelop.Ide.Commands.FileCommands.PrintPreviewDocument":
 			Output ("[print] printing is deferred to the Avalonia print service");
@@ -10645,6 +10876,96 @@ public partial class MainWindow : Window
 		FillVariableList (localsList, locals, "No locals");
 		SetPadVisible ("locals", true);
 		Output ("[frame] locals of " + frame.Method + " — " + locals.Length + " rows");
+	}
+
+	// Ronda 6 (BUG 3): runs a custom command (Project Commands > Custom command
+	// list) exactly like the legacy CustomCommandListHandler.Run — port of
+	// CustomCommand.CreateExecutionCommand + the background-thread Execute. The
+	// command string is parsed with the legacy CustomCommand.ParseCommand rule
+	// (a leading quoted token is the executable, the rest the args; otherwise
+	// the first whitespace split), the ${ProjectDir}/${ProjectName} tags are
+	// substituted (the tags the project StringTagModel exposes; other tags are
+	// left verbatim), the working directory defaults to the project directory,
+	// a non-rooted executable is resolved against the project directory
+	// (the legacy back-compat), and the declared environment variables are
+	// applied. It is its OWN process (not the shared build/run runningProc), so
+	// running one does not trip the Stop / IsOperationRunning gates, and its
+	// output streams to the Output pad. The ExternalConsole /
+	// PauseExternalConsole flags have no "separate console" on the headless
+	// Avalonia shell and are acknowledged in the log only.
+	async System.Threading.Tasks.Task RunCustomCommand (string name)
+	{
+		var entry = SelectedProjectCustomCommands.FirstOrDefault (c => c.Name == name);
+		if (entry is null) {
+			Output ($"[customcmd] '{name}' not found in the selected project");
+			return;
+		}
+		var projPath = ResolveSelectedProjectPath () ?? ResolveActiveProject ();
+		var projDir = projPath is not null ? Path.GetDirectoryName (projPath)! : Directory.GetCurrentDirectory ();
+		var projName = Path.GetFileNameWithoutExtension (projPath ?? name);
+
+		string Sub (string s) => s
+			.Replace ("${ProjectDir}", projDir, StringComparison.OrdinalIgnoreCase)
+			.Replace ("${ProjectName}", projName, StringComparison.OrdinalIgnoreCase);
+
+		// Legacy CustomCommand.ParseCommand: a leading quoted token is the
+		// executable (with spaces), the remainder the args; otherwise the first
+		// whitespace split.
+		string full = Sub (entry.Command), cmd, args = string.Empty;
+		if (full.Length > 0 && full [0] == '"') {
+			int n = full.IndexOf ('"', 1);
+			if (n != -1) { cmd = full.Substring (1, n - 1); args = full.Substring (n + 1).Trim (); }
+			else { cmd = full; }
+		} else {
+			int i = full.IndexOf (' ');
+			if (i != -1) { cmd = full.Substring (0, i); args = full.Substring (i + 1).Trim (); }
+			else { cmd = full; }
+		}
+
+		var workingDir = string.IsNullOrWhiteSpace (entry.WorkingDir)
+			? projDir
+			: Sub (entry.WorkingDir.Trim ());
+		if (!Path.IsPathRooted (workingDir))
+			workingDir = Path.GetFullPath (Path.Combine (projDir, workingDir));
+
+		if (!Path.IsPathRooted (cmd)) {
+			// Legacy back-compat: a bare executable name that matches a file in the
+			// project directory uses that; otherwise it is left for PATH.
+			var local = Path.GetFullPath (Path.Combine (projDir, cmd));
+			if (File.Exists (local))
+				cmd = local;
+		}
+
+		Output ($"[customcmd] running '{entry.Name}': {cmd} {args}");
+		if (entry.ExternalConsole)
+			Output ("[customcmd] (ExternalConsole requested — no separate console on the Avalonia shell)");
+		if (entry.PauseExternalConsole)
+			Output ("[customcmd] (PauseExternalConsole requested — ignored on the Avalonia shell)");
+
+		try {
+			var psi = new System.Diagnostics.ProcessStartInfo (cmd, args) {
+				WorkingDirectory = workingDir,
+				RedirectStandardOutput = true,
+				RedirectStandardError = true,
+				UseShellExecute = false,
+				CreateNoWindow = false,
+			};
+			foreach (var (k, v) in entry.Environment)
+				psi.EnvironmentVariables [k] = Sub (v);
+			var proc = System.Diagnostics.Process.Start (psi);
+			if (proc is null) {
+				Output ("[customcmd] failed to start " + cmd);
+				return;
+			}
+			proc.OutputDataReceived += (_, e) => { if (e.Data is not null) Avalonia.Threading.Dispatcher.UIThread.Post (() => Output (e.Data)); };
+			proc.ErrorDataReceived += (_, e) => { if (e.Data is not null) Avalonia.Threading.Dispatcher.UIThread.Post (() => Output (e.Data)); };
+			proc.BeginOutputReadLine ();
+			proc.BeginErrorReadLine ();
+			await proc.WaitForExitAsync ();
+			Avalonia.Threading.Dispatcher.UIThread.Post (() => Output ($"[customcmd] '{entry.Name}' exited with {proc.ExitCode}"));
+		} catch (Exception ex) {
+			Output ("[customcmd] execution failed: " + ex.Message);
+		}
 	}
 
 	// Oleada 3 (cleanup, P5): the process killed by a legitimate Stop — the

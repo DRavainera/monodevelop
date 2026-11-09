@@ -237,38 +237,14 @@ public static class MenuService
 			SepHeader ("Layout"),
 			// Legacy order (MainMenu.addin.xml): LayoutList before ViewList. Both
 			// are array commands — their masters render hidden and the array
-			// children inline right after each master (Ronda 3: the Layout List
-			// "Code" entry fills the region between the Layout header and Pads;
-			// the View List array stays empty because the Pads submenu below
-			// serves the legacy pad-list role).
+			// children inline right after each master (the Layout List "Code"
+			// entry fills the region after the Layout header; Ronda 6 (BUG 1)
+			// the View List array fills its region with the Pads / Debug Pads
+			// pad submenus — the GTK View List layout — replacing the old
+			// shell-only "_Pads" flat submenu).
 			Item ("Layout List", click: Command ("MonoDevelop.Ide.Commands.ViewCommands.LayoutList")),
 			Sep (),
 			Item ("View List", click: Command ("MonoDevelop.Ide.Commands.ViewCommands.ViewList")),
-			Sep (),
-			Sub ("_Pads", new List<MenuEntry> {
-				// One toggle per pad, same order/labels as Pads.addin.xml + addin pads;
-				// MainWindow checks them against actual visibility (pad:<id> dispatch).
-				Item ("Solution", isChecked: true, click: Command ("pad:solution")),
-				Item ("Classes", click: Command ("pad:classes")),
-				Item ("Help", click: Command ("pad:help")),
-				Sep (),
-				Item ("Toolbox", click: Command ("pad:toolbox")),
-				Item ("Properties", isChecked: true, click: Command ("pad:properties")),
-				Item ("Document Outline", click: Command ("pad:documentoutline")),
-				Item ("Unit Tests", click: Command ("pad:unittests")),
-				Sep (),
-				Item ("Output", isChecked: true, click: Command ("pad:output")),
-				Item ("Errors", click: Command ("pad:errors")),
-				Item ("Tasks", click: Command ("pad:tasks")),
-				Item ("Code Issues", click: Command ("pad:codeissues")),
-				Item ("Search Results", click: Command ("pad:searchresults")),
-				Sep (),
-				Item ("Call Stack", click: Command ("pad:callstack")),
-				Item ("Locals", click: Command ("pad:locals")),
-				Item ("Watch", click: Command ("pad:watch")),
-				Item ("Breakpoints", click: Command ("pad:breakpoints")),
-				Item ("Threads", click: Command ("pad:threads")),
-			}),
 			Sep (),
 			Item ("Save Curre_nt Layout...", icon: "gtk-add", click: Command ("MonoDevelop.Ide.Commands.ViewCommands.NewLayout")),
 			Item ("_Delete Current Layout", icon: "gtk-remove", click: Command ("MonoDevelop.Ide.Commands.ViewCommands.DeleteCurrentLayout")),

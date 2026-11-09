@@ -406,13 +406,20 @@ public static class ConfigurationService
 		/// <summary>Conteo de items DECLARADOS en el fichero (no evaluados por
 		/// MSBuild): Compile/None/Content/EmbeddedResource, solo los > 0.</summary>
 		public IReadOnlyDictionary<string, int> ItemCounts { get; }
+		/// <summary>Ronda 6 (BUG 3): los <c>CustomCommand</c> de
+		/// <c>Type="Custom"</c> declarados en el fichero (los que el menú
+		/// Project Commands &gt; Custom command list lista y ejecuta). Vacío si
+		/// el proyecto no declara ninguno — el mismo resultado que la GTK
+		/// cuando <c>conf.CustomCommands</c> no tiene entrada Custom.</summary>
+		public IReadOnlyList<CustomCommandEntry> CustomCommands { get; }
 
 		internal ProjectFileModel (string path, string name, string? outputType,
 			IReadOnlyList<string> targetFrameworks, string? outputPath, string? baseOutputPath,
 			IReadOnlyList<string> configurations, IReadOnlyList<string> frameworkRefs,
 			IReadOnlyList<string> packageRefs, IReadOnlyList<string> assemblyRefs,
 			IReadOnlyList<string> projectRefs, IReadOnlyList<ReferenceItem> references,
-			IReadOnlyDictionary<string, int> itemCounts)
+			IReadOnlyDictionary<string, int> itemCounts,
+			IReadOnlyList<CustomCommandEntry> customCommands)
 		{
 			Path = path;
 			Name = name;
@@ -427,6 +434,7 @@ public static class ConfigurationService
 			ProjectReferences = projectRefs;
 			References = references;
 			ItemCounts = itemCounts;
+			CustomCommands = customCommands;
 		}
 	}
 
@@ -437,6 +445,23 @@ public static class ConfigurationService
 	/// to PackageReference; <see cref="HintPath"/> only to Reference
 	/// (display — the save does not write it, like the legacy rewrite).</summary>
 	public sealed record ReferenceItem (string Kind, string Include, string? Version = null, string? HintPath = null);
+
+	/// <summary>Ronda 6 (BUG 3): one legacy <c>CustomCommand</c> of
+	/// <c>Type="Custom"</c> read straight from the .csproj (the Project
+	/// Commands &gt; Custom command list). Reduced to the properties the
+	/// execution layer needs — <c>Name</c> is the menu label and the
+	/// <c>Command</c> string the legacy <c>CustomCommand.ParseCommand</c>
+	/// splits into file + args ("\"exe arg\" rest" → exe="exe arg",
+	/// args="rest"; otherwise the first whitespace token). <c>WorkingDir</c>
+	/// is the raw tag value (null = the project directory); the
+	/// <c>ExternalConsole</c>/<c>PauseExternalConsole</c> flags mirror the
+	/// legacy ItemProperty booleans and <c>Environment</c> the
+	/// <c>EnvironmentVariables</c> block. Read-only: the shell lists and runs
+	/// these, it never writes them back (the legacy Add/Remove dialogs are
+	/// not migrated).</summary>
+	public sealed record CustomCommandEntry (
+		string Name, string Command, string? WorkingDir, bool ExternalConsole, bool PauseExternalConsole,
+		IReadOnlyDictionary<string, string> Environment);
 
 	/// <summary>Oleada 4 (slice F): rewrites the project's editable reference
 	/// items (PackageReference / ProjectReference / Reference) exactly as the
@@ -645,6 +670,10 @@ public static class ConfigurationService
 				(string?)el.Element (ns + "HintPath")?.Value));
 		}
 
+		// Ronda 6 (BUG 3): the legacy CustomCommand entries (Type="Custom") the
+		// Project Commands > Custom command list shows and runs.
+		var customCommands = ParseCustomCommands (root);
+
 		return new ProjectFileModel (
 			path: full,
 			name: name,
@@ -658,7 +687,109 @@ public static class ConfigurationService
 			assemblyRefs: ItemIncludes ("Reference"),
 			projectRefs: projRefs,
 			references: references,
-			itemCounts: itemCounts);
+			itemCounts: itemCounts,
+			customCommands: customCommands);
+	}
+
+	/// <summary>Ronda 6 (BUG 3): reads the project's legacy <c>CustomCommand</c>
+	/// entries of <c>Type="Custom"</c> from the .csproj — the same data the GTK
+	/// <c>CustomCommandListHandler</c> pulls from
+	/// <c>IConfigurationTarget.DefaultConfiguration.CustomCommands</c>.
+	///
+	/// The legacy <c>ItemProperty</c> writer (CollectionDataType) nests the
+	/// commands as a <c>CustomCommands</c> group inside each configuration
+	/// <c>PropertyGroup</c>, so we walk every <c>CustomCommands</c> descendant
+	/// (namespace- and casing-tolerant). Each command item carries
+	/// <c>Type</c>/<c>Command</c>/<c>WorkingDir</c>/<c>Name</c>/
+	/// <c>ExternalConsole</c>/<c>PauseExternalConsole</c>; a field is read from
+	/// the matching attribute first, then the same-named child element (the two
+	/// spellings the legacy writer can emit), case-insensitively. Non-Custom
+	/// types (Build/Clean/…) and entries without a command are skipped, exactly
+	/// as the legacy handler filters <c>cmd.Type == CustomCommandType.Custom</c>.
+	/// An unreadable/absent block yields an empty list — a broken custom-command
+	/// section must not break the whole project model (the legacy tolerance).</summary>
+	static List<CustomCommandEntry> ParseCustomCommands (System.Xml.Linq.XElement root)
+	{
+		var result = new List<CustomCommandEntry> ();
+		try {
+			// The legacy collection (CollectionDataType) wraps the command items in a
+			// CustomCommands group whose element name is the SAME as the items
+			// (CollectionDataType.OnSerialize: the wrapper's name is the property name
+			// and each item's name is the CustomCommand class's serialized name — both
+			// "CustomCommands", pinned by MSBuildXmlNamespaceNotAddedToCustomCommand).
+			// So Descendants() named "CustomCommands" matches BOTH the wrapper and each
+			// item. The wrapper is a pure container (no Command field); only the items
+			// carry a Command. Filtering to the command-bearing nodes therefore yields
+			// exactly the items, with no duplicates and no need to walk children.
+			var items = root.Descendants ().Where (e =>
+				string.Equals (e.Name.LocalName, "CustomCommands", StringComparison.OrdinalIgnoreCase)
+				&& HasCommandField (e)).ToList ();
+			foreach (var el in items) {
+				var type = StringField (el, "Type");
+				// The legacy filters Type == CustomCommandType.Custom; the enum
+				// serializes as the value name ("Custom"). Case-insensitive.
+				if (type is not null && !string.Equals (type, "Custom", StringComparison.OrdinalIgnoreCase))
+					continue;
+				var command = StringField (el, "Command");
+				if (string.IsNullOrWhiteSpace (command))
+					continue;
+				result.Add (new CustomCommandEntry (
+					Name: StringField (el, "Name") ?? string.Empty,
+					Command: command,
+					WorkingDir: StringField (el, "WorkingDir"),
+					ExternalConsole: BoolField (el, "ExternalConsole"),
+					PauseExternalConsole: BoolField (el, "PauseExternalConsole"),
+					Environment: EnvVars (el)));
+			}
+		} catch {
+			// A malformed block must not break the model — same tolerance as the
+			// rest of ParseProjectFile (return what we already have).
+		}
+		return result;
+	}
+
+	static bool HasCommandField (System.Xml.Linq.XElement el)
+		=> FieldValue (el, "Command") is not null;
+
+	/// <summary>Reads a field as a string from the matching attribute first, then
+	/// the same-named child element (case-insensitive) — the two spellings the
+	/// legacy ItemProperty writer can emit. null when absent or blank.</summary>
+	static string? StringField (System.Xml.Linq.XElement el, string field)
+	{
+		var v = FieldValue (el, field);
+		return string.IsNullOrWhiteSpace (v) ? null : v.Trim ();
+	}
+
+	static bool BoolField (System.Xml.Linq.XElement el, string field)
+		=> bool.TryParse (FieldValue (el, field), out var b) && b;
+
+	/// <summary>Ronda 6 (BUG 3): the command's <c>EnvironmentVariables</c> block —
+	/// the legacy writer nests <c>Variable</c> items with <c>name</c>/<c>value</c>
+	/// (case-tolerant here). An empty dictionary when the block is absent.</summary>
+	static Dictionary<string, string> EnvVars (System.Xml.Linq.XElement el)
+	{
+		var vars = new Dictionary<string, string> ();
+		foreach (var block in el.Elements ().Where (x =>
+			string.Equals (x.Name.LocalName, "EnvironmentVariables", StringComparison.OrdinalIgnoreCase))) {
+			foreach (var v in block.Elements ()) {
+				var name = v.Attribute ("name")?.Value ?? v.Element ("name")?.Value;
+				var value = v.Attribute ("value")?.Value ?? v.Element ("value")?.Value;
+				if (!string.IsNullOrEmpty (name))
+					vars [name] = value ?? string.Empty;
+			}
+		}
+		return vars;
+	}
+
+	static string? FieldValue (System.Xml.Linq.XElement el, string field)
+	{
+		var attr = el.Attributes ().FirstOrDefault (a =>
+			string.Equals (a.Name.LocalName, field, StringComparison.OrdinalIgnoreCase));
+		if (attr is not null)
+			return attr.Value;
+		var elem = el.Elements ().FirstOrDefault (e =>
+			string.Equals (e.Name.LocalName, field, StringComparison.OrdinalIgnoreCase));
+		return elem?.Value;
 	}
 
 	// ------------------------------------------------------------------

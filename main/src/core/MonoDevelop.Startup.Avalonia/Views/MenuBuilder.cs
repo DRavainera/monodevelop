@@ -237,6 +237,24 @@ public static class MenuBuilder
 					children.Add (sep);
 					continue;
 				}
+				// Ronda 6 (BUG 1): a CommandInfoSet is a named group — the legacy
+				// GTK renders it as a SUBMENU (e.g. View List's "Pads"/"Debug
+				// Pads"). Build a submenu MenuItem and inline its leaves; each
+				// leaf dispatches the master id with its own dataItem, so the
+				// nesting level does not change the Run(dataItem) payload.
+				if (ci is MonoDevelop.Components.Commands.CommandInfoSet set) {
+					var setMenu = new Avalonia.Controls.MenuItem {
+						Header = set.Text,
+						IsEnabled = set.Enabled,
+					};
+					AppendArraySetChildren (setMenu, set.CommandInfos, id);
+					// An empty group disappears (the "all children invisible"
+					// marker, like the model's AutoHide submenus).
+					setMenu.IsVisible = setMenu.Items.OfType<Avalonia.Controls.MenuItem> ().Any (c => c.IsVisible);
+					InsertItem (parent, idx + 1 + children.Count, setMenu);
+					children.Add (setMenu);
+					continue;
+				}
 				var child = new Avalonia.Controls.MenuItem {
 					Header = ci.Text,
 					IsEnabled = ci.Enabled,
@@ -252,6 +270,40 @@ public static class MenuBuilder
 				children.Add (child);
 			}
 		arrayChildren[master] = children;
+	}
+
+	// Ronda 6 (BUG 1): fills a set submenu's Items from a CommandArrayInfo —
+	// the leaves of a CommandInfoSet. Each leaf dispatches the ARRAY MASTER id
+	// (not the set) with its own dataItem, matching the flat-array case and the
+	// legacy handler's Run(dataItem) (which forwards the dataItem regardless of
+	// which CommandInfo it came from). Recurses for a nested set and renders
+	// separators.
+	static void AppendArraySetChildren (Avalonia.Controls.MenuItem setMenu, MonoDevelop.Components.Commands.CommandArrayInfo arr, string id)
+	{
+		foreach (var ci in arr) {
+			if (ci.IsArraySeparator) {
+				setMenu.Items.Add (new Separator ());
+				continue;
+			}
+			if (ci is MonoDevelop.Components.Commands.CommandInfoSet nested) {
+				var sub = new Avalonia.Controls.MenuItem { Header = nested.Text, IsEnabled = nested.Enabled };
+				AppendArraySetChildren (sub, nested.CommandInfos, id);
+				sub.IsVisible = sub.Items.OfType<Avalonia.Controls.MenuItem> ().Any (c => c.IsVisible);
+				setMenu.Items.Add (sub);
+				continue;
+			}
+			var child = new Avalonia.Controls.MenuItem {
+				Header = ci.Text,
+				IsEnabled = ci.Enabled,
+				IsVisible = ci.Visible && ci.Enabled,
+				Tag = ci.DataItem,
+			};
+			if (ci.Checked)
+				child.Icon = CheckGlyph ();
+			var data = ci.DataItem;
+			child.Click += (_, _) => MonoDevelop.Components.Commands.CommandService.Dispatch (id, data, MonoDevelop.Components.Commands.CommandSource.MainMenu);
+			setMenu.Items.Add (child);
+		}
 	}
 
 	// Oleada 3 (slice C): Avalonia 12's ItemCollection (ItemsSourceView) throws
