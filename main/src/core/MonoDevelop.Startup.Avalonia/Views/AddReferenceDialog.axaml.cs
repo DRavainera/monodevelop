@@ -33,7 +33,10 @@ public class AddReferenceDialog : DialogWindow
 			public string Raw = ""; // original Include / full path
 	}
 
-	static readonly string [] KnownPackages = {
+	// The shell's offline package repository (legacy NuGet repository list): the
+	// single source Add Reference (Packages tab) and the Manage NuGet Packages
+	// dialog consult — internal so both share the same list.
+	internal static readonly string [] KnownPackages = {
 		"Newtonsoft.Json", "System.Json", "System.Numerics.Vectors", "System.Runtime.Serialization",
 		"System.Transactions", "System.Web", "System.Windows", "System.Xml.Linq",
 		"System.Drawing.Common", "Microsoft.CSharp", "Microsoft.Extensions.Logging",

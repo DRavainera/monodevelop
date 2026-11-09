@@ -439,6 +439,35 @@ public partial class MainWindow : Window
 					Dump ("docs12");
 					Output ("MENURUNTIME_DONE");
 				}, Avalonia.Threading.DispatcherPriority.Background);
+			} else if (qa.StartsWith ("--openmenu=", StringComparison.Ordinal)) {
+				// QA (Ronda 4, evidencia solo por píxeles): abre por programa el menú
+				// top-level indicado (IsSubMenuOpen=true) y LO DEJA ABIERTO, para que
+				// la captura de la ventana popup sea determinista. No se puede abrir
+				// con click sintético: el compositor Wayland/XWayland bloquea XTEST
+				// (xdotool no mueve el puntero en :0) y AT-SPI no expone Action en
+				// los MenuItem. El popup es una ventana top-level propia (override-
+				// redirect) que la captura lee con import -window <id>.
+				var openMenuName = qa.Substring ("--openmenu=".Length);
+				Avalonia.Threading.Dispatcher.UIThread.Post (async () => {
+					await System.Threading.Tasks.Task.Delay (1500); // el menubar termina su primer render
+					MenuBuilder.RefreshCommandStates ();
+					var target = MainMenu.Items.OfType<Avalonia.Controls.MenuItem> ()
+						.FirstOrDefault (m => {
+							var h = m.Header as string ?? "";
+							return h == openMenuName || h == "_" + openMenuName || h.Replace ("_", "") == openMenuName;
+						});
+					if (target is null) {
+						Output ($"[openmenu] menu '{openMenuName}' no encontrado entre {MainMenu.Items.OfType<Avalonia.Controls.MenuItem>().Count()} tops");
+						return;
+					}
+					// El popup solo se abre con la ventana activa (el menú entra en
+					// input mode al recibir foco); activa y enfoca antes.
+					Activate ();
+					Focus ();
+					target.Focus ();
+					target.IsSubMenuOpen = true;
+					Output ($"[openmenu] '{target.Header}' IsSubMenuOpen=true (abierto para captura)");
+				}, Avalonia.Threading.DispatcherPriority.Background);
 			} else if (qa == "--iconsqa") {
 				// QA: dump IconService resolution (Fluent family preferred, legacy
 				// icons/ fallback) for the shell's main stock ids.
@@ -3004,6 +3033,38 @@ public partial class MainWindow : Window
 					_ = new AddReferenceDialog (proj, loadedSolutionPath).ShowDialog (this);
 				else
 					Output ("[addrefdlg-qa] no project");
+			} else if (qa == "--managepkgdlg") {
+				// QA: show the Manage NuGet Packages dialog for visual inspection.
+				var mp = ResolveActiveProject ();
+				if (mp is not null)
+					_ = new ManagePackagesDialog (mp, loadedSolutionPath).ShowDialog (this);
+				else
+					Output ("[managepkgdlg-qa] no project");
+			} else if (qa == "--managepkgs") {
+				// QA: exercise ManagePackages through the project model: add a
+				// known package reference, verify the csproj, remove it and
+				// verify the model returns to the baseline (same cycle shape as
+				// --addref, through ManagePackagesDialog).
+				var mp2 = loadedSolutionPath.Length > 0
+					? ConfigurationService.GetSolutionProjects (loadedSolutionPath).FirstOrDefault ()
+					: null;
+				if (string.IsNullOrEmpty (mp2))
+					mp2 = ResolveActiveProject ();
+				if (mp2 is not null) {
+					var before = ConfigurationService.LoadProjectModel (mp2);
+					Output ($"[managepkgs-qa] model {Path.GetFileNameWithoutExtension (mp2)} refs={before?.References.Count ?? 0} package={before?.PackageReferences.Count ?? 0}");
+					var dlg = new ManagePackagesDialog (mp2, loadedSolutionPath);
+					bool ok = dlg.TryAddPackage ("RestSharp");
+					Output ($"[managepkgs-qa] TryAddPackage(RestSharp) → {ok}");
+					var text = File.ReadAllText (mp2);
+					Output ($"[managepkgs-qa] csproj contains RestSharp: {text.Contains ("RestSharp")}");
+					bool rm = dlg.TryRemovePackage ("RestSharp");
+					Output ($"[managepkgs-qa] TryRemovePackage(RestSharp) → {rm}");
+					ConfigurationService.ClearProjectModelCache ();
+					var after = ConfigurationService.LoadProjectModel (mp2);
+					Output ($"[managepkgs-qa] model after-clean refs={after?.References.Count ?? 0} package={after?.PackageReferences.Count ?? 0}");
+				} else
+					Output ("[managepkgs-qa] no project");
 			} else if (qa == "--extensionsdlg") {
 				// QA: show the Extensions (Add-in Manager) dialog with the chrome frame.
 				_ = new AddinManagerDialog { WindowStartupLocation = WindowStartupLocation.CenterOwner }.ShowDialog (this);
@@ -7299,6 +7360,36 @@ public partial class MainWindow : Window
 			_ = dlg.ShowDialog (this);
 			return;
 		}
+		// ----- NuGet Package Management: the three Project menu items (legacy
+		// MonoDevelop.PackageManagement handlers, now Avalonia). Manage opens the
+		// Manage NuGet Packages dialog on the same project the Add Reference
+		// dispatch resolves; Update / Restore report their state (no solution-wide
+		// resolver in the shell yet). -----
+		case "MonoDevelop.PackageManagement.Commands.ManageNuGetPackages": {
+			var mSelProj = nodeContext is not null && nodeContext.StartsWith ("project:", StringComparison.Ordinal)
+				? nodeContext ["project:".Length..]
+				: nodeContext is null ? ResolveSelectedProjectPath () : null;
+			var mProj = mSelProj is not null && File.Exists (mSelProj) ? mSelProj : ResolveActiveProject ();
+			if (mProj is null) {
+				Output ("[manage-pkgs] no project loaded");
+				return;
+			}
+			var mDlg = new ManagePackagesDialog (mProj, loadedSolutionPath);
+			mDlg.Closed += (_, _) => {
+				foreach (var a in mDlg.AddedPackages)
+					Output ($"[manage-pkgs] added '{a}' to {Path.GetFileName (mProj)}");
+				foreach (var r in mDlg.RemovedPackages)
+					Output ($"[manage-pkgs] removed '{r}' from {Path.GetFileName (mProj)}");
+			};
+			_ = mDlg.ShowDialog (this);
+			return;
+		}
+		case "MonoDevelop.PackageManagement.Commands.UpdateAllPackagesInSolution":
+			Output ("[manage-pkgs] Update NuGet Packages: no solution-wide update in the shell (open Manage NuGet Packages per project)");
+			return;
+		case "MonoDevelop.PackageManagement.Commands.RestorePackages":
+			Output ("[manage-pkgs] Restore NuGet Packages: no package restore in the shell (dotnet restore covers the projects)");
+			return;
 		case "MonoDevelop.Ide.Commands.FileCommands.ReloadFile":
 			// Legacy ReloadFile: reverts the active editor to the on-disk content.
 			if (docs.TryGetValue ((DocTabs.SelectedItem as TabItem)?.Tag as string ?? "", out var rl)

@@ -385,6 +385,14 @@ public static class MenuService
 		Children = {
 			Item ("_Add Reference...", icon: "md-reference", click: Command ("MonoDevelop.Ide.Commands.ProjectCommands.AddReference")),
 			Sep (),
+			// MonoDevelop.PackageManagement.addin.xml: the three NuGet items insert
+			// right after AddReference (SeparatorItem insertafter="AddReference"), so
+			// they sit at the top of the menu — same position as the GTK UI, not at
+			// the bottom after the core content.
+			Item ("_Manage NuGet Packages...", click: Command ("MonoDevelop.PackageManagement.Commands.ManageNuGetPackages")),
+			Item ("_Update NuGet Packages", click: Command ("MonoDevelop.PackageManagement.Commands.UpdateAllPackagesInSolution")),
+			Item ("_Restore NuGet Packages", click: Command ("MonoDevelop.PackageManagement.Commands.RestorePackages")),
+			Sep (),
 			Item ("Custom command list", click: Command ("MonoDevelop.Ide.Commands.ProjectCommands.CustomCommandList")),
 			Sep (),
 			Item ("Run Code Analysis on Solution", click: Command ("MonoDevelop.Ide.Commands.ProjectCommands.RunCodeAnalysisSolution")),
@@ -410,12 +418,6 @@ public static class MenuService
 			// !windows — active on linux).
 			Item ("Create Package...", click: Command ("MonoDevelop.Deployment.Commands.CreatePackage")),
 			Item ("Generate Makefiles...", click: Command ("MonoDevelop.Autotools.Commands.GenerateFiles")),
-			Sep (),
-			// MonoDevelop.PackageManagement.addin.xml: the NuGet package items
-			// append after the core menu content.
-			Item ("_Manage NuGet Packages...", click: Command ("MonoDevelop.PackageManagement.Commands.ManageNuGetPackages")),
-			Item ("_Update NuGet Packages", click: Command ("MonoDevelop.PackageManagement.Commands.UpdateAllPackagesInSolution")),
-			Item ("_Restore NuGet Packages", click: Command ("MonoDevelop.PackageManagement.Commands.RestorePackages")),
 			Sep (),
 			// MonoDevelop.Refactoring.addin.xml: ItemSet "_Analyze".
 			Sub ("_Analyze", new List<MenuEntry> {
