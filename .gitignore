@@ -24,6 +24,7 @@ obj/
 /main/tests/tmp
 /main/tests/config
 /main/tests/UnitTests/test-results
+/main/tests/AvaloniaShell.Editor.Tests/bin
 /main/build/MacOSX/monostub
 /main/build/MacOSX/monostub-nogui
 /main/build/MacOSx/monostub-test

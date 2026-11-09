@@ -7446,8 +7446,14 @@ public partial class MainWindow : Window
 		case "MonoDevelop.Ide.Editor.MessageBubbleCommands.ToggleIssues":
 			WithActiveEditor (e => e.ToggleBubbles ());
 			return;
+		// Ronda 2: the ported HideIssuesHandler now owns this command (catalog
+		// dispatch reaches it directly); this case only serves the session
+		// replay, which re-displays recorded ids through OnMenuCommand — it
+		// delegates to the same shared entry point so replay and click keep the
+		// identical semantics (toggle the persisted hide-all state, apply it to
+		// the active editor, refresh the check glyphs).
 		case "MonoDevelop.Ide.Editor.MessageBubbleCommands.HideIssues":
-			WithActiveEditor (e => e.SetBubbleMode (SkTextEditor.BubbleMode.Never));
+			MonoDevelop.Ide.Editor.MessageBubbleState.ToggleHideAll ();
 			return;
 		case "MonoDevelop.Ide.Commands.ViewCommands.ViewList":
 			// Legacy View List: check list of pads with their visibility — the new shell
@@ -9554,6 +9560,13 @@ public partial class MainWindow : Window
 		else
 			Output ("[edit] no active text editor");
 	}
+
+	// Ronda 2: entry point for the ported MessageBubble handlers (MonoDevelop.Ide
+	// Editor/MessageBubbles/MessageBubbleCommands.cs) — mirrors the persisted
+	// bubbles preference onto the active editor (legacy IdePreferences.Changed
+	// parity). WithActiveEditor stays private; the port routes through here.
+	public void SetActiveEditorBubbleMode (MonoDevelop.Ide.Controls.SkTextEditor.BubbleMode mode)
+		=> WithActiveEditor (e => e.SetBubbleMode (mode));
 
 	// FileCommands.NewFile (legacy NewFileHandler: new NewFileDialog(null, null)):
 	// the real New File dialog in free mode — the "Add to project" box is offered

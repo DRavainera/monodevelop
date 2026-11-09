@@ -158,6 +158,15 @@
 		<Compile Include="..\MonoDevelop.Ide\MonoDevelop.Ide.Commands\TextEditorCommands.cs" />
 		<Compile Include="..\MonoDevelop.Ide\MonoDevelop.Ide.Commands\NavigationCommands.cs" />
 		<Compile Include="..\MonoDevelop.Ide\MonoDevelop.Ide.Commands\SearchCommands.cs" />
+		<!-- Ronda 2 (2026-11-09): the MessageBubble command handlers (HideIssues
+		     check item + ToggleIssues radio array). The shell resolves the
+		     catalog defaultHandler types against its own assembly
+		     (CommandCatalogLoader.ResolveHandlerType), so without the
+		     AVALONIA_SHELL ports compiled in here the ToggleIssues master
+		     stays handler-less: hidden with no CommandArrayInfo, and its
+		     children (Errors / Errors and Warnings) never inline in
+		     View > Inline Messages. -->
+		<Compile Include="..\MonoDevelop.Ide\MonoDevelop.Ide.Editor\MessageBubbles\MessageBubbleCommands.cs" />
 	</ItemGroup>
 	<!-- Legacy command catalogs: the *.addin.xml sources (MonoDevelop.Ide core +
 	     every add-in) are staged next to the binaries under addinxml/ and loaded
