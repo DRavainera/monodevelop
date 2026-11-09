@@ -367,6 +367,78 @@ public partial class MainWindow : Window
 					perMenu.Add (m.Label + "=" + items + "i/" + cmds + "c");
 				}
 				Output ("[menudump] menus=" + menus.Count + " items=" + allItems + " cmds=" + allCmds + " bindings=" + MenuCommandBindings ().Count + " " + string.Join (" ", perMenu));
+			} else if (qa == "--menuruntime") {
+				// QA (menu visibility): dump the BUILT MainMenu state after
+				// RefreshCommandStates — every item with its depth, header,
+				// visible/enabled state and command tag, plus per-top-menu
+				// visible/total counts. --menudump counts the model (pre-mirror);
+				// this is what the user actually sees at runtime.
+				Avalonia.Threading.Dispatcher.UIThread.Post (async () => {
+					void Dump (string phase)
+					{
+						int total = 0, hidden = 0;
+						var perMenu = new List<string> ();
+						void Walk (System.Collections.IEnumerable items, int depth)
+						{
+							foreach (var it in items) {
+								if (it is not Avalonia.Controls.MenuItem mi)
+									continue;
+								total++;
+								if (!mi.IsVisible)
+									hidden++;
+								Output ($"[menuruntime] {phase} d{depth} '{mi.Header}' vis={mi.IsVisible} en={mi.IsEnabled} tag={mi.Tag as string ?? ""}");
+								if (mi.Items.Count > 0)
+									Walk (mi.Items, depth + 1);
+							}
+						}
+						void Count (System.Collections.IEnumerable items, ref int t, ref int h)
+						{
+							foreach (var it in items) {
+								if (it is not Avalonia.Controls.MenuItem mi2)
+									continue;
+								t++;
+								if (!mi2.IsVisible)
+									h++;
+								if (mi2.Items.Count > 0)
+									Count (mi2.Items, ref t, ref h);
+							}
+						}
+						foreach (var top in MainMenu.Items.OfType<Avalonia.Controls.MenuItem> ()) {
+							int t = 0, h = 0;
+							Count (top.Items, ref t, ref h);
+							perMenu.Add ($"{top.Header}={t - h}/{t}");
+						}
+						Walk (MainMenu.Items, 0);
+						var topCount = MainMenu.Items.OfType<Avalonia.Controls.MenuItem> ().Count ();
+						Output ($"[menuruntime] {phase} summary menus={topCount} total={total} hidden={hidden} " + string.Join (" ", perMenu));
+					}
+					MenuBuilder.RefreshCommandStates ();
+					Dump ("initial");
+					// Phase 2: two real file documents (the operator's working state).
+					var qaDir = Path.Combine (Environment.GetEnvironmentVariable ("HOME")!, "opencode", "fix1_qa");
+					Directory.CreateDirectory (qaDir);
+					var f1 = Path.Combine (qaDir, "menuqa1.cs");
+					var f2 = Path.Combine (qaDir, "menuqa2.cs");
+					File.WriteAllText (f1, "class MenuQa1 { }\n");
+					File.WriteAllText (f2, "class MenuQa2 { }\n");
+					OpenFileDocument (f1);
+					OpenFileDocument (f2);
+					SelectDocument (DocKey (f2));
+					SelectDocument (DocKey (f1));
+					await System.Threading.Tasks.Task.Delay (500); // navigation push settles
+					MenuBuilder.RefreshCommandStates ();
+					Dump ("docs2");
+					// Phase 3: 12 documents (Window > Document List array fills).
+					for (int i = 3; i <= 12; i++) {
+						var fi = Path.Combine (qaDir, "menuqa" + i + ".cs");
+						File.WriteAllText (fi, "class MenuQa" + i + " { }\n");
+						OpenFileDocument (fi);
+					}
+					await System.Threading.Tasks.Task.Delay (300);
+					MenuBuilder.RefreshCommandStates ();
+					Dump ("docs12");
+					Output ("MENURUNTIME_DONE");
+				}, Avalonia.Threading.DispatcherPriority.Background);
 			} else if (qa == "--iconsqa") {
 				// QA: dump IconService resolution (Fluent family preferred, legacy
 				// icons/ fallback) for the shell's main stock ids.

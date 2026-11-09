@@ -196,12 +196,32 @@ public static class MenuService
 			Sub ("_Insert", new List<MenuEntry> {
 				Item ("_Snippet...", click: Command ("MonoDevelop.Ide.Commands.TextEditorCommands.ShowCodeTemplateWindow")),
 				Item ("Standard _Header", click: Command ("MonoDevelop.Ide.Commands.EditCommands.InsertStandardHeader")),
+				// DocFood.addin.xml: insertafter InsertStandardHeader.
+				Item ("Documentation _Comments", click: Command ("MonoDevelop.DocFood.Commands.DocumentBuffer")),
 				Sep (),
 				Item ("_GUID (Globally Unique Identifier)", click: Command ("MonoDevelop.Ide.Commands.EditCommands.InsertGuid")),
 			}),
+			// MonoDevelop.XmlEditor.addin.xml: ItemSet "_XML" insertafter Insert.
+			Sub ("_XML", new List<MenuEntry> {
+				Item ("_Validate", click: Command ("MonoDevelop.Xml.Editor.XmlCommands.Validate")),
+				Sep (),
+				Item ("Create _Schema", click: Command ("MonoDevelop.Xml.Editor.XmlCommands.CreateSchema")),
+				Item ("_Go to Schema Definition", click: Command ("MonoDevelop.Xml.Editor.XmlCommands.GoToSchemaDefinition")),
+				Sep (),
+				Item ("_Assign XSLT...", click: Command ("MonoDevelop.Xml.Editor.XmlCommands.AssignStylesheet")),
+				Item ("_Open XSLT", click: Command ("MonoDevelop.Xml.Editor.XmlCommands.OpenStylesheet")),
+				Item ("Run XSL_T", shortcut: "Alt Ctrl T", click: Command ("MonoDevelop.Xml.Editor.XmlCommands.RunXslTransform")),
+			}),
 			Sep (),
+			// ChangeLogAddIn.addin.xml: insertafter Separator5 (the separator
+			// above; the Avalonia ChangeLog add-in contributes the same item —
+			// one entry, deduplicated by command id).
+			Item ("Insert ChangeLog Entry", click: Command ("MonoDevelop.ChangeLogAddIn.ChangeLogCommands.InsertEntry")),
 			Item ("Complete Word", shortcut: "Ctrl Space", click: Command ("MonoDevelop.Ide.Commands.TextEditorCommands.ShowCompletionWindow")),
 			Item ("Show Parameter List", shortcut: "Ctrl Shift Space", click: Command ("MonoDevelop.Ide.Commands.TextEditorCommands.ShowParameterCompletionWindow")),
+			// MonoDevelop.Refactoring.addin.xml: insertafter
+			// ShowParameterCompletionWindow (CodeGeneration command).
+			Item ("Show Code _Generation", shortcut: "Alt Insert", click: Command ("MonoDevelop.CodeGeneration.CodeGenerationCommands.ShowCodeGenerationWindow")),
 			Item ("Switch Completion/Suggestion Mode", click: Command ("MonoDevelop.Ide.Commands.TextEditorCommands.ToggleCompletionSuggestionMode")),
 			Sep (),
 			Item ("Pr_eferences...", icon: "gtk-preferences", click: OpenPrefs ()),
@@ -311,6 +331,15 @@ public static class MenuService
 			Sep (),
 			Item ("Show Previous", click: Command ("MonoDevelop.Ide.Commands.ViewCommands.ShowPrevious")),
 			Item ("Show Next", click: Command ("MonoDevelop.Ide.Commands.ViewCommands.ShowNext")),
+			// MonoDevelop.SourceEditor.addin.xml: ItemSet "Inspect"
+			// insertafter ShowNext (legacy menu order).
+			Sub ("Inspect", new List<MenuEntry> {
+				Item ("Previous Error", shortcut: "Alt Shift PageUp", click: Command ("MonoDevelop.SourceEditor.SourceEditorCommands.PrevIssueError")),
+				Item ("Next Error", shortcut: "Alt Shift PageDown", click: Command ("MonoDevelop.SourceEditor.SourceEditorCommands.NextIssueError")),
+				Sep (),
+				Item ("Previous Issue in File", shortcut: "Alt PageUp", click: Command ("MonoDevelop.SourceEditor.SourceEditorCommands.PrevIssue")),
+				Item ("Next Issue in File", shortcut: "Alt PageDown", click: Command ("MonoDevelop.SourceEditor.SourceEditorCommands.NextIssue")),
+			}),
 			Sep (),
 			Sub ("Navigation _History", new List<MenuEntry> {
 				Item ("Navigate _Back", icon: "md-navigate-back", shortcut: "Ctrl Minus", click: Command ("MonoDevelop.Ide.Commands.NavigationCommands.NavigateBack")),
@@ -356,6 +385,11 @@ public static class MenuService
 			Item ("Run Code Analysis on Project", click: Command ("MonoDevelop.Ide.Commands.ProjectCommands.RunCodeAnalysisProject")),
 			Sep (),
 			Sub ("Active Configuration", ActiveConfigChildren (), autoHide: true),
+			// Legacy radio|array command: the master renders hidden and the
+			// children inline only when the runtime-selector feature switch is
+			// on (SelectActiveRuntimeHandler.Update) — same rendering as the
+			// other array commands in this menu.
+			Item ("Active Runtime", click: Command ("MonoDevelop.Ide.Commands.ProjectCommands.SelectActiveRuntime")),
 			Sep (),
 			Item ("Apply Policy...", click: Command ("MonoDevelop.Ide.Commands.ProjectCommands.ApplyPolicy")),
 			Item ("Export Policy...", click: Command ("MonoDevelop.Ide.Commands.ProjectCommands.ExportPolicy")),
@@ -365,6 +399,26 @@ public static class MenuService
 			Item ("Project _Options", icon: "gtk-preferences", click: Command ("MonoDevelop.Ide.Commands.ProjectCommands.ProjectOptions")),
 			Sep (),
 			Item ("Convert Solution Format...", click: Command ("MonoDevelop.Ide.Commands.ProjectCommands.ExportSolution")),
+			// Deployment.addin.xml (insertafter ExportSolution) and
+			// Autotools.addin.xml (insertafter ExportSolution, Platform
+			// !windows — active on linux).
+			Item ("Create Package...", click: Command ("MonoDevelop.Deployment.Commands.CreatePackage")),
+			Item ("Generate Makefiles...", click: Command ("MonoDevelop.Autotools.Commands.GenerateFiles")),
+			Sep (),
+			// MonoDevelop.PackageManagement.addin.xml: the NuGet package items
+			// append after the core menu content.
+			Item ("_Manage NuGet Packages...", click: Command ("MonoDevelop.PackageManagement.Commands.ManageNuGetPackages")),
+			Item ("_Update NuGet Packages", click: Command ("MonoDevelop.PackageManagement.Commands.UpdateAllPackagesInSolution")),
+			Item ("_Restore NuGet Packages", click: Command ("MonoDevelop.PackageManagement.Commands.RestorePackages")),
+			Sep (),
+			// MonoDevelop.Refactoring.addin.xml: ItemSet "_Analyze".
+			Sub ("_Analyze", new List<MenuEntry> {
+				Item ("_Whole Solution", click: Command ("MonoDevelop.Refactoring.AnalyzeWholeSolution")),
+				Item ("_Current Project", click: Command ("MonoDevelop.Refactoring.AnalyzeCurrentProject")),
+			}),
+			Sep (),
+			// MonoDevelop.ConnectedServices.addin.xml: appends at the end.
+			Item ("Service Capabilities", click: Command ("MonoDevelop.ConnectedServices.Commands.OpenServicesGallery")),
 		}
 	};
 
@@ -380,8 +434,26 @@ public static class MenuService
 			Item ("R_ebuild", click: Command ("MonoDevelop.Ide.Commands.ProjectCommands.Rebuild")),
 			Item ("C_lean", click: Command ("MonoDevelop.Ide.Commands.ProjectCommands.Clean")),
 			Sep (),
+			// MonoDevelop.Packaging.addin.xml: separator + item positioned
+			// between Clean and the following core separator (legacy shows it
+			// when the active project carries NuGet packaging metadata — the
+			// shell has no such condition, so it stays present like the rest
+			// of the pending ports).
+			Item ("Create NuGet _Package", click: Command ("MonoDevelop.Packaging.Commands.CreateNuGetPackage")),
+			Sep (),
 			Item ("_Stop", icon: "gtk-stop", shortcut: "Shift F5", click: Command ("MonoDevelop.Ide.Commands.ProjectCommands.Stop")),
 			Sep (),
+			// Publish tail: the core "Publish" ItemSet is empty and
+			// autohide=True, so legacy hides it; the add-in items fill the
+			// same region (AspNetCore + DotNetCore, ordered around their
+			// PackSeparator anchor).
+			Item ("Publish to Folder...", click: Command ("MonoDevelop.AspNetCore.Commands.PublishToFolder")),
+			Sep (),
+			Item ("Pack", click: Command ("MonoDevelop.DotNetCore.Commands.Pack")),
+			// AspNetCore array command (publish profiles): like the other
+			// array commands, the master renders hidden while the profile
+			// list is empty — it fills in once the add-in is ported.
+			Item ("Publish", click: Command ("MonoDevelop.AspNetCore.Commands.PublishToFolderProfiles")),
 		}
 	};
 
@@ -404,10 +476,30 @@ public static class MenuService
 			Item ("Step O_ut", icon: "md-step-out-debug", shortcut: "Shift F11", click: Command ("MonoDevelop.Debugger.DebugCommands.StepOut")),
 			Item ("_Continue", icon: "md-continue-debug", shortcut: "Alt F5", click: Command ("MonoDevelop.Debugger.DebugCommands.Continue")),
 			Item ("_Pause", icon: "md-pause-debug", click: Command ("MonoDevelop.Debugger.DebugCommands.Pause")),
+			// MonoDevelop.Debugger.addin.xml: the debug-step region continues
+			// with Stop Evaluation (legacy: right after Pause) and Show
+			// Current Execution Line (legacy: after Step Out; its Alt+*
+			// shortcut has no Avalonia Key equivalent, so no gesture).
+			Item ("Stop Evaluation", click: Command ("MonoDevelop.Debugger.DebugCommands.StopEvaluation")),
+			Item ("Show Current Execution Line", icon: "md-go-to-line", click: Command ("MonoDevelop.Debugger.DebugCommands.ShowCurrentExecutionLine")),
 			Sep (),
+			Item ("Debug Application...", click: Command ("MonoDevelop.Debugger.DebugCommands.DebugApplication")),
 			Item ("_Stop Debugging", icon: "gtk-stop", shortcut: "Shift F5", click: Command ("MonoDevelop.Debugger.DebugCommands.Stop")),
 			Item ("De_tach", click: Command ("MonoDevelop.Debugger.DebugCommands.Detach")),
 			Item ("Attach to Process...", click: Command ("MonoDevelop.Debugger.DebugCommands.AttachToProcess")),
+			Sep (),
+			// Legacy debugger breakpoint commands (same group in the GTK menu).
+			Item ("New Breakpoint…", icon: "md-breakpoint-new", click: Command ("MonoDevelop.Debugger.DebugCommands.NewBreakpoint")),
+			Item ("New Function Breakpoint", icon: "md-breakpoint-new", click: Command ("MonoDevelop.Debugger.DebugCommands.NewFunctionBreakpoint")),
+			Item ("New Exception Catchpoint", icon: "md-catchpoint-new", click: Command ("MonoDevelop.Debugger.DebugCommands.NewCatchpoint")),
+			Item ("View Breakpoints", icon: "md-view-debug-breakpoints", click: Command ("MonoDevelop.Debugger.DebugCommands.ShowBreakpoints")),
+			Item ("Toggle Breakpoint", icon: "md-breakpoint", shortcut: "F9", click: Command ("MonoDevelop.Debugger.DebugCommands.ToggleBreakpoint")),
+			Item ("Enable/Disable Breakpoint", icon: "md-breakpoint-on-off", shortcut: "Ctrl F9", click: Command ("MonoDevelop.Debugger.DebugCommands.EnableDisableBreakpoint")),
+			Item ("Enable or Disable All Breakpoints", icon: "md-breakpoint-disable-all", click: Command ("MonoDevelop.Debugger.DebugCommands.DisableAllBreakpoints")),
+			Item ("Remove All Breakpoints", icon: "md-clear", click: Command ("MonoDevelop.Debugger.DebugCommands.ClearAllBreakpoints")),
+			Sep (),
+			Item ("Show Disassembly", click: Command ("MonoDevelop.Debugger.DebugCommands.ShowDisassembly")),
+			Item ("Expression Evaluator", shortcut: "Shift F9", click: Command ("MonoDevelop.Debugger.DebugCommands.ExpressionEvaluator")),
 			Sep (),
 			Item ("_Stop", icon: "gtk-stop", shortcut: "Ctrl Shift F5", click: Command ("MonoDevelop.Ide.Commands.ProjectCommands.Stop")),
 		}
@@ -463,6 +555,24 @@ public static class MenuService
 			Item ("_Diff", icon: "vc-diff", click: Command ("MonoDevelop.VersionControl.Commands.Diff")),
 			Item ("_Log", icon: "vc-log", click: Command ("MonoDevelop.VersionControl.Commands.Log")),
 			Item ("Authors", click: Command ("MonoDevelop.VersionControl.Commands.Annotate")),
+			// MonoDevelop.VersionControl.Git.addin.xml: the Git items append
+			// after the core menu content (the "Switch to Branch" legacy
+			// ItemSet wraps a radio|array master — bound with the model's
+			// ":branches" suffix id, like SelectActiveConfiguration:<config>,
+			// so MenuBuilder does not treat the entry as an array master and
+			// hide it; dispatch reports it like the other pending ports).
+			Sep (),
+			Item ("Push Changes...", icon: "vc-push", click: Command ("MonoDevelop.VersionControl.Git.Commands.Push")),
+			Item ("Switch to Branch", click: Command ("MonoDevelop.VersionControl.Git.Commands.SwitchToBranch:branches")),
+			Sep (),
+			Item ("Merge Branch...", click: Command ("MonoDevelop.VersionControl.Git.Commands.Merge")),
+			Item ("Rebase to Branch...", click: Command ("MonoDevelop.VersionControl.Git.Commands.Rebase")),
+			Item ("Manage Branches and Remotes", click: Command ("MonoDevelop.VersionControl.Git.Commands.ManageBranches")),
+			Sep (),
+			Item ("Stash...", click: Command ("MonoDevelop.VersionControl.Git.Commands.Stash")),
+			Item ("Pop stash", click: Command ("MonoDevelop.VersionControl.Git.Commands.StashPop")),
+			Item ("Manage stashes", click: Command ("MonoDevelop.VersionControl.Git.Commands.ManageStashes")),
+			Sep (),
 		}
 	};
 
@@ -482,6 +592,10 @@ public static class MenuService
 		Children = {
 			Item ("_Extensions...", icon: "gtk-plugin", click: OpenAddins ()),
 			Sep (),
+			// AssemblyBrowser/RegexToolkit add-ins: insertafter the
+			// "ToolsSection" separator above.
+			Item ("_Assembly Browser", click: Command ("MonoDevelop.AssemblyBrowser.ShowAssemblyBrowser")),
+			Item ("_Regular Expressions Toolkit", click: Command ("MonoDevelop.RegexToolkit.Commands.ShowRegexToolkit")),
 			Sub ("Session Recorder", new List<MenuEntry> {
 				Item ("Start Session Recorder", click: Command ("MonoDevelop.Ide.Commands.ToolCommands.ToggleSessionRecorder")),
 				Item ("Replay Session...", icon: "gtk-go-forward", click: Command ("MonoDevelop.Ide.Commands.ToolCommands.ReplaySession")),
@@ -558,6 +672,23 @@ public static class MenuService
 				Item ("Dump Accessibility Tree", click: Command ("MonoDevelop.Ide.Commands.HelpCommands.DumpA11yTree")),
 				Item ("Dump Accessibility Tree (10s)", click: Command ("MonoDevelop.Ide.Commands.HelpCommands.DumpA11yTreeDelayed")),
 				Item ("Mark Log", click: Command ("MonoDevelop.Ide.Commands.HelpCommands.MarkLog")),
+				// PerformanceDiagnostics/ReliabilityDiagnostics add-ins extend
+				// the same ItemSet id="Diagnostics" (merged after Mark Log,
+				// no separators, like the legacy menu).
+				Item ("Start monitoring UIThread hangs", click: Command ("PerformanceDiagnosticsAddIn.StartStopListeningUIThreadMonitorHandler")),
+				Item ("Profile for 5 seconds", click: Command ("PerformanceDiagnosticsAddIn.ProfileFor5SecondsHandler")),
+				Item ("Toggle profiling", click: Command ("PerformanceDiagnosticsAddIn.ToggleProfileHandler")),
+				Item ("Enhance Sample output file", click: Command ("PerformanceDiagnosticsAddIn.EnhanceSampleFile")),
+				Item ("SpinDump for 5 seconds", click: Command ("PerformanceDiagnosticsAddIn.SpinDumpFor5SecondsHandler")),
+				// Legacy: gated by a FeatureSwitch condition (the legacy build
+				// keeps it in the merged set); present like the rest of the
+				// pending ports.
+				Item ("Dump live widgets", click: Command ("PerformanceDiagnosticsAddIn.DumpLiveWidgetsHandler")),
+				Item ("Induce UI Thread Crash", click: Command ("PerformanceDiagnosticsAddIn.InduceUIThreadCrash")),
+				Item ("Induce Managed Crash", click: Command ("PerformanceDiagnosticsAddIn.InduceManagedCrash")),
+				Item ("Induce Native Crash", click: Command ("PerformanceDiagnosticsAddIn.InduceNativeCrash")),
+				Item ("Induce Hang", click: Command ("PerformanceDiagnosticsAddIn.InduceHang")),
+				Item ("Induce PInvoke Crash", click: Command ("PerformanceDiagnosticsAddIn.InduceNativePInvokeCrash")),
 			}),
 			Sep (),
 			Item ("_Check for Updates...", icon: "md-updates", click: Command ("MonoDevelop.Ide.Updater.UpdateCommands.CheckForUpdates")),
