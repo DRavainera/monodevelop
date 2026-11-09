@@ -486,6 +486,11 @@ namespace MonoDevelop.Ide.Commands
 		{
 			ShellCommandHandler.Run (ViewCommands.ViewList, dataItem);
 		}
+
+		// Ronda 3: el legacy ViewList inlineaba aquí la lista de pads (uno
+		// checked por pad visible). En la shell Avalonia ese rol lo cubre el
+		// submenu "Pads" (exclusivo de la shell, no existe en GTK), así que este
+		// array queda deliberadamente vacío para no duplicar los pads.
 	}
 
 	public class LayoutListHandler : CommandHandler
@@ -493,6 +498,20 @@ namespace MonoDevelop.Ide.Commands
 		protected override void Run (object dataItem)
 		{
 			ShellCommandHandler.Run (ViewCommands.LayoutList, dataItem);
+		}
+
+		// Ronda 3: port del legacy Update(CommandArrayInfo) — una entrada por
+		// layout de workbench registrado (stock GTK: el único layout "Solution",
+		// renombrado "Code" por el NameMapping legacy), checked el actual. La
+		// shell tiene un único layout (el mapa de visibilidad de pads que
+		// SaveCurrentLayout persiste), por lo que la lista es esa misma entrada
+		// única checked; el click es un no-op como el legacy CurrentLayout =
+		// "Solution" cuando ya es el actual.
+		protected override void Update (CommandArrayInfo info)
+		{
+			var ci = info.Add ("Code", "layout:Solution");
+			ci.Checked = true;
+			ci.Description = "Switch to layout 'Solution'";
 		}
 	}
 

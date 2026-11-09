@@ -7461,7 +7461,10 @@ public partial class MainWindow : Window
 			Output ("[view] pads: Solution, Classes, Help, Properties, Errors, Tasks, Search Results, Output");
 			return;
 		case "MonoDevelop.Ide.Commands.ViewCommands.LayoutList":
-			Output ("[layout] saved layout: " + (SettingsStore.GetString ("Monodevelop.PadLayout") ?? "(none)"));
+			// Ronda 3: el hijo inlineado del array (dataItem "layout:Solution")
+			// activa un layout — el legacy fija CurrentLayout; la shell tiene un
+			// único layout (ya es el actual), por lo que es un no-op.
+			Output ("[layout] selected layout " + (nodeContext ?? "(none)") + "; saved pad layout: " + (SettingsStore.GetString ("Monodevelop.PadLayout") ?? "(none)"));
 			return;
 		case "MonoDevelop.Components.MainToolbar.Commands.NavigateTo":
 			// Legacy toolbar NavigateTo opens the Go To File/Type/Symbol dialog.

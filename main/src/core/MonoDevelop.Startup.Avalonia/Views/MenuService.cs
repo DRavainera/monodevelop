@@ -235,9 +235,15 @@ public static class MenuService
 		Label = "_View",
 		Children = {
 			SepHeader ("Layout"),
-			Item ("View List", click: Command ("MonoDevelop.Ide.Commands.ViewCommands.ViewList")),
-			Sep (),
+			// Legacy order (MainMenu.addin.xml): LayoutList before ViewList. Both
+			// are array commands — their masters render hidden and the array
+			// children inline right after each master (Ronda 3: the Layout List
+			// "Code" entry fills the region between the Layout header and Pads;
+			// the View List array stays empty because the Pads submenu below
+			// serves the legacy pad-list role).
 			Item ("Layout List", click: Command ("MonoDevelop.Ide.Commands.ViewCommands.LayoutList")),
+			Sep (),
+			Item ("View List", click: Command ("MonoDevelop.Ide.Commands.ViewCommands.ViewList")),
 			Sep (),
 			Sub ("_Pads", new List<MenuEntry> {
 				// One toggle per pad, same order/labels as Pads.addin.xml + addin pads;
