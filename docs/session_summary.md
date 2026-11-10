@@ -1948,8 +1948,77 @@ Directrices del operador: (1) ningún cambio de `MonoDevelop.Ide.*`/`MonoDevelop
 
 **Cierre**: las páginas de ayuda Monodoc se abren como web tabs renderizadas en el área de edición (paridad de experiencia con el viewer legacy), sin tocar el mecanismo de documentos.
 
+## 2026-10-23 (a) — Lote 1: conversión de 9 proyectos net472 old-style a SDK-style net10.0
+
+**Qué se hizo**: 9 proyectos de `main/external/nrefactory` y `main/external/debugger-libs` pasaron de old-style `net472` a SDK-style `net10.0` (`dotnet build -c DebugLinux`, **0 errores en los 9**). Submódulos `nrefactory` y `debugger-libs`: sus commits y push (rama `net10`) forman parte de esta tarea.
+
+| Proyecto | Comp | Resultado |
+|---|---|---|
+| ICSharpCode.NRefactory | 209 | OK |
+| ICSharpCode.NRefactory.Cecil | 3 | OK |
+| ICSharpCode.NRefactory.CSharp | 300 | OK |
+| CorApi | 5 | OK |
+| CorApi2 | 68 | OK |
+| Mono.Debugger.Soft | 77 | OK |
+| Mono.Debugging | 81 | OK |
+| Mono.Debugging.Soft | 19 | OK |
+| Mono.Debugging.Win32 | 21 | OK |
+
+**Decisiones / notas técnicas**:
+- Cabecera SDK estándar **sin xmlns**: en el SDK 10.0.401 la combinación `Sdk` + `xmlns` en `<Project>` falla con `MSB4041` (comportamiento del MSBuild actual). ADVERTENCIA heredada: `MonoDevelop.GtkCore.csproj` usa `Sdk` + `xmlns` y falla con MSB4041 (fuera del alcance de esta tarea).
+- `EnableDefaultItems=false`, `EnableDefaultCompileItems=false`, `GenerateAssemblyInfo=false`; refs BCL implícitas y `netstandard` eliminadas; firmas conservadas. `PublicSign` en CorApi, CorApi2 y Mono.Debugging.Win32 (snk RSA-1024 → la firma fuerte real falla con `invalid digest` en OpenSSL 3).
+- Constantes de preprocesado movidas a `DefineConstants` incondicionales (los PGs condicionales no cubrían `-c DebugLinux`); `LangVersion 7.3` en NRefactory.CSharp/CorApi2/Mono.Debugging.Soft/Win32 (la palabra clave `field` de C# 13/14 rompe fuentes legacy).
+- Referencias a paquetes vía HintPath a `$(NuGetPackageRoot)`; NRefactory.CSharp con `System.CodeDom` 5.0.0 `PrivateAssets=runtime`.
+
+**Fixes mínimos en fuentes** (archivos dentro de los submódulos, commits en rama `net10`):
+- NRefactory: `UnresolvedSecurityDeclarationBlob.cs` — `typeof(PermissionSetAttribute)` (CAS, eliminado de .NET 10) → `ReflectionHelper.ParseReflectionName(…)`; capa codegen/driver del fork mcs con guards `#if !NET` sobre `AddDeclarativeSecurity`, `DefineDynamicModule`, `DefineUnmanagedResource`, `Builder.Save`, `AssemblyBuilderAccess` (→ `RunAndCollect`), etc.
+- debugger-libs: eliminados `using System.Runtime.Remoting.Messaging;`; `AsyncResult` y `RemotingServices.Disconnect` guardados con `#if !NET` / `#else throw PlatformNotSupportedException` (coherente: el APM `Begin*` lanza `PlatformNotSupportedException` en net10).
+
+**Validación** (`--no-incremental`): los 9 compilan con 0 errores (warnings de deprecación OK).
+
+**Pendiente / notas**: `MonoDevelop.GtkCore.csproj` (Sdk + xmlns) requiere corrección por el agente principal; caminos APM de `VirtualMachineManager` lanzan `PlatformNotSupportedException` en runtime net10 (limitación de .NET); los proyectos compilan a `bin\DebugLinux\net10.0\`.
+
+## 2026-10-23 (b) — Lote 2: conversión de 5 proyectos a net10.0 + cierre de olas 1-3 (`Main.sln` a 0 errores)
+
+**Qué se hizo**: 5 proyectos pasaron a SDK-style `net10.0` (`dotnet build -c DebugLinux`). El código legacy no se borra: se convierte en el sitio. Submódulos modificados (commit + push en rama `net10` + puntero): `external/guiunit`, `external/Xamarin.PropertyEditing`.
+
+| # | Proyecto | Tipo | Resultado |
+|---|---|---|---|
+| 1 | `fsharpbinding/MonoDevelop.FSharp.Gui.csproj` | old-style net472 → SDK | **OK, 0 errores** |
+| 2 | `guiunit/src/framework/GuiUnit_NET_4_5.csproj` (submódulo) | old-style v4.5 Exe → SDK | **OK, 0 errores** |
+| 3 | `MonoDevelop.MSBuildResolver.csproj` | old-style v4.6.1/v4.7.2 → SDK | **OK, 0 errores** |
+| 4 | `Xamarin.PropertyEditing.csproj` (submódulo) | SDK netstandard2.0 → net10.0 | **OK, 0 errores** |
+| 5 | `MonoDevelop.TextTemplating.csproj` | old-style net472 → SDK | **Verificado 0/0 en aislado; el build quedó bloqueado por upstream (resuelto al cerrarse la cadena Xwt/MonoDevelop.Ide en el cierre de ola 1)** |
+
+**Decisiones / notas técnicas**:
+- Cabecera: proyectos que importan `MonoDevelop.props` usan `<Project DefaultTargets="Build" Sdk="…" xmlns="…">` (correcto en el SDK 10.0.401); `GuiUnit` (sin import) usa `<Project Sdk="…">` conservando sus props.
+- `TargetFramework net10.0`, `MDFrameworkVersion v10.0`, `EnableDefaultItems=false`, `EnableDefaultCompileItems=false`, `GenerateAssemblyInfo=false` (excepto FSharp.Gui).
+- gtk-sharp 2.12 (FSharp.Gui, TextTemplating): `<Import Project="$(ReferencesGtk)" />`. `Mono.Posix` (FSharp.Gui) vía `$(MonoFrameworkNet45Directory)/Mono.Posix.dll` + `Private=False`.
+- MSBuildResolver: HintPath `$(MSBuildBinPath)\Microsoft.Build*.dll`. TextTemplating: ref directa a `mono.texttemplating/1.3.1/lib/net45/` de la caché (el `PackageReference` net45-only da NU1202 en net10.0) + `System.CodeDom` 5.0.0.
+- GuiUnit: `DefineConstants` incondicionales `NET_4_5;CLR_4_0;NUNITLITE` + `PublicSign` + `NoWarn SYSLIB0011` (`BinaryFormatter`).
+
+**Fixes mínimos en fuentes**: guiunit `TestExecutionContext.cs` (eliminado `using System.Runtime.Remoting.Messaging;`); Xamarin.PropertyEditing — ambigüedad CS0104 nueva en net10.0 (`System.Collections.Generic.OrderedDictionary` vs `Cadenza.Collections.OrderedDictionary`), se cualificó el tipo Cadenza en 4 ficheros; TextTemplating `TextTemplatingFileGenerator.cs` (`CallContext` no existe en net10.0 → se dejó el comportamiento real, warning + no-op).
+
+**Validación**: 1-4 → 0 errores; el 5 → 0/0 en aislado (14 fuentes contra las dlls net10.0 stageadas).
+
+### Cierre de olas 1-3 (2026-10-24) — `Main.sln` a 0 errores
+
+**Estado final del gate**: `dotnet build main/Main.sln -c DebugLinux` → **0 Errores** (incremental + `--no-incremental` clean-room; 97 proyectos para `DebugLinux`, el resto Windows/Mac-only excluidos vía ausencia de `Build.0`).
+
+**Hallazgo clave — `WindowsPlatform` no bloquea el gate**: los 4 proyectos Windows-only llevan `ActiveCfg` para `DebugLinux` pero **sin línea `Build.0`** en `Main.sln` → el gate no los compila. Los "9 errores" de `WindowsPlatform.csproj` en aislado venían de una config no-Win32. Igual para los 5 Mac-only.
+
+**Fixes del gate**: `MonoDevelop.GtkCore.GuiBuilder/CombinedDesignView.cs` — `TextEditor` (CS0118) cualificado a `MonoDevelop.Ide.Editor.TextEditor`; `MonoDevelop.GtkCore/GtkDesignInfo.cs` — `RemotingServices.Disconnect/Marshal` (CS0234) → `#if !NET`; `MonoDevelop.Startup.Avalonia` — `MSB4018` era un flake por nodos MSBuild huérfanos (al limpiar → 0, no es código).
+
+**QA Senior (§18.5)** (headless `xvfb-run -a`, logs `~/opencode/migrate/qa-senior/`): el subagente re-ejecutó el gate de forma independiente → 0 Errores (exit 0); Avalonia por defecto (`--menudump`) OK (add-ins `loaded=True`, 0 FATAL/Unhandled); Gtk legacy (`--old-gui`) OK (proceso vivo, 0 FATAL/Exception); Limpieza OK. **Veredicto: APROBADO, 0 hallazgos de código.**
+
+**Infraestructura compartida** (usada en toda la migración): `main/msbuild/LegacyReferenceAssemblies.targets` (target `PreferLegacyReferenceAssemblies` — resuelve el conflicto RAR "stub net10.0 vs reference net472"); `EnsureLegacyReferenceStaging` en `main/Directory.Build.targets` (copia las 5 facades net472 a `main/build/`); `DownloadNupkg.cs` (omite `nuget.exe` si los paquetes ya están extraídos — esta máquina no tiene mono); Xwt (submódulo): target `RemoveExtraWpfThemeAssemblies` (deja solo `Aero` en WPF, CS0433) + `PublicSign` en Xwt.WPF/Xwt.Gtk.Windows.
+
+**Estado de ola 1 al cierre** (todo 0 Errores): Lote 1 (nrefactory x3, debugger-libs x6); xwt (Xwt, Xwt.Gtk, Xwt.WPF, Xwt.Gtk.Windows); mono-addins (4 proyectos); Lote 2 (FSharp.Gui, GuiUnit, MSBuildResolver, Xamarin.PropertyEditing, TextTemplating).
+
+**Cierre**: olas 1-3 cerradas sobre `Main.sln` a 0 errores. Quedan pendientes las ondas 2-4 del plan (62 proyectos old-style restantes, cluster `vs-editor-api`, cadena WPF, exclusión Mac-only) → resueltas en la ola 4 de abajo (2026-10-26). T7 → cerrada en la sesión de 2026-10-28.
+
 ### Oleada 4 — cierre: P1 Mono.Posix, T1 WPF, T4 Roslyn 5.9.0, T5 NuGet 6.11.2, T6 Cairo-MIG (2026-10-26)
-(Los cierres de olas 1-3 — 2026-10-23/24 — quedaron en `docs/handoff-sub-agent-senior-dev-role-report-lote2-net10.md`; la ola 4 se documenta también en su sección "Cierre de ola 4".)
+(Los cierres de olas 1-3 — 2026-10-23/24 — quedaron en las entradas "Lote 1" y "Lote 2 + cierre de olas 1-3" de esta sección; la ola 4 se documenta también en `docs/migration-status-report.md`. )
 
 **Qué se hizo** (79 M + 2 D + 1 carpeta nueva en main + 3 submódulos, rama `net10`):
 1. **P1 — Mono.Posix → MonoUnixCompat**: nuevo compat `main/src/compat/MonoUnixCompat/`
@@ -4249,7 +4318,7 @@ Commits de código (1 fichero) + docs pushados a `origin/agents/sub-agent-senior
 
 **Estado: CERRADO (QA APROBADO).** Último slice de la Oleada 5: el **gate de cierre de la fase de migración** (item 14 del checklist de Extras, M6).
 
-**Naturaleza**: slice de **verificación, sin cambio de código**. El gate ya estaba verde desde los cierres de ondas 2–4 del lote net10 (2026-10-24/26/28 — `docs/handoff-sub-agent-senior-dev-role-report-lote2-net10.md`; conversión de los ~77 proyectos old-style a SDK-style net10.0 por la decisión fila B del operador 2026-10-22) y las oleadas de backend 1–4 (2026-11-07/08) se construyeron sobre ese estado. La cifra histórica de 126 NU1201 (2026-10-17) estaba superada — el estado real del gate solo se sabe con `dotnet build` (el `dotnet restore` no-op no revela nada). `git status` limpio al inicio y al final.
+**Naturaleza**: slice de **verificación, sin cambio de código**. El gate ya estaba verde desde los cierres de ondas 2–4 del lote net10 (2026-10-24/26/28 — ver las secciones "Lote 1", "Lote 2 + cierre de olas 1-3", "T7" y "Oleada 4" de `docs/migration-status-report.md`; conversión de los ~77 proyectos old-style a SDK-style net10.0 por la decisión fila B del operador 2026-10-22) y las oleadas de backend 1–4 (2026-11-07/08) se construyeron sobre ese estado. La cifra histórica de 126 NU1201 (2026-10-17) estaba superada — el estado real del gate solo se sabe con `dotnet build` (el `dotnet restore` no-op no revela nada). `git status` limpio al inicio y al final.
 
 **Evidencia del gate** (logs en `~/opencode/`):
 - `dotnet build main/Main.sln -c DebugLinux -m:1 --nologo` → **`0 Errores`, exit 0** — incremental (1:49, `oleada5_sliceB_gate1.log`) y clean-room `--no-incremental` (2:04, 7067 warnings preexistentes — CS8012/MSB3277/NETSDK1206/NU1701/obsoletos; `oleada5_sliceB_gate_cleanroom.log`).

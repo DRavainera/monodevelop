@@ -2842,8 +2842,8 @@ Diferidos (fuera de las oleadas): backends debugger (Gdb, Soft, VSCodeDebugProto
 
 ### Oleada 4 — cierre net10: P1 Mono.Posix, T1 WPF, T4 Roslyn 5.9.0, T5 NuGet 6.11.2, T6 Cairo-MIG (2026-10-26)
 Antecedente: los cierres de olas 1-3 (2026-10-23/24) quedaron documentados en
-`docs/handoff-sub-agent-senior-dev-role-report-lote2-net10.md` (este plan se retoma aquí).
-Detalle completo por tarea en la sección "Cierre de ola 4" de ese handoff.
+`docs/migration-status-report.md` (secciones "Lote 1", "Lote 2 + cierre de olas 1-3" y "T7";
+este plan se retoma aquí). Detalle completo por tarea en la sección "Oleada 4" de ese informe.
 
 **Cambios** (resumen; 79 M + 2 D + 1 carpeta nueva en main + 3 submódulos):
 1. **P1 — Mono.Posix → MonoUnixCompat**: nuevo proyecto `main/src/compat/MonoUnixCompat/`
@@ -5239,7 +5239,7 @@ La shell `RunBuildAsync` builda cada proyecto con la configuración **mapeada**:
 
 **Estado: CERRADO (QA APROBADO).** Último slice de la Oleada 5: el **gate de cierre de la fase de migración** (item 14 del checklist de Extras, M6): que `Main.sln` compile completo con el builder del SDK 10 real, sin bloqueos.
 
-**Naturaleza del slice**: verificación, **sin cambio de código**. El gate ya estaba verde desde los cierres de ondas 2–4 del lote net10 (2026-10-24/26/28, `docs/handoff-sub-agent-senior-dev-role-report-lote2-net10.md`: conversión de los ~77 proyectos old-style a SDK-style net10.0 por la decisión fila B del operador 2026-10-22) y las oleadas de backend 1–4 (2026-11-07/08) se construyeron sobre ese estado; la cifra histórica de 126 NU1201 (2026-10-17) estaba superada. El slice consiste en re-ejecutar el gate de forma independiente (incremental + clean-room) y comprobar que no quedó regresión alguna de las oleadas anteriores. `git status` limpio al inicio y al final (0 ficheros tocados; `main/src/addins/` intacta).
+**Naturaleza del slice**: verificación, **sin cambio de código**. El gate ya estaba verde desde los cierres de ondas 2–4 del lote net10 (2026-10-24/26/28, ver `docs/migration-status-report.md` secciones "Lote 1", "Lote 2 + cierre de olas 1-3", "T7" y "Oleada 4": conversión de los ~77 proyectos old-style a SDK-style net10.0 por la decisión fila B del operador 2026-10-22) y las oleadas de backend 1–4 (2026-11-07/08) se construyeron sobre ese estado; la cifra histórica de 126 NU1201 (2026-10-17) estaba superada. El slice consiste en re-ejecutar el gate de forma independiente (incremental + clean-room) y comprobar que no quedó regresión alguna de las oleadas anteriores. `git status` limpio al inicio y al final (0 ficheros tocados; `main/src/addins/` intacta).
 
 **Evidencia del gate** (logs en `~/opencode/`):
 - Incremental: `dotnet build main/Main.sln -c DebugLinux -m:1 --nologo` → **`0 Errores`**, `exit=0` (1:49; `oleada5_sliceB_gate1.log`).
