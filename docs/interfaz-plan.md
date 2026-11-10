@@ -5413,3 +5413,27 @@ La shell `RunBuildAsync` builda cada proyecto con la configuración **mapeada**:
 **QA §18.5** (subagente Tester QA Senior, 1 ronda; brief `~/opencode/r6_bugfix/qa_brief.md` + reporte `~/opencode/r6_bugfix/qa_report.md`, artefactos en `~/opencode/r6_bugfix/qa_tester/`): **APROBADO, 0 hallazgos P1–P4**; 3 P5 informativos (sin acción): (1) `marker exists=False` cosmético en `--runcustom` para el comando env (la verificación real va por `hello-r6` en el log); (2) ~7075 warnings preexistentes del gate (la invariante exige 0 **errores**); (3) known issue preexistente de la máquina — el runtime GTK legacy no abre ventana aquí (se valida por compilación, como en las rondas anteriores). El QA re-ejecutó la batería completa de forma autónoma y verificó contra los valores exactos (270/239, 475/113, 103/103, 15/0, delta −18/−17, `hello-r6`, marker, `editRefs=1`, `itemEnabled=True/False`).
 
 **Queda pendiente** (ya documentado, no pedido en esta ronda): (a) orden Run Code Analysis Sol/Proj vs GTK; (b) Update/Restore NuGet como acciones reales; (c) guard de `BeginMoveDrag` en `TitleBarRow`; (d) dispatch de ítems "not wired" Ronda 1; (e) 16 divergencias de label intencionales.
+
+## 2026-11-09 — Follow-up Ronda 6: "Project > Add Reference..." habilitado con solución abierta (sin selección de pad)
+
+**Solicitud del operador**: el elemento `Project > Add Reference...` se mostraba **deshabilitado** cuando hay una solución abierta (sin fila seleccionada en el pad de soluciones) y debe mostrarse **habilitado**.
+
+**Causa raíz**: el gate del comando (`EditReferencesHandler.Update`, bloque `#else` AVALONIA_SHELL de `ProjectCommands.cs`) era `info.Enabled = ShellCommandState.SelectedNodeIsProject` — solo se habilitaba cuando había una fila de proyecto (o fila bajo proyecto) **seleccionada** en el pad. La shell **no auto-selecciona** el nodo al cargar la solución, así que con la solución abierta y sin clic previo en el pad el gate quedaba `false`. La **ejecución** del comando (`MainWindow.OnMenuCommand`, caso `AddReference`) sí resuelve el proyecto por otra vía: la selección del pad con **fallback** al primer proyecto de la solución (`ResolveSelectedProjectPath() ?? ResolveActiveProject()`). El gate y la ejecución eran **inconsistentes**: con la solución abierta y sin selección, el menú estaba gris pero un clic (o el auto-select de GTK legacy) habría abierto el diálogo.
+
+**Fix** (1 hunk en `main/src/core/MonoDevelop.Ide/MonoDevelop.Ide.Commands/ProjectCommands.cs`, solo el bloque `#else` AVALONIA_SHELL — el bloque `#if !AVALONIA_SHELL`/Gtk legacy queda intacto):
+```
+info.Enabled = ShellCommandState.HasWorkspace
+    && (ShellCommandState.SelectedNodeIsProject || ShellCommandState.ActiveProjectCount > 0)
+info.Bypass = !info.Enabled;
+```
+Es decir: habilitado si hay solución cargada Y (hay fila de proyecto seleccionada **o** la solución tiene proyectos). El fallback a `ActiveProjectCount > 0` es el espejo exacto del fallback de ejecución a `ResolveActiveProject()` (primer `.csproj` de la sln). La solución de `QaProj.sln` tiene 1 proyecto → `ActiveProjectCount=1` → gate `true`. Al cargar la solución (`RefreshSolutionTree`) y en cada cambio de selección del pad se re-ejecuta el `Update`, así que el estado no queda rancio.
+
+**Validación** (QA §18.5, subagente Tester QA Senior, 1 ronda — **APROBADO, 0 hallazgos**):
+- Gate `dotnet build Main.sln -c DebugLinux` → **0 Errores** (exit 0; warnings preexistentes).
+- **Scenario A** (el caso del bug — `--sln=QaProj.sln --dispatchaddref` con `DISPATCH_NOSSEL=1`): `itemEnabled=True`, el dispatch del menú abre la ventana "Add Reference" (confirmada por X11/xdotool, PID vivo). Antes del fix: `itemEnabled=False`, no-op.
+- **Scenario B** (sin solución, `--cmdstates`): `hasWs=False`, `editRefs=0` en los 37 estados (deshabilitado, correcto).
+- **Scenario C** (con solución, `--cmdstates`): `hasWs=True`, `projCount=1`, `editRefs=1` en los 40 estados (habilitado en todos, sin regresión de los ítems vecinos: buildSol/run/projOpts/setStartup coherentes).
+- Sin fatals (`FATAL|Unhandled` = 0 en los 3 logs).
+- Nota: `DISPATCH_NOSSEL` exige que `launch_shell.sh` lo reenvíe tras el `env -i` (el script limpiaba el entorno); se añadió `${DISPATCH_NOSSEL:+DISPATCH_NOSSEL="$DISPATCH_NOSSEL"}` al launcher para futuras rondas.
+
+**Cierre**: commit por nombre del 1 fichero fuente + docs ×3, push a `origin/agents/sub-agent-senior-dev-role-report`. Sin submódulos.

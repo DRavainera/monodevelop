@@ -4454,3 +4454,15 @@ Commits pushados a `origin/agents/sub-agent-senior-dev-role-report`: (1) 3 fiche
 **QA §18.5** (subagente Tester QA Senior, 1 ronda; brief `~/opencode/r6_bugfix/qa_brief.md` + reporte `~/opencode/r6_bugfix/qa_report.md`, artefactos `~/opencode/r6_bugfix/qa_tester/`): **APROBADO, 0 hallazgos P1–P4**; 3 P5 informativos (sin acción): `marker exists=False` cosmético en `--runcustom` para el comando env; ~7075 warnings preexistentes del gate; known issue preexistente del runtime legacy (no abre ventana — se valida por compilación). Re-ejecución autónoma con los valores exactos (270/239, 475/113, 103/103, 15/0, delta −18/−17, `hello-r6`, marker, `editRefs=1`, `itemEnabled=True/False`).
 
 **Cierre**: commit por nombre de los 8 ficheros fuente + docs ×3 (`migration-status-report.md`, `interfaz-plan.md` y esta entrada), push a `origin/agents/sub-agent-senior-dev-role-report`. Sin submódulos. Flags QA permanentes añadidos (se quedan): `--autoselectqa`, `--runcustom=<nombre>`, cadena de submenús en `--openmenu=`. Pendientes de rondas futuras (ya documentados, no pedidos): orden Run Code Analysis Sol/Proj vs GTK; Update/Restore NuGet como acciones reales; guard de `BeginMoveDrag` en `TitleBarRow`; dispatch de ítems "not wired" Ronda 1; 16 divergencias de label intencionales.
+
+## 2026-11-09 (29) — Follow-up Ronda 6: "Project > Add Reference..." habilitado con solución abierta (sin selección de pad)
+
+**Estado: CERRADO (QA APROBADO, 0 hallazgos P1–P4).** Pedido del operador: el elemento `Project > Add Reference...` se mostraba deshabilitado cuando hay una solución abierta y debe mostrarse habilitado.
+
+**Causa raíz**: el gate (`EditReferencesHandler.Update`, bloque `#else` AVALONIA_SHELL de `ProjectCommands.cs`) era solo `SelectedNodeIsProject` (fila de proyecto seleccionada en el pad). La shell no auto-selecciona el nodo al cargar la solución, así que con la solución abierta y sin clic previo el gate quedaba `false`; la ejecución del comando, en cambio, resuelve la selección del pad con fallback al primer proyecto de la solución (`ResolveActiveProject()`). Gate y ejecución inconsistentes.
+
+**Fix** (1 hunk en `ProjectCommands.cs`, solo el bloque `#else` — el Gtk legacy queda intacto): `info.Enabled = HasWorkspace && (SelectedNodeIsProject || ActiveProjectCount > 0)`, `info.Bypass = !Enabled`. El `ActiveProjectCount > 0` es el espejo del fallback de ejecución a `ResolveActiveProject()`. Al cargar la solución y en cada cambio de selección del pad se re-ejecuta el `Update`.
+
+**Validación** (QA §18.5, 1 ronda — **APROBADO, 0 hallazgos**): gate `Main.sln` → 0 Errores; escenario del bug (`--sln=QaProj.sln --dispatchaddref` + `DISPATCH_NOSSEL=1`) → `itemEnabled=True` + ventana "Add Reference" abierta (X11); sin solución (`--cmdstates`) → `editRefs=0` en los 37 estados; con solución → `editRefs=1` en los 40 estados (sin regresión en los ítems vecinos); 0 fatals. Nota: `DISPATCH_NOSSEL` exige que `launch_shell.sh` lo reenvíe tras el `env -i` (se añadió la línea al launcher).
+
+**Cierre**: commit por nombre del 1 fichero fuente + docs ×3, push a `origin/agents/sub-agent-senior-dev-role-report`. Sin submódulos.

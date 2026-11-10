@@ -3165,3 +3165,21 @@ samples, csproj). Observaciones no bloqueantes: `md-plugin` colgante (cleanup ap
 **QA (§18.5)**: Tester QA Senior, 1 ronda — **APROBADO, 0 hallazgos P1–P4**; 3 P5 informativos (sin acción): `marker exists=False` cosmético en `--runcustom` para el comando env (la verificación real va por `hello-r6` en el log); ~7075 warnings preexistentes del gate (la invariante exige 0 **errores**); known issue preexistente de la máquina — el runtime GTK legacy no abre ventana aquí (se valida por compilación). Re-ejecución autónoma con los valores exactos (270/239, 475/113, 103/103, 15/0, delta −18/−17, `hello-r6`, marker, `editRefs=1`, `itemEnabled=True/False`). Brief+reporte+artefactos en `~/opencode/r6_bugfix/` (y `~/opencode/r6_bugfix/qa_tester/`).
 
 **Cierre**: commit por nombre de los 8 ficheros fuente + docs ×3 (este, `interfaz-plan.md`, `session_summary.md`), push a `origin/agents/sub-agent-senior-dev-role-report`. Sin submódulos. Flags QA permanentes añadidos (se quedan): `--autoselectqa`, `--runcustom=<nombre>`, cadena de submenús en `--openmenu=`. Queda pendiente (ya documentado, no pedido en esta ronda): orden Run Code Analysis Sol/Proj vs GTK; Update/Restore NuGet como acciones reales; guard de `BeginMoveDrag` en `TitleBarRow`; dispatch de ítems "not wired" Ronda 1; 16 divergencias de label intencionales.
+
+### Follow-up Ronda 6 — "Project > Add Reference..." habilitado con solución abierta, sin selección de pad (2026-11-09)
+
+**Pedido del operador**: el elemento `Project > Add Reference...` de la interfaz Avalonia se mostraba deshabilitado cuando hay una solución abierta (sin fila seleccionada en el pad de soluciones) y debe mostrarse habilitado.
+
+**Causa raíz**: el gate del comando (`EditReferencesHandler.Update`, bloque `#else` AVALONIA_SHELL de `ProjectCommands.cs`) era `SelectedNodeIsProject` — solo se habilitaba con una fila de proyecto (o fila bajo proyecto) **seleccionada** en el pad. La shell no auto-selecciona el nodo al cargar la solución, así que con la solución abierta y sin clic previo el gate quedaba `false`. La **ejecución** del comando (`MainWindow.OnMenuCommand`, caso `AddReference`) sí resuelve el proyecto: la selección del pad con **fallback** al primer proyecto de la solución (`ResolveSelectedProjectPath() ?? ResolveActiveProject()`) — gate y ejecución eran inconsistentes.
+
+**Fix** (1 hunk en `ProjectCommands.cs`, solo el bloque `#else` AVALONIA_SHELL; el bloque `#if !AVALONIA_SHELL`/Gtk legacy queda intacto):
+```
+info.Enabled = ShellCommandState.HasWorkspace
+    && (ShellCommandState.SelectedNodeIsProject || ShellCommandState.ActiveProjectCount > 0)
+info.Bypass = !info.Enabled;
+```
+Habilitado si hay solución cargada Y (fila de proyecto seleccionada **o** la solución tiene proyectos). `ActiveProjectCount > 0` es el espejo exacto del fallback de ejecución a `ResolveActiveProject()` (primer `.csproj` de la sln). Al cargar la solución y en cada cambio de selección del pad se re-ejecuta el `Update` (no queda rancio).
+
+**Validación** (QA §18.5, subagente Tester QA Senior, 1 ronda — **APROBADO, 0 hallazgos P1–P4**): gate `dotnet build Main.sln -c DebugLinux` → **0 Errores** (exit 0); escenario del bug (`--sln=QaProj.sln --dispatchaddref` + `DISPATCH_NOSSEL=1`) → `itemEnabled=True` y el dispatch abre la ventana "Add Reference" (confirmada por X11/xdotool, PID vivo) — antes del fix `itemEnabled=False`/no-op; sin solución (`--cmdstates`) → `hasWs=False`, `editRefs=0` en los 37 estados; con solución → `hasWs=True`, `projCount=1`, `editRefs=1` en los 40 estados (sin regresión en los ítems vecinos buildSol/run/projOpts/setStartup); 0 fatals en los 3 logs. Nota de harness: `DISPATCH_NOSSEL` exige que `launch_shell.sh` lo reenvíe tras el `env -i` (se añadió la línea al launcher de `~/opencode/`).
+
+**Cierre**: commit por nombre del 1 fichero fuente + docs ×3, push a `origin/agents/sub-agent-senior-dev-role-report`. Sin submódulos.

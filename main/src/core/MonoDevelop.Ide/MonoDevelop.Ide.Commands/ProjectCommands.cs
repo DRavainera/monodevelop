@@ -744,17 +744,26 @@ namespace MonoDevelop.Ide.Commands
 			ShellCommandHandler.Run (ProjectCommands.AddReference);
 		}
 
-		// Oleada 3 (slice 8): enabled only when the pad selection is a project
-		// row (legacy: CurrentSelectedProject is DotNetProject — every shell
-		// project row is a .csproj). Bypass mirrors the legacy keybinding
-		// behavior while the gate is off.
+		// Oleada 3 (slice 8): enabled when the loaded solution can resolve a
+		// target project: a project row (or any row under one) is selected in the
+		// pad, OR the solution has projects — matching the execution path, which
+		// resolves the pad-selected project and falls back to the solution's
+		// first project (MainWindow.OnMenuCommand AddReference). Legacy
+		// CurrentSelectedProject is DotNetProject stays on because the legacy pad
+		// auto-selects the active document's node, so with a solution open the
+		// item is enabled. A loaded solution also enables it with no project row
+		// selected (2026-11-09 operator report), even before the tree populates
+		// its selection — the solution-load and selection-change events both
+		// re-run this Update.
 		protected override void Update (CommandInfo info)
 		{
-			if (!ShellCommandState.SelectedNodeIsProject) {
+			if (ShellCommandState.HasWorkspace && (ShellCommandState.SelectedNodeIsProject || ShellCommandState.ActiveProjectCount > 0)) {
+				info.Enabled = true;
+				info.Bypass = false;
+			} else {
 				info.Enabled = false;
 				info.Bypass = true;
-			} else
-				info.Bypass = false;
+			}
 		}
 	}
 
