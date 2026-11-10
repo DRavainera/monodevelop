@@ -47,6 +47,38 @@ namespace MonoDevelop.AvaloniaAddons.Manifests
 
 		[JsonPropertyName ("extensions")]
 		public Dictionary<string, List<AddonExtensionNode>> Extensions { get; set; } = new ();
+
+		/// <summary>Set when the add-in was imported from the Visual Studio Marketplace
+		/// (see <c>Marketplace.VsixImporter</c>): the source package id and links, so the
+		/// manager's "More information" can point at the gallery listing. Null for the
+		/// shipped/user add-ins that are not marketplace imports.</summary>
+		[JsonPropertyName ("marketplace")]
+		public AddonMarketplaceSource Marketplace { get; set; }
+	}
+
+	public sealed class AddonMarketplaceSource
+	{
+		/// <summary>The marketplace listing id ("publisher.name", the query's
+		/// "publisher.name" / filterType-7 key) this add-in was imported from. It is the
+		/// stable tie between a gallery row (whose id is exactly this value) and the
+		/// installed add-in, so the manager can de-duplicate an installed marketplace
+		/// extension out of the gallery. Distinct from <see cref="PackageId"/> (the
+		/// package's own "publisher.vsixId") and from the identity id (the vsixmanifest
+		/// "Identity Id"), which are different naming spaces.</summary>
+		[JsonPropertyName ("listingId")]
+		public string ListingId { get; set; } = "";
+
+		[JsonPropertyName ("packageId")]
+		public string PackageId { get; set; } = "";
+
+		[JsonPropertyName ("galleryUrl")]
+		public string GalleryUrl { get; set; } = "";
+
+		[JsonPropertyName ("publisher")]
+		public string Publisher { get; set; } = "";
+
+		[JsonPropertyName ("isVisualStudioDesktop")]
+		public bool IsVisualStudioDesktop { get; set; }
 	}
 
 	public sealed class AddonIdentity
@@ -104,12 +136,16 @@ namespace MonoDevelop.AvaloniaAddons.Manifests
 	}
 
 	/// <summary>Accepts the file-pattern list either as a JSON array of strings or as
-	/// a (comma-separated) string, the two shapes the shipped manifests use.</summary>
+	/// a (comma-separated) string, the two shapes the shipped manifests use. Writes
+	/// the canonical array-of-strings shape (used when the marketplace importer
+	/// serializes a generated manifest).</summary>
 	public sealed class FileExtensionsJsonConverter : JsonConverter<List<string>>
 	{
 		public override List<string> Read (ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
 		{
 			var list = new List<string> ();
+			if (reader.TokenType == JsonTokenType.Null)
+				return list;
 			if (reader.TokenType == JsonTokenType.String) {
 				var raw = reader.GetString () ?? "";
 				foreach (var part in raw.Split (',')) {
@@ -130,6 +166,12 @@ namespace MonoDevelop.AvaloniaAddons.Manifests
 		}
 
 		public override void Write (Utf8JsonWriter writer, List<string> value, JsonSerializerOptions options)
-			=> throw new NotSupportedException ();
+		{
+			// Empty → an empty array (not null) so the round-trip is stable.
+			writer.WriteStartArray ();
+			foreach (var p in value ?? new List<string> ())
+				writer.WriteStringValue (p);
+			writer.WriteEndArray ();
+		}
 	}
 }

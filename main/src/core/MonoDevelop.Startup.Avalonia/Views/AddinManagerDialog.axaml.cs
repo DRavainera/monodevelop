@@ -3,6 +3,8 @@ using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Templates;
@@ -12,6 +14,7 @@ using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform.Storage;
 using MonoDevelop.AvaloniaAddons;
+using MonoDevelop.AvaloniaAddons.Marketplace;
 
 namespace MonoDevelop.AvaloniaShell.Views;
 
@@ -34,6 +37,13 @@ public class AddinItem
 	// Legacy row state driving the row icon and the details buttons.
 	public bool HasUpdate { get; set; }
 	public string Url { get; set; } = "";
+
+	// Gallery row sourced from the Visual Studio Marketplace (Phase 2). null for the
+	// local add-ins listed in the Installed / Updates tabs. When set, the Install
+	// button downloads the .vsix and imports it through the shell's add-in model.
+	// (Fully qualified: inside AddinItem the simple name "Marketplace" binds to this
+	// property, not to the MonoDevelop.AvaloniaAddons.Marketplace namespace.)
+	public MonoDevelop.AvaloniaAddons.Marketplace.MarketplaceExtension? Marketplace { get; set; }
 
 	// Row rendering: "Name" + secondary description line (the legacy markup cell puts
 	// the first description line under the name; the version lives in the details).
@@ -66,6 +76,19 @@ public partial class AddinManagerDialog : Window
 	string renderedTab = "installed";
 	bool updatingDetails;
 
+	// ----- Gallery = Visual Studio Marketplace (Phase 2) -----
+	// The Gallery tab is a live view of the marketplace: the local add-ins are NOT
+	// listed here anymore (a local not-installed add-in stays in the Installed tab,
+	// greyed out). The client/importer are created lazily on the UI thread (the
+	// gallery is the only consumer). The search is server-side and debounced: a
+	// generation counter plus a cancellation token let a new keystroke supersede any
+	// in-flight query, so a stale response can never render over a newer one. The
+	// network I/O runs off the UI thread; only the final render is posted back to it.
+	MarketplaceClient? mktClient;
+	VsixImporter? mktImporter;
+	int gallerySearchGeneration;
+	CancellationTokenSource? gallerySearchCts;
+
 	public AddinManagerDialog ()
 	{
 		InitializeComponent ();
@@ -85,9 +108,21 @@ public partial class AddinManagerDialog : Window
 		// local catalog, so it has one entry ("All repositories").
 		RepoCombo!.Items.Add (new ComboBoxItem { Content = "All repositories" });
 
+		// Marketplace client/importer for the Gallery tab, created up front on the
+		// UI thread (the search results land on the thread pool, so no lazy init
+		// from there). Released in OnClosing.
+		mktClient = new MarketplaceClient ();
+		mktImporter = host is not null ? new VsixImporter (host) : null;
+
 		FilterBox!.TextChanged += (_, _) => {
 			// Legacy: a filter change reloads the pages and expands the category
 			// trees (installed + gallery; the updates page has no categories).
+			// Gallery is a live marketplace view: its query is server-side and
+			// debounced (one keystroke = one search, not one per letter).
+			if (currentTab == "gallery") {
+				ScheduleGallerySearch ();
+				return;
+			}
 			expandInstalledAll = true;
 			expandGalleryAll = true;
 			ReloadCurrentTab ();
@@ -141,9 +176,15 @@ public partial class AddinManagerDialog : Window
 	void LoadAddins ()
 	{
 		SaveExpanded ();
+		// The Gallery tab is a live view of the Visual Studio Marketplace (Phase 2):
+		// its contents come from an async network query, not from a synchronous
+		// snapshot of host state, so it is loaded on its own debounced path.
+		if (currentTab == "gallery") {
+			ScheduleGallerySearch ();
+			return;
+		}
 		var items = currentTab switch {
 			"updates" => LoadUpdates (),
-			"gallery" => LoadGallery (),
 			_ => LoadInstalled ()
 		};
 		items = ApplyFilter (items);
@@ -318,26 +359,139 @@ public partial class AddinManagerDialog : Window
 		return list;
 	}
 
-	List<AddinItem> LoadGallery ()
+	// The Gallery is a live view of the Visual Studio Marketplace (Phase 2): a
+	// server-side search (filterType 1 text + filterType 8 target
+	// "Microsoft.VisualStudio"), so the local add-ins never appear here — a local
+	// not-installed add-in stays in the Installed tab, greyed out, and is never
+	// lost, it just does not pollute the "available" list.
+	void ScheduleGallerySearch ()
 	{
-		var list = new List<AddinItem> ();
-		if (host is null)
-			return list;
+		// Debounce: the filter box fires per keystroke; one search per pause of
+		// typing. A new keystroke cancels the pending one and supersedes any
+		// in-flight query, so a stale response can never render over a newer one.
+		gallerySearchCts?.Cancel ();
+		var cts = new CancellationTokenSource ();
+		gallerySearchCts = cts;
+		int generation = Interlocked.Increment (ref gallerySearchGeneration);
+		// Capture the term on the UI thread (this runs from TextChanged / tab
+		// selection); the delay and the query then run on the thread pool.
+		var term = (FilterBox?.Text ?? "").Trim ();
+		PageHeaderLabel.Text = "Searching the Visual Studio Marketplace…";
+		_ = RunGallerySearchAsync (generation, term, cts.Token);
+	}
+
+	async Task RunGallerySearchAsync (int generation, string term, CancellationToken ct)
+	{
+		// The pause is the debounce: a superseding keystroke cancels it before the
+		// search is even issued.
 		try {
-			// New add-in host: the catalog minus the installed (loaded) add-ins —
-			// those belong to the Installed page. The remaining rows render
-			// "available" (plugin-avail-32), like the legacy gallery's
-			// not-installed rows.
-			foreach (var state in host.Addons) {
-				// Superseded versions live in the Updates tab, not the gallery.
-				if (state.Loaded || state.Superseded)
-					continue;
-				list.Add (RowFor (state, installed: false));
-			}
-		} catch (Exception ex) {
-			Console.WriteLine ("[addins] load gallery failed: " + ex.Message);
+			await Task.Delay (450, ct);
+		} catch (OperationCanceledException) {
+			return;
 		}
-		return list;
+		List<MarketplaceExtension> results = new ();
+		try {
+			if (mktClient is null)
+				return; // window closing while the debounce was pending
+			// Server-side search: the marketplace matches name/publisher/tags; the
+			// target filter restricts the listing to Visual Studio extensions. An
+			// empty term returns the top listing of the target.
+			results = (await mktClient.SearchAsync (term, "Microsoft.VisualStudio", 40, ct)).ToList ();
+		} catch (OperationCanceledException) {
+			return; // superseded or the window closed
+		} catch (Exception ex) {
+			// Broad on purpose: a network failure (HttpRequestException — refused
+			// connection, DNS, proxy), a decode failure (JsonException) or a stale
+			// client must degrade to an empty gallery, never fault the task and leave
+			// the header stuck on "Searching…". MarketplaceException is one of these.
+			if (generation != gallerySearchGeneration)
+				return; // a newer search owns the UI now
+			Console.WriteLine ("[addins] gallery search failed: " + ex.Message);
+		}
+		if (generation != gallerySearchGeneration)
+			return; // stale response: a newer search superseded this one
+		// The render must run on the UI thread (Avalonia controls are not
+		// thread-safe); the search returned from the thread pool.
+		Avalonia.Threading.Dispatcher.UIThread.Post (() => BuildGalleryTree (results));
+	}
+
+	void BuildGalleryTree (List<MarketplaceExtension> results)
+	{
+		var list = AddinList!;
+		list.Items.Clear ();
+
+		// Extensions already installed belong to the Installed tab. A marketplace
+		// add-in installed through the gallery is registered under the vsixmanifest
+		// "Identity Id", so the gallery row's listing id ("publisher.name") is matched
+		// against the manifest's Marketplace.ListingId (persisted at import time); the
+		// identity id is also accepted so a hand-imported add-in whose listing id was
+		// recorded matches too.
+		var installedIds = new HashSet<string> (StringComparer.OrdinalIgnoreCase);
+		if (host is not null) {
+			foreach (var state in host.Addons) {
+				installedIds.Add (state.Manifest.Identity.Id ?? "");
+				var listingId = state.Manifest.Marketplace?.ListingId;
+				if (listingId is { Length: > 0 })
+					installedIds.Add (listingId);
+			}
+		}
+		var items = results
+			.Where (r => !installedIds.Contains (r.ExtensionId))
+			.Select (RowForMarketplace)
+			.ToList ();
+
+		RefreshButton.IsVisible = true;
+		RepoCombo.IsVisible = false;
+		UpdateAllButton.IsVisible = false;
+		PageHeaderLabel.Text = results.Count == 0
+			? "No Visual Studio extensions found"
+			: $"{items.Count} Visual Studio extension(s)";
+		UpdatesTabLabel.Text = "Updates";
+
+		if (items.Count == 0) {
+			renderedTab = currentTab;
+			ShowEmptyDetails ();
+			return;
+		}
+		// One flat category (the marketplace listing is already ordered by the
+		// search; a per-category tree is not meaningful for the results).
+		var cat = new TreeViewItem {
+			Tag = new AddinItem { Name = "Available", Subtitle = "__category__" },
+			Header = "Available",
+		};
+		cat.IsExpanded = true;
+		foreach (var it in items.OrderBy (i => i.Name))
+			cat.Items.Add (MakeRowItem (it));
+		list.Items.Add (cat);
+		renderedTab = currentTab;
+	}
+
+	AddinItem RowForMarketplace (MarketplaceExtension e)
+	{
+		var item = new AddinItem {
+			Name = e.Title,
+			Subtitle = e.Version.Length > 0 ? "v" + e.Version : "",
+			Id = e.QualifiedName,
+			Version = e.Version,
+			Description = e.ShortDescription.Length > 0 ? e.ShortDescription : e.Title,
+			Author = e.PublisherName,
+			Category = "Available",
+			IsInstalled = false,
+			Marketplace = e,
+		};
+		// "More information" links to the marketplace listing for this package.
+		item.Url = "https://marketplace.visualstudio.com/items?itemName=" + Uri.EscapeDataString (e.QualifiedName);
+		return item;
+	}
+
+	protected override void OnClosing (WindowClosingEventArgs e)
+	{
+		// Stop any in-flight gallery search and release the marketplace client
+		// (it owns an HttpClient).
+		gallerySearchCts?.Cancel ();
+		gallerySearchCts?.Dispose ();
+		mktClient?.Dispose ();
+		base.OnClosing (e);
 	}
 
 	List<AddinItem> LoadUpdates ()
@@ -427,7 +581,11 @@ public partial class AddinManagerDialog : Window
 		DetailsName!.Text = "";
 		DetailsVersion!.Text = "";
 		DetailsAuthor!.Text = "";
-		DetailsDesc!.Text = currentTab == "updates" ? "No updates available." : "Select an add-in.";
+		DetailsDesc!.Text = currentTab switch {
+			"updates" => "No updates available.",
+			"gallery" => "No add-ins available from the repository.",
+			_ => "Select an add-in.",
+		};
 		UpdateButton!.IsVisible = false;
 		InstallButton!.IsVisible = false;
 		DisableButton!.IsVisible = false;
@@ -494,22 +652,37 @@ public partial class AddinManagerDialog : Window
 
 	void OnInstallClicked (object? sender, RoutedEventArgs e)
 	{
-		InstallSelected ();
+		_ = InstallSelectedAsync ();
 	}
 
 	void OnUpdateClicked (object? sender, RoutedEventArgs e)
 	{
-		InstallSelected ();
+		_ = InstallSelectedAsync ();
 	}
 
-	void InstallSelected ()
+	// One marketplace import at a time: the download+import takes seconds and the
+	// button does not disable while it runs, so a re-entrancy guard keeps a
+	// double-click from stacking two installs of the same package.
+	bool installingFromMarketplace;
+
+	async Task InstallSelectedAsync ()
 	{
-		if (SelectedRow () is not { } item || host is null || item.State is null)
+		if (SelectedRow () is not { } item)
+			return;
+
+		// Gallery (marketplace) row: download the .vsix and import it into the
+		// shell's add-in model (the importer generates the shell manifest from
+		// extension.vsixmanifest and installs it into the user root).
+		if (item.Marketplace is { } ext) {
+			await InstallFromMarketplaceAsync (ext);
+			return;
+		}
+		if (host is null || item.State is null)
 			return;
 		string error;
 		// Updates page: apply the newest staged version of the id (the older
-		// versions are discarded). Gallery page: retry the load of an add-in that
-		// did not load at startup (e.g. its assembly was restored since).
+		// versions are discarded); Installed page: retry the load of an add-in that
+		// did not load at startup.
 		var ok = item.IsInstalled
 			? host.Update (item.Id, out error)
 			: host.LoadAddon (item.State, out error);
@@ -520,6 +693,64 @@ public partial class AddinManagerDialog : Window
 		if (!item.IsInstalled)
 			SelectTab ("installed");
 		LoadAddins ();
+	}
+
+	async Task InstallFromMarketplaceAsync (MarketplaceExtension ext)
+	{
+		if (installingFromMarketplace)
+			return;
+		if (mktClient is null || mktImporter is null) {
+			Console.WriteLine ("[addins] marketplace not ready");
+			return;
+		}
+		// The search results carry the .vsix package URL; fall back to a fresh
+		// detail lookup when the listing did not expose it.
+		var packageUrl = ext.PackageUrl;
+		if (string.IsNullOrEmpty (packageUrl)) {
+			try {
+				packageUrl = (await mktClient.GetExtensionAsync (ext.ExtensionId, CancellationToken.None))?.PackageUrl ?? "";
+			} catch (Exception mex) {
+				// Broad: a network/transport failure on the detail lookup must not
+				// fault the install task — it only matters when the URL is missing.
+				Console.WriteLine ("[addins] gallery detail failed: " + mex.Message);
+			}
+		}
+		if (string.IsNullOrEmpty (packageUrl)) {
+			Console.WriteLine ("[addins] no downloadable package for " + ext.ExtensionId);
+			return;
+		}
+		installingFromMarketplace = true;
+		PageHeaderLabel.Text = "Installing " + ext.Title + "…";
+		try {
+			var tmp = Path.Combine (Path.GetTempPath (), "md-avalonia-mkt-" + Guid.NewGuid ().ToString ("N") + ".vsix");
+			await mktClient.DownloadPackageAsync (packageUrl, tmp, CancellationToken.None);
+			// ext.ExtensionId is the marketplace listing id ("publisher.name"); persisting
+			// it lets the gallery de-duplicate this add-in once it is installed.
+			var result = mktImporter.Import (tmp, ext.ExtensionId);
+			if (result.Success)
+				try { File.Delete (tmp); } catch (Exception ex) { Console.WriteLine ("[addins] tmp cleanup: " + ex.Message); }
+			if (!result.Success) {
+				Console.WriteLine ("[addins] import " + ext.ExtensionId + " failed: " + result.Error);
+				PageHeaderLabel.Text = "Install failed: " + ext.Title;
+				return;
+			}
+			Console.WriteLine ("[addins] imported " + ext.ExtensionId + " -> " + result.AddinId
+				+ (result.IsVisualStudioDesktop ? " (VS desktop)" : " (VS Code)")
+				+ (result.HasEntryPoint ? " [entrypoint]" : " [metadata-only]"));
+			// The imported add-in is now a user add-in: switch to Installed so the
+			// user sees it registered (and can enable/disable/uninstall it).
+			SelectTab ("installed");
+			LoadAddins ();
+		} catch (Exception ex) {
+			// Broad: a transport failure (HttpRequestException — refused connection,
+			// DNS, proxy reset) or a bad/renamed package (bad zip, decode error) must
+			// surface a visible failure state, not fault the task and leave the header
+			// stuck on "Installing…". MarketplaceException is one of these.
+			Console.WriteLine ("[addins] marketplace install failed: " + ex.Message);
+			PageHeaderLabel.Text = "Install failed: " + ext.Title;
+		} finally {
+			installingFromMarketplace = false;
+		}
 	}
 
 	void SelectTab (string tab)
@@ -558,9 +789,8 @@ public partial class AddinManagerDialog : Window
 
 	void OnRefreshClicked (object? sender, RoutedEventArgs e)
 	{
-		// The new host's catalog is the build's own manifests, so a refresh re-reads
-		// the current host state into the list (the legacy refresh downloaded the
-		// remote repositories).
+		// The Refresh button is only shown on the Gallery tab, where it re-runs the
+		// marketplace query for the current search term.
 		LoadAddins ();
 	}
 
