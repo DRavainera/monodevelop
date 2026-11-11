@@ -1,3 +1,4 @@
+#if !AVALONIA_SHELL
 // TemplateCodon.cs
 //
 // Author:
@@ -67,3 +68,4 @@ namespace MonoDevelop.Ide.Editor.Highlighting
 		}
 	}
 }
+#endif

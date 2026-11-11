@@ -194,7 +194,8 @@ internal static class Program
 				|| a.StartsWith ("--sessionrec=", StringComparison.Ordinal)
 				|| a.StartsWith ("--sessionreplay=", StringComparison.Ordinal)
 				|| a.StartsWith ("--unittests", StringComparison.Ordinal)
-				|| a is "--helptree" or "--toolbox") ?? "";
+				|| a.StartsWith ("--themetoggle=", StringComparison.Ordinal)
+				|| a is "--helptree" or "--toolbox" or "--themetoggle") ?? "";
 
 	// Optional path of a solution to open at startup (--sln=<path>); the Solution
 	// pad is then populated with the real projects of that solution.

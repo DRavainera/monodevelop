@@ -302,7 +302,17 @@ public partial class MainWindow : Window
 			Background = Brushes.Transparent;
 			SetToolbarIcons ();
 			if (Application.Current is not null)
-				Application.Current.ActualThemeVariantChanged += (_, _) => SetToolbarIcons ();
+				Application.Current.ActualThemeVariantChanged += (_, _) => {
+					SetToolbarIcons ();
+					// The editor paints its colors from the active theme at Draw time (not
+					// cached), but a theme switch does not itself invalidate a control: the
+					// bound brushes are the same instances with their Color mutated in place,
+					// so the compositor re-presents the old frame. Force each open editor to
+					// re-run Draw so it recolors live dark/light (per-line segment cache stays
+					// valid — only colors change).
+					foreach (var ed in docs.Values)
+						ed.InvalidateColors ();
+				};
 
 			// Load a real solution into the Solution pad when requested (--sln=<path>).
 			var slnArg = Program.SolutionArg;
@@ -3390,6 +3400,36 @@ public partial class MainWindow : Window
 				RefreshOutlinePad ();
 				SetPadVisible ("documentoutline", true);
 				DumpOutlineTree ();
+			} else if (qa == "--themetoggle" || qa.StartsWith ("--themetoggle=", StringComparison.Ordinal)) {
+				// QA: live dark/light recolor in one session. Opens a fixture, then
+				// flips the theme through the REAL production path (ApplyThemeVariant,
+				// the same call the theme menu makes) and verifies the editor re-renders
+				// (QaRenderCount advances) — proving the editor recolors live dark/light
+				// without re-highlighting (the per-line segment cache stays valid across
+				// the switch). --themetoggle=<path> opens a specific fixture.
+				var tFile = qa.StartsWith ("--themetoggle=", StringComparison.Ordinal)
+					? qa ["--themetoggle=".Length..]
+					: Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile), "opencode", "highlight_qa", "fixture.cs");
+				if (File.Exists (tFile)) {
+					OpenFileDocument (tFile);
+					SelectDocument (DocKey (tFile));
+				}
+				await System.Threading.Tasks.Task.Delay (700); // initial render settles
+				if (docs.TryGetValue (DocKey (tFile), out var ted) && ted is not null) {
+					var before = ted.QaRenderCount;
+					var cur = ActualThemeVariant;
+					var next = cur == Avalonia.Styling.ThemeVariant.Light ? Avalonia.Styling.ThemeVariant.Dark : Avalonia.Styling.ThemeVariant.Light;
+					ApplyThemeVariant (next);
+					// Poll for the theme repaint (DynamicResource re-resolve is async).
+					var sw = System.Diagnostics.Stopwatch.StartNew ();
+					while (ted.QaRenderCount <= before && sw.Elapsed < TimeSpan.FromSeconds (3))
+						await System.Threading.Tasks.Task.Delay (50);
+					Output ($"[themetoggle] {tFile}: {cur} -> {next} renderCount {before} -> {ted.QaRenderCount} " +
+						(ted.QaRenderCount > before ? "RECLORED" : "NOT-REPAINTED"));
+				} else {
+					Output ("[themetoggle] no active editor");
+				}
+				Output ("THEMETOGGLE_DONE");
 			} else if (qa == "--classes") {
 				// QA: Classes pad over the loaded solution.
 				if (!string.IsNullOrEmpty (Program.SolutionArg))

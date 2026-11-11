@@ -58,6 +58,26 @@
           FSharp.Core 10.1.403 into main/build for both the service and the
           FSI child process to resolve. -->
     <PackageReference Include="FSharp.Compiler.Service" Version="43.12.403" />
+    <!-- YAML parser for the legacy syntax-definition loader
+         (MonoDevelop.Ide.Editor.Highlighting: Sublime3Format reads the
+         .sublime-syntax rule files with YamlDotNet). The GTK build pins the
+         signed net45 5.2.1; the shell is net10.0 and restores the modern
+         unsigned 15.1.2 (API-compatible for the YamlStream/YamlNode surface
+         the parser uses). -->
+    <PackageReference Include="YamlDotNet" Version="15.1.2" />
+    <!-- Microsoft.Extensions.ObjectPool: MonoDevelop.Core compiles
+         StringBuilderCache (used by the syntax-highlighting scope parser,
+         StackMatchExpression.Parse) against it. MonoDevelop.Core declares it
+         with PrivateAssets="runtime", which keeps the runtime asset OUT of
+         this shell's deps.json — so the shell's default AssemblyLoadContext
+         cannot resolve the assembly at runtime, even though the physical dll
+         is staged in main/build by MonoDevelop.Core's IncludeCopyLocal. The
+         dynamic syntax-highlighting paint path (SkTextEditor -> GetEditorTheme
+         -> StackMatchExpression.Parse -> StringBuilderCache.Allocate) is the
+         first shell code to reach it, and it crashes the process without this.
+         A direct PackageReference emits the runtime deps entry the shell's
+         ALC needs. Version pinned to the package MonoDevelop.Core references. -->
+    <PackageReference Include="Microsoft.Extensions.ObjectPool" Version="3.0.0-preview9.19423.4" />
     <AvaloniaResource Include="branding\AboutImage.png" />
     <AvaloniaResource Include="branding\AboutImage@2x.png" />
     <AvaloniaResource Include="branding\welcome-logo.png" />
@@ -97,6 +117,14 @@
     <ProjectReference Include="..\..\compat\MonoRoslynCompat\MonoRoslynCompat.csproj" />
     <Reference Include="Microsoft.CodeAnalysis.Workspaces">
       <HintPath>$(NuGetPackageRoot)microsoft.codeanalysis.workspaces.common/$(NuGetVersionRoslyn)/lib/netstandard2.0/Microsoft.CodeAnalysis.Workspaces.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <!-- Core Roslyn (Microsoft.CodeAnalysis.dll): the legacy document contract
+         recompiled for the shell (DocumentLocation <-> LinePosition, ITextDocument
+         ApplyTextChanges <-> TextChange) needs the core types that
+         Microsoft.CodeAnalysis.Workspaces does not expose on its own. -->
+    <Reference Include="Microsoft.CodeAnalysis">
+      <HintPath>$(NuGetPackageRoot)microsoft.codeanalysis.common/$(NuGetVersionRoslyn)/lib/netstandard2.0/Microsoft.CodeAnalysis.dll</HintPath>
       <Private>true</Private>
     </Reference>
     <!-- The Xwt Avalonia backend: dialogs/pads built on the Xwt frontend
@@ -177,6 +205,62 @@
 		     children (Errors / Errors and Warnings) never inline in
 		     View > Inline Messages. -->
 		<Compile Include="..\MonoDevelop.Ide\MonoDevelop.Ide.Editor\MessageBubbles\MessageBubbleCommands.cs" />
+		<!-- Oleada 4 (dynamic syntax highlighting): the legacy syntax-highlighting
+		     pipeline (MonoDevelop.Ide.Editor.Highlighting) recompiled into the shell
+		     — RegexEngine + Sublime3/TextMate parsers + the EditorTheme scope
+		     resolver — plus the MonoDevelop.Ide.Editor document contract it
+		     consumes (IReadonlyTextDocument/IDocumentLine/ITextDocument/
+		     DocumentLocation/LineEventArgs + the Editor.Util diff model). The GTK
+		     build keeps compiling the same files from its own csproj; both builds
+		     share the one source tree. GTK-only/legacy-service files (old theme
+		     formats, template codons, the Addins-based service) are guarded with
+		     #if !AVALONIA_SHELL and replaced by the shell port in Controls/. -->
+		<Compile Include="..\MonoDevelop.Ide\MonoDevelop.Ide.Editor.Highlighting\RegexEngine\**\*.cs" />
+		<Compile Include="..\MonoDevelop.Ide\MonoDevelop.Ide.Editor.Highlighting\ChunkStyle.cs" />
+		<Compile Include="..\MonoDevelop.Ide\MonoDevelop.Ide.Editor.Highlighting\ColoredSegment.cs" />
+		<Compile Include="..\MonoDevelop.Ide\MonoDevelop.Ide.Editor.Highlighting\EditorTheme.cs" />
+		<Compile Include="..\MonoDevelop.Ide\MonoDevelop.Ide.Editor.Highlighting\EditorThemeColors.cs" />
+		<Compile Include="..\MonoDevelop.Ide\MonoDevelop.Ide.Editor.Highlighting\IEditorThemeProvider.cs" />
+		<Compile Include="..\MonoDevelop.Ide\MonoDevelop.Ide.Editor.Highlighting\IStreamProvider.cs" />
+		<Compile Include="..\MonoDevelop.Ide\MonoDevelop.Ide.Editor.Highlighting\ISyntaxHighlighting.cs" />
+		<Compile Include="..\MonoDevelop.Ide\MonoDevelop.Ide.Editor.Highlighting\ISyntaxHighlightingDefinitionProvider.cs" />
+		<Compile Include="..\MonoDevelop.Ide\MonoDevelop.Ide.Editor.Highlighting\LanguageBundle.cs" />
+		<Compile Include="..\MonoDevelop.Ide\MonoDevelop.Ide.Editor.Highlighting\PObject.cs" />
+		<Compile Include="..\MonoDevelop.Ide\MonoDevelop.Ide.Editor.Highlighting\ScopeStack.cs" />
+		<Compile Include="..\MonoDevelop.Ide\MonoDevelop.Ide.Editor.Highlighting\StackMatchExpression.cs" />
+		<Compile Include="..\MonoDevelop.Ide\MonoDevelop.Ide.Editor.Highlighting\SyntaxHighlighting.cs" />
+		<Compile Include="..\MonoDevelop.Ide\MonoDevelop.Ide.Editor.Highlighting\SyntaxHighlightingDefinition.cs" />
+		<Compile Include="..\MonoDevelop.Ide\MonoDevelop.Ide.Editor.Highlighting\TmSnippet.cs" />
+		<Compile Include="..\MonoDevelop.Ide\MonoDevelop.Ide.Editor.Highlighting\TmSetting.cs" />
+		<Compile Include="..\MonoDevelop.Ide\MonoDevelop.Ide.Editor.Highlighting\ColorDescriptionAttribute.cs" />
+		<Compile Include="..\MonoDevelop.Ide\MonoDevelop.Ide.Editor.Highlighting\SemanticHighlighting.cs" />
+		<Compile Include="..\MonoDevelop.Ide\MonoDevelop.Ide.Editor.Highlighting\TemplateCodon.cs" />
+		<Compile Include="..\MonoDevelop.Ide\MonoDevelop.Ide.Editor.Highlighting\TemplateExtensionNodeLoader.cs" />
+		<Compile Include="..\MonoDevelop.Ide\MonoDevelop.Ide.Editor.Highlighting\SyntaxHighlightingService.cs" />
+		<Compile Include="..\MonoDevelop.Ide\MonoDevelop.Ide.Editor.Highlighting\Formats\TextMateFormat.cs" />
+		<Compile Include="..\MonoDevelop.Ide\MonoDevelop.Ide.Editor.Highlighting\Formats\Sublime3Format.cs" />
+		<Compile Include="..\MonoDevelop.Ide\MonoDevelop.Ide.Editor.Highlighting\Formats\OldFormat.cs" />
+		<!-- HslColor: the color model the theme layer resolves to (ToRgba() -> SKColor). -->
+		<Compile Include="..\MonoDevelop.Ide\MonoDevelop.Components\HslColor.cs" />
+		<!-- MonoDevelop.Ide.Editor document contract consumed by the highlighter. -->
+		<Compile Include="..\MonoDevelop.Ide\MonoDevelop.Ide.Editor\IReadonlyTextDocument.cs" />
+		<Compile Include="..\MonoDevelop.Ide\MonoDevelop.Ide.Editor\IDocumentLine.cs" />
+		<Compile Include="..\MonoDevelop.Ide\MonoDevelop.Ide.Editor\ITextDocument.cs" />
+		<Compile Include="..\MonoDevelop.Ide\MonoDevelop.Ide.Editor\DocumentLocation.cs" />
+		<Compile Include="..\MonoDevelop.Ide\MonoDevelop.Ide.Editor\LineEventArgs.cs" />
+		<Compile Include="..\MonoDevelop.Ide\MonoDevelop.Ide.Editor.Util\Diff.cs" />
+		<!-- The embedded syntax rule files (legacy grammars: .sublime-syntax YAML
+		     for C#/F#/Markdown/YAML, VSCode TextMate grammars for C/C++/XML/JSON)
+		     as manifest resources with deterministic names, loaded through the
+		     legacy ResourceStreamProvider by SyntaxHighlightingService. -->
+		<EmbeddedResource Include="..\MonoDevelop.Ide\MonoDevelop.Ide.Editor.Highlighting\Resources\csharp.sublime-syntax" LogicalName="MonoDevelop.AvaloniaShell.Highlighting.Resources.csharp.sublime-syntax" />
+		<EmbeddedResource Include="..\MonoDevelop.Ide\MonoDevelop.Ide.Editor.Highlighting\Resources\fsharp.sublime-syntax" LogicalName="MonoDevelop.AvaloniaShell.Highlighting.Resources.fsharp.sublime-syntax" />
+		<EmbeddedResource Include="..\MonoDevelop.Ide\MonoDevelop.Ide.Editor.Highlighting\Resources\markdown.sublime-syntax" LogicalName="MonoDevelop.AvaloniaShell.Highlighting.Resources.markdown.sublime-syntax" />
+		<EmbeddedResource Include="..\MonoDevelop.Ide\MonoDevelop.Ide.Editor.Highlighting\Resources\yaml.sublime-syntax" LogicalName="MonoDevelop.AvaloniaShell.Highlighting.Resources.yaml.sublime-syntax" />
+		<EmbeddedResource Include="..\MonoDevelop.Ide\MonoDevelop.Ide.Editor.Highlighting\Resources\c.json" LogicalName="MonoDevelop.AvaloniaShell.Highlighting.Resources.c.json" />
+		<EmbeddedResource Include="..\MonoDevelop.Ide\MonoDevelop.Ide.Editor.Highlighting\Resources\cpp.json" LogicalName="MonoDevelop.AvaloniaShell.Highlighting.Resources.cpp.json" />
+		<EmbeddedResource Include="..\MonoDevelop.Ide\MonoDevelop.Ide.Editor.Highlighting\Resources\xml.json" LogicalName="MonoDevelop.AvaloniaShell.Highlighting.Resources.xml.json" />
+		<EmbeddedResource Include="..\MonoDevelop.Ide\MonoDevelop.Ide.Editor.Highlighting\Resources\json.plist" LogicalName="MonoDevelop.AvaloniaShell.Highlighting.Resources.json.plist" />
 	</ItemGroup>
 	<!-- Legacy command catalogs: the *.addin.xml sources (MonoDevelop.Ide core +
 	     every add-in) are staged next to the binaries under addinxml/ and loaded

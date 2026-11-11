@@ -28,7 +28,9 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using MonoDevelop.Components;
+#if !AVALONIA_SHELL
 using MonoDevelop.Ide.TypeSystem;
+#endif
 using System.Linq;
 using MonoDevelop.Core.Text;
 using System.Xml.Linq;
@@ -40,7 +42,8 @@ namespace MonoDevelop.Ide.Editor.Highlighting
 {
 	static class TextMateFormat
 	{
-		#region Themes
+	#if !AVALONIA_SHELL
+	#region Themes
 
 		public static EditorTheme LoadEditorTheme (Stream stream)
 		{
@@ -291,6 +294,7 @@ namespace MonoDevelop.Ide.Editor.Highlighting
 		}
 
 		#endregion
+#endif
 
 		#region Syntax highlighting
 

@@ -2330,6 +2330,185 @@ preservando hermanos y restore byte-exacto del hook. Build 0 errores; 53/53
 tests; `naming`/`standardheader` `placeholder=False`, política escrita y
 restaurada. Hook QA `--prefs-sourcewrite` (dry-run con backup/restore).
 
+## M31 — Editor multi-lenguaje dinámico: pila legacy de coloreo + paletas VSCode (Fase 1)
+
+2026-11-11. **VERDE, 0 hallazgos abiertos.**
+
+**Objetivo**: transformar el editor de la shell (`SkTextEditor`, coloreo hardcodeado
+C# con `Tokenize`/`GetThemePalette`) en un editor dinámico multi-lenguaje que
+**reutilice la pila de coloreo legacy** (`MonoDevelop.Ide.Editor.Highlighting`:
+RegexEngine + formatos Sublime3/TextMate + `SyntaxHighlighting`/`EditorTheme`) con
+**paletas de calidad VSCode** (Dark+/Light+), como base de las fases siguientes
+(intellisense, errores + quick fixes, extension points VSIX, minimap, scroll
+bloqueado, fondo oscuro, dropdown de pestañas ▼). Lenguajes v1: C#, F#, JSON, XML
+(`.csproj`/`.sln`), C, C++, Markdown, YAML.
+
+**Enfoque (regla 18.4)**: la pila legacy **no tiene GTK** y se compila *inline* en el
+dll de la shell (globs `<Compile Include="..\MonoDevelop.Ide\MonoDevelop.Ide.Editor
+.Highlighting\...">` en el csproj de la shell). **No hay carpeta "Avalonia"**: el
+código convive en el árbol original de `MonoDevelop.Ide`. La ruta GTK (`--old-gui`)
+debe seguir compilando y arrancando: los ficheros legacy que usan Gtk/Mono.Addins/
+NRefactory llevan guards `#if !AVALONIA_SHELL` (solo la shell define la constante).
+`HslColor.cs`, `StackMatchExpression.cs` y `EditorTheme.cs` quedan **sin cambios**
+(compilan en los dos builds).
+
+**Qué se hizo (fases 1a–1g)**:
+- **1a Probe E2E** de la pila standalone (`~/opencode/highlight_e2e/`, artefacto QA):
+  demostró que la pila no necesita Gtk y que los únicos huecos son shims de
+  atributos CAS (`.NET 9+` eliminó los de `System.Security.Permissions` que el
+  código usa solo por compatibilidad).
+- **1b Pila compilando en la shell**: guards en `SyntaxHighlightingService.cs`,
+  `SemanticHighlighting.cs`, `TemplateCodon.cs`, `TemplateExtensionNodeLoader.cs`,
+  `Formats/OldFormat.cs` (completo) y `TextMateFormat.cs`, `IEditorThemeProvider.cs`,
+  `IReadonlyTextDocument.cs` (parcial). Shims CAS inertes en
+  `Controls/HighlightingCasShims.cs` (bajo `#if AVALONIA_SHELL`). Servicio portado en
+  `Controls/SyntaxHighlightingService.Avalonia.cs` — **a propósito** en el namespace
+  `MonoDevelop.Ide.Editor.Highlighting` (la `SyntaxHighlightingDefinition` legacy
+  resuelve sus scope-include contra `SyntaxHighlightingService.AllBundles` sin
+  cualificar). Los 8 grammars viven en
+  `MonoDevelop.Ide.Editor.Highlighting/Resources/` y se incrustan como
+  `EmbeddedResource` con `LogicalName="MonoDevelop.AvaloniaShell.Highlighting
+  .Resources.<fichero>"`, cargados con el `ResourceStreamProvider` legacy.
+- **1e Integración en `SkTextEditor`** (región `Dynamic syntax highlighting`):
+  highlighter **recreado por generación** (invalidación en `SetLines`/`Commit`/setter
+  `FilePath`) + cache `HighlightedLine` por línea (snapshot inmutable vía
+  `Controls/EditorTextDocumentAdapter.cs`). **El tema se resuelve en cada paint**
+  (no se cachea con el resaltado). `ToSegments` traduce `ColoredSegment`
+  (scope→`ColorStyleKey`) a `theme.TryGetColor(scope,"foreground")` →
+  `HslColor.ToRgba()` → `SKColor`. `Tokenize`/`GetThemePalette` **borrados**.
+- **1f Wiring**: `OpenFileDocument` asigna `FilePath` **antes** que `Text`.
+- **Paletas** en `Controls/HighlightingThemePalette.cs`: Dark+/Light+ como datos
+  puros, convertidos al modelo legacy (`ThemeSetting`/`StackMatchExpression`), de
+  modo que la resolución scope→color es la implementación legacy compartida.
+
+**Fixes hallados por la QA (ciclo §18.5)**:
+1. **`Microsoft.Extensions.ObjectPool` no resolvible** (crash en el primer paint,
+   `StringBuilderCache.Allocate`): `MonoDevelop.Core` declara el paquete con
+   `PrivateAssets="runtime"` → el runtime asset **no fluye** al deps.json de la shell
+   vía `ProjectReference` (aunque el dll físico sí llega por `IncludeCopyLocal` a
+   `main/build`). Fix contenido en la shell: `PackageReference` directo
+   (`3.0.0-preview9.19423.4`, misma versión) emite la entrada de runtime. Un
+   `<Reference>` con `HintPath` NO funciona (el compilador sí, el host no).
+   `MonoDevelop.Core` no se toca (regla 18.4).
+2. **Fondo del editor negro (preexistente, ejercitado por la QA)**: los editores se
+   montan con `Background = Brushes.Transparent`; `ToSk(Transparent)` devuelve
+   `SKColor(0,0,0,0)` (no nulo) → el fallback `?? #1E1E1E` nunca se aplicaba y el
+   fill transparente dejaba la superficie `#000000`. Invisible en dark (base-fg
+   claro), crítico en light (base-fg oscuro → texto plano invisible). Fix en
+   `SkTextEditor.Draw`: si `Background` es nulo o `Alpha==0`, el fondo se pinta desde
+   la paleta activa (`TryGetColor("background")`; fallback por variante `#FFFFFF` /
+   `#1E1E1E`). Cubre además la requirement "fondo negro en tema oscuro".
+3. **Recolorido live dark/light** (requirement: el tema NO está en la cache): un
+   cambio de tema muta los brushes vinculados *in place* (la re-resolución del
+   `DynamicResource` cambia el `Color` de la misma instancia `SolidColorBrush`) →
+   `ForegroundProperty` no cambia → no hay `AffectsRender` ni `OnPropertyChanged` →
+   el compositor re-presenta el frame viejo. (Se probó y **revertió** una rama en
+   `OnPropertyChanged` por propiedades de brush: no se dispara; `Control
+   .ActualThemeVariant` en Avalonia 12 es una propiedad simple sin `AvaloniaProperty`.)
+   Fix definitivo: el handler existente de `Application.Current
+   .ActualThemeVariantChanged` en `MainWindow` llama además a `ed.InvalidateColors()`
+   de cada editor abierto (nuevo método público de `SkTextEditor` → `MarkDirty()`).
+
+**Driver QA**: flag `--themetoggle[=<path>]` (registro en `Program.QaDialogArg` +
+rama en la cadena QA de `MainWindow`) — abre un fixture y alterna el tema por la
+**ruta real de producción** (`ApplyThemeVariant`, la misma del menú de tema),
+verificando `QaRenderCount` antes/después. Mismo estilo que `--outline`/`--editqa`.
+
+**Validación (veredicto por requisito)**:
+- **Builds canónicos a 0 errores**: shell (`MonoDevelop.Startup.Avalonia.csproj
+  -c DebugLinux -m:1`, 2198 warnings preexistentes) y GTK
+  (`MonoDevelop.Ide.csproj -c DebugLinux -m:1`, 242 warnings). La shell **no**
+  referencia `MonoDevelop.Ide.csproj` (la pila se compila inline); el proyecto GTK
+  no define `AVALONIA_SHELL` (los guards lo excluyen).
+- **Probe headless del glue** (`~/opencode/highlight_qa/headless/`, referenciando los
+  DLLs reales de `main/build`): 42 aserciones `[OK]`, 0 `[FAIL]` — 8 resoluciones por
+  extensión + 2 negativos, paletas Dark+/Light+ (tolerancia ±2 LSB, el round-trip
+  HSL del `HslColor` pierde 1-2 bits — idéntico al mundo GTK), fallback de tema
+  desconocido, tiling completo y scopes esperados en los 6 fixtures. `GLUE PROBE
+  VERDE`.
+- **QA visual 6 lenguajes × 2 temas** (12 capturas Xvfb + `analyze_colors.py`):
+  colores distintos de tinta — dark cs 566 / fs 634 / json 508 / xml 480 / cpp 525 /
+  md 270; light cs 479 / fs 569 / json 505 / xml 346 / cpp 481 / md 139. Canónicos
+  presentes (dark: keyword `#BE82B9`, string `#C68A72`, comment `#669352`; light:
+  keyword `#9C00C4`, string `#921212`, comment `#007A00`). "Canónicos faltantes" en
+  json/md/xml esperados (los fixtures no tienen esos tokens).
+- **Fix de fondo verificado** (`fix_light_cs.png` / `fix_dark_cs.png`): light →
+  fondo `#FFFFFF` (0.0% `#000000`), 12 líneas visibles; dark → fondo `#1E1E1E`, 0 px
+  de `#000000` en la zona del editor.
+- **Recolorido live en la misma sesión** (`--themetoggle`): `Dark -> Light
+  renderCount 2 -> 3 RECLORED` + captura post-toggle con UI y editor completos en
+  light, paleta Light+ aplicada sin reabrir el documento.
+- **Arranque `--old-gui` verificado**: vía `dotnet <dll> --old-gui` el hijo es
+  `dotnet main/build/MonoDevelop.dll` con `MONODEVELOP_LEGACY_UI=1`, carga ~287 MB
+  RSS, crea ventana, vivo >120 s sin excepciones. Quirk preexistente: vía **apphost**
+  `Environment.ProcessPath` devuelve el apphost → el hijo re-ejecuta la shell
+  Avalonia (no es regresión; el diff no toca `LaunchLegacyGtk`). Captura negra en
+  Xvfb = **artefacto de entorno** (sin window manager instalado: `twm`/openbox
+  ausentes) → la evidencia es proceso vivo + RSS + `xwininfo -root -tree`, no píxeles.
+
+**Decisiones de diseño (trade-offs documentados)**:
+1. **Invalidación por generación + cache por línea, sin invalidación incremental.**
+   El adapter es un snapshot inmutable (no `ITextDocument` con cambios), así que cada
+   edición recrea el highlighter y descarta la cache; el coste se amortigua con la
+   cache `HighlightedLine` por línea (el resaltado por línea es independiente).
+   Trade-off: un documento grande se re-highlighta entero tras cada edición; a
+   cambio, cero riesgo de desincronización. Paso natural futuro: adapter incremental.
+2. **Sync-over-async en `Draw` es seguro**: `GetColoredSegments`/
+   `GetHighlightedLineAsync` son 100% síncronos (`Task.FromResult`); el
+   `GetAwaiter().GetResult()` en el camino de pintura no puede deadlock.
+3. **Round-trip HSL de `HslColor` da ±1-2 LSB por canal** (modelo HSL:
+   `Parse→ToRgba` pierde 1-2 bits). El mundo GTK hace el mismo round-trip; las
+   aserciones de QA usan tolerancia ±2.
+4. **El `PackageReference` de ObjectPool en el csproj de la shell es un fix de
+   empaquetado contenido en la shell** (root cause en `MonoDevelop.Core`, no se
+   toca — regla 18.4).
+5. **`HslColor` ambiguo**: existe `Avalonia.Media.HslColor`; las referencias del
+   glue están cualificadas como `MonoDevelop.Components.HslColor`.
+
+**Archivos**:
+- Nuevos (solo compilan en la shell; `Controls/` por el glob `Controls\**\*.cs`):
+  `Controls/EditorTextDocumentAdapter.cs`, `Controls/HighlightingCasShims.cs`
+  (bajo `#if AVALONIA_SHELL`), `Controls/HighlightingThemePalette.cs`,
+  `Controls/SyntaxHighlightingService.Avalonia.cs`, y
+  `MonoDevelop.Ide.Editor.Highlighting/Resources/` (8 grammars:
+  `csharp.sublime-syntax`, `fsharp.sublime-syntax`, `markdown.sublime-syntax`,
+  `yaml.sublime-syntax`, `c.json`, `cpp.json`, `xml.json`, `json.plist`).
+- Modificados: `Controls/SkTextEditor.cs` (integración del highlighter, borrado de
+  `Tokenize`/`GetThemePalette`, invalidación por generación, fix de fondo,
+  `InvalidateColors()`); guards `#if !AVALONIA_SHELL` en `SyntaxHighlightingService
+  .cs`, `SemanticHighlighting.cs`, `TemplateCodon.cs`,
+  `TemplateExtensionNodeLoader.cs`, `Formats/OldFormat.cs`, `TextMateFormat.cs`,
+  `IEditorThemeProvider.cs`, `IReadonlyTextDocument.cs`;
+  `MonoDevelop.Startup.Avalonia.csproj` (compile set, 8 `EmbeddedResource` con
+  `LogicalName`, `Reference` Roslyn core, `PackageReference ObjectPool`);
+  `Program.cs` (flag QA `--themetoggle`); `Views/MainWindow.axaml.cs`
+  (`InvalidateColors()` en `ActualThemeVariantChanged` + flag QA `--themetoggle`).
+- Sin cambios (deliberado): `HslColor.cs`, `StackMatchExpression.cs`,
+  `EditorTheme.cs` (compilan en los dos builds); `MonoDevelop.Core` (regla 18.4).
+
+**Cómo se valida** (artefactos en `~/opencode/highlight_qa/`, regla 18.6):
+1. Builds canónicos: `dotnet build main/src/core/MonoDevelop.Startup.Avalonia/
+   MonoDevelop.Startup.Avalonia.csproj -c DebugLinux -m:1` y
+   `dotnet build main/src/core/MonoDevelop.Ide/MonoDevelop.Ide.csproj -c DebugLinux
+   -m:1` → 0 errores.
+2. Probe headless: `cd ~/opencode/highlight_qa/headless && dotnet build
+   glue_probe.csproj -c Debug -m:1 && dotnet bin/Debug/net10.0/glue_probe.dll` →
+   `GLUE PROBE VERDE`.
+3. QA visual: `~/opencode/highlight_qa/capture_all.sh <dark|light> cs fs json xml
+   cpp md` + `python3 analyze_colors.py <tema> shot_*.png`.
+4. Recolorido live: lanzar la shell con `--themetoggle=<fixture>` → buscar
+   `RECLORED` en el log.
+5. `--old-gui`: `dotnet main/build/MonoDevelop.AvaloniaShell.dll --old-gui` → proceso
+   vivo, ~290 MB RSS, ventana creada, sin excepciones.
+
+**Queda pendiente** (fases 2-9, fuera de esta tarea): lenguajes adicionales del
+alcance original (`.properties` y `.txt` — el servicio ya resuelve por extensión);
+intellisense, errores + quick fixes, extension points VSIX (aplicables a toda la
+shell Avalonia); minimap siempre visible a la derecha (clic/arrastre mueve viewport;
+muestra errores y breakpoints); scroll bloqueado hasta que las líneas superan el
+alto del editor; dropdown de pestañas ▼ a la derecha de la barra de pestañas
+(comportamiento GTK).
+
 ## Plan de migración de add-ins (blueprint: `docs/plan-migracion-addins.md`)
 
 Estado (2026-10-06): las fases 0 a 3 de este plan están ejecutadas y validadas por QA. La Fase 4 (oleadas de add-ins legacy → Avalonia) está en curso: oleada A completa, oleadas B–E pendientes. El shell Avalonia convive con la UI GTK legacy (`--old-gui`). No se elimina soporte GTK. Los add-ins Avalonia viven en carpetas `MonoDevelop.Avalonia.*`; las carpetas legacy no se tocan.
@@ -5495,3 +5674,30 @@ Es decir: habilitado si hay solución cargada Y (hay fila de proyecto selecciona
 **Queda pendiente** (aceptado por el operador): (a) `CodeGenerationPanel` per-proyecto (project properties — panel de proyecto en el legacy, fuera de la página global); (b) integración VSIX/Marketplace del binding F# (en pausa).
 
 **Cierre**: commit por nombre de los 20 ficheros (4 nuevos + 16 M) + docs ×3, push a `origin/agents/sub-agent-senior-dev-role-report`. Sin submódulos. Artefactos en `~/opencode/` (fixture `fsharp_port/fsls_fs/`, probes `fcs_probe/` + `fs_scanner_probe/`, lanzadores `launch_shell.sh`/`oldgui_smoke.sh`).
+
+## 2026-11-11 — M31 Editor multi-lenguaje dinámico: pila legacy de coloreo + paletas VSCode (Fase 1) — CERRADO (QA VERDE, 0 hallazgos)
+
+**Estado: CERRADO (QA APROBADO, 0 hallazgos abiertos).** El editor de la shell (`SkTextEditor`, coloreo hardcodeado C#) reutiliza la **pila de coloreo legacy** (`MonoDevelop.Ide.Editor.Highlighting`: RegexEngine + Sublime3/TextMate + `SyntaxHighlighting`/`EditorTheme`) con **paletas VSCode** (Dark+/Light+). Lenguajes v1: C#, F#, JSON, XML (`.csproj`/`.sln`), C, C++, Markdown, YAML (resolución por extensión, la más larga gana). Base de las fases 2-9 (intellisense, errores+quick fixes, extension points VSIX, minimap, scroll bloqueado, fondo oscuro, dropdown ▼). Detalle completo en § M31 de este fichero.
+
+**Arquitectura (regla 18.4)**: la pila **no tiene GTK** y se compila *inline* en el dll de la shell (globs `<Compile Include>` en el csproj de la shell). **Sin carpeta "Avalonia"** — convive en `MonoDevelop.Ide`. Guards `#if !AVALONIA_SHELL` en 8 ficheros legacy (solo la shell define la constante); shims CAS inertes bajo `#if AVALONIA_SHELL`. `HslColor`/`StackMatchExpression`/`EditorTheme` sin cambios (compilan en los dos builds). Servicio portado en `SyntaxHighlightingService.Avalonia.cs` (a propósito en el namespace `MonoDevelop.Ide.Editor.Highlighting` por `AllBundles` sin cualificar). 8 grammars incrustados como `EmbeddedResource` con `LogicalName`.
+
+**Integración**: highlighter **recreado por generación** (invalidación en `SetLines`/`Commit`/setter `FilePath`) + cache `HighlightedLine` por línea (snapshot inmutable, `EditorTextDocumentAdapter`). **El tema se resuelve en cada paint** (no se cachea con el resaltado). `Tokenize`/`GetThemePalette` borrados. Wiring: `FilePath` antes que `Text`.
+
+**Fixes hallados por la QA (ciclo §18.5)**:
+1. **`Microsoft.Extensions.ObjectPool` no resolvible** (crash en el primer paint, `StringBuilderCache.Allocate`): root cause = `PrivateAssets="runtime"` en `MonoDevelop.Core` → runtime asset fuera del deps.json de la shell vía `ProjectReference` (el dll físico sí llega por `IncludeCopyLocal`). Fix contenido en la shell: `PackageReference` directo (`3.0.0-preview9.19423.4`). Un `<Reference>` con `HintPath` no funciona. `MonoDevelop.Core` no se toca (regla 18.4).
+2. **Fondo del editor negro (preexistente)**: editores montan con `Background=Transparent` → `ToSk` devuelve `SKColor(0,0,0,0)` (no nulo) → el fallback `?? #1E1E1E` nunca se aplica → superficie `#000000` (oculta el texto base en light). Fix en `Draw`: si `Background` es nulo o `Alpha==0`, se pinta desde la paleta activa (`TryGetColor("background")`; fallback `#FFFFFF`/`#1E1E1E`).
+3. **Recolorido live dark/light**: un cambio de tema muta los brushes *in place* (DynamicResource cambia el `Color` de la misma instancia `SolidColorBrush`) → no hay `OnPropertyChanged`/`AffectsRender` → el compositor re-presenta el frame viejo. (Se probó y **revertió** una rama en `OnPropertyChanged` por propiedades de brush: no se dispara; `Control.ActualThemeVariant` en Avalonia 12 es propiedad simple sin `AvaloniaProperty`.) Fix: el handler de `Application.Current.ActualThemeVariantChanged` en `MainWindow` llama a `ed.InvalidateColors()` de cada editor abierto (nuevo método público de `SkTextEditor` → `MarkDirty()`).
+
+**Validación (valores medidos)**:
+- **Builds a 0 errores**: shell (`MonoDevelop.Startup.Avalonia.csproj -c DebugLinux -m:1`, 2198 warnings preexistentes) y GTK (`MonoDevelop.Ide.csproj -c DebugLinux -m:1`, 242 warnings). La shell no referencia `MonoDevelop.Ide.csproj`; el proyecto GTK no define `AVALONIA_SHELL`.
+- **Probe headless** (`~/opencode/highlight_qa/headless/`, sobre los DLLs reales de `main/build`): **42 aserciones `[OK]`, 0 `[FAIL]`** — 8 resoluciones + 2 negativos, paletas (tolerancia ±2 LSB), fallback de tema desconocido, tiling completo y scopes en los 6 fixtures. `GLUE PROBE VERDE`.
+- **QA visual 6 lenguajes × 2 temas** (12 capturas + `analyze_colors.py`): colores distintos de tinta — dark cs 566 / fs 634 / json 508 / xml 480 / cpp 525 / md 270; light cs 479 / fs 569 / json 505 / xml 346 / cpp 481 / md 139. Canónicos: dark keyword `#BE82B9`/string `#C68A72`/comment `#669352`; light keyword `#9C00C4`/string `#921212`/comment `#007A00`.
+- **Fix de fondo** (`fix_{light,dark}_cs.png`): light → `#FFFFFF` (0.0% `#000000`), 12 líneas visibles; dark → `#1E1E1E`, 0 px `#000000` en la zona del editor.
+- **Recolorido live** (`--themetoggle`): `Dark -> Light renderCount 2 -> 3 RECLORED` + captura post-toggle en light.
+- **Arranque `--old-gui`** (vía `dotnet <dll> --old-gui`): hijo `dotnet main/build/MonoDevelop.dll` con `MONODEVELOP_LEGACY_UI=1`, ~287 MB RSS, ventana creada, vivo >120 s sin excepciones. Quirk preexistente vía apphost (`Environment.ProcessPath` = apphost → el hijo re-ejecuta la shell; no es regresión). Captura negra en Xvfb = artefacto de entorno (sin window manager).
+
+**QA §18.5** (subagente Tester QA Senior, ciclos recursivos hasta 0 hallazgos): ciclo inicial → 3 hallazgos (ObjectPool crash, fondo negro preexistente, recolorido live `NOT-REPAINTED`) → todos corregidos → ciclo final **VERDE 0 hallazgos** (probe headless verde + 12 capturas + `RECLORED` + builds a 0 errores + `--old-gui` verificado).
+
+**Queda pendiente** (fases 2-9, fuera de esta tarea): `.properties`/`.txt`; intellisense; errores + quick fixes; extension points VSIX; minimap; scroll bloqueado; dropdown de pestañas ▼.
+
+**Cierre**: commit por nombre de los ficheros modificados + nuevos (`Controls/`, `Resources/`, 3 docs) + push a `origin/agents/sub-agent-senior-dev-role-report`. Sin submódulos. Artefactos en `~/opencode/highlight_qa/` (fixtures, probe headless, `capture_all.sh`, `analyze_colors.py`, lanzadores, 12 capturas, logs) + `~/opencode/highlight_e2e/` (probe 1a).

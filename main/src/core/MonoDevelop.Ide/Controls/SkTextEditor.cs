@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
@@ -14,6 +15,8 @@ using Avalonia.Platform;
 using Avalonia.VisualTree;
 using Avalonia.Threading;
 using SkiaSharp;
+using MonoDevelop.Core;
+using MonoDevelop.Ide.Editor.Highlighting;
 
 namespace MonoDevelop.Ide.Controls;
 
@@ -75,7 +78,20 @@ public class SkTextEditor : Control
 
 	// Backing file path — set when opened from the Solution pad or File > Open.
 	// Empty for untitled documents (like the legacy "Untitled" documents).
-	public string FilePath { get; set; } = "";
+	string filePath = "";
+	public string FilePath {
+		get => filePath;
+		set {
+			if (filePath == value)
+				return;
+			filePath = value;
+			// The language is resolved from the extension, so a file change
+			// (open/rename) may select a different syntax definition. The
+			// highlighter's cross-line state cache was built from the old
+			// definition, so it must be disposed, not just cached-out.
+			InvalidateHighlighter ();
+		}
+	}
 
 	// F# language service: the full list of source files of the project this
 	// document belongs to (set by MainWindow when a .fs/.fsi/.fsx/.fsscript
@@ -230,6 +246,138 @@ public class SkTextEditor : Control
 			scrollLines = caretLine;
 		else if (caretLine > scrollLines + Bounds.Height / lineH - 2)
 			scrollLines = Math.Max (0, caretLine - Bounds.Height / lineH + 2);
+	}
+
+	#endregion
+
+	#region Dynamic syntax highlighting (legacy MonoDevelop.Ide.Editor.Highlighting)
+
+	// The editor drives the SAME legacy highlighter the GTK world uses
+	// (SyntaxHighlighting over an IReadonlyTextDocument adapter). The editor's
+	// line model is a snapshot, not a live ITextDocument, so the highlighter
+	// instance is rebuilt whenever the document generation changes — i.e. when
+	// the content changes (SetLines is the single funnel every edit goes through)
+	// or the file path changes (an open/rename may switch the resolved language).
+	// The per-line HighlightedLine results are cached in hlLineCache and reused
+	// across scrolls until InvalidateHighlighter() drops them. The color THEME is
+	// NOT part of the cache: it is resolved on every paint, so a live dark/light
+	// variant switch recolors instantly without re-running the highlighter.
+	SyntaxHighlighting? hlHighlighter;
+	readonly Dictionary<int, HighlightedLine> hlLineCache = new ();
+
+	/// <summary>Resolves the color segments of editor line <paramref name="line"/>
+	/// (0-based) through the legacy highlighter. Returns null when the document
+	/// has no matching syntax definition — the caller then paints the base
+	/// foreground.</summary>
+	List<Segment>? GetHighlightedSegments (int line, SKColor baseFg)
+	{
+		if (line < 0 || line >= lines.Count)
+			return null;
+		var theme = CurrentEditorTheme ();
+
+		// The per-line cache is valid for the current document generation only;
+		// InvalidateHighlighter() drops it on any content/file change, so a hit
+		// here is always for the live content.
+		if (hlLineCache.TryGetValue (line, out var hit) && hit != null)
+			return ToSegments (hit, lines [line], baseFg, theme);
+
+		var def = SyntaxHighlightingService.GetSyntaxHighlightingDefinition (new FilePath (FilePath));
+		if (def == null)
+			return null;
+		if (hlHighlighter == null) {
+			var adapter = new EditorTextDocumentAdapter (lines, FilePath);
+			hlHighlighter = new SyntaxHighlighting (def, adapter);
+			hlLineCache.Clear ();
+		}
+		var docLine = hlHighlighter.Document.GetLine (line + 1);
+		// GetHighlightedLineAsync is synchronous end-to-end (the highlighter
+		// never awaits a real operation, only Task.FromResult), so the blocking
+		// GetResult inside the paint pass is safe.
+		HighlightedLine highlighted;
+		try {
+			highlighted = hlHighlighter.GetHighlightedLineAsync (docLine, CancellationToken.None).GetAwaiter ().GetResult ();
+		} catch (Exception ex) {
+			MonoDevelop.Core.LoggingService.LogDebug ("Syntax highlight failed on line " + (line + 1) + ": " + ex);
+			InvalidateHighlighter ();
+			return null;
+		}
+		if (highlighted != null)
+			hlLineCache [line] = highlighted;
+		return ToSegments (highlighted, lines [line], baseFg, theme);
+	}
+
+	/// <summary>Maps the legacy HighlightedLine (a full-width ColoredSegment run
+	/// whose offsets are line-relative) to the editor's (text, color) segments.
+	/// Each segment's scope (ColorStyleKey) is resolved through the active
+	/// EditorTheme — the same scope-resolution the GTK world uses.</summary>
+	static List<Segment> ToSegments (HighlightedLine hl, string text, SKColor baseFg, EditorTheme theme)
+	{
+		var result = new List<Segment> ();
+		if (hl == null || hl.Segments.Count == 0 || text.Length == 0)
+			return result;
+		foreach (var seg in hl.Segments) {
+			int off = seg.Offset;
+			int len = seg.Length;
+			if (off < 0)
+				off = 0;
+			if (len < 0)
+				len = 0;
+			int end = off + len;
+			if (end > text.Length)
+				end = text.Length;
+			if (off >= text.Length || off >= end)
+				continue;
+			string scope = seg.ColorStyleKey ?? "";
+			var color = baseFg;
+			if (scope.Length > 0 && theme != null) {
+				MonoDevelop.Components.HslColor c;
+				if (theme.TryGetColor (scope, "foreground", out c)) {
+					var (r, g, b, a) = c.ToRgba ();
+					color = new SKColor (r, g, b, a);
+				}
+			}
+			result.Add (new Segment { Text = text.Substring (off, end - off), Color = color });
+		}
+		if (result.Count == 0)
+			result.Add (new Segment { Text = text, Color = baseFg });
+		return result;
+	}
+
+	/// <summary>The comment-underline color for F# adornments, resolved from the
+	/// active palette's "comment" scope (falls back to the base foreground).</summary>
+	SKColor CurrentCommentColor (SKColor fallback)
+	{
+		var theme = CurrentEditorTheme ();
+		if (theme == null)
+			return fallback;
+		MonoDevelop.Components.HslColor c;
+		if (theme.TryGetColor ("comment", "foreground", out c)) {
+			var (r, g, b, a) = c.ToRgba ();
+			return new SKColor (r, g, b, a);
+		}
+		return fallback;
+	}
+
+	string CurrentThemeVariantName ()
+		=> ActualThemeVariant == Avalonia.Styling.ThemeVariant.Light
+			? SyntaxHighlightingService.LightName
+			: SyntaxHighlightingService.DarkName;
+
+	EditorTheme CurrentEditorTheme ()
+		=> SyntaxHighlightingService.GetEditorTheme (CurrentThemeVariantName ());
+
+	/// <summary>Disposes the highlighter and drops the per-line cache. Called at
+	/// the two document-generation choke points — SetLines (every content edit
+	/// funnels through it) and the FilePath setter (an open/rename may switch the
+	/// resolved language) — so the next paint rebuilds from the current content
+	/// with a fresh highlighter state.</summary>
+	void InvalidateHighlighter ()
+	{
+		if (hlHighlighter != null) {
+			hlHighlighter.Dispose ();
+			hlHighlighter = null;
+		}
+		hlLineCache.Clear ();
 	}
 
 	#endregion
@@ -421,6 +569,16 @@ public class SkTextEditor : Control
 		InvalidateVisual ();
 	}
 
+	/// <summary>
+	/// Force the next frame to re-run Draw. A theme switch mutates the bound
+	/// brushes in place (the DynamicResource re-resolve changes the brush's Color
+	/// on the same instance), so no property-changed fires on the control and the
+	/// compositor would re-present the old bitmap. Call this on theme change so the
+	/// editor recolors live dark/light without re-highlighting (the per-line segment
+	/// cache stays valid; colors are resolved per paint).
+	/// </summary>
+	public void InvalidateColors () => MarkDirty ();
+
 	protected override void OnGotFocus (FocusChangedEventArgs e)
 	{
 		base.OnGotFocus (e);
@@ -460,6 +618,8 @@ public class SkTextEditor : Control
 		lines.AddRange (next);
 		caretLine = Math.Clamp (caretLine, 0, lines.Count - 1);
 		caretCol = Math.Clamp (caretCol, 0, lines [caretLine].Length);
+		// Content changed → the highlighter's line-relative cache is stale.
+		InvalidateHighlighter ();
 		RebuildFolds ();
 		MarkDirty ();
 	}
@@ -1111,6 +1271,12 @@ public class SkTextEditor : Control
 		var before = Text ?? "";
 		var joined = string.Join ("\n", lines);
 		PushUndo (before);
+		// The edit just mutated `lines` in place (this is the single funnel for
+		// every keyboard/program edit). The highlighter's per-line cache is now
+		// stale; drop it so the next paint rebuilds from the new content. (The
+		// echo into SetLines below is a no-op via its SequenceEqual guard, so it
+		// cannot do this invalidation for us.)
+		InvalidateHighlighter ();
 		SetValue (TextProperty, joined);
 		if (!IsDirty)
 			IsDirty = true; // user edit → legacy modified marker on the tab
@@ -2859,14 +3025,35 @@ public class SkTextEditor : Control
 		float lineH = LineHeight;
 		float gutterW = GutterWidth ();
 
-		var bg = ToSk (Background as ISolidColorBrush) ?? new SKColor (0x1E, 0x1E, 0x1E);
+		SKColor bg;
+		var bgBrush = ToSk (Background as ISolidColorBrush);
+		if (bgBrush is null or { Alpha: 0 }) {
+			// No explicit opaque background: document editors are mounted with
+			// Brushes.Transparent, and a transparent fill on the opaque frame
+			// leaves the surface black, which hides the light theme's dark base
+			// text. Paint the editor background from the active palette (Dark+ =
+			// #1E1E1E, Light+ = #FFFFFF), falling back to the per-variant default.
+			var isLight = ActualThemeVariant == Avalonia.Styling.ThemeVariant.Light;
+			var defaultBg = isLight ? new SKColor (0xFF, 0xFF, 0xFF) : new SKColor (0x1E, 0x1E, 0x1E);
+			var theme = CurrentEditorTheme ();
+			if (theme != null && theme.TryGetColor ("background", out var bgc)) {
+				var (r, g, b, a) = bgc.ToRgba ();
+				bg = new SKColor (r, g, b, 0xFF);
+			}
+			else
+				bg = defaultBg;
+		}
+		else {
+			bg = bgBrush.Value;
+		}
 		var fg = ToSk (Foreground as ISolidColorBrush) ?? new SKColor (0xD4, 0xD4, 0xD4);
 		var gutterBg = ToSk (GutterBackground as ISolidColorBrush) ?? new SKColor (0x2D, 0x2D, 0x2D);
 		var gutterFg = ToSk (GutterForeground as ISolidColorBrush) ?? new SKColor (0x86, 0x86, 0x86);
 		var caretColor = ToSk (CaretBrush as ISolidColorBrush) ?? fg;
 
-		var (comment, strColor, keywordColor, numberColor) = GetThemePalette (ActualThemeVariant);
-		var keywordSet = new HashSet<string> (Keywords.Split (' '));
+		// The F# adornment underline uses the palette's "comment" scope color;
+		// the actual per-line colors come from the dynamic highlighter below.
+		var commentColor = CurrentCommentColor (fg);
 
 		using var bgPaint = new SKPaint { Color = bg, IsAntialias = false };
 		canvas.DrawRect (0, 0, (float)Bounds.Width, (float)Bounds.Height, bgPaint);
@@ -2967,10 +3154,13 @@ public class SkTextEditor : Control
 				canvas.DrawRect (gutterW, y, (float)Bounds.Width - gutterW, lineH, execPaint);
 			}
 
-			// segments with basic highlighting
-			var segments = Tokenize (lines [i], fg, comment, strColor, keywordColor, numberColor, keywordSet);
+			// dynamic syntax highlighting (legacy highlighter); falls back to the
+			// base foreground when no language matches the file
+			var segments = GetHighlightedSegments (i, fg) ?? new List<Segment> { new Segment { Text = lines [i], Color = fg } };
 			float x = gutterW + 4;
 			foreach (var seg in segments) {
+				if (seg.Text.Length == 0)
+					continue;
 				textPaint.Color = seg.Color;
 				canvas.DrawText (seg.Text, x, baseline, textFont, textPaint);
 				x += seg.Text.Length * charW;
@@ -2978,7 +3168,7 @@ public class SkTextEditor : Control
 			// inline message bubble (legacy MessageBubble) after the line text
 			DrawBubbles (canvas, i, x, baseline, textFont, textPaint);
 			// F# adornments (HighlightMutables underline / ShowTypeSignatures)
-			DrawFSharpAdornments (canvas, i, y, lineH, gutterW, charW, comment, textFont, textPaint);
+			DrawFSharpAdornments (canvas, i, y, lineH, gutterW, charW, commentColor, textFont, textPaint);
 			// pinned-watch bubbles (legacy PinnedWatch adorner): one amber bubble
 			// per expression pinned to the line; on a debug stop each shows its
 			// evaluated "expr = value" (static "expr = ?" between sessions).
@@ -3034,67 +3224,6 @@ public class SkTextEditor : Control
 
 	static SKColor? ToSk (ISolidColorBrush? brush)
 		=> brush is null ? null : new SKColor (brush.Color.R, brush.Color.G, brush.Color.B, brush.Color.A);
-
-	(SKColor, SKColor, SKColor, SKColor) GetThemePalette (Avalonia.Styling.ThemeVariant variant)
-		=> variant == Avalonia.Styling.ThemeVariant.Light
-			? (new SKColor (0x6A, 0x99, 0x55), new SKColor (0xA3, 0x15, 0x15), new SKColor (0x00, 0x00, 0xFF), new SKColor (0x09, 0x86, 0x58))
-			: (new SKColor (0x6A, 0x99, 0x55), new SKColor (0xCE, 0x91, 0x78), new SKColor (0x56, 0x9C, 0xD6), new SKColor (0xB5, 0xCE, 0xA8));
-
-	List<Segment> Tokenize (string line, SKColor defaultColor, SKColor comment, SKColor strColor, SKColor keywordColor, SKColor numberColor, HashSet<string> keywords)
-	{
-		var segments = new List<Segment> ();
-		var current = new System.Text.StringBuilder ();
-		SKColor currentColor = defaultColor;
-		void Flush ()
-		{
-			if (current.Length > 0) {
-				segments.Add (new Segment { Text = current.ToString (), Color = currentColor });
-				current.Clear ();
-			}
-		}
-		for (int i = 0; i < line.Length; i++) {
-			char c = line [i];
-			if (c == '/' && i + 1 < line.Length && line [i + 1] == '/') {
-				Flush ();
-				segments.Add (new Segment { Text = line.Substring (i), Color = comment });
-				break;
-			}
-			if (c == '"') {
-				Flush ();
-				int j = i + 1;
-				while (j < line.Length && line [j] != '"') {
-					if (line [j] == '\\' && j + 1 < line.Length)
-						j++;
-					j++;
-				}
-				segments.Add (new Segment { Text = line.Substring (i, Math.Min (j + 1, line.Length) - i), Color = strColor });
-				i = Math.Min (j, line.Length - 1);
-				continue;
-			}
-			if (char.IsLetter (c) || c == '_' || (c == '@' && i + 1 < line.Length && char.IsLetter (line [i + 1]))) {
-				int j = i;
-				while (j < line.Length && (char.IsLetterOrDigit (line [j]) || line [j] == '_'))
-					j++;
-				var word = line.Substring (i, j - i);
-				Flush ();
-				segments.Add (new Segment { Text = word, Color = keywords.Contains (word) ? keywordColor : defaultColor });
-				i = j - 1;
-				continue;
-			}
-			if (char.IsDigit (c)) {
-				Flush ();
-				int j = i;
-				while (j < line.Length && (char.IsDigit (line [j]) || line [j] == '.' || char.ToLower (line [j]) is 'f' or 'd' or 'm' or 'x' or 'e' or 'b' or 'o'))
-					j++;
-				segments.Add (new Segment { Text = line.Substring (i, j - i), Color = numberColor });
-				i = j - 1;
-				continue;
-			}
-			current.Append (c);
-		}
-		Flush ();
-		return segments;
-	}
 
 	#endregion
 }

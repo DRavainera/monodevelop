@@ -1,3 +1,4 @@
+#if !AVALONIA_SHELL
 //
 // SemanticHighlighting.cs
 //
@@ -75,3 +76,4 @@ namespace MonoDevelop.Ide.Editor.Highlighting
 		internal event EventHandler SemanticHighlightingUpdated;
 	}
 }
+#endif

@@ -26,7 +26,9 @@
 
 using System;
 using MonoDevelop.Components;
+#if !AVALONIA_SHELL
 using Xwt.Drawing;
+#endif
 using System.Collections.Generic;
 using MonoDevelop.Core;
 using System.Linq;
@@ -77,12 +79,15 @@ namespace MonoDevelop.Ide.Editor.Highlighting
 				return theme;
 			} catch (Exception e) {
 				if (faultedThemes.Add (Name)) {
+#if !AVALONIA_SHELL
 					MessageService.ShowError (GettextCatalog.GetString ("Error while loading theme: {0}", Name), e);
+#endif
 					LoggingService.LogError ("Error while loading theme :" + Name, e);
 				}
 				return null;
 			}
 		}
+#if !AVALONIA_SHELL
 		public static IEditorThemeProvider CreateProvider (EditorThemeFormat format, string name, Func<IStreamProvider> getStreamProvider)
 		{
 			switch (format) {
@@ -96,8 +101,10 @@ namespace MonoDevelop.Ide.Editor.Highlighting
 				throw new InvalidOperationException ("Unknown editor theme format " + format);
 			}
 		}
+#endif
 
 		#region Format implementations
+#if !AVALONIA_SHELL
 
 		class XamarinStudioFormatThemeProvider : AbstractThemeProvider
 		{
@@ -146,6 +153,7 @@ namespace MonoDevelop.Ide.Editor.Highlighting
 				}
 			}
 		}
+#endif
 		#endregion
 	}
 }

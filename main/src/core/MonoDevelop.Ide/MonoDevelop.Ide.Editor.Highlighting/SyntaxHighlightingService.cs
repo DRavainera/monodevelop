@@ -1,3 +1,4 @@
+#if !AVALONIA_SHELL
 ﻿// SyntaxModeService.cs
 //
 // Author:
@@ -852,3 +853,4 @@ namespace MonoDevelop.Ide.Editor.Highlighting
 		}
 	}
 }
+#endif

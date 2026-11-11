@@ -1,3 +1,4 @@
+#if !AVALONIA_SHELL
 //
 // ColorScheme.cs
 //
@@ -1526,3 +1527,4 @@ namespace MonoDevelop.Ide.Editor.Highlighting
 		}
 	}
 }
+#endif

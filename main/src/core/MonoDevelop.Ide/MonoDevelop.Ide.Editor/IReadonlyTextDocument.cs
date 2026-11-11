@@ -258,6 +258,7 @@ namespace MonoDevelop.Ide.Editor
 			return document.GetTextBetween (document.LocationToOffset (start), document.LocationToOffset (end));
 		}
 
+#if !AVALONIA_SHELL
 		public static string GetEolMarker (this IReadonlyTextDocument document)
 		{
 			if (document == null)
@@ -271,5 +272,6 @@ namespace MonoDevelop.Ide.Editor
 
 			return !string.IsNullOrEmpty (eol) ? eol : DefaultSourceEditorOptions.Instance.DefaultEolMarker;
 		}
+#endif
 	}
 }

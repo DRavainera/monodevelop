@@ -258,6 +258,26 @@ El bucle de migración Gtk → Avalonia continúa por módulos (detalle por hito
   `docs/interfaz-plan.md` § M25b.
 - **M26 completado (2026-10-02)**: portados los tres pads placeholder
   `documentoutline`, `classes` y `codeissues` (Opción 1 acotada de la propuesta).
+- **M31 — Editor multi-lenguaje dinámico (Fase 1, 2026-11-11, VERDE 0 hallazgos)**:
+  el editor de la shell (`SkTextEditor`, coloreo hardcodeado C#) ahora reutiliza la
+  **pila de coloreo legacy** (`MonoDevelop.Ide.Editor.Highlighting`: RegexEngine +
+  Sublime3/TextMate + `SyntaxHighlighting`/`EditorTheme`) con **paletas VSCode**
+  (Dark+/Light+). Lenguajes v1: C#, F#, JSON, XML (`.csproj`/`.sln`), C, C++,
+  Markdown, YAML (resolución por extensión, la más larga gana). Compilación
+  integrada (regla 18.4: sin carpeta "Avalonia"; guards `#if !AVALONIA_SHELL` en 8
+  ficheros legacy; shims CAS inertes). Dos fixes hallados por la QA: (a)
+  **`Microsoft.Extensions.ObjectPool` no resolvible** en la shell (root cause
+  `PrivateAssets="runtime"` en `MonoDevelop.Core` → runtime asset fuera del deps.json
+  de la shell; fix = `PackageReference` directo contenido en la shell — sin tocar
+  `MonoDevelop.Core`), y (b) **fondo del editor negro** preexistente (los editores
+  montan con `Background=Transparent` → fill alfa 0 → superficie negra; oculta el
+  texto base en light; fix en `Draw` pinta el fondo desde la paleta activa).
+  Recolorido dark/light **en vivo** en la misma sesión (el tema se resuelve por
+  paint, no se cachea: `InvalidateColors()` desde `ActualThemeVariantChanged`).
+  QA: probe headless 42 aserciones sobre los DLLs reales de `main/build`, 12
+  capturas (6 lenguajes × 2 temas), `--themetoggle` → `RECLORED`, builds shell + GTK
+  a 0 errores, arranque `--old-gui` verificado. Detalle en `docs/interfaz-plan.md`
+  § M31 y registro en `docs/session_summary.md` (2026-11-11 (32)).
   Nuevos servicios `SymbolIndexService` (escáner de una pasada: outline,
   breadcrumb/GoToType/`:t` y árbol de clases) y `CodeIssueService` (diagnósticos
   MSBuild agrupados por severidad); pads auto-ocultos con doble clic que abre
