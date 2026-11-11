@@ -182,6 +182,8 @@ public partial class MainWindow : Window
 					b.Click += (_, _) => NudgeTabStrip (-1);
 				else if (b.Name == "DocScrollRight")
 					b.Click += (_, _) => NudgeTabStrip (1);
+				else if (b.Name == "DocTabList")
+					b.Click += (_, _) => ShowTabListMenu (b);
 			}
 			if (DocTabsPresenter is not null)
 				DocTabsPresenter.RenderTransform = new Avalonia.Media.TranslateTransform ();
@@ -608,6 +610,31 @@ public partial class MainWindow : Window
 					await Task.Delay (200); // layout settle after the removals
 					UpdateTabScrollButtons ();
 					Output ("[tabscroll] after close: docs=" + docs.Count + " scrollVisible=" + TabScrollButtonsVisible ());
+				}
+			} else if (qa == "--tablist") {
+				// QA: tab-list button (▾) — open a real file (dismisses the welcome
+				// overlay), then enough untitled documents for the strip to
+				// overflow; verify the button is present and that selecting the LAST
+				// (hidden) tab via the menu's reveal path shifts the strip to show it.
+				var realFile = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile), "opencode", "highlight_qa", "fixture.cs");
+				if (File.Exists (realFile))
+					OpenFileDocument (realFile);
+				for (int i = 1; i <= 10; i++) {
+					OpenDocumentText ("QaTabList" + i + ".cs", $"// tablist filler {i}\n");
+					await Task.Delay (60);
+				}
+				UpdateTabScrollButtons ();
+				Output ("[tablist] overflow=" + TabScrollButtonsVisible () + " tabs=" + DocTabs!.Items.OfType<TabItem> ().Count ());
+				var btn = DocTabs.GetVisualDescendants ().OfType<Button> ().FirstOrDefault (b => b.Name == "DocTabList");
+				Output ("[tablist] button-found=" + (btn is not null) + " button-visible=" + (btn?.IsVisible == true));
+				var lastTab = DocTabs.Items.OfType<TabItem> ().LastOrDefault ();
+				Output ("[tablist] lastTab=" + (lastTab?.Tag ?? "null") + " before-selected=" + (DocTabs.SelectedItem as TabItem)?.Tag + " before-offset=" + tabStripOffset.ToString ("F0"));
+				if (lastTab is not null) {
+					SelectDocument ((string)lastTab.Tag!);
+					RevealSelectedTab ();
+					await Task.Delay (80);
+					Output ("[tablist] after-pick selected=" + (DocTabs.SelectedItem as TabItem)?.Tag +
+						" offset=" + tabStripOffset.ToString ("F0") + " reveal-ok=" + ReferenceEquals (DocTabs.SelectedItem, lastTab));
 				}
 			} else if (qa == "--searchpopup") {
 				// QA: toolbar search — live results while typing, category prefixes
@@ -5103,6 +5130,77 @@ public partial class MainWindow : Window
 		tabStripOffset = System.Math.Clamp (tabStripOffset + dir * System.Math.Max (100, vp.Bounds.Width / 2), -overflow, 0);
 		if (row.RenderTransform is Avalonia.Media.TranslateTransform t)
 			t.X = tabStripOffset;
+	}
+
+	/// <summary>Tab-list button (▾, VSCode-style): a menu with every open document
+	/// tab (icon + file name, a check mark on the active one) so a tab hidden by
+	/// the strip overflow can be selected without scrolling the strip.</summary>
+	void ShowTabListMenu (Control anchor)
+	{
+		var tabs = DocTabs!.Items.OfType<TabItem> ().Where (t => t.IsVisible).ToList ();
+		if (tabs.Count == 0)
+			return;
+		var menu = new ContextMenu ();
+		foreach (var tab in tabs) {
+			var tag = (string?)tab.Tag;
+			if (string.IsNullOrEmpty (tag))
+				continue;
+			bool active = DocTabs.SelectedItem == tab;
+			var panel = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
+			if (FileTabIcon (tag) is { } img)
+				panel.Children.Add (new Image { Source = img, Width = 16, Height = 16 });
+			// The check mark reserves the same width as the active tab's marker so
+			// the labels line up regardless of which tab is current.
+			panel.Children.Add (new TextBlock {
+				Text = active ? "\u2713  " : "    ",
+				FontSize = 12,
+			});
+			panel.Children.Add (new TextBlock {
+				Text = Path.GetFileName (tag) + (docs.TryGetValue (tag, out var ed) && ed.IsDirty ? " \u2022" : ""),
+				FontSize = 12,
+			});
+			var mi = new MenuItem { Header = panel };
+			var tagRef = tag;
+			mi.Click += (_, _) => {
+				SelectDocument (tagRef);
+				RevealSelectedTab ();
+			};
+			menu.Items.Add (mi);
+		}
+		menu.Open (anchor);
+	}
+
+	/// <summary>Shifts the clipped strip so the selected tab is visible (picked
+	/// from the tab-list menu while the strip overflows). Left-aligns the tab when
+	/// it hides under the left edge, right-aligns it under the right edge.</summary>
+	void RevealSelectedTab ()
+	{
+		var vp = TabStripViewport;
+		var row = DocTabsPresenter;
+		if (vp is null || row is null || row.RenderTransform is not Avalonia.Media.TranslateTransform t)
+			return;
+		double overflow = TabStripContentWidth - vp.Bounds.Width;
+		if (overflow <= 1)
+			return;
+		double left = 0;
+		TabItem? selected = null;
+		foreach (var it in DocTabs!.Items.OfType<TabItem> ().Where (x => x.IsVisible)) {
+			if (ReferenceEquals (it, DocTabs.SelectedItem)) {
+				selected = it;
+				break;
+			}
+			left += it.Bounds.Width;
+		}
+		if (selected is null)
+			return;
+		double right = left + selected.Bounds.Width;
+		double visibleLeft = -tabStripOffset;
+		if (left < visibleLeft)
+			tabStripOffset = -left;
+		else if (right > visibleLeft + vp.Bounds.Width)
+			tabStripOffset = -(right - vp.Bounds.Width);
+		tabStripOffset = System.Math.Clamp (tabStripOffset, -System.Math.Max (0, overflow), 0);
+		t.X = tabStripOffset;
 	}
 
 	/// <summary>

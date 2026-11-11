@@ -2505,9 +2505,89 @@ verificando `QaRenderCount` antes/después. Mismo estilo que `--outline`/`--edit
 alcance original (`.properties` y `.txt` — el servicio ya resuelve por extensión);
 intellisense, errores + quick fixes, extension points VSIX (aplicables a toda la
 shell Avalonia); minimap siempre visible a la derecha (clic/arrastre mueve viewport;
-muestra errores y breakpoints); scroll bloqueado hasta que las líneas superan el
-alto del editor; dropdown de pestañas ▼ a la derecha de la barra de pestañas
-(comportamiento GTK).
+muestra errores y breakpoints). *(Resuelto en M31b — § 2026-11-11 al pie de este
+fichero: scrollbar vertical del editor y dropdown de pestañas ▼; el fondo oscuro
+pasó de la paleta Dark+ `#1E1E1E` al negro puro `#000000` pedido por el operador.)*
+
+### M31b — Fondo negro del editor, scrollbar vertical y botón de lista de pestañas ▾ (2026-11-11)
+
+2026-11-11. **VERDE, 0 hallazgos abiertos** (QA ciclo #3).
+
+**Pedido**: el operador vio M31 y pidió (1) **fondo negro** en el editor, no gris
+("Yo quería el fondo del editor negro, no gris": el fix de M31 pintaba `#1E1E1E`
+de la paleta Dark+; el look original es `#000000`), y (2) **el scrollview y el
+botón de lista de pestañas** ("tambien falta el scrollview y el botón de lista
+de pestañas": el editor solo scrollaba por rueda y la tira no tenía dropdown).
+"Poco coloreo" en `.cs` dark: aceptado (la paleta era casi VSCode-dark).
+
+**Qué se hizo**:
+- **Fondo negro en dark** (`SkTextEditor.Draw`): con `Background` transparente,
+  dark pinta `#000000` puro sin mirar la paleta; light sigue usando la paleta/
+  `#FFFFFF`.
+- **Scrollbar vertical** (pintada en el canvas Skia — el editor es 100%
+  custom-drawn, sin control nativo): 14px al borde derecho; visible solo si el
+  documento desborda; thumb proporcional (viewport/total, mín. 24px) arrastrable
+  (`e.Pointer.Capture(this)`); clic en track pagina 0.9 viewport; cursores
+  `SizeNorthSouth`/`UpArrow`; hover de palabra/gutter suprimido sobre la barra.
+  El clamp de rueda pasó a `MaxScroll`.
+- **Botón ▾ de lista de pestañas** (`DocTabList`, siempre visible, docked right
+  junto a ‹ ›): `ShowTabListMenu` (ContextMenu con todas las tabs: icono + ✓ en
+  la activa + nombre + `•` dirty) y `RevealSelectedTab` (desplaza la tira para
+  mostrar la pestaña elegida). Flag QA `--tablist` (autocontenido).
+- **Fix de doble sustracción (crítico, preexistente desde M16e `0309f21902`)**:
+  el bucle de `Draw` hacía `y = (drawn - scrollLines)·lineH` con
+  `firstLine=(int)scrollLines` → offset entero restado dos veces → editor en
+  blanco total con `scrollLines > ~1 viewport`. Inalcanzable antes (solo rueda +
+  fixtures cortos); la scrollbar lo expone. Fix:
+  `y = (firstLine + drawn - (float)scrollLines) * lineH`.
+- **Fix H-1 (preexistente, media-baja)**: tras un fold, el gutter duplicaba el
+  número de la última línea en las filas sobrantes. (a) `MaxScroll` sobre líneas
+  de buffer, no rows visibles; (b) fallback `RowToLine` a `lines.Count - 1` +
+  bucle que emitía `visible` filas aunque quedaran menos. Fix: `RowToLine`
+  devuelve `-1` al agotarse las filas visibles y el bucle rompe (`i < 0`);
+  `MaxScroll = VisibleRowCount - ScrollVisibleLines` (cuenta líneas no ocultas
+  por folds).
+
+**Decisiones de diseño**:
+1. **Scrollbar pintada, no control nativo**: la superficie es un canvas Skia
+   sobre `WriteableBitmap`; un `ScrollBar` de Avalonia rompería la coherencia.
+   ~120 líneas a cambio de identidad total con la pintura (misma invalidación,
+   mismo frame).
+2. **Fondo negro solo en dark**: dark no mira la paleta (el operador pidió
+   negro); light respeta la paleta actual.
+3. **Botón ▾ siempre visible** (como VSCode): no depende de overflow; el menú
+   lista todas las tabs y el reveal es un no-op sin overflow.
+
+**Validación (valores medidos)**:
+- **Build 0 errores** (`-c DebugLinux -m:1`). **Ruta GTK intocada**:
+  `SkTextEditor.cs` solo lo compila la shell (glob `Controls\**\*.cs`);
+  `MonoDevelop.Ide.csproj` = `EnableDefaultCompileItems=false` sin globs
+  (`--old-gui` no se toca, verificado por grep).
+- **Fondo**: dark 96% `#000000` en la zona del editor; light 96% `#FFFFFF`;
+  coloreo intacto.
+- **Scrollbar**: aparece con 308 líneas (track+thumb, dark y light), no aparece
+  con 19; arrastre por xdotool funcional.
+- **Tablist** (`--tablist`): `overflow=True tabs=11`, `button-found=True
+  button-visible=True`, `reveal-ok=True`, offset 0 → -746.
+- **Fix de scroll**: repro exacta (arrastre en 308 líneas) → 4231 px de texto
+  tras el scroll (antes ~0); línea 308 al final; rueda+clamp; coloreo y
+  caret/gutter alineados.
+- **H-1**: fold de toda la clase (309→5 rows) + scroll al fondo → 0 tinta de
+  número bajo la última fila; fold intermedio (188 rows, desborda) → thumb al
+  final = final real del documento.
+- **QA §18.5 recursiva (3 ciclos)**: #1 → blocker doble sustracción → fix →
+  #2 VERDE (0 regresiones) + hallazgo H-1 → fix → **#3 VERDE 0 hallazgos**
+  (7 ítems: build, H-1, scroll básico, wheel, fondo+coloreo, folds,
+  gutter/caret). Artefactos `~/opencode/qa_m31_bg/` (cycle1/2/3, fix_scroll).
+
+**Archivos** (4 M, +223/−11): `Controls/SkTextEditor.cs` (fondo negro,
+scrollbar, fix de doble sustracción, H-1); `App.axaml` (botón `DocTabList`);
+`Views/MainWindow.axaml.cs` (wiring, `ShowTabListMenu`, `RevealSelectedTab`,
+flag `--tablist`); `Program.cs` (`--tablist` en `QaDialogArg`).
+
+**Queda pendiente** (fases 2-9, fuera de esta tarea): `.properties`/`.txt`;
+intellisense; errores + quick fixes; extension points VSIX; minimap siempre
+visible a la derecha.
 
 ## Plan de migración de add-ins (blueprint: `docs/plan-migracion-addins.md`)
 
@@ -5698,6 +5778,10 @@ Es decir: habilitado si hay solución cargada Y (hay fila de proyecto selecciona
 
 **QA §18.5** (subagente Tester QA Senior, ciclos recursivos hasta 0 hallazgos): ciclo inicial → 3 hallazgos (ObjectPool crash, fondo negro preexistente, recolorido live `NOT-REPAINTED`) → todos corregidos → ciclo final **VERDE 0 hallazgos** (probe headless verde + 12 capturas + `RECLORED` + builds a 0 errores + `--old-gui` verificado).
 
-**Queda pendiente** (fases 2-9, fuera de esta tarea): `.properties`/`.txt`; intellisense; errores + quick fixes; extension points VSIX; minimap; scroll bloqueado; dropdown de pestañas ▼.
+**Queda pendiente** (fases 2-9, fuera de esta tarea): `.properties`/`.txt`; intellisense; errores + quick fixes; extension points VSIX; minimap. *(Resuelto en M31b: scroll bloqueado (scrollbar del editor), dropdown ▼ y fondo oscuro puro.)*
 
 **Cierre**: commit por nombre de los ficheros modificados + nuevos (`Controls/`, `Resources/`, 3 docs) + push a `origin/agents/sub-agent-senior-dev-role-report`. Sin submódulos. Artefactos en `~/opencode/highlight_qa/` (fixtures, probe headless, `capture_all.sh`, `analyze_colors.py`, lanzadores, 12 capturas, logs) + `~/opencode/highlight_e2e/` (probe 1a).
+
+## 2026-11-11 — M31b Fondo negro del editor, scrollbar vertical y botón de lista de pestañas ▾ — CERRADO (QA VERDE, 0 hallazgos)
+
+**Estado: CERRADO (QA APROBADO, 0 hallazgos abiertos).** Tres piezas pedidas por el operador sobre M31: (1) **fondo del editor negro puro `#000000`** en tema oscuro (no el gris `#1E1E1E` de la paleta Dark+ — pedido explícito: "quería el fondo del editor negro, no gris"; light sigue blanco), (2) **scrollbar vertical del editor** (pintada en el canvas Skia, ya que el editor es 100% custom-drawn: 14px, solo con desborde, thumb arrastrable, clic en track pagina) y (3) **botón ▾ de lista de pestañas** (siempre visible en la tira; menú con todas las tabs — ✓ en la activa, `•` dirty — y reveal de la pestaña elegida; flag QA `--tablist`). La QA §18.5 encontró y se corrigieron además **dos bugs de scroll preexistentes** que la nueva scrollbar hizo alcanzables: (a) **doble sustracción del offset en `Draw`** (editor en blanco con `scrollLines > ~1 viewport`; preexistente desde M16e `0309f21902`; fix `y = (firstLine + drawn - scrollLines)·lineH`) y (b) **gutter duplicando el número de la última línea tras un fold** (fallback `RowToLine` + `MaxScroll` sobre líneas de buffer; fix: `RowToLine` → -1, guarda en el bucle, `MaxScroll = VisibleRowCount - ScrollVisibleLines`). `SkTextEditor.cs` solo compila en la shell → ruta `--old-gui` intacta. QA recursiva en 3 ciclos (blocker scroll → H-1 → **VERDE 0 hallazgos**). Detalle completo en § M31b (subsección de § M31).

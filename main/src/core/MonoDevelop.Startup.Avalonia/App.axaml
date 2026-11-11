@@ -71,6 +71,14 @@
                           FontSize="10" Content="›" HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
                           ToolTip.Tip="More tabs" IsVisible="False" />
                 </StackPanel>
+                <!-- Tab-list button (VSCode-style): always present; opens a menu
+                     with every document tab so a hidden tab can be selected
+                     without scrolling the strip. Docked right so the viewport
+                     (LastChildFill) keeps the middle. -->
+                <Button Name="DocTabList" Classes="chromebtn" DockPanel.Dock="Right" Width="18" Height="18"
+                        Padding="0" Margin="2,0,4,0" FontSize="10" Content="▾"
+                        HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+                        ToolTip.Tip="Select from open tabs" />
                 <Border Name="StripViewport" ClipToBounds="True">
                   <ItemsPresenter Name="PART_ItemsPresenter" ItemsPanel="{TemplateBinding ItemsPanel}" />
                 </Border>

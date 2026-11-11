@@ -63,6 +63,15 @@ public class SkTextEditor : Control
 	/// ITextView.Caret.PositionChanged).</summary>
 	public event Action? CaretMoved;
 	double scrollLines;
+	// Vertical scrollbar (legacy editor VScrollbar). The editor has no horizontal
+	// scroll (long lines clip at the view width), so a single vertical bar drives
+	// the document offset. It is painted into the Skia canvas (the editor is fully
+	// custom-rendered; there is no native scrollbar control). Shown only while the
+	// document is taller than the viewport; the thumb is grabbed to scroll and a
+	// track click pages toward the cursor.
+	const double ScrollBarWidth = 14;
+	bool draggingScroll;
+	double scrollGrabOffset;
 
 	// CPU raster buffer: Skia draws straight into the memory of an Avalonia
 	// WriteableBitmap, which is then presented via DrawImage. This is the
@@ -1093,7 +1102,7 @@ public class SkTextEditor : Control
 	{
 		base.OnPointerWheelChanged (e);
 		scrollLines = Math.Max (0, scrollLines - e.Delta.Y * 3);
-		scrollLines = Math.Min (scrollLines, Math.Max (0, lines.Count - 1));
+		scrollLines = Math.Min (scrollLines, MaxScroll);
 		InvalidateVisual ();
 		e.Handled = true;
 	}
@@ -1102,7 +1111,27 @@ public class SkTextEditor : Control
 	{
 		base.OnPointerPressed (e);
 		Focus ();
-		var pt = e.GetCurrentPoint (this);			if (pt.Properties.IsLeftButtonPressed) {
+		var pt = e.GetCurrentPoint (this);
+		// Vertical scrollbar: grab the thumb to scroll, or click the track to
+		// page toward the cursor (legacy editor VScrollbar). Consumed before the
+		// caret-move logic so a click at the right edge never moves the caret.
+		if (pt.Properties.IsLeftButtonPressed && ScrollBarVisible && pt.Position.X >= Bounds.Width - ScrollBarWidth) {
+			var (top, thumbH) = ScrollThumb ();
+			if (pt.Position.Y >= top && pt.Position.Y <= top + thumbH) {
+				draggingScroll = true;
+				scrollGrabOffset = pt.Position.Y - top;
+				e.Pointer.Capture (this);
+			} else {
+				PageScrollToward (pt.Position.Y);
+				draggingScroll = true; // resume thumb-drag from the new position
+				var (nt, nh) = ScrollThumb ();
+				scrollGrabOffset = pt.Position.Y - nt;
+			}
+			MarkDirty ();
+			e.Handled = true;
+			return;
+		}
+		if (pt.Properties.IsLeftButtonPressed) {
 				// Legacy left margin: a click on the gutter marker strip toggles the
 			// breakpoint of that line (Mono.TextEditor ActionTextArea
 			// "left margin click"). The strip is the icon column next to the line
@@ -1151,9 +1180,29 @@ public class SkTextEditor : Control
 	{
 		base.OnPointerMoved (e);
 		var pt = e.GetPosition (this);
+		// Vertical scrollbar: dragging the thumb scrolls; the thumb also gets a
+		// resize-free pointer-follow (offset kept from the grab point).
+		if (draggingScroll) {
+			SetScrollFromThumb (pt.Y);
+			MarkDirty ();
+			return;
+		}
 		// Gutter hover polish: highlight the row under the cursor, hand cursor
 		// over the breakpoint strip, tooltip with the line number.
 		UpdateGutterHover (pt);
+		// Over the vertical scrollbar the gutter/word hover pipeline stays off;
+		// the cursor reports the scrollbar affordance (thumb = resize, track =
+		// page direction).
+		if (ScrollBarVisible && pt.X >= Bounds.Width - ScrollBarWidth) {
+			ClearGutterHover ();
+			hoverTimer.Stop ();
+			hoverPopup?.HideTooltip ();
+			var (top, thumbH) = ScrollThumb ();
+			Cursor = pt.Y >= top && pt.Y <= top + thumbH
+				? new Cursor (StandardCursorType.SizeNorthSouth)
+				: pt.Y < top ? new Cursor (StandardCursorType.UpArrow) : new Cursor (StandardCursorType.Arrow);
+			return;
+		}
 		// Hover tooltip: restart the timer on every move (legacy tooltip pipeline).
 		if (!dragging) {
 			// Over the gutter the word-hover pipeline stays off (the legacy margin
@@ -1195,6 +1244,11 @@ public class SkTextEditor : Control
 	{
 		base.OnPointerReleased (e);
 		dragging = false;
+		if (draggingScroll) {
+			draggingScroll = false;
+			e.Pointer.Capture (null);
+			MarkDirty ();
+		}
 	}
 
 	// Right-click on a pinned-watch bubble shows the bubble menu (legacy
@@ -1831,7 +1885,10 @@ public class SkTextEditor : Control
 			if (l - hidden == row)
 				return l;
 		}
-		return lines.Count - 1;
+		// -1 = no visible line for this row: the caller stops the loop. The
+		// old fallback (lines.Count - 1) painted the last line repeatedly
+		// for every surplus row (gutter number duplicated on empty rows).
+		return -1;
 	}
 
 	// Maps a buffer line to its rendered row (-1 when hidden).
@@ -2891,6 +2948,57 @@ public class SkTextEditor : Control
 	/// left margin icon column).</summary>
 		float GutterIconStripWidth () => Math.Max (0, GutterWidth () - 18);
 
+	// ----- Vertical scrollbar (legacy editor VScrollbar) -----
+	/// <summary>Number of lines that fit in the viewport (scrolling space).</summary>
+	double ScrollVisibleLines => Math.Max (1, Bounds.Height / LineHeight);
+	/// <summary>Maximum value of scrollLines for the current content.</summary>
+	// Based on the VISIBLE row count: with collapsed folds the buffer holds
+	// more lines than rows, so lines.Count would oversize the scroll range.
+	double MaxScroll => Math.Max (0, VisibleRowCount - ScrollVisibleLines);
+	/// <summary>Number of rows actually rendered (buffer lines minus folded-hidden lines).</summary>
+	int VisibleRowCount
+	{
+		get
+		{
+			if (collapsedFolds.Count == 0)
+				return lines.Count;
+			int n = 0;
+			for (int l = 0; l < lines.Count; l++)
+				if (!IsLineHidden (l))
+					n++;
+			return n;
+		}
+	}
+	/// <summary>True while the document overflows the viewport (the bar shows).</summary>
+	bool ScrollBarVisible => MaxScroll > 0.5;
+	/// <summary>Thumb top (px) / height (px) inside the viewport.</summary>
+	(float Top, float Height) ScrollThumb ()
+	{
+		double frac = MaxScroll > 0 ? scrollLines / MaxScroll : 0;
+		float thumbH = (float)Math.Min (Bounds.Height, ScrollVisibleLines / Math.Max (1, lines.Count) * Bounds.Height);
+		thumbH = Math.Max (24f, Math.Min (thumbH, (float)Bounds.Height));
+		float top = (float)(frac * (Bounds.Height - thumbH));
+		return (top, thumbH);
+	}
+	/// <summary>Sets scrollLines from a pointer Y position while grabbing the
+	/// thumb (offset = distance from the pointer to the thumb top).</summary>
+	void SetScrollFromThumb (double y)
+	{
+		var (_, thumbH) = ScrollThumb ();
+		double maxTop = Math.Max (0, Bounds.Height - thumbH);
+		double frac = maxTop > 0 ? Math.Clamp ((y - scrollGrabOffset) / maxTop, 0, 1) : 0;
+		scrollLines = frac * MaxScroll;
+	}
+	/// <summary>Pages toward a track click (legacy scrollbar click-behavior).</summary>
+	void PageScrollToward (double y)
+	{
+		var (top, thumbH) = ScrollThumb ();
+		if (y < top)
+			scrollLines = Math.Max (0, scrollLines - ScrollVisibleLines * 0.9);
+		else if (y > top + thumbH)
+			scrollLines = Math.Min (MaxScroll, scrollLines + ScrollVisibleLines * 0.9);
+	}
+
 	// ----- Gutter hover polish (legacy Mono.TextEditor gutter area): the row
 	// under the pointer highlights, the breakpoint strip shows the hand cursor
 	// (like ActionTextArea's margin cursors) and a tooltip announces the line
@@ -3031,17 +3139,21 @@ public class SkTextEditor : Control
 			// No explicit opaque background: document editors are mounted with
 			// Brushes.Transparent, and a transparent fill on the opaque frame
 			// leaves the surface black, which hides the light theme's dark base
-			// text. Paint the editor background from the active palette (Dark+ =
-			// #1E1E1E, Light+ = #FFFFFF), falling back to the per-variant default.
+			// text. The dark editor surface stays pure black (#000000) — the
+			// original editor look — rather than the palette's Dark+ gray
+			// (#1E1E1E). Light uses the palette background (white).
 			var isLight = ActualThemeVariant == Avalonia.Styling.ThemeVariant.Light;
-			var defaultBg = isLight ? new SKColor (0xFF, 0xFF, 0xFF) : new SKColor (0x1E, 0x1E, 0x1E);
-			var theme = CurrentEditorTheme ();
-			if (theme != null && theme.TryGetColor ("background", out var bgc)) {
-				var (r, g, b, a) = bgc.ToRgba ();
-				bg = new SKColor (r, g, b, 0xFF);
+			if (isLight) {
+				var theme = CurrentEditorTheme ();
+				if (theme != null && theme.TryGetColor ("background", out var bgc)) {
+					var (r, g, b, a) = bgc.ToRgba ();
+					bg = new SKColor (r, g, b, 0xFF);
+				}
+				else
+					bg = new SKColor (0xFF, 0xFF, 0xFF);
 			}
 			else
-				bg = defaultBg;
+				bg = new SKColor (0x00, 0x00, 0x00);
 		}
 		else {
 			bg = bgBrush.Value;
@@ -3087,9 +3199,17 @@ public class SkTextEditor : Control
 		while (line < lines.Count && drawn < visible) {
 			int i = RowToLine (line); // skip folded (hidden) lines
 			line++;
-			if (i >= lines.Count)
+			// i == -1: the visible rows ran out (folds collapsed more rows
+			// than the viewport holds); stop instead of painting surplus rows.
+			if (i < 0 || i >= lines.Count)
 				break;
-			float y = (drawn - (float)scrollLines) * lineH;
+			// The viewport y of this row is its absolute visible-row index
+			// (firstLine + drawn) minus the scroll offset. Subtracting only
+			// `scrollLines` here double-counted the integer part (drawn already
+			// starts at 0 for row firstLine=(int)scrollLines), which pushed every
+			// line above the viewport once scrollLines exceeded one viewport —
+			// a blank editor on any real scroll.
+			float y = (firstLine + drawn - (float)scrollLines) * lineH;
 			float baseline = y + (lineH - (float)FontSize) / 2f + (float)FontSize * 0.85f;
 			drawn++;
 
@@ -3219,6 +3339,19 @@ public class SkTextEditor : Control
 			float caretY = (caretLine - (float)scrollLines) * lineH;
 			if (caretY >= -lineH && caretY <= (float)Bounds.Height)
 				canvas.DrawRect (caretX, Math.Max (0f, caretY), 1.5f, Math.Min (lineH, (float)Bounds.Height - Math.Max (0f, caretY)), caretPaint);
+		}
+
+		// vertical scrollbar (legacy editor VScrollbar): track at the right edge,
+		// thumb sized to viewport/document ratio, drawn on top of everything
+		// (it never underlaps the gutter, which sits at the left).
+		if (ScrollBarVisible) {
+			var (top, thumbH) = ScrollThumb ();
+			float sbX = (float)Bounds.Width - (float)ScrollBarWidth;
+			bool darkBg = bg.Red * 0.299 + bg.Green * 0.587 + bg.Blue * 0.114 < 128;
+			using var trackPaint = new SKPaint { Color = darkBg ? new SKColor (0x2B, 0x2B, 0x2B) : new SKColor (0xE6, 0xE6, 0xE6), IsAntialias = false };
+			canvas.DrawRect (sbX, 0, (float)ScrollBarWidth, (float)Bounds.Height, trackPaint);
+			using var thumbPaint = new SKPaint { Color = new SKColor (0x6E, 0x6E, 0x6E), IsAntialias = false };
+			canvas.DrawRect (sbX + 2, top, (float)ScrollBarWidth - 4, thumbH, thumbPaint);
 		}
 	}
 

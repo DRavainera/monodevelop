@@ -278,6 +278,22 @@ El bucle de migración Gtk → Avalonia continúa por módulos (detalle por hito
   capturas (6 lenguajes × 2 temas), `--themetoggle` → `RECLORED`, builds shell + GTK
   a 0 errores, arranque `--old-gui` verificado. Detalle en `docs/interfaz-plan.md`
   § M31 y registro en `docs/session_summary.md` (2026-11-11 (32)).
+- **M31b (2026-11-11, VERDE 0 hallazgos)**: tres piezas pedidas por el operador sobre M31.
+  (a) **Fondo del editor negro puro `#000000`** en tema oscuro (no el gris `#1E1E1E` de la
+  paleta Dark+ — el operador quería el negro original; light sigue blanco). (b) **Scrollbar
+  vertical del editor**: pintada en el canvas Skia (14px, solo con desborde, thumb
+  arrastrable, clic en track pagina) — el editor es 100% custom-drawn, no hay control
+  nativo. (c) **Botón de lista de pestañas ▾** siempre visible en la tira: menú con todas
+  las tabs (✓ en la activa, `•` dirty) y reveal de la pestaña elegida (flag QA
+  `--tablist`). Además la QA §18.5 encontró y se corrigieron **dos bugs de scroll
+  preexistentes** que la scrollbar hizo alcanzables: (1) doble sustracción del offset en
+  el bucle de `Draw` (editor en blanco con `scrollLines > ~1 viewport`, preexistente desde
+  M16e) y (2) gutter duplicando el número de la última línea tras un fold (`RowToLine`
+  fallback + `MaxScroll` sobre líneas de buffer en vez de rows visibles). QA recursiva en
+  3 ciclos (ciclo #1 blocker scroll → ciclo #2 VERDE + hallazgo H-1 → ciclo #3 VERDE 0
+  hallazgos). `SkTextEditor.cs` solo compila en la shell → la ruta `--old-gui` no se toca.
+  Detalle en `docs/interfaz-plan.md` (§ M31 + registro 2026-11-11 M31b) y
+  `docs/session_summary.md` (2026-11-11 (33)).
   Nuevos servicios `SymbolIndexService` (escáner de una pasada: outline,
   breadcrumb/GoToType/`:t` y árbol de clases) y `CodeIssueService` (diagnósticos
   MSBuild agrupados por severidad); pads auto-ocultos con doble clic que abre
