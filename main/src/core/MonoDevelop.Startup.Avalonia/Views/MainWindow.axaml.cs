@@ -19,6 +19,7 @@ using Avalonia.VisualTree;
 using MonoDevelop.Ide.Controls;
 using MonoDevelop.Ide.Services;
 using MonoDevelop.AvaloniaShell.Views;
+using MonoDevelop.AvaloniaShell.Services;
 
 namespace MonoDevelop.AvaloniaShell.Views;
 
@@ -158,6 +159,10 @@ public partial class MainWindow : Window
 		// Legacy DirtyFilesDialog gate: closing the window with modified documents
 		// shows "Save Files" before quitting (Workbench.OnDeleteEvent).
 		Closing += OnMainWindowClosing;
+		// F# Interactive (F# port, phase 4): the dotnet-fsi child must not outlive
+		// the window — kill it when the window is actually destroyed (Closed
+		// always fires, unlike Closing which the dirty-files gate can cancel).
+		Closed += (_, _) => FsiKillSession ();
 
 		// Tab clicks swap the mounted document in DocContent (and show the empty
 		// host when the selection is cleared).
@@ -325,6 +330,12 @@ public partial class MainWindow : Window
 				// QA: exercise the global-policy write for naming/header, dump and restore.
 				var dlg = new PreferencesDialog { WindowStartupLocation = WindowStartupLocation.CenterOwner };
 				dlg.QaWriteSourceCodePolicies ();
+				dlg.Close ();
+			} else if (qa == "--prefs-fsharp") {
+				// QA (F# port phase 6): exercise the F# Settings persistence round-trip
+				// (FSharpBinding.* keys in the GTK-compatible store), dump and restore.
+				var dlg = new PreferencesDialog { WindowStartupLocation = WindowStartupLocation.CenterOwner };
+				dlg.QaFSharpRoundTrip ();
 				dlg.Close ();
 			} else if (qa.StartsWith ("--prefs=", StringComparison.Ordinal)) {
 				var arg = qa.Substring ("--prefs=".Length);
@@ -664,18 +675,35 @@ public partial class MainWindow : Window
 					if (created)
 						Directory.Delete (Path.Combine (dir, qaName));
 				}
-			} else if (qa == "--newfile") {
-				// QA: free-mode New File dialog end to end — auto-confirm an Empty
-				// File with "Add to project" on (the default), verify the on-disk
-				// file (BOM) and clean up, like --ctxnewfolder does for folders.
+			} else if (qa == "--newfile" || qa.StartsWith ("--newfile=", StringComparison.Ordinal)) {
+				// QA: free-mode New File dialog end to end — auto-confirm a
+				// template with "Add to project" on (the default), verify the
+				// on-disk file (BOM) and clean up, like --ctxnewfolder does for
+				// folders. --newfile=<templateId> selects the template
+				// (CSharpEmptyFile by default; F# ids: EmptyFSharpSource/
+				// EmptyFSharpScript/EmptyFSharpSignature/FSharpAssemblyInfo/
+				// FSharpNUnitTestType).
+				var qaTemplate = qa.StartsWith ("--newfile=", StringComparison.Ordinal)
+					? qa ["--newfile=".Length..]
+					: "CSharpEmptyFile";
 				var proj = ResolveActiveProject ();
 				if (proj is null) {
 					Output ("[newfile] no project");
 				} else {
 					var dir = Path.GetDirectoryName (proj)!;
-					var qaName = "QaNewFile.cs";
+					// The name follows the template default (C# → .cs, F# →
+					// .fs/.fsx/.fsi); the fixed-filename template (F# Assembly
+					// Information) always creates AssemblyInfo.fs.
+					var qaName = qaTemplate switch {
+						"EmptyFSharpSource" => "QaNewFile.fs",
+						"EmptyFSharpScript" => "QaNewFile.fsx",
+						"EmptyFSharpSignature" => "QaNewFile.fsi",
+						"FSharpAssemblyInfo" => "AssemblyInfo.fs",
+						"FSharpNUnitTestType" => "QaNUnitTest.fs",
+						_ => "QaNewFile.cs",
+					};
 					var dlg = new NewFileDialog (GetSolutionProjectPaths (), proj) {
-						TemplateForQa = "CSharpEmptyFile",
+						TemplateForQa = qaTemplate,
 						NameForQa = qaName,
 						ConfirmForQa = true,
 					};
@@ -3456,6 +3484,21 @@ public partial class MainWindow : Window
 				// QA (Fila C): exercise the real counters (open/close document,
 				// build) and open the in-process instrumentation viewer.
 				await InstrumentationViewerQaAsync ();
+			} else if (qa == "--fsi") {
+				// F# port (phase 4) QA: drive the F# Interactive pad end to end
+				// through the dotnet-fsi child — open the pad, wait for the
+				// session, send a correct expression (expect the val result),
+				// a bad one (expect the FS diagnostic on stderr), exercise
+				// restart/clear, then kill the session and report.
+				await FsiQaAsync ();
+			} else if (qa == "--fsls") {
+				// F# port (phase 5) QA: drive the in-process F# language service
+				// (FCS 43.12) against the F# fixture — open the fixture solution,
+				// wait for the document to be wired, then assert completions
+				// (member + cross-file), hover (cross-file function), go-to-def
+				// (declaration in the other file), and diagnostics (the
+				// type-mismatch on the bad line) all resolve through the service.
+				await FslsQaAsync ();
 			}
 		};
 
@@ -3499,6 +3542,14 @@ public partial class MainWindow : Window
 			MainMenu.Items.Add (item);
 		// Re-attach on every rebuild: the items are new instances each time.
 		MonoDevelop.Ide.Services.KeyboardShortcutRegistry.AttachHotKeys (this);
+		// F# Interactive (F# port, phase 4): the legacy F# Integration commands
+		// are not placed in the main menu (the Send* are, see BuildEdit), so
+		// Show/Restart/Clear register their app-level shortcuts directly.
+		// ClearFsi's Ctrl+Alt+C is intentionally NOT registered: the core
+		// ToggleLineComment owns that combo (the legacy GTK workbench had the
+		// same collision and left the last-registered winner — the core one).
+		MenuBuilder.RegisterHotkey ("MonoDevelop.FSharp.FSharpCommands.ShowFSharpInteractive", "Ctrl Alt F");
+		MenuBuilder.RegisterHotkey ("MonoDevelop.FSharp.FSharpCommands.RestartFsi", "Ctrl Alt R");
 		SetSessionRecorderMenuLabel (sessionRecorder.IsRecording);
 		// Run > Run With mirrors the execution modes (legacy ExecutionModeCommandService
 		// fills the submenu per run target); selection persists in the settings store.
@@ -3608,7 +3659,8 @@ public partial class MainWindow : Window
 			if (qaArg is "--collapse" or "--collapsebottom"
 				|| qaArg.StartsWith ("--outline", StringComparison.Ordinal)
 				|| qaArg.StartsWith ("--unittests", StringComparison.Ordinal)
-				|| qaArg is "--classes" or "--codeissues" or "--helptree" or "--toolbox")
+				|| qaArg is "--classes" or "--codeissues" or "--helptree" or "--toolbox"
+				|| qaArg is "--fsi" or "--fsls")
 				return;
 			var raw = SettingsStore.GetString ("Monodevelop.PadsLayout");
 			if (string.IsNullOrWhiteSpace (raw))
@@ -3939,6 +3991,10 @@ public partial class MainWindow : Window
 	TreeView? localsList;
 	TreeView? watchList;
 	TextBox? immediateInput;
+	// F# Interactive pad (F# port, phase 4): the `dotnet fsi` session surface
+	// (legacy FSharpInteractivePad). Its dotnet-fsi child process is started on
+	// first show and killed on tab close / window close.
+	FSharpInteractivePadView? fsiPad;
 	ListBox? callStackList;
 	TreeView? outlineTree;
 	TreeView? classesTree;
@@ -4003,13 +4059,17 @@ public partial class MainWindow : Window
 		// check refresh (plus the hidden-pads restore strip).
 		LeftPads.PadTabClosed += _ => { UpdateRestoreStrip (); BuildMenu (); DumpPadsMenuChecks ("closed"); };
 		RightPads.PadTabClosed += _ => { UpdateRestoreStrip (); BuildMenu (); DumpPadsMenuChecks ("closed"); };
-		BottomPads.PadTabClosed += _ => {
+		BottomPads.PadTabClosed += padId => {
 			UpdateRestoreStrip ();
 			BuildMenu ();
 			// Last tab ✕-closed → collapse to the rail (row 34 via CollapseChanged)
 			// instead of leaving an empty expanded pad; View > Pads reopens it.
 			if (!BottomPads.IsCollapsed && BottomPads.Tabs.All (t => !t.Visible))
 				BottomPads.ToggleCollapse ("empty-close");
+			// F# Interactive (F# port, phase 4): killing the dotnet-fsi child on
+			// tab close is the legacy PadContent.Dispose → Shutdown path.
+			if (padId == "fsi")
+				FsiKillSession ();
 			DumpPadsMenuChecks ("closed");
 		};
 
@@ -4329,6 +4389,17 @@ public partial class MainWindow : Window
 		breakpointsList.ContextMenu = BuildBreakpointsMenu ();
 		BottomPads.AddTab (new PadHost.PadTab { Id = "breakpoints", Label = "Breakpoints", Icon = "md-breakpoint", Content = breakpointsList, Visible = false });
 
+		// F# Interactive pad (F# port, phase 4; legacy FSharpInteractivePad):
+		// `dotnet fsi` session — input editor + output view + the legacy
+		// Save/Open/Clear/Reset toolbar. The legacy pad icon was md-project
+		// (md-fs-project is not a registered stock). The dotnet-fsi child
+		// process starts on the first show (legacy editor.RunWhenRealized)
+		// and is killed when the tab closes or the window quits.
+		fsiPad = new FSharpInteractivePadView ();
+		fsiPad.SaveRequested += (_, _) => _ = FsiSaveScriptAsync ();
+		fsiPad.OpenRequested += (_, _) => _ = FsiOpenScriptAsync ();
+		BottomPads.AddTab (new PadHost.PadTab { Id = "fsi", Label = "F# Interactive", Icon = "md-project", Content = fsiPad, Visible = false });
+
 		// Hide buttons feed the restore strip at the bottom edge (legacy pin/hide).
 		LeftPads.Hidden += (_, _) => UpdateRestoreStrip ();
 		RightPads.Hidden += (_, _) => UpdateRestoreStrip ();
@@ -4379,6 +4450,10 @@ public partial class MainWindow : Window
 				host.ToggleCollapse ("menu-show"); // reopening a rail-collapsed pad restores its size
 			host.SetTabVisible (padId, true);
 			host.Select (padId);
+			// F# Interactive (F# port, phase 4): the dotnet-fsi session starts on
+			// first show (legacy editor.RunWhenRealized → setupSession).
+			if (padId == "fsi")
+				FsiEnsureSession ();
 		} else {
 			host.SetTabVisible (padId, false);
 			// Hide the whole host when no visible tabs remain (legacy empty dock hides).
@@ -4402,7 +4477,7 @@ public partial class MainWindow : Window
 		"toolbox" or "properties" or "documentoutline" or "unittests" => (RightPads, RightPads.Tabs.FirstOrDefault (t => t.Id == padId)),
 		"output" or "errors" or "tasks" or "codeissues" or "searchresults"
 			or "callstack" or "locals" or "watch" or "breakpoints" or "threads" or "bookmarks"
-			or "attach"
+			or "attach" or "fsi"
 			=> (BottomPads, BottomPads.Tabs.FirstOrDefault (t => t.Id == padId)),
 		_ => (null, null),
 	};
@@ -4469,6 +4544,24 @@ public partial class MainWindow : Window
 	readonly List<(string Tag, Control Content)> documents = new ();
 	// Open file editors by tab tag (island tabs): used by Save/SaveAll (FileCommands).
 	readonly Dictionary<string, MonoDevelop.Ide.Controls.SkTextEditor> docs = new ();
+
+	// F# language service (phase 5): per-document state keyed by document tag
+	// (full path). The CheckCompleted handler is stored so UnwireFSharpDocument
+	// can remove it from the LONG-LIVED singleton's event (leaving it would
+	// accumulate a delegate per open/close and retain the closure forever); the
+	// recheck timer keeps the cache warm against unsaved edits so a feature fired
+	// right after typing does not pay for a blocking FCS re-check on the UI thread.
+	readonly Dictionary<string, Action<string, FSharpLanguageService.CheckResult>> fsharpCheckHandlers = new ();
+	readonly Dictionary<string, FSharpRecheck> fsharpRechecks = new ();
+	sealed class FSharpRecheck
+	{
+		public Avalonia.Threading.DispatcherTimer? Timer;
+		public EventHandler? TickHandler;
+		public EventHandler<Avalonia.AvaloniaPropertyChangedEventArgs>? TextHandler;
+		public string? PendingPath;
+		public string[]? PendingSource;
+		public string PendingText = "";
+	}
 
 	// Oleada 3: read-only state the ported command handlers' Update overrides
 	// consult (via ShellCommandState) to enable/disable menu items.
@@ -4756,6 +4849,12 @@ public partial class MainWindow : Window
 		documents.Add ((tag, content));
 		if (content is MonoDevelop.Ide.Controls.SkTextEditor ed && !docs.ContainsKey (tag)) {
 			docs.Add (tag, ed);
+			// F# language service (phase 5): wire the in-process FCS checker for
+			// F# documents — the full project source list (so cross-file types
+			// resolve), the Ctrl+Click go-to-definition router, and a
+			// background pre-load so the first hover/completion hits a warm
+			// cache instead of blocking the UI on the (slow) first check.
+			WireFSharpDocument (ed);
 			// Oleada 3: any document editor's dirty change re-evaluates the
 			// command-bound menu items (Save All et al.).
 			ed.PropertyChanged += (_, e) => {
@@ -5022,8 +5121,8 @@ public partial class MainWindow : Window
 	{
 		string ext = System.IO.Path.GetExtension (fileName).ToLowerInvariant ();
 		string stock = ext switch {
-			".cs" or ".java" or ".c" or ".cpp" or ".h" or ".py" or ".vala" => "md-class-file",
-			".xml" or ".xaml" or ".axaml" or ".csproj" or ".sln" or ".props" or ".targets" or ".config" => "md-xml-file-icon",
+			".cs" or ".fs" or ".java" or ".c" or ".cpp" or ".h" or ".py" or ".vala" => "md-class-file",
+			".xml" or ".xaml" or ".axaml" or ".csproj" or ".fsproj" or ".sln" or ".props" or ".targets" or ".config" => "md-xml-file-icon",
 			".txt" or ".md" or ".log" => "md-text-file-icon",
 			_ => "md-empty-file-icon",
 		};
@@ -5072,7 +5171,7 @@ public partial class MainWindow : Window
 		// other); a blank caret line borrows the nearest non-blank line's indent.
 		int caretIndent = CaretIndentAt (editor, line - 1);
 		var chain = new List<(int Indent, int Line, string Text)> ();
-		foreach (var hit in ScanSymbols (editor.Text)) {
+		foreach (var hit in ScanSymbols (editor.Text, editor.FilePath)) {
 			if (hit.Line > line)
 				break;
 			// Each hit is its own segment; the enclosing type is already in the
@@ -5391,9 +5490,10 @@ public partial class MainWindow : Window
 		var doc = documents.FirstOrDefault (d => d.Tag == tag);
 		if (doc.Content is null)
 			return false;
+		docs.TryGetValue (tag, out var ed);
 		// Legacy: an untitled document with changes is confirmed before discard;
 		// titled dirty files only gate on close-workspace/quit (DirtyFilesDialog).
-		if (docs.TryGetValue (tag, out var ed) && ed.IsDirty && string.IsNullOrEmpty (ed.FilePath)) {
+		if (ed is not null && ed.IsDirty && string.IsNullOrEmpty (ed.FilePath)) {
 			var gate = new DirtyFilesDialog ();
 			gate.Load (new[] {
 				new DirtyFilesDialog.DirtyDoc {
@@ -5412,6 +5512,7 @@ public partial class MainWindow : Window
 			DocTabs.Items.Remove (tab);
 		documents.Remove (doc);
 		docs.Remove (tag);
+		UnwireFSharpDocument (tag, ed); // remove the F# service subscriptions (singleton event + timer + editor subs)
 		docsClosedCounter.Inc (Path.GetFileName (tag));
 		SelectFirstDocument ();
 		NotifyCommandStateChanged (); // Oleada 3: a document tab was closed
@@ -5459,7 +5560,12 @@ public partial class MainWindow : Window
 			var solDir = Path.GetDirectoryName (Path.GetFullPath (loadedSolutionPath));
 			if (dir is null || solDir is null)
 				return null;
-			foreach (var csproj in Directory.EnumerateFiles (solDir, "*.csproj", SearchOption.AllDirectories)) {
+			// F# projects group their files too (F# port, phase 3): scan both
+			// extensions, in the same nearest-project sense.
+			var projs = Directory.EnumerateFiles (solDir, "*.csproj", SearchOption.AllDirectories)
+				.Concat (Directory.EnumerateFiles (solDir, "*.fsproj", SearchOption.AllDirectories))
+				.Distinct (StringComparer.OrdinalIgnoreCase);
+			foreach (var csproj in projs) {
 				var projDir = Path.GetDirectoryName (csproj);
 				if (projDir is not null && (dir == projDir || dir.StartsWith (projDir + Path.DirectorySeparatorChar)))
 					return "Project: " + Path.GetFileNameWithoutExtension (csproj);
@@ -5489,12 +5595,13 @@ public partial class MainWindow : Window
 			var p = contextNodePath;
 			if (p.StartsWith ("folder:", StringComparison.Ordinal))
 				p = p ["folder:".Length..];
-			if (p.EndsWith (".csproj", StringComparison.OrdinalIgnoreCase))
+			if (ConfigurationService.IsProjectFile (p))
 				return p;
-			// File or folder node → walk up to its owning .csproj.
+			// File or folder node → walk up to its owning project file.
 			var dir = File.Exists (p) ? Path.GetDirectoryName (p) : p;
 			while (!string.IsNullOrEmpty (dir)) {
-				var csproj = Directory.GetFiles (dir, "*.csproj").FirstOrDefault ();
+				var csproj = Directory.GetFiles (dir, "*.csproj").FirstOrDefault ()
+					?? Directory.GetFiles (dir, "*.fsproj").FirstOrDefault ();
 				if (csproj is not null)
 					return csproj;
 				var parent = Directory.GetParent (dir)?.FullName;
@@ -5590,7 +5697,7 @@ public partial class MainWindow : Window
 			return Path.GetDirectoryName (p);
 		if (Directory.Exists (p))
 			return p;
-		if (p.EndsWith (".csproj", StringComparison.OrdinalIgnoreCase))
+		if (ConfigurationService.IsProjectFile (p))
 			return Path.GetDirectoryName (p);
 		return null;
 	}
@@ -5996,8 +6103,8 @@ public partial class MainWindow : Window
 				return System.IO.Path.GetFileName (file);
 		}
 		var ext = System.IO.Path.GetExtension (fileName).ToLowerInvariant ();			return ext switch {
-				".cs" => "file-source-16.png",
-				".csproj" or ".props" or ".targets" => "project-16.png",
+				".cs" or ".fs" => "file-source-16.png",
+				".csproj" or ".fsproj" or ".props" or ".targets" => "project-16.png",
 				".sln" => "solution-16.png",
 				_ => "file-text-16.png",
 			};
@@ -6029,8 +6136,8 @@ public partial class MainWindow : Window
 			return iconId;
 		var ext = Path.GetExtension (fileName).ToLowerInvariant ();
 		return ext switch {
-			".cs" => "md-file-source",
-			".csproj" or ".props" or ".targets" => "md-project",
+			".cs" or ".fs" or ".fsi" or ".fsx" => "md-file-source",
+			".csproj" or ".fsproj" or ".props" or ".targets" => "md-project",
 			".sln" => "md-solution",
 			".xml" or ".config" => "md-xml-file-icon",
 			".json" => "md-text-file-icon",
@@ -6155,7 +6262,7 @@ public partial class MainWindow : Window
 		// Legacy ProjectPad.OpenItem: double-click on a file node opens its editor.
 		if (solutionTreeView?.SelectedItem is TreeViewItem { Tag: string file }
 			&& File.Exists (file)
-			&& !file.EndsWith (".csproj", StringComparison.Ordinal)) {
+			&& !ConfigurationService.IsProjectFile (file)) {
 			OpenFileDocument (file);
 		}
 	}
@@ -6253,7 +6360,8 @@ public partial class MainWindow : Window
 	}
 
 	// Node classification (legacy ItemType condition values) from the Tag:
-	// solution path → Solution; .csproj → Project; folder: → ProjectFolder; file → ProjectFile.
+	// solution path → Solution; project file (.csproj/.fsproj) → Project;
+	// folder: → ProjectFolder; file → ProjectFile.
 	(string NodeType, string? Path) SelectedNodeType ()
 	{
 		var s = SelectedXwtNode ();
@@ -6261,7 +6369,7 @@ public partial class MainWindow : Window
 			if (s.StartsWith ("reference:", StringComparison.Ordinal)) return ("ProjectReference", s);
 			if (s.StartsWith ("folder:", StringComparison.Ordinal)) return ("ProjectFolder", s ["folder:".Length..]);
 			if (s.EndsWith (".sln", StringComparison.OrdinalIgnoreCase)) return ("Solution", s);
-			if (s.EndsWith (".csproj", StringComparison.OrdinalIgnoreCase)) return ("Project", s);
+			if (ConfigurationService.IsProjectFile (s)) return ("Project", s);
 			if (File.Exists (s)) return ("ProjectFile", s);
 		}
 		return ("None", null);
@@ -6552,7 +6660,7 @@ public partial class MainWindow : Window
 		var isFolder = path.StartsWith ("folder:", StringComparison.Ordinal);
 		if (isFolder)
 			path = path ["folder:".Length..];
-		if (path.EndsWith (".csproj", StringComparison.OrdinalIgnoreCase) ||
+		if (ConfigurationService.IsProjectFile (path) ||
 			path.EndsWith (".sln", StringComparison.OrdinalIgnoreCase) ||
 			(!File.Exists (path) && !Directory.Exists (path)))
 			return false;
@@ -6574,6 +6682,13 @@ public partial class MainWindow : Window
 					if (docs.TryGetValue (oldKey, out var ed)) {
 						var newKey = DocKey (newPath);
 						ed.FilePath = newPath;
+						// Re-key the F# language-service state to the new path:
+						// unwiring the old tag de-subscribes the singleton event
+						// and the editor's subscriptions (no stale path left behind),
+						// re-wiring re-attaches them under the new tag. A no-op for
+						// non-F# documents.
+						UnwireFSharpDocument (oldKey, ed);
+						WireFSharpDocument (ed);
 						docs.Remove (oldKey);
 						docs [newKey] = ed;
 						var doc = documents.FirstOrDefault (d => d.Tag == oldKey);
@@ -6609,7 +6724,7 @@ public partial class MainWindow : Window
 		var isFolder = path.StartsWith ("folder:", StringComparison.Ordinal);
 		if (isFolder)
 			path = path ["folder:".Length..];
-		if (path.EndsWith (".csproj", StringComparison.OrdinalIgnoreCase) ||
+		if (ConfigurationService.IsProjectFile (path) ||
 			path.EndsWith (".sln", StringComparison.OrdinalIgnoreCase) ||
 			(!File.Exists (path) && !Directory.Exists (path)))
 			return false;
@@ -6669,13 +6784,15 @@ public partial class MainWindow : Window
 	}
 
 	// The owning project = the nearest ancestor directory of the deleted node
-	// that holds a .csproj (never walking above the solution directory).
+	// that holds a project file (.csproj/.fsproj), never walking above the
+	// solution directory.
 	static string? FindOwningProject (string filePath, string? solutionDir)
 	{
 		var dir = Path.GetDirectoryName (Path.GetFullPath (filePath));
 		var solFull = string.IsNullOrEmpty (solutionDir) ? null : Path.GetFullPath (solutionDir);
 		while (!string.IsNullOrEmpty (dir)) {
-			var csproj = Directory.EnumerateFiles (dir, "*.csproj").FirstOrDefault ();
+			var csproj = Directory.EnumerateFiles (dir, "*.csproj").FirstOrDefault ()
+				?? Directory.EnumerateFiles (dir, "*.fsproj").FirstOrDefault ();
 			if (csproj is not null)
 				return csproj;
 			if (solFull is not null && dir.TrimEnd ('/').Equals (solFull.TrimEnd ('/'), StringComparison.OrdinalIgnoreCase))
@@ -7086,13 +7203,23 @@ public partial class MainWindow : Window
 	public static List<SymbolIndexService.SymbolHit> ScanSymbols (string text)
 		=> SymbolIndexService.ScanSymbols (text);
 
+	// F#-aware alias: the breadcrumb and the live-document consumers pass the
+	// document's own language flag (its .fs/.fsi/.fsx/.fsscript extension), so
+	// the F# symbol scanner (module/type/let) runs instead of the C# regexes.
+	static List<SymbolIndexService.SymbolHit> ScanSymbols (string text, string? path)
+		=> SymbolIndexService.ScanSymbols (text, SymbolIndexService.IsFSharpSource (path));
+
 	void CollectSymbolResults (string term)
 	{
 		var projDir = string.IsNullOrEmpty (loadedSolutionPath) ? null : Path.GetDirectoryName (loadedSolutionPath);
 		if (projDir is null || term.Length == 0)
 			return;
 		var hits = new List<(SymbolIndexService.SymbolHit Hit, string File, int Rank)> ();
-		foreach (var file in Directory.EnumerateFiles (projDir, "*.cs", SearchOption.AllDirectories)) {
+		// C# and F# sources both contribute (ScanFile picks the scanner by the
+		// file's extension); the bound applies to the combined result.
+		foreach (var file in Directory.EnumerateFiles (projDir, "*.cs", SearchOption.AllDirectories)
+			.Concat (Directory.EnumerateFiles (projDir, "*.fs", SearchOption.AllDirectories))
+			.Concat (Directory.EnumerateFiles (projDir, "*.fsi", SearchOption.AllDirectories))) {
 			if (file.Contains ("/obj/") || file.Contains ("/bin/") || file.Contains ("/.git/"))
 				continue;
 			var syms = SymbolIndexService.ScanFile (file);
@@ -8393,6 +8520,58 @@ public partial class MainWindow : Window
 			else
 				Output ("[unittests] no test at the caret position");
 			return;
+		// ----- F# Integration (F# port, phase 4; legacy FSharpInteractivePad
+		// command handlers) -----
+		case "MonoDevelop.FSharp.FSharpCommands.ShowFSharpInteractive":
+			// Legacy check command: show the pad (and check the item).
+			SetPadVisible ("fsi", true);
+			BuildMenu ();
+			return;
+		case "MonoDevelop.FSharp.FSharpCommands.SendFile":
+			// Legacy FSharpFileInteractiveCommand: only valid inside an F# file.
+			if (FsiActiveDocFileName () is { } fsiFilePath && ActiveTextEditor is { } fsiFileEd)
+				fsiPad?.SendFile (fsiFilePath, fsiFileEd.Text);
+			else
+				Output ("[fsi] open an F# file (.fs/.fsi/.fsx) to send it to the F# Interactive");
+			return;
+		case "MonoDevelop.FSharp.FSharpCommands.SendSelection":
+			if (FsiActiveDocFileName () is not null && ActiveTextEditor is { } fsiSelEd)
+				fsiPad?.SendSelection (fsiSelEd.SelectedText, FsiCurrentLine (fsiSelEd));
+			else
+				Output ("[fsi] open an F# file (.fs/.fsi/.fsx) to send the selection to the F# Interactive");
+			return;
+		case "MonoDevelop.FSharp.FSharpCommands.SendLine":
+			if (FsiActiveDocFileName () is not null && ActiveTextEditor is { } fsiLineEd) {
+				fsiPad?.SendLine (FsiCurrentLine (fsiLineEd));
+				// AdvanceToNextLine (Preferences "F# Settings", legacy
+				// FSharpBinding.AdvanceToNextLine, default on): after sending the
+				// caret line to a live FSI session, move the caret to the next line
+				// (the legacy SendCommand behavior — gated on a live session so the
+				// caret only advances when the line actually went out).
+				if (fsiPad is { IsSessionRunning: true } && SettingsStore.GetBool ("FSharpBinding.AdvanceToNextLine", true)) {
+					int nextLine = fsiLineEd.CurrentLine + 1;
+					fsiLineEd.SetCaret (nextLine, 0); // SetCaret clamps to the last line
+					Output ("[fsi] sent line to F# Interactive (caret → line " + (nextLine + 1) + ")");
+				}
+			}
+			else
+				Output ("[fsi] open an F# file (.fs/.fsi/.fsx) to send the line to the F# Interactive");
+			return;
+		case "MonoDevelop.FSharp.FSharpCommands.SendReferences":
+			_ = FsiSendReferencesAsync ();
+			return;
+		case "MonoDevelop.FSharp.FSharpCommands.RestartFsi":
+			if (fsiPad is null)
+				break;
+			if (!IsPadVisible ("fsi"))
+				SetPadVisible ("fsi", true);
+			fsiPad.RestartFsi ();
+			return;
+		case "MonoDevelop.FSharp.FSharpCommands.ClearFsi":
+			if (fsiPad is null)
+				break;
+			fsiPad.ClearFsi ();
+			return;
 		// DebugTest / DebugAllTests and the TestChartCommands.* items are not
 		// ported (no test debug, no results chart): they fall through to the
 		// unported-report below, like the other pending ports.
@@ -8400,6 +8579,666 @@ public partial class MainWindow : Window
 		var message = $"'{commandId}' is not wired in the new UI yet — its GTK implementation remains available through --old-gui until the cutover.";
 		Output ("[menu] " + message);
 		Console.WriteLine ("[menu] " + message);
+	}
+
+	// ---------- F# Interactive session wiring (F# port, phase 4) ----------
+	// The `dotnet fsi` child (FsiProcess) starts lazily on the first pad show,
+	// in the working folder of the active F# document when there is one (legacy
+	// getActiveDocumentFileName set ctx.WorkingFolder), else the solution dir,
+	// else the process cwd. It is killed on tab close and on window close.
+
+	// Legacy getActiveDocumentFileName: the active document's path when it is
+	// an F# file, else null (the FSI working folder follows the F# doc).
+	static string? FsiActiveDocFileName ()
+	{
+		var path = MainWindow.Instance?.ActiveTextEditor?.FilePath;
+		if (string.IsNullOrEmpty (path) || !File.Exists (path))
+			return null;
+		var ext = Path.GetExtension (path).ToLowerInvariant ();
+		return ext is ".fs" or ".fsi" or ".fsx" or ".fsscript" ? path : null;
+	}
+
+	string FsiWorkingDirectory ()
+	{
+		var doc = FsiActiveDocFileName ();
+		if (doc is not null)
+			return Path.GetDirectoryName (doc)!;
+		var solDir = LoadedSolutionDirectory ();
+		if (solDir is not null && Directory.Exists (solDir))
+			return solDir;
+		return Environment.CurrentDirectory;
+	}
+
+	// ---------- F# language service wiring (F# port, phase 5) ----------
+	// The in-process FCS checker (FSharpLanguageService) powers completions,
+	// hover, go-to-definition and diagnostics for .fs/.fsi/.fsx/.fsscript
+	// documents. It is wired per-document when the document opens: the editor
+	// gets the full project source list (so cross-file types resolve) and the
+	// window subscribes the editor's Ctrl+Click go-to-definition request.
+
+	// The F# document's owning project = the nearest ancestor directory that
+	// holds a .fsproj (mirrors FindOwningProject, which handles .csproj/.fsproj).
+	static string? FindFSharpOwningProject (string filePath)
+	{
+		var dir = Path.GetDirectoryName (Path.GetFullPath (filePath));
+		while (!string.IsNullOrEmpty (dir)) {
+			var fsproj = Directory.EnumerateFiles (dir, "*.fsproj", SearchOption.TopDirectoryOnly).FirstOrDefault ();
+			if (fsproj is not null)
+				return fsproj;
+			var parent = Path.GetDirectoryName (dir);
+			if (parent == dir || parent is null)
+				break;
+			dir = parent;
+		}
+		return null;
+	}
+
+	// All F# source files (.fs/.fsi) of the document's project, excluding the
+	// build artifacts (obj/bin). This is the sourceFiles list passed to FCS so
+	// cross-file type references resolve (ParseAndCheckFileInProject of the
+	// active file sees the whole project).
+	string[] ResolveFSharpSourceFiles (string file)
+	{
+		var proj = FindFSharpOwningProject (file);
+		if (proj is null)
+			return new[] { file };
+		var projDir = Path.GetDirectoryName (proj)!;
+		var files = new List<string> ();
+		foreach (var f in Directory.EnumerateFiles (projDir, "*.fs", SearchOption.AllDirectories)
+			.Concat (Directory.EnumerateFiles (projDir, "*.fsi", SearchOption.AllDirectories))
+			.Where (f => !f.Contains ("\\obj\\") && !f.Contains ("/obj/") && !f.Contains ("\\bin\\") && !f.Contains ("/bin/"))
+			.OrderBy (f => f, StringComparer.OrdinalIgnoreCase))
+			files.Add (f);
+		if (!files.Contains (file, StringComparer.OrdinalIgnoreCase))
+			files.Add (file); // a loose .fsx/.fsscript not in a project
+		return files.ToArray ();
+	}
+
+	// Wires an F# document editor to the language service (a no-op for C#
+	// documents and untitled documents, which keep the editor's built-in
+	// word/keyword completion and hover). The subscriptions are stored per
+	// document tag so UnwireFSharpDocument can remove them when the document
+	// closes: the CheckCompleted handler MUST leave the long-lived singleton's
+	// event (leaving it would accumulate a delegate per open/close that retains
+	// the editor's closure forever), and the recheck timer must be stopped.
+	void WireFSharpDocument (MonoDevelop.Ide.Controls.SkTextEditor ed)
+	{
+		var path = ed.FilePath;
+		if (string.IsNullOrEmpty (path) || !IsFSharpDocument (path))
+			return;
+		var tag = DocKey (path);
+		ed.FSharpSourceFiles = ResolveFSharpSourceFiles (path);
+		ed.GotoDefinitionRequested += FSharpGotoDefinition;
+		var svc = FSharpLanguageService.Instance;
+		// Live diagnostics + adornments: when a check completes, surface the F#
+		// diagnostics as inline message bubbles and refresh the document's F#
+		// adornments (HighlightMutables underlines / ShowTypeSignatures), all
+		// from the same freshly-completed check. ComputeAdornments runs directly
+		// on the executor thread (this event fires from CoreCheck) — no re-entry.
+		var checkHandler = new Action<string, FSharpLanguageService.CheckResult> ((file, result) => {
+			if (!string.Equals (file, path, StringComparison.OrdinalIgnoreCase))
+				return;
+			// Compute on the executor thread (we are already there), then marshal
+			// both the bubbles and the adornments to the UI thread. The two
+			// adornment option flags are read here (background thread, one prefs
+			// load per check — never per frame) and passed to the editor.
+			var adornments = svc.ComputeAdornments (result);
+			var showMutable = SettingsStore.GetBool ("FSharpBinding.HighlightMutables", false);
+			var showType = SettingsStore.GetBool ("FSharpBinding.ShowTypeSignatures", false);
+			Avalonia.Threading.Dispatcher.UIThread.Post (() => {
+				if (!docs.TryGetValue (DocKey (path), out var bEd))
+					return;
+				var bubbles = svc.GetDiagnostics (result)
+					.Where (d => string.Equals (d.File, path, StringComparison.OrdinalIgnoreCase))
+					.Select (d => (Math.Max (0, d.Line), $"{d.Code}: {d.Message}", d.Level == "error"))
+					.ToList ();
+				bEd.SetBubbles (bubbles);
+				bEd.SetFSharpAdornments (adornments.Select (a => (a.Line, a.Col, a.Length, a.Kind, a.Text)), showMutable, showType);
+			});
+		});
+		fsharpCheckHandlers [tag] = checkHandler;
+		svc.CheckCompleted += checkHandler;
+		// Keep the cache warm against unsaved edits: a debounced BACKGROUND
+		// re-check runs after the user stops typing, so a feature fired right
+		// after typing hits the (just updated) cache instead of paying for a
+		// blocking FCS re-check on the UI thread.
+		var rc = new FSharpRecheck {
+			Timer = new Avalonia.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds (1500) },
+		};
+		rc.TickHandler = (_, _) => {
+			rc.Timer!.Stop ();
+			if (!string.IsNullOrEmpty (rc.PendingPath) && rc.PendingSource is not null)
+				svc.QueueCheck (rc.PendingPath, rc.PendingSource, rc.PendingText);
+		};
+		rc.Timer.Tick += rc.TickHandler;
+		rc.TextHandler = (_, e) => {
+			if (e.Property == MonoDevelop.Ide.Controls.SkTextEditor.TextProperty)
+				ScheduleFSharpRecheck (tag, ed);
+		};
+		ed.PropertyChanged += rc.TextHandler;
+		fsharpRechecks [tag] = rc;
+		// Warm the cache in the background so the first hover/completion does
+		// not block the UI on the (slow) first full check.
+		svc.QueueCheck (path, ed.FSharpSourceFiles);
+		Output ("[fsls] wired " + Path.GetFileName (path) + " (" + ed.FSharpSourceFiles.Length + " source files)");
+	}
+
+	// Debounced background re-check: after each edit, restart the timer; when it
+	// fires (the user has stopped typing), re-check the live buffer in the
+	// background so the cache is warm for the next feature call.
+	void ScheduleFSharpRecheck (string tag, MonoDevelop.Ide.Controls.SkTextEditor ed)
+	{
+		if (!fsharpRechecks.TryGetValue (tag, out var rc))
+			return;
+		rc.PendingPath = ed.FilePath;
+		rc.PendingSource = ed.FSharpSourceFiles;
+		rc.PendingText = ed.Text ?? "";
+		if (rc.Timer is not null) {
+			rc.Timer.Stop ();
+			rc.Timer.Start ();
+		}
+	}
+
+	// Removes the F# language-service subscriptions of a document
+	// (counterpart of WireFSharpDocument). The CheckCompleted handler is
+	// de-subscribed from the long-lived singleton's event; the recheck timer is
+	// stopped and the text handler removed from the editor. When ed is given
+	// (the retargeting paths: rename / save-as) the editor's own subscriptions
+	// are removed too, so a subsequent WireFSharpDocument re-subscribes cleanly
+	// instead of stacking a second GotoDefinition/TextChanged delegate. On the
+	// plain close path ed may be null: the editor loses every external root and
+	// the per-editor subscriptions are collected with it.
+	void UnwireFSharpDocument (string tag, MonoDevelop.Ide.Controls.SkTextEditor? ed = null)
+	{
+		if (fsharpRechecks.TryGetValue (tag, out var rc)) {
+			if (rc.Timer is not null) {
+				if (rc.TickHandler is not null)
+					rc.Timer.Tick -= rc.TickHandler;
+				rc.Timer.Stop ();
+			}
+			if (ed is not null && rc.TextHandler is not null)
+				ed.PropertyChanged -= rc.TextHandler;
+			fsharpRechecks.Remove (tag);
+		}
+		if (fsharpCheckHandlers.TryGetValue (tag, out var checkHandler)) {
+			FSharpLanguageService.Instance.CheckCompleted -= checkHandler;
+			fsharpCheckHandlers.Remove (tag);
+		}
+		if (ed is not null)
+			ed.GotoDefinitionRequested -= FSharpGotoDefinition;
+	}
+
+	static bool IsFSharpDocument (string path)
+	{
+		var ext = Path.GetExtension (path).ToLowerInvariant ();
+		return ext is ".fs" or ".fsi" or ".fsx" or ".fsscript";
+	}
+
+	// Ctrl+Click go-to-definition (F# documents): ask the service for the
+	// declaration location of the symbol under the caret and navigate there
+	// (opening the file first if it is in another project file).
+	void FSharpGotoDefinition (int line, int col, string file)
+	{
+		var ed = ActiveTextEditor;
+		var src = ed?.FSharpSourceFiles ?? ResolveFSharpSourceFiles (file);
+		var allText = ed?.Text ?? "";
+		var lineText = LineAtOffset0 (allText, line);
+		var hit = FSharpLanguageService.Instance.GetGotoDefinition (file, src, line, col, lineText, allText);
+		if (hit is null) {
+			Output ("[fsls] no definition found at " + line + ":" + col);
+			return;
+		}
+		// Open the file (landing on the declaration line) and place the caret on
+		// the exact declaration column. OpenFileDocumentAtLine takes a 1-based
+		// line (it does GotoLine(line-1)); SetCaret takes 0-based.
+		OpenFileDocumentAtLine (hit.Value.File, hit.Value.Line + 1);
+		if (docs.TryGetValue (DocKey (hit.Value.File), out var tEd))
+			tEd.SetCaret (hit.Value.Line, hit.Value.Col);
+		Output ("[fsls] goto-def → " + Path.GetFileName (hit.Value.File) + ":" + (hit.Value.Line + 1) + ":" + hit.Value.Col);
+	}
+
+	static string LineAtOffset0 (string text, int line0)
+	{
+		if (line0 < 0)
+			return "";
+		var ls = text.Split ('\n');
+		return line0 < ls.Length ? ls [line0] : "";
+	}
+
+	void FsiEnsureSession ()
+	{
+		if (fsiPad is null)
+			return;
+		// Legacy FsiFileInteractiveCommand.Update: the send commands are only
+		// enabled inside an F# file; Show always is. The session itself is
+		// started regardless (the pad is a standalone REPL, like the legacy).
+		if (!IsPadVisible ("fsi"))
+			return;
+		fsiPad.StartSession (FsiWorkingDirectory ());
+		// The Show F# Interactive item is a check item: reflect the pad state.
+		BuildMenu ();
+	}
+
+	void FsiKillSession ()
+	{
+		// The pad owns the FsiProcess instance; ask it to shut the process
+		// down (the pad's StopSession un-subscribes and disposes).
+		fsiPad?.KillSession ();
+	}
+
+	// The active document's current line text (the FSI send-line source).
+	static string FsiCurrentLine (SkTextEditor ed)
+	{
+		var lines = ed.Text.Split ('\n');
+		var line = Math.Clamp (ed.CurrentLine, 0, lines.Length - 1);
+		return lines [line];
+	}
+
+	// Legacy SendReferences: send one #r "<path>" per reference of the active
+	// project, in order. The shell's project model (ConfigurationService) gives
+	// the declared Reference items; their dll paths resolve to the project's
+	// bin output when built (the SDK layout bin/<cfg>/net10.0/<name>.dll), and
+	// to the HintPath when present.
+	async System.Threading.Tasks.Task FsiSendReferencesAsync ()
+	{
+		if (fsiPad is null)
+			return;
+		var proj = ResolveActiveProject ();
+		if (proj is null) {
+			Output ("[fsi] no active project to send references from");
+			return;
+		}
+		var model = ConfigurationService.LoadProjectModel (proj);
+		if (model is null) {
+			Output ("[fsi] could not load the project model of " + Path.GetFileName (proj));
+			return;
+		}
+		var cfg = string.IsNullOrEmpty (loadedSolutionPath) || !File.Exists (loadedSolutionPath)
+			? "Debug"
+			: ConfigurationService.GetActiveConfiguration (loadedSolutionPath);
+		var projDir = Path.GetDirectoryName (proj)!;
+		int sent = 0;
+		foreach (var ri in model.References) {
+			string? dll = null;
+			if (ri.Kind == "ProjectReference") {
+				var inc = ri.Include;
+				dll = File.Exists (inc) ? inc : null;
+				if (dll is null && (inc.EndsWith (".csproj", StringComparison.OrdinalIgnoreCase) || inc.EndsWith (".fsproj", StringComparison.OrdinalIgnoreCase))) {
+					var refName = Path.GetFileNameWithoutExtension (inc);
+					dll = FirstExisting (
+						Path.Combine (projDir, "bin", cfg, "net10.0", refName + ".dll"),
+						Path.Combine (projDir, "bin", cfg, refName + ".dll"));
+				}
+			} else if (ri.Kind == "Reference") {
+				dll = ri.HintPath is { Length: > 0 } hp
+					? FirstExisting (hp, Path.Combine (projDir, hp))
+					: null;
+				if (dll is null)
+					dll = FirstExisting (
+						Path.Combine (projDir, "bin", cfg, "net10.0", ri.Include + ".dll"),
+						Path.Combine (projDir, "bin", cfg, ri.Include + ".dll"));
+			} else {
+				// PackageReference: the dll is not on disk until restore; skip it
+				// (the FSI resolves NuGet packages via its own #r "nuget:" form,
+				// which is out of scope for the phase-4 process port).
+				continue;
+			}
+			if (dll is not null && File.Exists (dll)) {
+				fsiPad.SendCommand ("#r \"" + dll.Replace ('\\', '/') + "\"");
+				sent++;
+			}
+		}
+		Output ($"[fsi] sent {sent} reference(s) from {Path.GetFileName (proj)}");
+		await System.Threading.Tasks.Task.CompletedTask;
+	}
+
+	static string? FirstExisting (params string[] candidates)
+		=> candidates.FirstOrDefault (File.Exists);
+
+	// F# port (phase 4) QA: drive the F# Interactive pad end to end through the
+	// dotnet-fsi child — show the pad (starts the session), wait for it to be
+	// ready, send a correct expression (expect the val result in the transcript),
+	// send a broken one (expect the FS diagnostic on stderr), then exercise
+	// Restart and Clear. Every step logs to the Output pad and to console for
+	// the QA log.
+	async System.Threading.Tasks.Task FsiQaAsync ()
+	{
+		if (fsiPad is null) {
+			Output ("[fsi-qa] pad not created");
+			return;
+		}
+		SetPadVisible ("fsi", true);
+		BottomPads.Select ("fsi");
+		// The session starts lazily on the first show (FsiEnsureSession); give
+		// the dotnet-fsi child time to boot and print its first prompt.
+		var deadline = DateTime.UtcNow.AddSeconds (120);
+		while (DateTime.UtcNow < deadline && !fsiPad.SessionReady)
+			await System.Threading.Tasks.Task.Delay (250);
+		Output ("[fsi-qa] ready=" + fsiPad.SessionReady + " running=" + fsiPad.HasSession);
+		if (!fsiPad.SessionReady) {
+			Output ("[fsi-qa] FAIL: session did not become ready within timeout");
+			Output ("[fsi-qa] transcript=" + fsiPad.TranscriptText);
+			return;
+		}
+		// 1) correct expression → the FSI prints the val result on stdout.
+		fsiPad.SendCommand ("1+1;;");
+		deadline = DateTime.UtcNow.AddSeconds (60);
+		while (DateTime.UtcNow < deadline && !fsiPad.TranscriptText.Contains ("val it: int = 2", StringComparison.Ordinal))
+			await System.Threading.Tasks.Task.Delay (250);
+		bool resultOk = fsiPad.TranscriptText.Contains ("val it: int = 2", StringComparison.Ordinal);
+		Output ("[fsi-qa] result-ok=" + resultOk);
+		if (!resultOk)
+			Output ("[fsi-qa] transcript-after-step1=" + fsiPad.TranscriptText.Replace ("\n", " | "));
+		// 2) broken expression → the FSI prints the FS diagnostic on stderr.
+		fsiPad.SendCommand ("let bad = 1 +");
+		deadline = DateTime.UtcNow.AddSeconds (60);
+		while (DateTime.UtcNow < deadline && !fsiPad.TranscriptText.Contains ("error FS", StringComparison.Ordinal))
+			await System.Threading.Tasks.Task.Delay (250);
+		Output ("[fsi-qa] diagnostic-ok=" + fsiPad.TranscriptText.Contains ("error FS", StringComparison.Ordinal));
+		// 3) restart: kills the session and starts a fresh one (new prompt).
+		Output ("[fsi-qa] restarting session…");
+		fsiPad.RestartFsi ();
+		deadline = DateTime.UtcNow.AddSeconds (120);
+		while (DateTime.UtcNow < deadline && !fsiPad.SessionReady)
+			await System.Threading.Tasks.Task.Delay (250);
+		Output ("[fsi-qa] restart-ready=" + fsiPad.SessionReady);
+		fsiPad.SendCommand ("2*21;;");
+		deadline = DateTime.UtcNow.AddSeconds (60);
+		while (DateTime.UtcNow < deadline && !fsiPad.TranscriptText.Contains ("val it: int = 42", StringComparison.Ordinal))
+			await System.Threading.Tasks.Task.Delay (250);
+		Output ("[fsi-qa] restart-result-ok=" + fsiPad.TranscriptText.Contains ("val it: int = 42", StringComparison.Ordinal));
+		// 4) clear: empties the transcript. A QA-only hold (FSI_QA_HOLD_SECONDS)
+		// pauses first so a GUI screenshot can capture the populated pad (the
+		// clear would otherwise race the capture).
+		int holdSeconds = int.TryParse (Environment.GetEnvironmentVariable ("FSI_QA_HOLD_SECONDS"), out var hold) ? hold : 0;
+		if (holdSeconds > 0) {
+			// GUI capture window: the Welcome page is a full-workbench overlay
+			// (legacy AddOverlayWidget) that paints over the pads, so hide it to
+			// reveal the bottom dock with the F# Interactive pad — same trick the
+			// --bookmarks QA capture uses. Real usage hides it the moment a
+			// document opens (line: "opening a document dismisses the welcome").
+			HideWelcomePage ();
+			Output ("[fsi-qa] hold " + holdSeconds + "s (GUI capture window)");
+			await System.Threading.Tasks.Task.Delay (holdSeconds * 1000);
+		}
+		fsiPad.ClearFsi ();
+		Output ("[fsi-qa] clear-empty=" + (fsiPad.TranscriptText.Length == 0));
+		// 5) AdvanceToNextLine (Preferences "F# Settings" consumer, phase 6): after
+		//    sending the caret line to a live FSI session, the caret moves to the
+		//    next line (SetCaret clamps at the last line). Open the fixture
+		//    Program.fs (when a solution was passed), dispatch the SendLine command
+		//    exactly as the menu does, and assert the caret moved. The option is
+		//    forced to true for the test and restored afterwards, so the assertion
+		//    is deterministic regardless of the user's stored setting. The sent
+		//    line fails in the FSI (makePoint is not in FSI scope) — that is fine:
+		//    the caret advance is independent of the FSI's answer.
+		var advSolDir = string.IsNullOrEmpty (Program.SolutionArg) ? null : Path.GetDirectoryName (Path.GetFullPath (Program.SolutionArg));
+		var advFile = advSolDir is not null ? Path.Combine (advSolDir, "FsLs", "Program.fs") : "";
+		if (File.Exists (advFile)) {
+			OpenFileDocument (advFile);
+			SelectDocument (DocKey (advFile));
+			if (ActiveTextEditor is { } advEd) {
+				var advWas = SettingsStore.GetBool ("FSharpBinding.AdvanceToNextLine", true);
+				SettingsStore.SetBool ("FSharpBinding.AdvanceToNextLine", true);
+				advEd.SetCaret (4, 0); // 1-based line 5: "let p = makePoint 3 4"
+				OnMenuCommand ("MonoDevelop.FSharp.FSharpCommands.SendLine");
+				bool advanced = advEd.CurrentLine == 5;
+				SettingsStore.SetBool ("FSharpBinding.AdvanceToNextLine", advWas);
+				Output ("[fsi-qa] advance-line from=5 to=" + (advEd.CurrentLine + 1) + " session=" + fsiPad.IsSessionRunning + " stored-before=" + advWas);
+				Output ("[fsi-qa] advance-ok=" + advanced);
+			} else {
+				Output ("[fsi-qa] advance-ok=False (no active editor after opening the fixture)");
+			}
+		} else {
+			Output ("[fsi-qa] advance-ok=skipped (fixture Program.fs not found — pass --sln)");
+		}
+		// Leave the session running (the pad owns its lifecycle); do not kill it
+		// here so a follow-up GUI check can reuse the warm session.
+		Output ("[fsi-qa] done transcript-lines=" + fsiPad.TranscriptText.Split ('\n').Length);
+	}
+
+	// F# port (phase 5) QA: drives the in-process F# language service (FCS 43.12)
+	// against the F# fixture (FsLs: Lib.fs + Program.fs). The fixture is a real
+	// multi-file project so the assertions cover cross-file resolution:
+	//   - Program.fs uses makePoint/describe from Lib.fs (cross-file function);
+	//   - Program.fs has a record-typed value p (member completion target);
+	//   - Program.fs has a deliberate type mismatch (the diagnostic target).
+	// The QA opens Program.fs (which wires the service via AddDocument), then
+	// asserts diagnostics, hover, member completion, editor routing and
+	// go-to-definition all resolve through the service.
+	async System.Threading.Tasks.Task FslsQaAsync ()
+	{
+		var sln = Program.SolutionArg;
+		var solDir = string.IsNullOrEmpty (sln) ? null : Path.GetDirectoryName (Path.GetFullPath (sln));
+		var progFile = solDir is not null ? Path.Combine (solDir, "FsLs", "Program.fs") : "";
+		if (string.IsNullOrEmpty (progFile) || !File.Exists (progFile)) {
+			Output ("[fsls-qa] FAIL: fixture Program.fs not found (pass --sln=<FsLs.sln>)");
+			return;
+		}
+		// 1) Open Program.fs — AddDocument → WireFSharpDocument sets up the service.
+		OpenFileDocument (progFile);
+		if (!docs.TryGetValue (DocKey (progFile), out var ed)) {
+			Output ("[fsls-qa] FAIL: Program.fs did not open");
+			return;
+		}
+		// 2) Wait for the document to be wired (FSharpSourceFiles set).
+		var deadline = DateTime.UtcNow.AddSeconds (30);
+		while (DateTime.UtcNow < deadline && ed.FSharpSourceFiles is null)
+			await System.Threading.Tasks.Task.Delay (100);
+		Output ("[fsls-qa] wired=" + (ed.FSharpSourceFiles is not null) + " srcfiles=" + (ed.FSharpSourceFiles?.Length ?? 0));
+		if (ed.FSharpSourceFiles is null) {
+			Output ("[fsls-qa] FAIL: document was not wired to the F# service");
+			return;
+		}
+		var svc = FSharpLanguageService.Instance;
+		var src = ed.FSharpSourceFiles!;
+		var text = ed.Text ?? "";
+		var lines = text.Replace ("\r\n", "\n").Split ('\n');
+		// 3) Diagnostics: wait for the background pre-load to complete (IsChecked),
+		//    then read the cached check (non-blocking). The fixture has a
+		//    deliberate type mismatch (let bad : int = "text") that must
+		//    produce an error diagnostic.
+		deadline = DateTime.UtcNow.AddSeconds (120);
+		while (DateTime.UtcNow < deadline && !svc.IsChecked (progFile))
+			await System.Threading.Tasks.Task.Delay (150);
+		var check = svc.CheckFile (progFile, src, text);
+		var diags = svc.GetDiagnostics (check);
+		var errs = diags.Where (d => d.Level == "error" && Path.GetFileName (d.File) == "Program.fs").ToList ();
+		Output ("[fsls-qa] diagnostics=" + diags.Count + " errors=" + errs.Count);
+		foreach (var d in errs)
+			Output ("   " + d.Level + " " + d.Code + " L" + (d.Line + 1) + " " + d.Message.Replace ("\n", " ").Substring (0, Math.Min (50, d.Message.Length)));
+		Output ("[fsls-qa] diagnostic-ok=" + (errs.Count >= 1));
+		// 3b) Live inline bubbles: the check-completed handler should have
+		//     surfaced the diagnostic as a message bubble on the affected line.
+		deadline = DateTime.UtcNow.AddSeconds (30);
+		while (DateTime.UtcNow < deadline && ed.BubbleCount < 1)
+			await System.Threading.Tasks.Task.Delay (100);
+		Output ("[fsls-qa] bubbles=" + ed.BubbleCount);
+		Output ("[fsls-qa] bubble-ok=" + (ed.BubbleCount >= 1));
+		// 4) Hover: makePoint on its use line (cross-file: declared in Lib.fs).
+		int hoverLine = -1, hoverCol = -1;
+		for (int i = 0; i < lines.Length; i++) {
+			int mi = lines [i].IndexOf ("makePoint", StringComparison.Ordinal);
+			if (mi >= 0 && lines [i].TrimStart ().StartsWith ("let p", StringComparison.Ordinal)) {
+				hoverLine = i;
+				hoverCol = mi;
+				break;
+			}
+		}
+		Output ("[fsls-qa] hover-target=makePoint @" + (hoverLine >= 0 ? hoverLine + ":" + hoverCol : "NOT FOUND"));
+		var hover = hoverLine >= 0 ? svc.GetHover (progFile, src, hoverLine, hoverCol, lines [hoverLine], text) : null;
+		Output ("[fsls-qa] hover-ok=" + (hover is not null));
+		if (hover is not null)
+			Output ("   header='" + hover.Header + "' icon=" + hover.Icon + " desc='" + hover.Description.Replace ("\n", " ").Substring (0, Math.Min (70, hover.Description.Length)) + "'");
+		Output ("[fsls-qa] hover-assert=" + (hover is { Header: "makePoint" } && !string.IsNullOrEmpty (hover.Description)));
+		// 5) Member completion on "p." (line "let d = p.X + p.Y", caret just
+		//    after the dot → member completion of the record type Punto).
+		int compLine = -1, compCol = -1;
+		for (int i = 0; i < lines.Length; i++) {
+			if (lines [i].Contains ("p.X", StringComparison.Ordinal)) {
+				compLine = i;
+				compCol = lines [i].IndexOf ('.', StringComparison.Ordinal) + 1;
+				break;
+			}
+		}
+		Output ("[fsls-qa] completion-target=p. @" + (compLine >= 0 ? compLine + ":" + compCol : "NOT FOUND"));
+		var comp = compLine >= 0 ? svc.GetCompletions (progFile, src, compLine, compCol, lines [compLine], text) : new List<FSharpLanguageService.CompletionItem> ();
+		var compNames = comp.Select (c => c.NameInCode).ToList ();
+		Output ("[fsls-qa] completions=" + comp.Count + " hasX=" + compNames.Contains ("X") + " hasY=" + compNames.Contains ("Y") + " first=" + string.Join (",", compNames.Take (8)));
+		Output ("[fsls-qa] member-completion-ok=" + (compNames.Contains ("X") && compNames.Contains ("Y")));
+		// 6) Editor routing: the F# editor's GetCompletionItems() must route to
+		//    the service (F#-tagged categories), not the C# keyword fallback.
+		if (compLine >= 0) {
+			ed.SetCaret (compLine, compCol);
+			var edItems = ed.GetCompletionItems ().ToList ();
+			var edFSharp = edItems.Where (i => i.Category.StartsWith ("F#", StringComparison.Ordinal)).Select (i => i.Text).ToList ();
+			Output ("[fsls-qa] editor-routing items=" + edItems.Count + " fsharp=" + edFSharp.Count + " first=" + string.Join (",", edFSharp.Take (8)));
+			Output ("[fsls-qa] editor-routing-ok=" + (edFSharp.Contains ("X") && edFSharp.Contains ("Y")));
+		} else {
+			Output ("[fsls-qa] editor-routing-ok=False (no completion line)");
+		}
+		// 7) Go-to-definition: makePoint → its declaration in Lib.fs.
+		var gotoDef = hoverLine >= 0 ? svc.GetGotoDefinition (progFile, src, hoverLine, hoverCol, lines [hoverLine], text) : null;
+		Output ("[fsls-qa] goto-def-ok=" + (gotoDef is not null) + (gotoDef is not null ? " → " + Path.GetFileName (gotoDef.Value.File) + ":" + (gotoDef.Value.Line + 1) + ":" + gotoDef.Value.Col : ""));
+		Output ("[fsls-qa] goto-def-assert=" + (gotoDef is not null && Path.GetFileName (gotoDef.Value.File) == "Lib.fs"));
+		// 7b) Navigation (F# symbol scanner): the Document Outline, Go To Type and
+		//     the Classes pad are all driven by SymbolIndexService. Assert each
+		//     surfaces the fixture's F# declarations (module / type / let), both
+		//     in the active file and cross-file (Lib.fs), and that Go To Type can
+		//     find and open the record type.
+		var libFile = Path.Combine (solDir!, "FsLs", "Lib.fs");
+		string libText = File.Exists (libFile) ? File.ReadAllText (libFile) : "";
+		var progOutline = MonoDevelop.Ide.Services.SymbolIndexService.BuildOutline (text, isFSharp: true);
+		var libOutline = MonoDevelop.Ide.Services.SymbolIndexService.BuildOutline (libText, isFSharp: true);
+		var progNames = progOutline.Select (n => n.Name).ToList ();
+		var libNames = libOutline.Select (n => n.Name).ToList ();
+		Output ("[fsls-qa] outline-prog=" + string.Join (",", progNames));
+		Output ("[fsls-qa] outline-lib=" + string.Join (",", libNames));
+		Output ("[fsls-qa] outline-assert=" +
+			(progNames.Contains ("Program") && progNames.Contains ("p") && progNames.Contains ("bad")
+				&& libNames.Contains ("FslsLib") && libNames.Contains ("Punto")
+				&& libNames.Contains ("makePoint") && libNames.Contains ("describe")));
+		// Go To Type over the loaded solution: the record type Punto (in Lib.fs)
+		// must be listed and openable.
+		var typeDlg = new GoToDialog ("Go To Type");
+		_ = typeDlg.ShowDialog (this);
+		typeDlg.QaFilter ("Punto");
+		var typeFirst = typeDlg.QaFirstItem;
+		Output ("[fsls-qa] gototype-Punto=" + typeFirst);
+		typeDlg.QaActivateFirst ();
+		var gototypeTab = (DocTabs.SelectedItem as TabItem)?.Tag as string ?? "none";
+		Output ("[fsls-qa] gototype-tab=" + gototypeTab + " expected=Lib.fs");
+		Output ("[fsls-qa] gototype-assert=" + (typeFirst.Contains ("Punto", StringComparison.Ordinal) && typeFirst.Contains ("class", StringComparison.Ordinal)));
+		// Classes pad: the fixture's project must contain the record type under
+		// its F# module (the F# grouping level in the class tree).
+		var fsSources = new List<(string Project, string File)> {
+			(FsProjName (solDir!), libFile),
+			(FsProjName (solDir!), progFile),
+		};
+		var classRoots = MonoDevelop.Ide.Services.SymbolIndexService.BuildClassTree (fsSources);
+		var classDump = DumpClassTreeForQa (classRoots);
+		Output ("[fsls-qa] classes=" + classDump);
+		Output ("[fsls-qa] classes-assert=" + classDump.Contains ("Punto", StringComparison.Ordinal));
+		// 7c) F# adornments — the Preferences "F# Settings" consumers (phase 6):
+		//     HighlightMutables (underline a mutable binding) and ShowTypeSignatures
+		//     (a function's type signature). Assert both the service computation
+		//     (ComputeAdornments + FormatFSharpType) and the live push to the editor
+		//     (the CheckCompleted handler → UI thread path). Fixture targets, located
+		//     by content (robust to the comment lines above them):
+		//     `let mutable counter = 0` (name "counter", 7 chars) and
+		//     `let doubleIt (x : int) : int = x * 2` (type "int -> int").
+		int counterLine = -1, doubleItLine = -1;
+		for (int i = 0; i < lines.Length; i++) {
+			if (lines [i].Contains ("let mutable counter", StringComparison.Ordinal)) counterLine = i;
+			if (lines [i].Contains ("let doubleIt", StringComparison.Ordinal)) doubleItLine = i;
+		}
+		var ads = svc.GetFileAdornments (progFile, src, text);
+		var mut = ads.FirstOrDefault (a => a.Kind == "mutable");
+		var typ = ads.FirstOrDefault (a => a.Kind == "type");
+		Output ("[fsls-qa] adornments=" + ads.Count + " mutable=" + ads.Count (a => a.Kind == "mutable") + " type=" + ads.Count (a => a.Kind == "type"));
+		Output ("[fsls-qa] adornment-mutable=" + (mut is not null ? $"L{mut.Line} c{mut.Col} len{mut.Length}" : "none"));
+		Output ("[fsls-qa] adornment-type=" + (typ is not null ? $"L{typ.Line} '{typ.Text}'" : "none"));
+		Output ("[fsls-qa] fsls-mutable-ok=" + (mut is not null && mut.Line == counterLine && mut.Length == 7));
+		Output ("[fsls-qa] fsls-type-ok=" + (typ is not null && typ.Line == doubleItLine && typ.Text == "int -> int"));
+		// The background pre-warm check's completion should already have pushed the
+		// adornments to the editor (bubbles and adornments are posted together).
+		deadline = DateTime.UtcNow.AddSeconds (15);
+		while (DateTime.UtcNow < deadline && ed.AdornmentCount == 0)
+			await System.Threading.Tasks.Task.Delay (100);
+		Output ("[fsls-qa] editor-adornments=" + ed.AdornmentCount + " mutable=" + ed.MutableAdornmentCount + " type=" + ed.TypeAdornmentCount);
+		Output ("[fsls-qa] fsls-adornments-ok=" + (ed.AdornmentCount >= 2 && ed.MutableAdornmentCount >= 1 && ed.TypeAdornmentCount >= 1));
+		// 8) GUI capture window (optional): hold with the welcome page hidden so
+		//    a screenshot can capture the F# document in the editor.
+		int holdSeconds = int.TryParse (Environment.GetEnvironmentVariable ("FSI_QA_HOLD_SECONDS"), out var hold) ? hold : 0;
+		if (holdSeconds > 0) {
+			HideWelcomePage ();
+			Output ("[fsls-qa] hold " + holdSeconds + "s (GUI capture window)");
+			await System.Threading.Tasks.Task.Delay (holdSeconds * 1000);
+		}
+		Output ("[fsls-qa] done");
+	}
+
+	// QA helper: the fixture project's display name (directory holding the
+	// .fsproj), used to group the F# sources when building the class tree.
+	static string FsProjName (string solDir)
+	{
+		var proj = Path.Combine (solDir, "FsLs", "FsLs.fsproj");
+		return File.Exists (proj) ? Path.GetFileName (Path.GetDirectoryName (proj)!) : "FsLs";
+	}
+
+	// QA helper: a one-line dump of a class tree (project ▸ namespace ▸ type ▸
+	// member), recursing into children, for the assertion log.
+	static string DumpClassTreeForQa (List<MonoDevelop.Ide.Services.SymbolIndexService.ClassNode> roots)
+	{
+		string Walk (List<MonoDevelop.Ide.Services.SymbolIndexService.ClassNode> nodes)
+		{
+			var sb = new System.Text.StringBuilder ();
+			foreach (var n in nodes) {
+				sb.Append (n.Name).Append (':');
+				if (n.Children.Count > 0)
+					sb.Append ('[').Append (Walk (n.Children)).Append (']');
+				sb.Append (' ');
+			}
+			return sb.ToString ();
+		}
+		return Walk (roots);
+	}
+
+	// Legacy Save: the input lines (TrimEnd ';') written as a .fsx. The file
+	// dialog runs here (the pad has no window context).
+	async System.Threading.Tasks.Task FsiSaveScriptAsync ()
+	{
+		if (fsiPad is null)
+			return;
+		var file = await StorageProvider.SaveFilePickerAsync (new Avalonia.Platform.Storage.FilePickerSaveOptions {
+			Title = "Save as .fsx",
+			SuggestedFileName = "script.fsx",
+			FileTypeChoices = new[] { new Avalonia.Platform.Storage.FilePickerFileType ("F# script files") { Patterns = new[] { "*.fsx" } } },
+		});
+		if (file is null)
+			return;
+		var path = file.Path.LocalPath;
+		if (string.IsNullOrEmpty (path))
+			return;
+		if (!path.EndsWith (".fsx", StringComparison.OrdinalIgnoreCase))
+			path = Path.ChangeExtension (path, ".fsx");
+		File.WriteAllText (path, fsiPad.BuildSaveContent ());
+		Output ("[fsi] saved " + path);
+	}
+
+	// Legacy OpenScript: #load "<path>".
+	async System.Threading.Tasks.Task FsiOpenScriptAsync ()
+	{
+		if (fsiPad is null)
+			return;
+		var files = await StorageProvider.OpenFilePickerAsync (new Avalonia.Platform.Storage.FilePickerOpenOptions {
+			Title = "Open script",
+			AllowMultiple = false,
+			FileTypeFilter = new[] { new Avalonia.Platform.Storage.FilePickerFileType ("F# script files") { Patterns = new[] { "*.fs", "*.fsi", "*.fsx", "*.fsscript" } } },
+		});
+		if (files.Count == 0)
+			return;
+		fsiPad.LoadScript (files [0].Path.LocalPath);
 	}
 
 	// ---------- Session recording (Fila C) ----------
@@ -8815,7 +9654,8 @@ public partial class MainWindow : Window
 			FillSymbolTree (outlineTree, NoOutlineMessage);
 			return;
 		}
-		var nodes = MonoDevelop.Ide.Services.SymbolIndexService.BuildOutline (ed.Text);
+		var nodes = MonoDevelop.Ide.Services.SymbolIndexService.BuildOutline (ed.Text,
+			MonoDevelop.Ide.Services.SymbolIndexService.IsFSharpSource (ed.FilePath));
 		if (nodes.Count == 0) {
 			FillSymbolTree (outlineTree, NoOutlineMessage);
 			return;
@@ -8871,7 +9711,11 @@ public partial class MainWindow : Window
 			return;
 		}
 		var sources = new List<(string Project, string File)> ();
-		foreach (var file in Directory.EnumerateFiles (dir, "*.cs", SearchOption.AllDirectories)) {
+		// C# and F# sources both feed the pad (the scanner picks its language by
+		// the file's extension inside SymbolIndexService).
+		foreach (var file in Directory.EnumerateFiles (dir, "*.cs", SearchOption.AllDirectories)
+			.Concat (Directory.EnumerateFiles (dir, "*.fs", SearchOption.AllDirectories))
+			.Concat (Directory.EnumerateFiles (dir, "*.fsi", SearchOption.AllDirectories))) {
 			if (file.Contains ("/obj/") || file.Contains ("/bin/") || file.Contains ("/.git/"))
 				continue;
 			sources.Add ((ProjectNameForFile (dir, file), file));
@@ -8886,12 +9730,14 @@ public partial class MainWindow : Window
 	}
 
 	// Legacy ProjectNodeBuilder groups by project: the nearest ancestor directory
-	// holding a .csproj, falling back to the solution directory itself.
+	// holding a project file (.csproj/.fsproj), falling back to the solution
+	// directory itself.
 	static string ProjectNameForFile (string solutionDir, string file)
 	{
 		var dir = Path.GetDirectoryName (file);
 		while (!string.IsNullOrEmpty (dir) && dir.Length > solutionDir.Length) {
-			if (Directory.EnumerateFiles (dir, "*.csproj").Any ())
+			if (Directory.EnumerateFiles (dir, "*.csproj").Any ()
+				|| Directory.EnumerateFiles (dir, "*.fsproj").Any ())
 				return Path.GetFileName (dir);
 			dir = Path.GetDirectoryName (dir);
 		}
@@ -9845,7 +10691,9 @@ public partial class MainWindow : Window
 			return null;
 		var dir = Path.GetDirectoryName (sln)!;
 		try {
+			// F# projects (.fsproj) resolve like C# ones (F# port, phase 3).
 			return Directory.GetFiles (dir, "*.csproj", SearchOption.AllDirectories)
+				.Concat (Directory.GetFiles (dir, "*.fsproj", SearchOption.AllDirectories))
 				.FirstOrDefault (p => !p.Contains ("obj") && !p.Contains ("bin"));
 		} catch {
 			return null;
@@ -9903,7 +10751,8 @@ public partial class MainWindow : Window
 		HandleNewFileDialogResult (dlg);
 	}
 
-	// All the .csproj of the loaded solution (legacy workspace projects).
+	// All the project files (.csproj/.fsproj) of the loaded solution (legacy
+	// workspace projects).
 	List<string> GetSolutionProjectPaths ()
 	{
 		var sln = loadedSolutionPath;
@@ -9911,6 +10760,7 @@ public partial class MainWindow : Window
 			return new List<string> ();
 		try {
 			return Directory.GetFiles (Path.GetDirectoryName (sln)!, "*.csproj", SearchOption.AllDirectories)
+				.Concat (Directory.GetFiles (Path.GetDirectoryName (sln)!, "*.fsproj", SearchOption.AllDirectories))
 				.Where (p => !p.Contains ("obj") && !p.Contains ("bin"))
 				.OrderBy (p => p, StringComparer.OrdinalIgnoreCase)
 				.ToList ();
@@ -10039,6 +10889,15 @@ public partial class MainWindow : Window
 		}
 		ed.FilePath = path;
 		ed.IsDirty = false;
+		// Re-key the F# language-service state to the new path when the document
+		// actually moved (save-as to a new location): unwiring the old tag
+		// de-subscribes the singleton event and the editor's subscriptions, re-wiring
+		// re-attaches them under the new tag. A no-op for a plain save to the same
+		// path and for non-F# documents.
+		if (oldTag is not null && oldTag != newKey) {
+			UnwireFSharpDocument (oldTag, ed);
+			WireFSharpDocument (ed);
+		}
 		AttachEditorContextMenu (ed);
 		if (!docs.ContainsKey (newKey))
 			docs [newKey] = ed;

@@ -77,6 +77,36 @@ public class SkTextEditor : Control
 	// Empty for untitled documents (like the legacy "Untitled" documents).
 	public string FilePath { get; set; } = "";
 
+	// F# language service: the full list of source files of the project this
+	// document belongs to (set by MainWindow when a .fs/.fsi/.fsx/.fsscript
+	// document opens). When set, completions and hover resolve through the
+	// in-process FCS checker instead of the C# word/keyword fallback, so
+	// cross-file type references work. Empty/null → standalone single-file
+	// resolution (scripts, loose files).
+	public string[]? FSharpSourceFiles { get; set; }
+
+	// Ctrl+Click go-to-definition (F# documents only): the editor reports the
+	// caret line/col and the owning file; MainWindow asks the F# service for
+	// the declaration location and navigates there. (The editor itself has no
+	// window/document context to jump across files.)
+	public event Action<int, int, string>? GotoDefinitionRequested;
+
+	// The in-process F# language service (shell-side; the GTK legacy UI has no
+	// F# completions wired this way). Null-safe: a C# document, or a build
+	// without the F# service, simply skips the F# branch.
+	MonoDevelop.AvaloniaShell.Services.FSharpLanguageService? FSharpService
+		=> MonoDevelop.AvaloniaShell.Services.FSharpLanguageService.Instance;
+
+	// True when the file is an F# source file (the same gate the FSI pad uses
+	// for its "active F# document" check): .fs/.fsi/.fsx/.fsscript.
+	static bool IsFSharpFile (string? path)
+	{
+		if (string.IsNullOrEmpty (path))
+			return false;
+		var ext = System.IO.Path.GetExtension (path).ToLowerInvariant ();
+		return ext is ".fs" or ".fsi" or ".fsx" or ".fsscript";
+	}
+
 	// Legacy IsDirty: the tab shows the modified marker (dot) and File > Save enables.
 	public static readonly StyledProperty<bool> IsDirtyProperty =
 		AvaloniaProperty.Register<SkTextEditor, bool> (nameof (IsDirty));
@@ -145,6 +175,18 @@ public class SkTextEditor : Control
 	{
 		caretLine = Math.Clamp (zeroBasedLine, 0, lines.Count - 1);
 		caretCol = Math.Clamp (caretCol, 0, lines [caretLine].Length);
+		hasSelection = false;
+		EnsureCaretVisible ();
+		MarkDirty ();
+	}
+
+	// Sets the caret to an exact line/column (0-based), clearing any
+	// selection. Used by go-to-definition (cross-file jump lands on a
+	// specific column) and by the QA pipeline.
+	public void SetCaret (int zeroBasedLine, int zeroBasedCol)
+	{
+		caretLine = Math.Clamp (zeroBasedLine, 0, lines.Count - 1);
+		caretCol = Math.Clamp (zeroBasedCol, 0, lines [caretLine].Length);
 		hasSelection = false;
 		EnsureCaretVisible ();
 		MarkDirty ();
@@ -429,6 +471,15 @@ public class SkTextEditor : Control
 		var (word, line, col) = WordAtPoint (p);
 		if (word.Length == 0)
 			return null;
+		// F# documents resolve through the in-process FCS language service
+		// (real type-aware descriptions); the C# word-scan below stays the
+		// fallback for other languages and for the rare miss.
+		if (FSharpService is { } svc) {
+			var lineText = lines [line];
+			var hover = svc.GetHover (FilePath, FSharpSourceFiles ?? new[] { FilePath }, line, col, lineText, Text);
+			if (hover is not null)
+				return (hover.Header, hover.Description, hover.Icon);
+		}
 		return DescribeWord (word, line);
 	}
 
@@ -545,6 +596,17 @@ public class SkTextEditor : Control
 	/// language model is available).</summary>
 	public IEnumerable<CompletionPopup.Item> GetCompletionItems ()
 	{
+		// F# documents: type-aware completions from the in-process FCS service
+		// (member completion after '.', top-level names, cross-file types).
+		// The caret line/col drives the partial-name extraction inside the
+		// service, so the '.' trigger and Ctrl+Space both work.
+		if (IsFSharpFile (FilePath) && FSharpService is { } svc) {
+			var lineText = lines [caretLine];
+			var items = svc.GetCompletions (FilePath, FSharpSourceFiles ?? new[] { FilePath }, caretLine, caretCol, lineText, Text);
+			foreach (var it in items)
+				yield return new CompletionPopup.Item (it.NameInCode, it.IconStock, it.Description, it.Category);
+			yield break;
+		}
 		var kw = new HashSet<string> (Keywords.Split (' '));
 		foreach (var w in DocumentWords ())
 			yield return new CompletionPopup.Item (w, "element-field-16", "document word", "");
@@ -736,6 +798,11 @@ public class SkTextEditor : Control
 			MoveBlockDown ();
 			e.Handled = true;
 			return;
+		case Key.Return when ctrl:
+			// F# Interactive SendSelection (legacy Ctrl+Return): the window-level
+			// key binding owns this combo — the editor must not insert a newline
+			// (the plain Enter case below keeps handling unmodified Enter).
+			return;
 		}
 		switch (e.Key) {
 		case Key.Back:
@@ -884,6 +951,21 @@ public class SkTextEditor : Control
 				int gutterLine = Math.Clamp ((int)(pt.Position.Y / LineHeight + scrollLines), 0, lines.Count - 1);
 				caretLine = gutterLine;
 				ToggleBreakpoint ();
+				e.Handled = true;
+				return;
+			}
+			// F# go-to-definition (legacy F1 / Ctrl+Click on an identifier): the
+			// editor reports the caret line/col + owning file and lets the
+			// language-service owner (MainWindow) resolve and navigate. C#
+			// documents keep the plain caret-move behavior.
+			if (e.KeyModifiers.HasFlag (KeyModifiers.Control) && FilePath.Length > 0
+				&& IsFSharpFile (FilePath) && GotoDefinitionRequested is not null) {
+				double charW0 = FontSize * 0.6;
+				int gcol = Math.Max (0, (int)((pt.Position.X - GutterWidth ()) / charW0));
+				int gline = Math.Clamp ((int)(pt.Position.Y / LineHeight + scrollLines), 0, lines.Count - 1);
+				caretLine = gline;
+				caretCol = Math.Clamp (gcol, 0, lines [caretLine].Length);
+				GotoDefinitionRequested (caretLine, caretCol, FilePath);
 				e.Handled = true;
 				return;
 			}
@@ -1675,6 +1757,9 @@ public class SkTextEditor : Control
 		MarkDirty ();
 	}
 
+	/// <summary>Number of inline diagnostic markers currently shown (QA assertion).</summary>
+	public int BubbleCount => lineBubbles.Count;
+
 	public void SetBubbleMode (BubbleMode mode)
 	{
 		bubbleMode = mode;
@@ -1682,6 +1767,53 @@ public class SkTextEditor : Control
 	}
 
 	public BubbleMode CurrentBubbleMode => bubbleMode;
+
+	// F# document adornments (Preferences "F# Settings" consumers, phase 6):
+	// "mutable" → an underline under a mutable binding name (HighlightMutables);
+	// "type" → a small right-aligned type signature on a function's line
+	// (ShowTypeSignatures). Computed on the background check path by the F#
+	// service and pushed here on the UI thread; rendered per line in OnPaint.
+	// Line/col are 0-based (the editor's caret convention). The two option flags
+	// are cached (not re-read from UserPreferences every frame — that would
+	// reload the prefs XML per visible line per frame) and refreshed on every
+	// SetFSharpAdornments, i.e. on each background check completion.
+	readonly List<(int line, int col, int len, string kind, string text)> fsharpAdornments = new ();
+	bool fsharpShowMutable;
+	bool fsharpShowType;
+
+	// The option flags are passed in by the caller (MainWindow reads them from
+	// SettingsStore on each background check completion) so the editor itself
+	// never loads the user preferences file; they are cached and applied here.
+	public void SetFSharpAdornments (IEnumerable<(int line, int col, int len, string kind, string text)> items, bool showMutable, bool showType)
+	{
+		fsharpAdornments.Clear ();
+		fsharpAdornments.AddRange (items);
+		fsharpShowMutable = showMutable;
+		fsharpShowType = showType;
+		MarkDirty ();
+	}
+
+	public int AdornmentCount => fsharpAdornments.Count;
+	public int MutableAdornmentCount => fsharpAdornments.Count (a => a.kind == "mutable");
+	public int TypeAdornmentCount => fsharpAdornments.Count (a => a.kind == "type");
+	public (int line, int col, int len, string text)? FirstMutableAdornment
+	{
+		get {
+			foreach (var a in fsharpAdornments)
+				if (a.kind == "mutable")
+					return (a.line, a.col, a.len, a.text);
+			return null;
+		}
+	}
+	public (int line, string text)? FirstTypeAdornment
+	{
+		get {
+			foreach (var a in fsharpAdornments)
+				if (a.kind == "type")
+					return (a.line, a.text);
+			return null;
+		}
+	}
 
 	// Toggles between the three legacy states.
 	public void ToggleBubbles ()
@@ -1705,6 +1837,48 @@ public class SkTextEditor : Control
 			return;
 		paint.Color = b.isError ? new SKColor (0xf1, 0x6a, 0x6a) : new SKColor (0xe5, 0xb5, 0x6a);
 		canvas.DrawText ("● " + b.text, x + 12, baseline, font, paint);
+	}
+
+	// F# adornments for a line (Preferences "F# Settings" consumers, phase 6):
+	// "mutable" → a 2px underline under the binding name (HighlightMutables,
+	// the FSharpSyntaxMode highlightMutable parity — a mutable binding is marked
+	// in the editor); "type" → the function's type signature, dimmed and
+	// right-aligned on the line (ShowTypeSignatures, the legacy TypeSignatureHelp
+	// gutter marker, kept inline so it never shifts the line height). The option
+	// flags are cached in SetFSharpAdornments (refreshed on each background
+	// check completion), never re-read from UserPreferences in the render loop.
+	void DrawFSharpAdornments (SKCanvas canvas, int line, float y, float lineH, float gutterW, float charW, SKColor commentColor, SKFont font, SKPaint textPaint)
+	{
+		if (fsharpAdornments.Count == 0)
+			return;
+		if (!fsharpShowMutable && !fsharpShowType)
+			return;
+		foreach (var a in fsharpAdornments) {
+			if (a.line != line)
+				continue;
+			if (a.kind == "mutable" && fsharpShowMutable) {
+				// Underline under the binding name (a.col..a.col+a.len), just
+				// below the text baseline.
+				float ux0 = gutterW + 4 + a.col * charW;
+				float ux1 = ux0 + Math.Max (1, a.len) * charW;
+				using var underPaint = new SKPaint {
+					Color = commentColor,
+					IsAntialias = false,
+					Style = SKPaintStyle.Stroke,
+					StrokeWidth = 2f,
+				};
+				canvas.DrawLine (ux0, y + lineH - 1f, ux1, y + lineH - 1f, underPaint);
+			} else if (a.kind == "type" && fsharpShowType && a.text.Length > 0) {
+				// Right-aligned dim signature at the end of the line.
+				string sig = "  : " + a.text;
+				float sx = gutterW + (float)Bounds.Width - gutterW - 4 - sig.Length * charW;
+				if (sx < gutterW + 4)
+					sx = gutterW + 4;
+				textPaint.Color = commentColor;
+				float baselineY = y + (lineH - (float)FontSize) / 2f + (float)FontSize * 0.85f;
+				canvas.DrawText (sig, sx, baselineY, font, textPaint);
+			}
+		}
 	}
 
 	// ----- Debug data tip (legacy TextEditor inline value bubble): while paused,
@@ -2803,6 +2977,8 @@ public class SkTextEditor : Control
 			}
 			// inline message bubble (legacy MessageBubble) after the line text
 			DrawBubbles (canvas, i, x, baseline, textFont, textPaint);
+			// F# adornments (HighlightMutables underline / ShowTypeSignatures)
+			DrawFSharpAdornments (canvas, i, y, lineH, gutterW, charW, comment, textFont, textPaint);
 			// pinned-watch bubbles (legacy PinnedWatch adorner): one amber bubble
 			// per expression pinned to the line; on a debug stop each shows its
 			// evaluated "expr = value" (static "expr = ?" between sessions).

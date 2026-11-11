@@ -4490,3 +4490,47 @@ Commits pushados a `origin/agents/sub-agent-senior-dev-role-report`: (1) 3 fiche
 **QA §18.5** (subagente Tester QA Senior, 2 rondas): ronda 1 **RECHAZADO** (2 MAYOR + 1 MENOR) — (H1) el dedupe nunca coincidía (ids de espacios distintos, ver arriba), (H2) los `HttpRequestException` escapaban de los `catch (MarketplaceException)` y dejaban el header atascado + error silenciado, (H3) warnings nuevos MD0009 (catch vacío) / VSTHRD200 (método async sin sufijo). Corregidos (fix de `ListingId`, `catch (Exception)` con `OperationCanceledException` antes, `File.Delete` del temporal solo si `result.Success` y con log, `InstallSelected`→`InstallSelectedAsync`, `InstallFromMarketplace`→`InstallFromMarketplaceAsync`) → ronda 2 **APROBADO, 0 hallazgos** con evidencias: `dedupe_probe` 4/4 (manifiesto en disco con `listingId`), `mkt_probe` 15/15, `mkt_ex_probe` (comportamiento del cliente ante fallos de transporte), build `Main.sln -c DebugLinux` 0 errores, `AddonHost.cs` limpio (sin cambios), regresiones verificadas (sin sobre-filtro, `Import` de 1 argumento intacto, OCE no tragado). Nota aprobada por QA: un `.vsix` de import fallido puede dejar el temporal en `/tmp` (no se borra en el camino de error; lo limpia el SO, sin impacto funcional).
 
 **Cierre**: commit por nombre de los 6 ficheros (4 nuevos de `Marketplace/` + `AddonManifest.cs` + `AddinManagerDialog.axaml.cs`; `AddonHost.cs` no entra) + docs ×3, push a `origin/agents/sub-agent-senior-dev-role-report`. Sin submódulos. Artefactos de prueba en `~/opencode/` (probes `mkt_probe/`, `dedupe_probe/`, `mkt_ex_probe/`, capturas `smoke_gallery_*.png`, fixtures `.vsix` reales descargadas).
+
+## 2026-11-10 (31) — Port F# completo (fases 1–6): binding F# GTK → shell Avalonia (nuevas soluciones, build/run, pad FSI, language service FCS, preferences + adornos)
+
+**Estado: CERRADO (QA APROBADO, ciclo #4 VERDE 0 hallazgos).** Pedido del operador: portar la superficie F# completa del binding GTK (`main/external/fsharpbinding/`) a la shell Avalonia — nuevas soluciones/archivos F#, build/run de `.fsproj`, pad F# Interactive, language service F# completo (completions, hover, navegación, `.fsx`), preferences F# + adornos. Alcance fase 6 decidido por el operador: **completo — consumidores en vivo** (4 opciones persistidas + `AdvanceToNextLine` + `HighlightMutables` + `ShowTypeSignatures`).
+
+**Fases (6, todas validadas)**:
+- **Fase 1 (New Solution + New File)**: plantillas F# Console y F# Tutorial (port del `xpt` legacy → `Assets/Tutorial.fs`, 976 l) en `NewSolutionDialog`; plantillas `.fs`/`.fsi`/`.fsx`/`.fsscript` en `NewFileDialog`; scaffolding de `.fsproj` (SDK-style, `net10.0`, `FSharp.Core` implícito).
+- **Fase 2 (build/run `.fsproj`)**: `ConfigurationService` reconoce proyectos `.fsproj` (mapeo solución→proyecto, TFM, output); build vía `dotnet build` y run vía `dotnet run` (el modelo de configuraciones ya lo orquestaba; se extendió el reconocimiento de extensión).
+- **Fase 3 (pad F# Interactive)**: `FsiProcess.cs` (262 l) — proceso hijo `dotnet fsi --nologo` que habla el protocolo de prompts FSI (stdin/stdout/stderr, diagnóstico FS, restart, clear). `FSharpInteractivePadView.axaml.cs` (382 l) — pad (transcript monospace + input + toolbar Save/Open/Clear/Reset); sesión arranca lazy al primer show, muere al cerrar la tab o al salir.
+- **Fase 4 (FCS in-process)**: `FSharpLanguageService.cs` (776 l) — `FSharpChecker.Create` (FCS **43.12.403**, la era .NET 10; el binding legacy usaba FCS 31.0.0 con otra API surface) singleton + executor single-thread; completions (`GetDeclarationListInfo` con `lineText` real), hover (`GetSymbolUseAtLocation` sobre **usos**, no declaraciones), go-to-definition, diagnostics (`ParseAndCheckFileInProject` síncrono por archivo). Contratos FCS verificados por probe (`~/opencode/fcs_probe/`).
+- **Fase 5 (navegación + retargeting)**: scanner F# propio en `SymbolIndexService` (+232 l) para outline/índice (no FCS — más barato y suficiente para navegación); `GoToDialog` incluye símbolos F#; retargeting rename/save-as: `UnwireFSharpDocument(tag, ed)` + `WireFSharpDocument` (re-suscribe al cambiar la path).
+- **Fase 6 (Preferences + adornos + AdvanceToNextLine)**: página "F# Settings" en `PreferencesDialog` (`PanelFSharp` en .axaml, +23 l; lógica en .axaml.cs, +128 l) — 4 claves legacy `FSharpBinding.*` (`FscPath` null si useDefault, `AdvanceToNextLine` default true, `HighlightMutables`/`ShowTypeSignatures` default false) vía `SettingsStore` (mismo `MonoDevelopProperties.xml` del GTK). Adornos: `FSharpLanguageService.GetFileAdornments` (UI, `executor.Invoke`) + `internal ComputeAdornments(CheckResult)` (ruta del evento, sin re-entrada — `CheckCompleted` nace en el executor) → `GetAllUsesOfAllSymbolsInFile` → `IsFromDefinition` → `IsFunction`/`IsMutable`/`FullTypeSafe` por reflection + `FormatFSharpType`. Editor: `SetFSharpAdornments(items, showMutable, showType)` en `SkTextEditor` (+176 l) — mutable → subrayado 2px; type → dim ` : <type>` a la derecha. `AdvanceToNextLine`: guard en comando `SendLine` (sesión viva + flag → `SetCaret(CurrentLine+1, 0)`).
+
+**Archivos** (4 nuevos + 16 modificados; sin submódulos; `fsharpbinding` NO es submódulo — trackeado en el repo principal):
+- `Services/FSharpLanguageService.cs` (nuevo, 776 l) — FCS in-process + adornos.
+- `Services/FsiProcess.cs` (nuevo, 262 l) — proceso hijo `dotnet fsi`.
+- `Views/FSharpInteractivePadView.axaml.cs` (nuevo, 382 l) — pad F# Interactive (todo en code, sin .axaml).
+- `Assets/Tutorial.fs` (nuevo, 976 l) — template F# Tutorial (Content, `CopyToOutputDirectory=PreserveNewest`).
+- `MonoDevelop.Startup.Avalonia.csproj` (M, +16) — `FSharp.Compiler.Service 43.12.403` + `Tutorial.fs` como Content.
+- `MainWindow.axaml.cs` (M, +929) — wiring F# (WireFSharpDocument, FsiQaAsync, FslsQaAsync, comandos FSI/FS, pad, dispatch `--fsi`/`--fsls`/`--prefs-fsharp`).
+- `SkTextEditor.cs` (M, +176) — adornos F# (SetFSharpAdornments, DrawFSharpAdornments, props QA).
+- `SymbolIndexService.cs` (M, +232) — scanner F# para outline/navegación.
+- `ConfigurationService.cs` (M, +44) — reconocimiento `.fsproj`.
+- `NewSolutionDialog.axaml(.cs)` (M, +32/+172) — plantillas F# Console + Tutorial.
+- `NewFileDialog.axaml.cs` (M, +147) — plantillas F# de archivo.
+- `PreferencesDialog.axaml(.cs)` (M, +23/+128) — PanelFSharp + Load/Store/Browse + QaFSharpRoundTrip.
+- `Program.cs` (M, +20) — hooks QA `--fsi`, `--fsls`, `--prefs-fsharp`.
+- `MenuBuilder.cs` (+18), `MenuService.cs` (+10), `ViewCommands.cs` (+3) — menús/comandos F#.
+- `AddReferenceDialog.axaml.cs` (+6), `GoToDialog.axaml.cs` (+24) — F# en add-reference y go-to.
+
+**Validación (valores medidos)**:
+- **E2E `--fsls`** (canónico, `launch_shell.sh --sln=$HOME/opencode/fsharp_port/fsls_fs/FsLs.sln --fsls`): **14 aserciones True, 0 False** — `wired=True srcfiles=2`, `diagnostic-ok=True`, `bubble-ok=True`, `hover-ok=True`, `hover-assert=True`, `member-completion-ok=True`, `editor-routing-ok=True`, `goto-def-ok=True → Lib.fs:8:4`, `goto-def-assert=True`, `outline-assert=True`, `gototype-assert=True`, `classes-assert=True`, `fsls-mutable-ok=True` (L10 len7), `fsls-type-ok=True` (L11 `int -> int`), `fsls-adornments-ok=True` (editor-adornments=2 mutable=1 type=1). Framework refs: `.../10.0.12/ref/net10.0`.
+- **E2E `--fsi`**: **9/9 True** — `ready=True running=True`, `result-ok=True`, `diagnostic-ok=True`, `restart-ready=True`, `restart-result-ok=True`, `clear-empty=True`, `advance-ok=True from=5 to=6 session=True`, `done transcript-lines=1`.
+- **`--prefs-fsharp`**: `roundtrip-ok=True` + restore exacto (valores restaurados).
+- **`--prefs=fsharp`**: `placeholder=False`, icono `md-prefs-source`, `[prefs-fsharp] loaded: advance=True mutables=False typesigs=False fsc=(default)`.
+- **Regresión C#**: `Build succeeded.` + `[build] build done failed=False` + 0 líneas `[fsls] wired`.
+- **GTK legacy**: `GTK VIVO (relay --old-gui OK)`.
+- **Build**: `dotnet build ... -c DebugLinux -m:1` → **0 errores** (~2100 warnings preexistentes).
+
+**QA §18.5** (subagente Tester QA Senior, 4 ciclos recursivos): ciclo #1 → 4 hallazgos (fuga `CheckCompleted` en close, freeze por debounce 1.5 s, regex `let` procedural, retargeting rename/save-as). Corregidos. Ciclo #2 → 1 hallazgo (fuga residual). Corregido. Ciclo #3 → **VERDE 0 hallazgos** (fases 1–5 cerradas). Ciclo #4 (fase 6) → **VERDE 0 hallazgos** con evidencias: 5 componentes verificados por lectura (sin CS0122, sin deadlock, flags cacheados, firma consistente) + 4 hooks E2E + 2 regresiones en verde + build 0 errores.
+
+**Queda pendiente** (límites aceptados por el operador, no defectos): (a) `CodeGenerationPanel` per-proyecto (project properties, fuera de la página global de preferences — el binding legacy lo tenía en `FSharpOptionsPanels.fs` como panel de proyecto); (b) integración VSIX/Marketplace del binding F# (en pausa por decisión del operador).
+
+**Cierre**: commit por nombre de los 20 ficheros (4 nuevos: `FSharpLanguageService.cs`, `FsiProcess.cs`, `FSharpInteractivePadView.axaml.cs`, `Assets/Tutorial.fs` + 16 M) + docs ×3, push a `origin/agents/sub-agent-senior-dev-role-report`. Sin submódulos modificados. Artefactos de prueba en `~/opencode/` (fixture `fsharp_port/fsls_fs/`, probes `fcs_probe/`, `fs_scanner_probe/`, lanzadores `launch_shell.sh`, `oldgui_smoke.sh`, log `shell_qa.log`).

@@ -214,7 +214,11 @@ public class AddReferenceDialog : DialogWindow
 			solutionProjects = ConfigurationService.GetSolutionProjects (solutionPath);
 		try {
 			var sources = solutionPath.Length > 0 ? solutionProjects :
-				Directory.EnumerateFiles (slnDir, "*.csproj", SearchOption.AllDirectories).ToList ();
+				// Standalone (no solution): the candidates are the project files in
+				// the tree — .csproj and .fsproj alike (F# port, phase 3).
+				Directory.EnumerateFiles (slnDir, "*.csproj", SearchOption.AllDirectories)
+					.Concat (Directory.EnumerateFiles (slnDir, "*.fsproj", SearchOption.AllDirectories))
+					.ToList ();
 			foreach (var csproj in sources) {
 				if (!string.Equals (csproj, projectPath, StringComparison.OrdinalIgnoreCase)) {
 					var name = Path.GetFileNameWithoutExtension (csproj);

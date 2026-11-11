@@ -90,7 +90,15 @@ public static class SymbolIndexService
 	/// event, property, method), each with its line and INDENT — the container chain
 	/// (breadcrumb scope, Go To Type detail) falls out of an indentation stack.</summary>
 	public static List<SymbolHit> ScanSymbols (string text)
+		=> ScanSymbols (text, false);
+
+	/// <summary>Language-aware symbol scan. For F# sources, a simpler scanner
+	/// extracts <c>let</c> bindings, <c>type</c> declarations and <c>module</c>
+	/// declarations (the C# regexes do not match F# syntax).</summary>
+	public static List<SymbolHit> ScanSymbols (string text, bool isFSharp)
 	{
+		if (isFSharp)
+			return ScanFSharpSymbols (text);
 		var hits = new List<SymbolHit> ();
 		var stack = new List<(int Indent, string Name, bool IsType)> (); // enclosing scopes
 		bool inBlockComment = false, inVerbatimString = false, inRawString = false;
@@ -188,6 +196,152 @@ public static class SymbolIndexService
 	{
 		var t = clause.Trim ();
 		return t.StartsWith ("record", StringComparison.Ordinal) ? "record" : t;
+	}
+
+	// F# declaration scanner: extracts `module NAME`, `type NAME` and
+	// `let NAME` top-level declarations. F# has no indentation-based scoping
+	// (unlike C#), so the container chain stays null. The regexes are
+	// deliberately conservative: they match the declaration keyword at the
+	// start of a (comment-stripped) line and capture the identifier that
+	// follows, skipping comments and string bodies.
+	static readonly Regex fsModuleRegex = new (
+		@"^module\s+([A-Za-z_][A-Za-z0-9_]*)",
+		RegexOptions.Compiled);
+	static readonly Regex fsTypeRegex = new (
+		@"^type\s+(?:(?:abstract|sealed|static|struct|union|interface)\s+)*([A-Za-z_][A-Za-z0-9_]*)",
+		RegexOptions.Compiled);
+	// `let` / `let!` / `let+` (computation expressions), optionally followed by
+	// the binding modifiers (rec, mutable, inline, unchecked, private) in any
+	// order. The NAME is then parsed procedurally, because it is not always a
+	// bare identifier: it can be a backtick identifier, a parenthesized
+	// destructuring pattern (`let (a, b) = ...`) or the unit pattern `let ()`.
+	// The old regex captured the token right after `let`, which was the modifier
+	// (e.g. `let mutable x` → "mutable") instead of the name.
+	static readonly Regex fsLetPrefixRegex = new (
+		@"^let[!+]?\s+(?:(?:rec|mutable|inline|unchecked|private)\s+)*",
+		RegexOptions.Compiled);
+
+	static List<SymbolHit> ScanFSharpSymbols (string text)
+	{
+		var hits = new List<SymbolHit> ();
+		int ln = 0;
+		int blockCommentDepth = 0;
+		foreach (var raw in text.Split ('\n')) {
+			ln++;
+			var line = raw.TrimEnd ('\r');
+			// Strip block comments (nested in F#) and line comments.
+			var sb = new System.Text.StringBuilder ();
+			int i = 0;
+			while (i < line.Length) {
+				if (blockCommentDepth > 0) {
+					if (line [i] == '(' && i + 1 < line.Length && line [i + 1] == '*') {
+						blockCommentDepth++;
+						i += 2;
+						continue;
+					}
+					if (line [i] == '*' && i + 1 < line.Length && line [i + 1] == ')') {
+						blockCommentDepth--;
+						i += 2;
+						continue;
+					}
+					i++;
+					continue;
+				}
+				if (line [i] == '(' && i + 1 < line.Length && line [i + 1] == '*') {
+					blockCommentDepth++;
+					i += 2;
+					continue;
+				}
+				if (line [i] == '/' && i + 1 < line.Length && line [i + 1] == '/')
+					break; // line comment: the rest is ignored
+				sb.Append (line [i]);
+				i++;
+			}
+			var trimmed = sb.ToString ().TrimStart ();
+			if (trimmed.Length == 0)
+				continue;
+			var m = fsModuleRegex.Match (trimmed);
+			if (m.Success) {
+				hits.Add (new SymbolHit ("module", m.Groups [1].Value, ln, 0, null));
+				continue;
+			}
+			var t = fsTypeRegex.Match (trimmed);
+			if (t.Success) {
+				hits.Add (new SymbolHit ("class", t.Groups [1].Value, ln, 0, null));
+				continue;
+			}
+			var lp = fsLetPrefixRegex.Match (trimmed);
+			if (lp.Success) {
+				// The name follows the prefix (`let`/`let!`/`let+` + modifiers).
+				// It is not always a bare identifier — it can be a backtick
+				// identifier, a destructuring pattern (`let (a, b)`) or the unit
+				// pattern `let ()` — so it is parsed procedurally.
+				bool isComputation = trimmed.Length > 3 && (trimmed [3] == '!' || trimmed [3] == '+');
+				int nameStart = lp.Length;
+				int p = nameStart;
+				while (p < trimmed.Length && char.IsWhiteSpace (trimmed [p]))
+					p++;
+				string name = "";
+				int afterName = trimmed.Length;
+				if (p < trimmed.Length) {
+					char c0 = trimmed [p];
+					if (c0 == '(') {
+						// Destructuring / unit pattern: use the first identifier
+						// inside the parens; `let ()` has none and is skipped.
+						int close = trimmed.IndexOf (')', p);
+						if (close > p) {
+							name = FirstIdent (trimmed.Substring (p + 1, close - p - 1));
+							afterName = close + 1;
+						}
+					} else if (c0 == '`') {
+						// Backtick identifier (`my value`): the name is wrapped in
+						// backticks, so find the closing one.
+						int end = trimmed.IndexOf ('`', p + 1);
+						if (end > p + 1) {
+							name = trimmed.Substring (p + 1, end - p - 1);
+							afterName = end + 1;
+						}
+					} else if (char.IsLetterOrDigit (c0) || c0 == '_') {
+						int end = p;
+						while (end < trimmed.Length && (char.IsLetterOrDigit (trimmed [end]) || trimmed [end] == '_'))
+							end++;
+						name = trimmed.Substring (p, end - p);
+						afterName = end;
+					}
+				}
+				if (name.Length == 0)
+					continue;
+				// A `let` is a function when it has a parameter list: an explicit
+				// `(...)` right after the name, or an implicit-parameter
+				// identifier (`let f x = x`). A `let` followed by `=`, `: T`, or a
+				// computation-expression binding (`let! x = ...`) is a value.
+				int k = afterName;
+				while (k < trimmed.Length && char.IsWhiteSpace (trimmed [k]))
+					k++;
+				bool isFunction = !isComputation && k < trimmed.Length &&
+					(trimmed [k] == '(' || char.IsLetterOrDigit (trimmed [k]) || trimmed [k] == '_');
+				hits.Add (new SymbolHit (isFunction ? "method" : "field", name, ln, 0, null));
+			}
+		}
+		return hits;
+	}
+
+	// The first identifier in a destructuring pattern (e.g. "(a, b)" → "a"),
+	// skipping pattern symbols like "|", "{", ",". Returns "" when there is none.
+	static string FirstIdent (string s)
+	{
+		int i = 0;
+		while (i < s.Length) {
+			var c = s [i];
+			if (char.IsLetterOrDigit (c) || c == '_') {
+				int start = i;
+				while (i < s.Length && (char.IsLetterOrDigit (s [i]) || s [i] == '_'))
+					i++;
+				return s.Substring (start, i - start);
+			}
+			i++;
+		}
+		return "";
 	}
 
 	// Token-aware: a type such as `Dictionary<string, int>` is fine, but any
@@ -292,19 +446,32 @@ public static class SymbolIndexService
 	}
 
 	/// <summary>Timestamp-cached <see cref="ScanSymbols"/> over a file on disk;
-	/// unreadable files contribute no symbols instead of throwing.</summary>
+	/// unreadable files contribute no symbols instead of throwing. The F#/C#
+	/// scanner is chosen by the file extension (the .fs/.fsi/.fsx/.fsscript gate
+	/// used everywhere else in the shell).</summary>
 	public static List<SymbolHit> ScanFile (string file)
 	{
 		try {
 			var stamp = File.GetLastWriteTimeUtc (file);
 			if (cache.TryGetValue (file, out var cached) && cached.Stamp == stamp)
 				return cached.Symbols;
-			var syms = ScanSymbols (File.ReadAllText (file));
+			var isFSharp = IsFSharpSource (file);
+			var syms = ScanSymbols (File.ReadAllText (file), isFSharp);
 			cache [file] = (stamp, syms);
 			return syms;
 		} catch {
 			return new List<SymbolHit> ();
 		}
+	}
+
+	/// <summary>True when the path is an F# source file (the same extension gate
+	/// the editor routing and the FSI pad use).</summary>
+	public static bool IsFSharpSource (string path)
+	{
+		if (string.IsNullOrEmpty (path))
+			return false;
+		var ext = Path.GetExtension (path).ToLowerInvariant ();
+		return ext is ".fs" or ".fsi" or ".fsx" or ".fsscript";
 	}
 
 	/// <summary>Namespace declarations with their line, so a type hit can be
@@ -329,13 +496,60 @@ public static class SymbolIndexService
 		return list;
 	}
 
+	/// <summary>F# module declarations with their line (the F# equivalent of the
+	/// <c>namespace</c> grouping for the Classes pad). The same nested-comment
+	/// stripping as the F# symbol scanner keeps commented-out modules out.</summary>
+	public static List<(int Line, string Name)> ScanFSharpModules (string text)
+	{
+		var list = new List<(int, string)> ();
+		int blockCommentDepth = 0;
+		int ln = 0;
+		foreach (var raw in text.Split ('\n')) {
+			ln++;
+			var line = raw.TrimEnd ('\r');
+			var sb = new System.Text.StringBuilder ();
+			int i = 0;
+			while (i < line.Length) {
+				if (blockCommentDepth > 0) {
+					if (line [i] == '(' && i + 1 < line.Length && line [i + 1] == '*') {
+						blockCommentDepth++;
+						i += 2;
+						continue;
+					}
+					if (line [i] == '*' && i + 1 < line.Length && line [i + 1] == ')') {
+						blockCommentDepth--;
+						i += 2;
+						continue;
+					}
+					i++;
+					continue;
+				}
+				if (line [i] == '(' && i + 1 < line.Length && line [i + 1] == '*') {
+					blockCommentDepth++;
+					i += 2;
+					continue;
+				}
+				if (line [i] == '/' && i + 1 < line.Length && line [i + 1] == '/')
+					break;
+				sb.Append (line [i]);
+				i++;
+			}
+			var m = fsModuleRegex.Match (sb.ToString ().TrimStart ());
+			if (m.Success)
+				list.Add ((ln, m.Groups [1].Value));
+		}
+		return list;
+	}
+
 	/// <summary>Document Outline pad model: the flat hits nested by indentation,
-	/// preserving source order (the legacy outline is the document's own tree).</summary>
-	public static List<OutlineNode> BuildOutline (string text)
+	/// preserving source order (the legacy outline is the document's own tree).
+	/// F# sources (isFSharp) use the F# scanner — F# has no indentation scoping,
+	/// so its nodes are flat (module ▸ type ▸ let at the top level).</summary>
+	public static List<OutlineNode> BuildOutline (string text, bool isFSharp = false)
 	{
 		var roots = new List<OutlineNode> ();
 		var stack = new List<OutlineNode> ();
-		foreach (var hit in ScanSymbols (text)) {
+		foreach (var hit in ScanSymbols (text, isFSharp)) {
 			var node = new OutlineNode (hit.Kind, hit.Name, hit.Line, hit.Indent, new List<OutlineNode> ());
 			while (stack.Count > 0 && stack [^1].Indent >= hit.Indent)
 				stack.RemoveAt (stack.Count - 1);
@@ -364,10 +578,14 @@ public static class SymbolIndexService
 			} catch {
 				continue; // unreadable files just don't contribute types
 			}
-			var outline = BuildOutline (text);
+			bool isFSharp = IsFSharpSource (file);
+			var outline = BuildOutline (text, isFSharp);
 			if (outline.Count == 0)
 				continue;
-			var namespaces = ScanNamespaces (text);
+			// F# files have no `namespace` declarations: their top-level
+			// modules play the role of the containing namespace, so the type
+			// nodes are attributed to the module in effect at their line.
+			var namespaces = isFSharp ? ScanFSharpModules (text) : ScanNamespaces (text);
 			if (!projects.TryGetValue (project, out var projNode)) {
 				projNode = new ClassNode ("project", project, null, 0, new List<ClassNode> ());
 				projects [project] = projNode;

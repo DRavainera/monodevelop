@@ -182,13 +182,14 @@ internal static class Program
 				a is "--about" or "--prefs" or "--addins" or "--find" or "--build" or "--run"
 					or "--goto" or "--gototype" or "--editorpad" or "--padmenu" or "--padsqa" or "--padsqa2" or "--tasks" or "--tool" or "--editops" or "--windocs" or "--navhist"
 					or "--bookmarks" or "--addref" or "--brace" or "--buildone" or "--mcaret" or "--fmt" or "--diff" or "--fold" or "--viewcmds" or "--bubbles" or "--compl" or "--tool" or "--ctxmenu" or "--filter" or "--props" or "--dirtyfiles" or "--editqa" or "--totd" or "--progress" or "--encodings" or "--newconfig" or "--newconfig-real" or "--openimport" or "--activeconfig" or "--newproject" or "--newsolution" or "--bmkpad" or "--bkpad" or "--locals" or "--attachdlg" or "--watch" or "--condbp" or "--attachreal" or "--step" or "--tree" or "--imm"
-						or "--gutterbp" or "--frame" or "--immcompl" or "--persistqa" or "--watchedit" or "--pinwatch" or "--legacyqa" or "--xruncfg" or "--addrefdlg" or "--dispatchaddref" or "--extensionsdlg" or "--collapse" or "--collapsebottom" or "--qaresults" or "--newfolder" or "--exmode" or "--tabscroll" or "--selpad" or "--searchpopup" or "--rowactivate" or "--ctxnewfolder" or "--newfile" or "--newfile-unsaved" or "--ctxnewfile" or "--newfile-visual" or "--ctxmenu-visual" or "--delcsproj" or "--padclose" or "--outline" or "--classes" or "--codeissues" or "--dblclick" or "--prefs-tree" or "--prefs-sourcewrite" or "--menudump" or "--menuruntime" or "--dupdocs" or "--instrview" or "--iconsqa" or "--slnmodel" or "--cmdstates" or "--projmodel" or "--runcfg" or "--buildmap" or "--managepkgs" or "--managepkgdlg" or "--autoselectqa"
+						or "--gutterbp" or "--frame" or "--immcompl" or "--persistqa" or "--watchedit" or "--pinwatch" or "--legacyqa" or "--xruncfg" or "--addrefdlg" or "--dispatchaddref" or "--extensionsdlg" or "--collapse" or "--collapsebottom" or "--qaresults" or "--newfolder" or "--exmode" or "--tabscroll" or "--selpad" or "--searchpopup" or "--rowactivate" or "--ctxnewfolder" or "--newfile" or "--newfile-unsaved" or "--ctxnewfile" or "--newfile-visual" or "--ctxmenu-visual" or "--delcsproj" or "--padclose" or "--outline" or "--classes" or "--codeissues" or "--dblclick" or "--prefs-tree" or "--prefs-sourcewrite" or "--prefs-fsharp" or "--menudump" or "--menuruntime" or "--dupdocs" or "--instrview" or "--iconsqa" or "--slnmodel" or "--cmdstates" or "--projmodel" or "--runcfg" or "--buildmap" or "--managepkgs" or "--managepkgdlg" or "--autoselectqa" or "--fsi" or "--fsls"
 				|| a.StartsWith ("--runcustom=", StringComparison.Ordinal)
 				|| a.StartsWith ("--prefs=", StringComparison.Ordinal)
 				|| a.StartsWith ("--openmenu=", StringComparison.Ordinal)
 				|| a.StartsWith ("--outline=", StringComparison.Ordinal)
 				|| a.StartsWith ("--dblclick=", StringComparison.Ordinal)
 				|| a.StartsWith ("--newproject=", StringComparison.Ordinal)
+				|| a.StartsWith ("--newfile=", StringComparison.Ordinal)
 				|| a.StartsWith ("--gotoline", StringComparison.Ordinal)
 				|| a.StartsWith ("--sessionrec=", StringComparison.Ordinal)
 				|| a.StartsWith ("--sessionreplay=", StringComparison.Ordinal)
@@ -225,7 +226,22 @@ internal static class Program
 				// Selawik (SIL OFL 1.1, metric-compatible with Segoe UI) as the default
 				// UI face — open source, embedded in Assets/Fonts; falls back to fontconfig
 				// families when a glyph is missing.
-				DefaultFamilyName = "Selawik"
+				DefaultFamilyName = "Selawik",
+				// Pin the PLAIN "Selawik" name to the EMBEDDED font. DefaultFamilyName
+				// resolves through fontconfig (SystemFonts) because it carries no key;
+				// a restricted fontconfig (e.g. the QA fixture, /usr/share/fonts only)
+				// maps the unknown "Selawik" family to whatever its default face is —
+				// "Font Awesome 6 Brands" there, an icon font with no text glyphs — and
+				// glyph-typeface creation throws ("Could not create glyphTypeface. Font
+				// family: $Default"): the $Default placeholder remaps to this default
+				// family, and it reaches any TextPresenter still holding the placeholder
+				// (transient, mid-ApplyTemplate, non-zero caret). The embedded avares
+				// resource key never touches fontconfig, so pinning the name to it makes
+				// the default resolvable in every environment. (App.axaml already ships
+				// ContentFontFamily = the same embedded resource for content controls.)
+				FontFamilyMappings = new System.Collections.Generic.Dictionary<string, FontFamily> {
+					{ "Selawik", new FontFamily ("avares://MonoDevelop.AvaloniaShell/Fonts/selawk.ttf#Selawik") }
+				}
 			})
 			.LogToTrace ();
 }

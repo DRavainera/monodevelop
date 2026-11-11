@@ -48,6 +48,16 @@
          Avalonia shell is the only 7.9.0 consumer and stages its own closure
          into main/build). -->
     <PackageReference Include="NuGet.Configuration" Version="7.9.0" />
+    <!-- F# language service (FCS 43.12.403, the .NET 10 era): in-process
+          FSharpChecker for completions/hover/go-to-def/find-refs/diagnostics
+          on .fs/.fsi/.fsx/.fsscript documents (FSharpLanguageService). The
+          legacy fsharpbinding used FCS 31.0.0 against a different API
+          surface; 43.12 is the version whose editor-service contract
+          (GetDeclarationListInfo, GetSymbolUseAtLocation, synchronous
+          per-file results) was probed and verified for this port. Brings
+          FSharp.Core 10.1.403 into main/build for both the service and the
+          FSI child process to resolve. -->
+    <PackageReference Include="FSharp.Compiler.Service" Version="43.12.403" />
     <AvaloniaResource Include="branding\AboutImage.png" />
     <AvaloniaResource Include="branding\AboutImage@2x.png" />
     <AvaloniaResource Include="branding\welcome-logo.png" />
@@ -175,5 +185,11 @@
 	<ItemGroup>
 		<Content Include="..\**\*.addin.xml" Exclude="**\obj\**;**\bin\**" Link="addinxml\core\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
 		<Content Include="..\..\addins\**\*.addin.xml" Exclude="**\obj\**;**\bin\**" Link="addinxml\addins\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+	</ItemGroup>
+	<!-- F# Tutorial template asset (port of the legacy FSharpTutorialProject.xpt
+	     Tutorial.fs, F# 10-compatible): the "F# Tutorial" New Solution template
+	     copies it into the created project (NewSolutionDialog.ScaffoldFSharpTutorial). -->
+	<ItemGroup>
+		<Content Include="Assets\Tutorial.fs" CopyToOutputDirectory="PreserveNewest" />
 	</ItemGroup>
 </Project>

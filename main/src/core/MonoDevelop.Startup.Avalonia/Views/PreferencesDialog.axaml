@@ -668,6 +668,29 @@
                          Text="Stored in VersionControl.config (same file the GTK UI reads; repositories are preserved)." />
             </StackPanel>
 
+            <!-- ===== F# Settings (legacy FSharpSettingsPanel / FSharpSettingsWidget,
+                 addin.xml /MonoDevelop/Ide/GlobalOptionsDialog/Other, icon md-prefs-source) ===== -->
+            <StackPanel x:Name="PanelFSharp" Margin="16" Spacing="8" IsVisible="False">
+              <TextBlock Text="F# Compiler" FontWeight="SemiBold" />
+              <CheckBox x:Name="FsCompilerUseDefault" Content="Use the default F# compiler" />
+              <Grid ColumnDefinitions="160,*" Margin="0,2,0,0">
+                <TextBlock Text="Compiler path" VerticalAlignment="Center" />
+                <Grid Grid.Column="1" ColumnDefinitions="*,32">
+                  <TextBox x:Name="FsCompilerPath" />
+                  <Button x:Name="FsCompilerBrowse" Grid.Column="1" Content="…" MinWidth="30"
+                          HorizontalAlignment="Left" />
+                </Grid>
+              </Grid>
+              <TextBlock Text="F# Interactive" FontWeight="SemiBold" Margin="0,8,0,0" />
+              <CheckBox x:Name="FsAdvanceLine"
+                        Content="Advance to the next line when sending a line to the F# Interactive" />
+              <TextBlock Text="Editor" FontWeight="SemiBold" Margin="0,8,0,0" />
+              <CheckBox x:Name="FsHighlightMutables"
+                        Content="Highlight mutable bindings in the editor (underlined)" />
+              <CheckBox x:Name="FsTypeSignatures"
+                        Content="Show function type signatures in the editor" />
+            </StackPanel>
+
             <StackPanel x:Name="PanelPlaceholder" Margin="16" IsVisible="False" Spacing="8">
               <TextBlock Text="This options panel is provided by an add-in and has not been wired to the new UI yet."
                          TextWrapping="Wrap" Opacity="0.7" />

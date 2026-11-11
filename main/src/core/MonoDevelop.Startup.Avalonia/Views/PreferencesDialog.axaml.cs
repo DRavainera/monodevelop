@@ -77,6 +77,8 @@ public partial class PreferencesDialog : Window
 		"naming", "standardheader", "codeformatting",
 		"vcgeneral", "vccommit", "git", "changelog",
 		"nugetgeneral", "packagesources", "debugger", "netcore", "runtimes", "perfdiag", "xml", "intellisense-appearance", "intellisense-behavior", "analysis", "csharpformat", "xmlschemas",
+		// F# port phase 6: the legacy FSharpSettingsPanel (global options, FSharpBinding.* keys).
+		"fsharp",
 	};
 
 	string? pendingLanguage;
@@ -128,6 +130,9 @@ public partial class PreferencesDialog : Window
 		LoadCSharpFormatPanel ();
 		LoadXmlSchemasPanel ();
 		LoadCompletionAppearancePanel ();
+		LoadFSharpPanel ();
+		FsCompilerBrowse!.Click += OnFsCompilerBrowse;
+		FsCompilerUseDefault!.IsCheckedChanged += (_, _) => UpdateFsCompilerDisplay (FsCompilerUseDefault!.IsChecked == true);
 		SetupCmEditors ();
 		LoadCommitMessagePanel ();
 		LoadChangeLogPanel ();
@@ -1616,6 +1621,52 @@ public partial class PreferencesDialog : Window
 		}
 	}
 
+	/// <summary>QA: round-trips the F# Settings persistence (FSharpBinding.* keys) —
+	/// backs up the stored values, drives the panel controls to known values, stores
+	/// them, re-reads the keys from SettingsStore (the same file the GTK IDE reads),
+	/// asserts each round-tripped, then restores the previous values. Exposed as the
+	/// --prefs-fsharp hook.</summary>
+	public void QaFSharpRoundTrip ()
+	{
+		string adv = SettingsStore.GetString ("FSharpBinding.AdvanceToNextLine") ?? "";
+		string mut = SettingsStore.GetString ("FSharpBinding.HighlightMutables") ?? "";
+		string typ = SettingsStore.GetString ("FSharpBinding.ShowTypeSignatures") ?? "";
+		string fsc = SettingsStore.GetString ("FSharpBinding.FscPath") ?? "";
+		try {
+			// Drive the panel to known values, as a user would: uncheck "use
+			// default" FIRST (this enables the entry and, like the legacy
+			// setCompilerDisplay, refreshes it from the store), then type the
+			// test path into the entry, then store.
+			FsAdvanceLine!.IsChecked = false;
+			FsHighlightMutables!.IsChecked = true;
+			FsTypeSignatures!.IsChecked = true;
+			FsCompilerUseDefault!.IsChecked = false;
+			FsCompilerPath!.Text = "/qa/custom/fsc";
+			StoreFSharpPanel ();
+			// Re-read the exact keys from SettingsStore (the GTK-compatible store).
+			bool adv2 = SettingsStore.GetBool ("FSharpBinding.AdvanceToNextLine", true);
+			bool mut2 = SettingsStore.GetBool ("FSharpBinding.HighlightMutables", false);
+			bool typ2 = SettingsStore.GetBool ("FSharpBinding.ShowTypeSignatures", false);
+			string fsc2 = SettingsStore.GetString ("FSharpBinding.FscPath") ?? "";
+			bool advOk = adv2 == false;
+			bool mutOk = mut2 == true;
+			bool typOk = typ2 == true;
+			bool fscOk = fsc2 == "/qa/custom/fsc";
+			MainWindow.Instance?.Output ("[prefs-fsharp] roundtrip: advance=" + adv2 + " mutables=" + mut2
+				+ " typesigs=" + typ2 + " fsc=" + fsc2);
+			MainWindow.Instance?.Output ("[prefs-fsharp] roundtrip-ok=" + (advOk && mutOk && typOk && fscOk));
+		} finally {
+			// Restore the EXACT previous state: a previously-absent key ("" here)
+			// is removed again (SetString null → UserPreferences removes it) so the
+			// QA leaves no test residue behind.
+			SettingsStore.SetString ("FSharpBinding.FscPath", fsc == "" ? null : fsc);
+			SettingsStore.SetString ("FSharpBinding.AdvanceToNextLine", adv == "" ? null : adv);
+			SettingsStore.SetString ("FSharpBinding.HighlightMutables", mut == "" ? null : mut);
+			SettingsStore.SetString ("FSharpBinding.ShowTypeSignatures", typ == "" ? null : typ);
+			MainWindow.Instance?.Output ("[prefs-fsharp] restored previous values");
+		}
+	}
+
 	// ---------- Version Control → General (global config) ----------
 	// VersionControlService persists VersionControlConfiguration with XmlDataSerializer
 	// into ~/.config/MonoDevelop/9.0/VersionControl.config. The Disabled [ItemProperty] is
@@ -2459,6 +2510,7 @@ public partial class PreferencesDialog : Window
 		PanelXmlSchemas!.IsVisible = id == "xmlschemas";
 		PanelCompletionAppearance!.IsVisible = id == "intellisense-appearance";
 		PanelChangeLog!.IsVisible = id == "changelog";
+		PanelFSharp!.IsVisible = id == "fsharp";
 		PanelPlaceholder!.IsVisible = !functionalPanels.Contains (id);
 
 		HeaderTitle!.Text = node.Label;
@@ -2532,6 +2584,7 @@ public partial class PreferencesDialog : Window
 		StoreCSharpFormatPanel ();
 		StoreXmlSchemasPanel ();
 		StoreCompletionAppearancePanel ();
+		StoreFSharpPanel ();
 		StoreThemePanel ();
 		Close ();
 	}
@@ -2541,6 +2594,81 @@ public partial class PreferencesDialog : Window
 		=> SettingsStore.SetString (ThemeKey,
 			ThemeDarkRadio!.IsChecked == true ? "Dark" :
 			ThemeLightRadio!.IsChecked == true ? "Light" : "");
+
+	// ---------- F# Settings (legacy FSharpSettingsPanel, FSharpBinding.* keys) ----------
+
+	// The legacy panel's default compiler path: when "use default" is on (or no
+	// custom path is stored) the entry shows the F# compiler that ships with the
+	// .NET SDK (dotnet <sdkroot>/FSharp/fsc.dll) — the same resolution the shell
+	// uses to run `dotnet fsi`.
+	static string DefaultFsCompilerPath ()
+	{
+		try {
+			var sdkRoot = Path.GetDirectoryName (Path.GetDirectoryName (Environment.ProcessPath ?? ""));
+			if (!string.IsNullOrEmpty (sdkRoot)) {
+				var fsc = Path.Combine (sdkRoot, "FSharp", "fsc.dll");
+				if (File.Exists (fsc))
+					return fsc;
+			}
+		} catch { }
+		return "fsc (default)";
+	}
+
+	void LoadFSharpPanel ()
+	{
+		FsAdvanceLine!.IsChecked = SettingsStore.GetBool ("FSharpBinding.AdvanceToNextLine", true);
+		FsHighlightMutables!.IsChecked = SettingsStore.GetBool ("FSharpBinding.HighlightMutables", false);
+		FsTypeSignatures!.IsChecked = SettingsStore.GetBool ("FSharpBinding.ShowTypeSignatures", false);
+		var path = SettingsStore.GetString ("FSharpBinding.FscPath") ?? "";
+		var useDefault = path == "";
+		FsCompilerUseDefault!.IsChecked = useDefault;
+		UpdateFsCompilerDisplay (useDefault);
+		MainWindow.Instance?.Output ("[prefs-fsharp] loaded: advance=" + (FsAdvanceLine!.IsChecked == true)
+			+ " mutables=" + (FsHighlightMutables!.IsChecked == true)
+			+ " typesigs=" + (FsTypeSignatures!.IsChecked == true)
+			+ " fsc=" + (useDefault ? "(default)" : path));
+	}
+
+	// Legacy setCompilerDisplay: "use default" (or an empty stored path) shows
+	// the SDK compiler path and disables the entry; otherwise the stored path
+	// is editable.
+	void UpdateFsCompilerDisplay (bool useDefault)
+	{
+		var path = SettingsStore.GetString ("FSharpBinding.FscPath") ?? "";
+		FsCompilerPath!.Text = useDefault || path == "" ? DefaultFsCompilerPath () : path;
+		FsCompilerPath!.IsEnabled = !useDefault;
+	}
+
+	async void OnFsCompilerBrowse (object? sender, RoutedEventArgs e)
+	{
+		var files = await StorageProvider.OpenFilePickerAsync (new FilePickerOpenOptions {
+			Title = "Select the F# compiler (fsc)",
+			AllowMultiple = false,
+			FileTypeFilter = new[] {
+				new FilePickerFileType ("F# compiler") { Patterns = new[] { "fsc", "fsc.exe", "fsc.dll" } },
+				new FilePickerFileType ("All files") { Patterns = new[] { "*" } },
+			},
+		});
+		if (files.Count == 0)
+			return;
+		FsCompilerUseDefault!.IsChecked = false;
+		FsCompilerPath!.Text = files [0].Path.LocalPath;
+		UpdateFsCompilerDisplay (false);
+	}
+
+	void StoreFSharpPanel ()
+	{
+		// Legacy ApplyChanges: "use default" stores null (no custom compiler).
+		SettingsStore.SetString ("FSharpBinding.FscPath",
+			FsCompilerUseDefault!.IsChecked == true ? null : FsCompilerPath!.Text);
+		SettingsStore.SetBool ("FSharpBinding.AdvanceToNextLine", FsAdvanceLine!.IsChecked == true);
+		SettingsStore.SetBool ("FSharpBinding.HighlightMutables", FsHighlightMutables!.IsChecked == true);
+		SettingsStore.SetBool ("FSharpBinding.ShowTypeSignatures", FsTypeSignatures!.IsChecked == true);
+		MainWindow.Instance?.Output ("[prefs-fsharp] stored: advance=" + (FsAdvanceLine!.IsChecked == true)
+			+ " mutables=" + (FsHighlightMutables!.IsChecked == true)
+			+ " typesigs=" + (FsTypeSignatures!.IsChecked == true)
+			+ " fsc=" + (FsCompilerUseDefault!.IsChecked == true ? "(default)" : FsCompilerPath!.Text));
+	}
 
 	void OnCancel (object? sender, RoutedEventArgs e) => Close ();
 }

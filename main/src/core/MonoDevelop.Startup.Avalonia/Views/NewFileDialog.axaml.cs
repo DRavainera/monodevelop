@@ -71,6 +71,13 @@ public sealed class NewFileTemplate
 			["AuthorName"] = "",
 			["AuthorEmail"] = "",
 			["CopyrightHolder"] = "",
+			// Legacy F# xft templates reference ${Namespace}: the binding sets it
+			// from the project's root namespace. In free-document mode (no project)
+			// the file name without extension is the sensible default (F# modules
+			// are named after their file).
+			["Namespace"] = string.IsNullOrEmpty (projectName)
+				? Path.GetFileNameWithoutExtension (fileName)
+				: projectName,
 		};
 		return TemplateText.Parse (Body, tags);
 	}
@@ -164,8 +171,109 @@ $endif$
 //[assembly: AssemblyKeyFile("""")]",
 	};
 
+	// F# category (port of the five FileTemplates of FSharpBinding.addin.xml,
+	// registered under /MonoDevelop/Ide/FileTemplates with the xft data below;
+	// the category tree mirrors the legacy _Category fields: General / Misc / NUnit).
+	static readonly NewFileTemplate FSharpSourceTemplate = new () {
+		Id = "EmptyFSharpSource",
+		Name = "F# Source File",
+		Description = "Creates an empty F# source file.",
+		Language = "F#",
+		IconId = "md-text-file-icon",
+		DefaultFilename = "Class.fs",
+		Extension = ".fs",
+		AddStandardHeader = true,
+		Body = "",
+	};
+
+	static readonly NewFileTemplate FSharpScriptTemplate = new () {
+		Id = "EmptyFSharpScript",
+		Name = "F# Script File",
+		Description = "Creates an empty F# script file.",
+		Language = "F#",
+		IconId = "md-text-file-icon",
+		DefaultFilename = "Script.fsx",
+		Extension = ".fsx",
+		AddStandardHeader = true,
+		Body = "",
+	};
+
+	static readonly NewFileTemplate FSharpSignatureTemplate = new () {
+		Id = "EmptyFSharpSignature",
+		Name = "F# Signature File",
+		Description = "Creates an empty F# signature file.\n\nA signature file contains information about the public signatures of a set of F# program elements, such as types, namespaces, and modules.\n\nIt can be used to specify the accessibility of these program elements.",
+		Language = "F#",
+		IconId = "md-text-file-icon",
+		DefaultFilename = "Class.fsi",
+		Extension = ".fsi",
+		AddStandardHeader = true,
+		Body = "",
+	};
+
+	static readonly NewFileTemplate FSharpAssemblyInfoTemplate = new () {
+		Id = "FSharpAssemblyInfo",
+		Name = "Assembly Information",
+		Description = "A file defining assembly information attributes.",
+		Language = "F#",
+		IconId = "md-file-source",
+		DefaultFilename = "AssemblyInfo.fs",
+		Extension = ".fs",
+		FixedFilename = true,
+		FileSubPath = "AssemblyInfo.fs",
+		AddStandardHeader = true,
+		// Cuerpo CDATA literal de Templates/AssemblyInfo.xft.xml (binding F#).
+		Body = @"namespace ${Namespace}
+open System.Reflection
+open System.Runtime.CompilerServices
+
+[<assembly: AssemblyTitle(""${ProjectName}"")>]
+[<assembly: AssemblyDescription("""")>]
+[<assembly: AssemblyConfiguration("""")>]
+[<assembly: AssemblyCompany(""${AuthorCompany}"")>]
+[<assembly: AssemblyProduct("""")>]
+[<assembly: AssemblyCopyright(""${AuthorCopyright}"")>]
+[<assembly: AssemblyTrademark(""${AuthorTrademark}"")>]
+
+// The assembly version has the format {Major}.{Minor}.{Build}.{Revision}
+
+[<assembly: AssemblyVersion(""1.0.0.0"")>]
+
+//[<assembly: AssemblyDelaySign(false)>]
+//[<assembly: AssemblyKeyFile("""")>]
+
+()",
+	};
+	static readonly NewFileTemplate FSharpNUnitTestTemplate = new () {
+		Id = "FSharpNUnitTestType",
+		Name = "F# Test Fixture",
+		Description = "Creates a Test Fixture.",
+		Language = "F#",
+		IconId = "md-file-unit-test",
+		DefaultFilename = "NUnitTest",
+		Extension = ".fs",
+		AddStandardHeader = true,
+		// Cuerpo CDATA literal de Templates/FSharpNUnitTestType.xft.xml.
+		Body = @"namespace ${Namespace}
+open System
+open NUnit.Framework
+
+[<TestFixture>]
+type Test() = 
+
+    [<Test>]
+    member x.TestCase() =
+        Assert.IsTrue(true)",
+	};
+
 	readonly NewFileCategory csharpRoot = new () { Name = "C#" };
 	readonly NewFileCategory generalCategory = new () { Name = "General" };
+
+	// F# category tree (legacy _Category fields of the F# xft templates):
+	// General (Source/Script/Signature), Misc (Assembly Information), NUnit (Test Fixture).
+	readonly NewFileCategory fsharpRoot = new () { Name = "F#" };
+	readonly NewFileCategory fsharpGeneral = new () { Name = "General" };
+	readonly NewFileCategory fsharpMisc = new () { Name = "Misc" };
+	readonly NewFileCategory fsharpNUnit = new () { Name = "NUnit" };
 
 	// Free mode: proyectos de la solución cargada (legacy IdeApp.Workspace.GetAllProjects).
 	readonly List<string> projects;
@@ -209,8 +317,17 @@ $endif$
 		// Fallback legacy cuando el icono no existe: "md-file-source".
 		EmptyFileTemplate.Icon = IconService.GetImage (EmptyFileTemplate.IconId) ?? IconService.GetImage ("md-file-source");
 		AssemblyInfoTemplate.Icon = IconService.GetImage (AssemblyInfoTemplate.IconId) ?? IconService.GetImage ("md-file-source");
+		FSharpSourceTemplate.Icon = IconService.GetImage (FSharpSourceTemplate.IconId) ?? IconService.GetImage ("md-file-source");
+		FSharpScriptTemplate.Icon = IconService.GetImage (FSharpScriptTemplate.IconId) ?? IconService.GetImage ("md-file-source");
+		FSharpSignatureTemplate.Icon = IconService.GetImage (FSharpSignatureTemplate.IconId) ?? IconService.GetImage ("md-file-source");
+		FSharpAssemblyInfoTemplate.Icon = IconService.GetImage (FSharpAssemblyInfoTemplate.IconId) ?? IconService.GetImage ("md-file-source");
+		FSharpNUnitTestTemplate.Icon = IconService.GetImage (FSharpNUnitTestTemplate.IconId) ?? IconService.GetImage ("md-file-source");
 
 		csharpRoot.Add (generalCategory);
+
+		fsharpRoot.Add (fsharpGeneral);
+		fsharpRoot.Add (fsharpMisc);
+		fsharpRoot.Add (fsharpNUnit);
 
 		// Árbol de categorías (legacy catView): plantilla FuncTreeDataTemplate,
 		// mismo patrón que los árboles de MainWindow (MakeSymbolTree/MakeVariableTree).
@@ -279,9 +396,9 @@ $endif$
 
 	/// <summary>Legacy GetFileTemplates + AddTemplate: el catálogo se recompute con
 	/// el proyecto/contexto vigente. La condición ParentProject (RequireProject=True,
-	/// ExcludedFiles="AssemblyInfo.cs") solo se evalúa con proyecto: Assembly
-	/// Information se excluye cuando ya existe AssemblyInfo.cs en el directorio de
-	/// creación; sin proyecto la condición no se consulta (se incluye).</summary>
+	/// ExcludedFiles="AssemblyInfo.cs" en C#, "AssemblyInfo.fs" en F#) solo se evalúa
+	/// con proyecto: Assembly Information se excluye cuando ya existe AssemblyInfo en
+	/// el directorio de creación; sin proyecto la condición no se consulta (se incluye).</summary>
 	void RebuildCatalog ()
 	{
 		generalCategory.Templates.Clear ();
@@ -290,9 +407,20 @@ $endif$
 			!File.Exists (Path.Combine (effectiveDirectory, "AssemblyInfo.cs")))
 			generalCategory.Templates.Add (AssemblyInfoTemplate);
 
+		fsharpGeneral.Templates.Clear ();
+		fsharpGeneral.Templates.Add (FSharpSourceTemplate);
+		fsharpGeneral.Templates.Add (FSharpScriptTemplate);
+		fsharpGeneral.Templates.Add (FSharpSignatureTemplate);
+		fsharpMisc.Templates.Clear ();
+		fsharpNUnit.Templates.Clear ();
+		if (!ProjectActive || effectiveDirectory is null ||
+			!File.Exists (Path.Combine (effectiveDirectory, "AssemblyInfo.fs")))
+			fsharpMisc.Templates.Add (FSharpAssemblyInfoTemplate);
+		fsharpNUnit.Templates.Add (FSharpNUnitTestTemplate);
+
 		rebuilding = true;
 		try {
-			CategoryTree.ItemsSource = new List<NewFileCategory> { csharpRoot };
+			CategoryTree.ItemsSource = new List<NewFileCategory> { csharpRoot, fsharpRoot };
 		} finally {
 			rebuilding = false;
 		}
@@ -300,10 +428,14 @@ $endif$
 
 	NewFileCategory? FindCategory (string catPath)
 	{
+		// The tree root is a language (C# / F#); the path is "Language/Category...".
 		var parts = catPath.Split ('/');
-		if (parts.Length == 0 || csharpRoot.Name != parts [0])
+		if (parts.Length == 0)
 			return null;
-		var node = csharpRoot;
+		var root = parts [0] == "F#" ? fsharpRoot : csharpRoot;
+		if (root.Name != parts [0])
+			return null;
+		var node = root;
 		for (int i = 1; i < parts.Length; i++) {
 			var child = node.Children.FirstOrDefault (c => c.Name == parts [i]);
 			if (child is null)
@@ -527,6 +659,7 @@ $endif$
 	{
 		NewFileCategory? cat = null;
 		System.Func<NewFileCategory, bool>? walk = null;
+		// The tree root is a language; the template lives under C# or F#.
 		walk = c => {
 			if (c.Templates.Any (t => t.Id == id)) {
 				cat = c;
@@ -535,7 +668,7 @@ $endif$
 			return c.Children.Any (walk!);
 		};
 
-		if (!walk (csharpRoot)) {
+		if (!walk (csharpRoot) && !walk (fsharpRoot)) {
 			RestoreCategorySelection ();
 			return false;
 		}

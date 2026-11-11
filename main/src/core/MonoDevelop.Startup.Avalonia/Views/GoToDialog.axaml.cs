@@ -115,7 +115,12 @@ public class GoToDialog : Window
 				|| f.EndsWith (".xaml", StringComparison.Ordinal)
 				|| f.EndsWith (".axaml", StringComparison.Ordinal)
 				|| f.EndsWith (".json", StringComparison.Ordinal)
+				// F# source and project files (F# port, phase 3).
+				|| f.EndsWith (".fs", StringComparison.Ordinal)
+				|| f.EndsWith (".fsi", StringComparison.Ordinal)
+				|| f.EndsWith (".fsx", StringComparison.Ordinal)
 				|| f.EndsWith (".csproj", StringComparison.Ordinal)
+				|| f.EndsWith (".fsproj", StringComparison.Ordinal)
 				|| f.EndsWith (".sln", StringComparison.Ordinal)
 				|| f.EndsWith (".md", StringComparison.Ordinal)
 				|| f.EndsWith (".xml", StringComparison.Ordinal))
@@ -125,12 +130,23 @@ public class GoToDialog : Window
 
 		if (Kind == "Type") {
 			// Same scanner the search popup uses (SearchPopupWindow RoslynSearchCategory
-			// parity): line numbers + container for the detail column.
-			foreach (var f in allItems.Select (i => i.Path).Where (p => p.EndsWith (".cs", StringComparison.Ordinal)).ToList ()) {
+			// parity): line numbers + container for the detail column. C# sources
+			// list their types (class/interface/struct/enum); F# sources list their
+			// types and modules (the F# scanner's `type`/`module` hits) — the scan
+			// language is chosen by the file's extension.
+			foreach (var f in allItems.Select (i => i.Path)
+				.Where (p => p.EndsWith (".cs", StringComparison.Ordinal)
+					|| p.EndsWith (".fs", StringComparison.Ordinal)
+					|| p.EndsWith (".fsi", StringComparison.Ordinal)).ToList ()) {
 				try {
-					foreach (var hit in MainWindow.ScanSymbols (File.ReadAllText (f))) {
-						if (hit.Kind is not ("class" or "interface" or "struct" or "enum"))
+					bool isFSharp = SymbolIndexService.IsFSharpSource (f);
+					foreach (var hit in SymbolIndexService.ScanSymbols (File.ReadAllText (f), isFSharp)) {
+						if (isFSharp) {
+							if (hit.Kind is not ("class" or "module"))
+								continue;
+						} else if (hit.Kind is not ("class" or "interface" or "struct" or "enum")) {
 							continue;
+						}
 						var rel = Path.GetRelativePath (dir, f);
 						allItems.Add (new Item (hit.Name, f, IsType: true, $"{hit.Kind} — {rel} : {hit.Line}", hit.Line));
 					}

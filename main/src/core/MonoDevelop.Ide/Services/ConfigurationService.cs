@@ -24,16 +24,23 @@ public static class ConfigurationService
 	public const string AnyCpuSolution = "Any CPU";
 	public const string AnyCpuProject = "AnyCPU";
 
-	// C# project type GUID (the FAE04EC0 the legacy CSharpBinding registers) and
-	// the solution folder type GUID: folders reference no project file and the
-	// legacy writer skips them for build configurations (SupportsBuild == false).
+	// C# project type GUID (the FAE04EC0 the legacy CSharpBinding registers),
+	// the F# project type GUID (what dotnet sln writes when adding an .fsproj)
+	// and the solution folder type GUID: folders reference no project file and
+	// the legacy writer skips them for build configurations (SupportsBuild == false).
 	// SlnFile stores TypeGuid verbatim as the quoted text of the Project line —
 	// braces included, exactly as the .sln format writes it.
 	const string CSharpProjectTypeGuid = "{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}";
+	const string FSharpProjectTypeGuid = "{F2A71F9B-5D33-465A-A702-920D77279786}";
 	const string SolutionFolderTypeGuid = "{2150E333-8FDC-42A3-9474-1A3956D4EEDE}";
 	// The other GUID spelling real .sln files carry (the one the legacy
 	// MSBuildProjectService.FolderTypeGuid uses): both mark a solution folder.
 	const string SolutionFolderTypeGuidAlt = "{2150E333-8FDC-42A3-9474-1A3956D46DE8}";
+
+	static string ProjectTypeGuidFor (string projPath)
+		=> projPath.EndsWith (".fsproj", StringComparison.OrdinalIgnoreCase)
+			? FSharpProjectTypeGuid
+			: CSharpProjectTypeGuid;
 
 	static SlnFile ReadSln (string slnPath)
 	{
@@ -72,7 +79,18 @@ public static class ConfigurationService
 		return result;
 	}
 
-	/// <summary>Absolute paths of the .csproj projects referenced by the .sln
+	/// <summary>True for the project file extensions the model recognizes —
+	/// .csproj and .fsproj (the F# SDK-style project, Phase 3 of the F# port:
+	/// the project model and build/run gates see F# projects the same way as C#).</summary>
+	public static bool IsProjectFile (string path)
+	{
+		if (string.IsNullOrEmpty (path))
+			return false;
+		return path.EndsWith (".csproj", StringComparison.OrdinalIgnoreCase)
+			|| path.EndsWith (".fsproj", StringComparison.OrdinalIgnoreCase);
+	}
+
+	/// <summary>Absolute paths of the .csproj/.fsproj projects referenced by the .sln
 	/// (real model: SlnFile.Projects, paths resolved against the solution
 	/// directory). A directory scan is only a fallback for slns that yield
 	/// nothing — a referenced project may live outside the solution dir.</summary>
@@ -82,7 +100,7 @@ public static class ConfigurationService
 		var projs = new List<string> ();
 		try {
 			foreach (var p in ReadSln (slnPath).Projects) {
-				if (p.FilePath == null || !p.FilePath.EndsWith (".csproj", StringComparison.OrdinalIgnoreCase))
+				if (p.FilePath is null || !IsProjectFile (p.FilePath))
 					continue;
 				var full = ResolveProjectPath (slnPath, p.FilePath);
 				if (File.Exists (full))
@@ -93,6 +111,7 @@ public static class ConfigurationService
 		}
 		if (projs.Count == 0)
 			projs = Directory.GetFiles (slnDir, "*.csproj", SearchOption.AllDirectories)
+				.Concat (Directory.GetFiles (slnDir, "*.fsproj", SearchOption.AllDirectories))
 				.Where (p => !p.Contains ("/obj/") && !p.Contains ("/bin/"))
 				.ToList ();
 		return projs;
@@ -280,9 +299,10 @@ public static class ConfigurationService
 		doc.Save (prefs);
 	}
 
-	/// <summary>Adds an existing .csproj into an existing .sln (legacy
-	/// ProjectOperations.AddSolutionItem): Project entry with a fresh GUID plus the
-	/// ActiveCfg/Build.0 mappings per existing configuration.</summary>
+	/// <summary>Adds an existing .csproj/.fsproj into an existing .sln (legacy
+	/// ProjectOperations.AddSolutionItem): Project entry with a fresh GUID, the
+	/// per-language project type GUID (C# vs F#), plus the ActiveCfg/Build.0
+	/// mappings per existing configuration.</summary>
 	public static void AppendProjectToSolution (string csprojPath, string slnPath)
 	{
 		var sln = ReadSln (slnPath);
@@ -290,7 +310,7 @@ public static class ConfigurationService
 		var projName = Path.GetFileNameWithoutExtension (csprojPath);
 		var projRel = Path.GetRelativePath (Path.GetDirectoryName (slnPath)!, csprojPath).Replace ('\\', '/');
 		sln.Projects.Add (new SlnProject {
-			TypeGuid = CSharpProjectTypeGuid,
+			TypeGuid = ProjectTypeGuidFor (csprojPath),
 			Name = projName,
 			FilePath = projRel,
 			Id = guid
@@ -326,7 +346,7 @@ public static class ConfigurationService
 			ProductDescription = MSBuildFileFormat.DefaultFormat.ProductDescriptionComment
 		};
 		sln.Projects.Add (new SlnProject {
-			TypeGuid = CSharpProjectTypeGuid,
+			TypeGuid = ProjectTypeGuidFor (csprojPath),
 			Name = projName,
 			FilePath = projRel,
 			Id = guid
@@ -999,11 +1019,11 @@ public static class ConfigurationService
 		} catch (Exception) {
 			return fallback;
 		}
-		// Project GUID of the .csproj (same path resolution as GetSolutionProjects).
+		// Project GUID of the project file (same path resolution as GetSolutionProjects).
 		string? projId = null;
 		var target = Path.GetFullPath (projectPath);
 		foreach (var p in sln.Projects) {
-			if (p.FilePath == null || !p.FilePath.EndsWith (".csproj", StringComparison.OrdinalIgnoreCase))
+			if (p.FilePath is null || !IsProjectFile (p.FilePath))
 				continue;
 			if (Path.GetFullPath (Path.Combine (Path.GetDirectoryName (slnPath)!, p.FilePath.Replace ('\\', '/'))) == target) {
 				projId = p.Id;

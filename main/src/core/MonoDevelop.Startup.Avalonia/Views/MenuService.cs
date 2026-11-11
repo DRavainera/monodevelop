@@ -227,6 +227,16 @@ public static class MenuService
 			Item ("Pr_eferences...", icon: "gtk-preferences", click: OpenPrefs ()),
 			Item ("Po_licies...", click: Command ("MonoDevelop.Ide.Commands.EditCommands.DefaultPolicies")),
 			Sep (),
+			// F# Integration (F# port, phase 4): the legacy FSharpBinding places
+			// the four Send* commands at the END of Edit — insertbefore
+			// Separator6, which in MainMenu.addin.xml is the separator that
+			// closes the menu (after Preferences/Policies), so the F# items
+			// land last, in this legacy order and with these legacy labels
+			// (no mnemonics) and shortcuts.
+			Item ("Send selection to F# Interactive", shortcut: "Ctrl Return", click: Command ("MonoDevelop.FSharp.FSharpCommands.SendSelection")),
+			Item ("Send line to F# Interactive", shortcut: "Ctrl Alt L", click: Command ("MonoDevelop.FSharp.FSharpCommands.SendLine")),
+			Item ("Send current file to F# Interactive", click: Command ("MonoDevelop.FSharp.FSharpCommands.SendFile")),
+			Item ("Send references to F# Interactive", shortcut: "Ctrl Alt P", click: Command ("MonoDevelop.FSharp.FSharpCommands.SendReferences")),
 		}
 	};
 

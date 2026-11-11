@@ -357,6 +357,24 @@ public static class MenuBuilder
 		return key is null ? null : new KeyGesture (key.Value, mods);
 	}
 
+	/// <summary>
+	/// Registers an app-level hotkey for a command that has no visible menu
+	/// item (the F# Interactive pad's Show/Restart — the legacy F# Integration
+	/// category was registered in /MonoDevelop/Ide/Commands but never placed in
+	/// the GTK main menu, so its Show/Restart/Clear shortcuts had no menu owner).
+	/// A hidden MenuItem carries the gesture so the standard
+	/// KeyboardShortcutRegistry / AttachHotKeys / OnKeyDown pipeline picks it
+	/// up exactly like a menu item.
+	/// </summary>
+	public static void RegisterHotkey (string commandId, string shortcut)
+	{
+		var gesture = ParseGesture (shortcut);
+		if (gesture is null)
+			return;
+		var item = new MenuItem { InputGesture = gesture, IsVisible = false };
+		KeyboardShortcutRegistry.Register (commandId, item);
+	}
+
 	static string FormatHeader (string label)
 	{
 		// Mnemonics: keep the legacy "_File" convention (Avalonia renders the underscore

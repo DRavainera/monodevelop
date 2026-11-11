@@ -30,7 +30,7 @@
         <ListBox x:Name="CategoryList" Background="Transparent"
                  Foreground="{DynamicResource IdeFgBrush}" SelectionChanged="OnCategorySelected">
           <ListBoxItem Content="C#" IsSelected="True" />
-          <ListBoxItem Content="F#" IsEnabled="False" />
+          <ListBoxItem Content="F#" />
           <ListBoxItem Content="Other" IsEnabled="False" />
         </ListBox>
       </Border>
@@ -40,33 +40,11 @@
       <!-- Templates (32px icons like the legacy DND list) -->
       <Border Grid.Row="0" Grid.Column="2" Margin="0,0,6,0"
               BorderBrush="{DynamicResource IdeBorderBrush}" BorderThickness="1">
+        <!-- Template list is rebuilt per category (C# / F#) in OnCategorySelected;
+             it starts empty on purpose (the constructor seeds the initial
+             category, which may be F# for the fs* QA preselect hook). -->
         <ListBox x:Name="TemplateList" Background="Transparent"
-                 Foreground="{DynamicResource IdeFgBrush}" SelectionChanged="OnTemplateSelected">
-          <ListBoxItem Tag="console">
-            <StackPanel Orientation="Horizontal" Spacing="10">
-              <Image x:Name="IconConsole" Width="32" Height="32" />
-              <TextBlock Text="Console Application" VerticalAlignment="Center" />
-            </StackPanel>
-          </ListBoxItem>
-          <ListBoxItem Tag="library">
-            <StackPanel Orientation="Horizontal" Spacing="10">
-              <Image x:Name="IconLibrary" Width="32" Height="32" />
-              <TextBlock Text="Class Library" VerticalAlignment="Center" />
-            </StackPanel>
-          </ListBoxItem>
-          <ListBoxItem Tag="unittest">
-            <StackPanel Orientation="Horizontal" Spacing="10">
-              <Image x:Name="IconTest" Width="32" Height="32" />
-              <TextBlock Text="Unit Test Project" VerticalAlignment="Center" />
-            </StackPanel>
-          </ListBoxItem>
-          <ListBoxItem Tag="shared">
-            <StackPanel Orientation="Horizontal" Spacing="10">
-              <Image x:Name="IconShared" Width="32" Height="32" />
-              <TextBlock Text="Shared Project" VerticalAlignment="Center" />
-            </StackPanel>
-          </ListBoxItem>
-        </ListBox>
+                 Foreground="{DynamicResource IdeFgBrush}" SelectionChanged="OnTemplateSelected" />
       </Border>
       <GridSplitter Grid.Row="0" Grid.Column="3" Width="3" HorizontalAlignment="Stretch"
                     VerticalAlignment="Stretch" Background="Transparent" />
