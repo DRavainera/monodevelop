@@ -62,16 +62,22 @@ public class SkTextEditor : Control
 	/// <summary>Fired on any caret line/column change (legacy
 	/// ITextView.Caret.PositionChanged).</summary>
 	public event Action? CaretMoved;
-	double scrollLines;
-	// Vertical scrollbar (legacy editor VScrollbar). The editor has no horizontal
-	// scroll (long lines clip at the view width), so a single vertical bar drives
-	// the document offset. It is painted into the Skia canvas (the editor is fully
-	// custom-rendered; there is no native scrollbar control). Shown only while the
-	// document is taller than the viewport; the thumb is grabbed to scroll and a
-	// track click pages toward the cursor.
-	const double ScrollBarWidth = 14;
-	bool draggingScroll;
-	double scrollGrabOffset;
+	// Scroll view: the editor is mounted inside the standard ScrollViewer (the
+	// Avalonia equivalent of the legacy GtkScrolledWindow) and reports its full
+	// document height (MeasureOverride). The ScrollViewer owns the offset, the
+	// clip and the native vertical scrollbar (Auto → visible only on overflow);
+	// the editor reads them per-frame (ScrollChanged) and renders a VIEWPORT-
+	// sized bitmap positioned at the offset, so a large document never produces
+	// a full-content bitmap. Pointer positions on the editor already arrive in
+	// content (document) coordinates — the ScrollViewer transforms them — so the
+	// click-to-line mapping is unchanged.
+	ScrollViewer? scrollOwner;
+	double scrollOffset;
+	double viewportH;
+	/// <summary>Top visible row, derived from the ScrollViewer's offset (the
+	/// ScrollViewer owns the scroll state; this is read-only). With no folds this
+	/// equals the buffer line; the draw/row math below is expressed in rows.</summary>
+	double scrollLines => scrollOffset / LineHeight;
 
 	// CPU raster buffer: Skia draws straight into the memory of an Avalonia
 	// WriteableBitmap, which is then presented via DrawImage. This is the
@@ -250,11 +256,13 @@ public class SkTextEditor : Control
 
 	void EnsureCaretVisible ()
 	{
-		float lineH = LineHeight;
-		if (caretLine < scrollLines)
-			scrollLines = caretLine;
-		else if (caretLine > scrollLines + Bounds.Height / lineH - 2)
-			scrollLines = Math.Max (0, caretLine - Bounds.Height / lineH + 2);
+		double row = LineToRow (caretLine);
+		if (row < 0)
+			row = Math.Min (caretLine, Math.Max (0, VisibleLineCount - 1));
+		if (row < scrollLines)
+			ScrollToRow (row);
+		else if (row > scrollLines + ScrollVisibleRows - 2)
+			ScrollToRow (row - ScrollVisibleRows + 2);
 	}
 
 	#endregion
@@ -476,6 +484,65 @@ public class SkTextEditor : Control
 		blinkTimer.Start ();
 	}
 
+	// ----- Scroll-view ownership (legacy GtkScrolledWindow around the editor) -----
+	protected override void OnAttachedToVisualTree (VisualTreeAttachmentEventArgs e)
+	{
+		base.OnAttachedToVisualTree (e);
+		// Walk up to the enclosing ScrollViewer (the scroll owner). Avalonia 12
+		// has no FindAncestorOfType; GetVisualParent is the codebase pattern.
+		ScrollViewer? sv = null;
+		for (Visual? v = this.GetVisualParent (); v is not null; v = v.GetVisualParent ()) {
+			sv = v as ScrollViewer;
+			if (sv is not null)
+				break;
+		}
+		if (sv is null || ReferenceEquals (sv, scrollOwner))
+			return;
+		scrollOwner?.ScrollChanged -= OnScrollOwnerChanged;
+		scrollOwner = sv;
+		sv.ScrollChanged += OnScrollOwnerChanged;
+		UpdateScrollState ();
+		MarkDirty ();
+	}
+
+	protected override void OnDetachedFromVisualTree (VisualTreeAttachmentEventArgs e)
+	{
+		scrollOwner?.ScrollChanged -= OnScrollOwnerChanged;
+		scrollOwner = null;
+		base.OnDetachedFromVisualTree (e);
+	}
+
+	void OnScrollOwnerChanged (object? sender, ScrollChangedEventArgs e)
+	{
+		UpdateScrollState ();
+		MarkDirty ();
+	}
+
+	void UpdateScrollState ()
+	{
+		scrollOffset = scrollOwner?.Offset.Y ?? 0;
+		double vp = scrollOwner?.Viewport.Height ?? 0;
+		// Before the first layout the owner's viewport is 0; fall back to the
+		// arranged bounds so the bitmap is never degenerate.
+		viewportH = vp > 0 ? vp : Math.Max (1, Bounds.Height);
+	}
+
+	/// <summary>Full document height (visible rows, folded lines excluded) —
+	/// the extent the enclosing ScrollViewer scrolls over.</summary>
+	double DocumentHeight => LineHeight * Math.Max (1, VisibleLineCount);
+
+	protected override Size MeasureOverride (Size availableSize)
+	{
+		// The ScrollViewer measures its content with infinite height: report the
+		// full document height so the scrollbar reflects the real content (the
+		// editor itself is ARRANGED at the viewport size — it never gets the full
+		// height, so the rendered bitmap stays viewport-sized).
+		double w = double.IsPositiveInfinity (availableSize.Width)
+			? 640
+			: Math.Max (1, availableSize.Width);
+		return new Size (w, DocumentHeight);
+	}
+
 	// ----- Legacy hover tooltip pipeline (TooltipProvider.GetItem + ShowTooltipWindow)
 	// A borderless popup with the signature/description of the word under the mouse.
 	EditorTooltipPopup? hoverPopup;
@@ -526,20 +593,24 @@ public class SkTextEditor : Control
 			int col = lines [i].IndexOf (word, StringComparison.Ordinal);
 			if (col < 0)
 				continue;
+			// Document-space point: the editor is arranged at full document height
+			// and PointToScreen applies the ScrollViewer's offset.
 			var pt = new Point (
 				GutterWidth () + 4 + (col + word.Length / 2.0) * FontSize * 0.6,
-				(i - scrollLines + 0.5) * LineHeight);
+				(i + 0.5) * LineHeight);
 			hoverPopup.ShowAtScreen (PopupOwner, this.PointToScreen (pt), word, $"{word} = {value}", "md-debug-all");
 			return;
 		}
 	}
 
-	/// <summary>Word under an editor-relative point (legacy GetItem: offset → word).</summary>
+	/// <summary>Word under an editor-relative point (legacy GetItem: offset → word).
+	/// The point is in document coordinates (the ScrollViewer already applied the
+	/// scroll offset to pointer events).</summary>
 	public (string Word, int Line, int Col) WordAtPoint (Point p)
 	{
 		double charW = FontSize * 0.6;
 		int col = Math.Max (0, (int)((p.X - GutterWidth ()) / charW));
-		int line = Math.Clamp ((int)(p.Y / LineHeight + scrollLines), 0, lines.Count - 1);
+		int line = Math.Clamp ((int)(p.Y / LineHeight), 0, lines.Count - 1);
 		var text = lines [line];
 		if (col >= text.Length)
 			return ("", line, col);
@@ -630,6 +701,9 @@ public class SkTextEditor : Control
 		// Content changed → the highlighter's line-relative cache is stale.
 		InvalidateHighlighter ();
 		RebuildFolds ();
+		// The document extent changed (line count and folds): ask the enclosing
+		// ScrollViewer to re-measure so its scrollbar reflects the new size.
+		InvalidateMeasure ();
 		MarkDirty ();
 	}
 
@@ -798,9 +872,11 @@ public class SkTextEditor : Control
 			return;
 		// Position under the caret (legacy CodeCompletionContext).
 		double charW = FontSize * 0.6;
+		// Document-space point under the caret (PointToScreen applies the
+		// ScrollViewer's offset).
 		var topLeft = this.PointToScreen (new Point (
 			GutterWidth () + 4 + (caretCol - completionPrefix.Length) * charW,
-			(caretLine - scrollLines + 1) * LineHeight));
+			(caretLine + 1) * LineHeight));
 		completionPopup.Position = topLeft;
 		completionPopup.Show (PopupOwner);
 	}
@@ -1098,46 +1174,21 @@ public class SkTextEditor : Control
 		return (start, end);
 	}
 
-	protected override void OnPointerWheelChanged (PointerWheelEventArgs e)
-	{
-		base.OnPointerWheelChanged (e);
-		scrollLines = Math.Max (0, scrollLines - e.Delta.Y * 3);
-		scrollLines = Math.Min (scrollLines, MaxScroll);
-		InvalidateVisual ();
-		e.Handled = true;
-	}
-
 	protected override void OnPointerPressed (PointerPressedEventArgs e)
 	{
 		base.OnPointerPressed (e);
 		Focus ();
+		// GetCurrentPoint(this) is in DOCUMENT space (the ScrollViewer has already
+		// added its offset), so the row is Y / lineH directly — no scroll offset
+		// term (it would double-count).
 		var pt = e.GetCurrentPoint (this);
-		// Vertical scrollbar: grab the thumb to scroll, or click the track to
-		// page toward the cursor (legacy editor VScrollbar). Consumed before the
-		// caret-move logic so a click at the right edge never moves the caret.
-		if (pt.Properties.IsLeftButtonPressed && ScrollBarVisible && pt.Position.X >= Bounds.Width - ScrollBarWidth) {
-			var (top, thumbH) = ScrollThumb ();
-			if (pt.Position.Y >= top && pt.Position.Y <= top + thumbH) {
-				draggingScroll = true;
-				scrollGrabOffset = pt.Position.Y - top;
-				e.Pointer.Capture (this);
-			} else {
-				PageScrollToward (pt.Position.Y);
-				draggingScroll = true; // resume thumb-drag from the new position
-				var (nt, nh) = ScrollThumb ();
-				scrollGrabOffset = pt.Position.Y - nt;
-			}
-			MarkDirty ();
-			e.Handled = true;
-			return;
-		}
 		if (pt.Properties.IsLeftButtonPressed) {
-				// Legacy left margin: a click on the gutter marker strip toggles the
+			// Legacy left margin: a click on the gutter marker strip toggles the
 			// breakpoint of that line (Mono.TextEditor ActionTextArea
 			// "left margin click"). The strip is the icon column next to the line
 			// numbers; the rest of the gutter keeps its click-to-move-caret role.
 			if (pt.Position.X <= GutterIconStripWidth ()) {
-				int gutterLine = Math.Clamp ((int)(pt.Position.Y / LineHeight + scrollLines), 0, lines.Count - 1);
+				int gutterLine = Math.Clamp ((int)(pt.Position.Y / LineHeight), 0, lines.Count - 1);
 				caretLine = gutterLine;
 				ToggleBreakpoint ();
 				e.Handled = true;
@@ -1151,7 +1202,7 @@ public class SkTextEditor : Control
 				&& IsFSharpFile (FilePath) && GotoDefinitionRequested is not null) {
 				double charW0 = FontSize * 0.6;
 				int gcol = Math.Max (0, (int)((pt.Position.X - GutterWidth ()) / charW0));
-				int gline = Math.Clamp ((int)(pt.Position.Y / LineHeight + scrollLines), 0, lines.Count - 1);
+				int gline = Math.Clamp ((int)(pt.Position.Y / LineHeight), 0, lines.Count - 1);
 				caretLine = gline;
 				caretCol = Math.Clamp (gcol, 0, lines [caretLine].Length);
 				GotoDefinitionRequested (caretLine, caretCol, FilePath);
@@ -1164,7 +1215,7 @@ public class SkTextEditor : Control
 				secondaryCarets.Clear ();
 			double charW = FontSize * 0.6;
 			int col = Math.Max (0, (int)((pt.Position.X - GutterWidth ()) / charW));
-			int line = (int)(pt.Position.Y / LineHeight + scrollLines);
+			int line = (int)(pt.Position.Y / LineHeight);
 			caretLine = Math.Clamp (line, 0, lines.Count - 1);
 			caretCol = Math.Clamp (col, 0, lines [caretLine].Length);
 			selAnchorLine = caretLine;
@@ -1180,29 +1231,10 @@ public class SkTextEditor : Control
 	{
 		base.OnPointerMoved (e);
 		var pt = e.GetPosition (this);
-		// Vertical scrollbar: dragging the thumb scrolls; the thumb also gets a
-		// resize-free pointer-follow (offset kept from the grab point).
-		if (draggingScroll) {
-			SetScrollFromThumb (pt.Y);
-			MarkDirty ();
-			return;
-		}
 		// Gutter hover polish: highlight the row under the cursor, hand cursor
-		// over the breakpoint strip, tooltip with the line number.
+		// over the breakpoint strip, tooltip with the line number. (pt is in
+		// document coordinates — the ScrollViewer already applied the offset.)
 		UpdateGutterHover (pt);
-		// Over the vertical scrollbar the gutter/word hover pipeline stays off;
-		// the cursor reports the scrollbar affordance (thumb = resize, track =
-		// page direction).
-		if (ScrollBarVisible && pt.X >= Bounds.Width - ScrollBarWidth) {
-			ClearGutterHover ();
-			hoverTimer.Stop ();
-			hoverPopup?.HideTooltip ();
-			var (top, thumbH) = ScrollThumb ();
-			Cursor = pt.Y >= top && pt.Y <= top + thumbH
-				? new Cursor (StandardCursorType.SizeNorthSouth)
-				: pt.Y < top ? new Cursor (StandardCursorType.UpArrow) : new Cursor (StandardCursorType.Arrow);
-			return;
-		}
 		// Hover tooltip: restart the timer on every move (legacy tooltip pipeline).
 		if (!dragging) {
 			// Over the gutter the word-hover pipeline stays off (the legacy margin
@@ -1233,7 +1265,7 @@ public class SkTextEditor : Control
 			return;
 		double charW = FontSize * 0.6;
 		int col = Math.Max (0, (int)((pt.X - GutterWidth ()) / charW));
-		int line = (int)(pt.Y / LineHeight + scrollLines);
+		int line = (int)(pt.Y / LineHeight);
 		caretLine = Math.Clamp (line, 0, lines.Count - 1);
 		caretCol = Math.Clamp (col, 0, lines [caretLine].Length);
 		hasSelection = caretLine != selAnchorLine || caretCol != selAnchorCol;
@@ -1244,11 +1276,6 @@ public class SkTextEditor : Control
 	{
 		base.OnPointerReleased (e);
 		dragging = false;
-		if (draggingScroll) {
-			draggingScroll = false;
-			e.Pointer.Capture (null);
-			MarkDirty ();
-		}
 	}
 
 	// Right-click on a pinned-watch bubble shows the bubble menu (legacy
@@ -1259,7 +1286,10 @@ public class SkTextEditor : Control
 	void OnEditorContextRequested (object? sender, ContextRequestedEventArgs e)
 	{
 		var pt = e.TryGetPosition (this, out var p) ? p : new Avalonia.Point (0, 0);
-		if (TryGetPinnedWatchAt (pt, out var pinLine, out var _)) {
+		// pt arrives in document space (the ScrollViewer already added its
+		// offset); pinnedWatchRects are registered in viewport space by Draw,
+		// so convert before the hit-test.
+		if (TryGetPinnedWatchAt (new Avalonia.Point (pt.X, pt.Y - scrollOffset), out var pinLine, out var _)) {
 			var menu = BuildPinnedWatchMenu (pinLine);
 			if (menu is not null) {
 				caretLine = pinLine;
@@ -1335,6 +1365,9 @@ public class SkTextEditor : Control
 		if (!IsDirty)
 			IsDirty = true; // user edit → legacy modified marker on the tab
 		RebuildFolds ();
+		// An edit can change the visible row count (splitting/merging lines,
+		// fold regions): refresh the enclosing ScrollViewer's extent.
+		InvalidateMeasure ();
 		ShowCaret ();
 	}
 
@@ -1761,11 +1794,12 @@ public class SkTextEditor : Control
 			int col = lines [i].IndexOf (word, StringComparison.Ordinal);
 			if (col < 0)
 				continue;
-			// The word's center point in editor coordinates, then to screen pixels
-			// (the popup is a top-level window positioned in screen space).
+			// The word's center point in document coordinates, then to screen
+			// pixels (the popup is a top-level window; PointToScreen applies the
+			// ScrollViewer's offset).
 			var pt = new Point (
 				GutterWidth () + 4 + (col + word.Length / 2.0) * FontSize * 0.6,
-				(i - scrollLines + 0.5) * LineHeight);
+				(i + 0.5) * LineHeight);
 			var (header, desc, icon) = DescribeWord (word, i);
 			hoverPopup ??= new EditorTooltipPopup ();
 			hoverPopup.ShowAtScreen (PopupOwner, this.PointToScreen (pt), header, desc, icon);
@@ -1916,6 +1950,8 @@ public class SkTextEditor : Control
 			if (!collapsedFolds.Add (startLine))
 				collapsedFolds.Remove (startLine);
 		}
+		// Collapsed rows change the document extent.
+		InvalidateMeasure ();
 		MarkDirty ();
 	}
 
@@ -1927,6 +1963,7 @@ public class SkTextEditor : Control
 		else
 			foreach (var (start, _) in foldRegions)
 				collapsedFolds.Add (start);
+		InvalidateMeasure ();
 		MarkDirty ();
 	}
 
@@ -1941,6 +1978,7 @@ public class SkTextEditor : Control
 			foreach (var (start, end) in foldRegions)
 				collapsedFolds.Add (start);
 		}
+		InvalidateMeasure ();
 		MarkDirty ();
 	}
 
@@ -1952,15 +1990,20 @@ public class SkTextEditor : Control
 			foldRegions.Clear (); // no folding → no fold segments (legacy same)
 		} else
 			RebuildFolds ();
+		InvalidateMeasure ();
 		MarkDirty ();
 	}
 
 	// ViewCommands.CenterAndFocusCurrentDocument: scroll so the caret line sits
 	// in the middle of the viewport (legacy centers the caret and focuses the view).
+	// The ScrollViewer owns the offset; center the caret's rendered row (folds
+	// shift buffer lines to rows).
 	public void CenterCaret ()
 	{
-		int visible = Math.Max (1, (int)((Bounds.Height > 0 ? Bounds.Height : 400) / LineHeight));
-		scrollLines = Math.Clamp (caretLine - visible / 2, 0, Math.Max (0, lines.Count - visible));
+		double row = LineToRow (caretLine);
+		if (row < 0)
+			row = Math.Min (caretLine, Math.Max (0, VisibleLineCount - 1));
+		ScrollCenterRow (row);
 		MarkDirty ();
 	}
 
@@ -2948,55 +2991,44 @@ public class SkTextEditor : Control
 	/// left margin icon column).</summary>
 		float GutterIconStripWidth () => Math.Max (0, GutterWidth () - 18);
 
-	// ----- Vertical scrollbar (legacy editor VScrollbar) -----
-	/// <summary>Number of lines that fit in the viewport (scrolling space).</summary>
-	double ScrollVisibleLines => Math.Max (1, Bounds.Height / LineHeight);
-	/// <summary>Maximum value of scrollLines for the current content.</summary>
-	// Based on the VISIBLE row count: with collapsed folds the buffer holds
-	// more lines than rows, so lines.Count would oversize the scroll range.
-	double MaxScroll => Math.Max (0, VisibleRowCount - ScrollVisibleLines);
-	/// <summary>Number of rows actually rendered (buffer lines minus folded-hidden lines).</summary>
-	int VisibleRowCount
+	// ----- Scrolling (owned by the enclosing ScrollViewer) -----
+	/// <summary>Number of rows that fit in the scroll viewport.</summary>
+	double ScrollVisibleRows => Math.Max (1, viewportH / LineHeight);
+	/// <summary>Total scrollable document height in pixels.</summary>
+	double ScrollExtent => LineHeight * Math.Max (1, VisibleLineCount);
+	/// <summary>Scrolls (via the ScrollViewer) so <paramref name="row"/> is the
+	/// top visible row.</summary>
+	void ScrollToRow (double row)
 	{
-		get
-		{
-			if (collapsedFolds.Count == 0)
-				return lines.Count;
-			int n = 0;
-			for (int l = 0; l < lines.Count; l++)
-				if (!IsLineHidden (l))
-					n++;
-			return n;
-		}
+		if (scrollOwner is null)
+			return;
+		double max = Math.Max (0, ScrollExtent - viewportH);
+		double y = Math.Clamp (row * LineHeight, 0, max);
+		if (Math.Abs (y - scrollOffset) < 0.5)
+			return;
+		scrollOwner.Offset = new Vector (scrollOwner.Offset.X, y);
 	}
-	/// <summary>True while the document overflows the viewport (the bar shows).</summary>
-	bool ScrollBarVisible => MaxScroll > 0.5;
-	/// <summary>Thumb top (px) / height (px) inside the viewport.</summary>
-	(float Top, float Height) ScrollThumb ()
+	/// <summary>Pages toward the caret by <paramref name="lines"/> rows (may be
+	/// negative), used by keyboard paging while the caret is out of the viewport.</summary>
+	void ScrollByLines (double lines)
 	{
-		double frac = MaxScroll > 0 ? scrollLines / MaxScroll : 0;
-		float thumbH = (float)Math.Min (Bounds.Height, ScrollVisibleLines / Math.Max (1, lines.Count) * Bounds.Height);
-		thumbH = Math.Max (24f, Math.Min (thumbH, (float)Bounds.Height));
-		float top = (float)(frac * (Bounds.Height - thumbH));
-		return (top, thumbH);
+		if (scrollOwner is null)
+			return;
+		double max = Math.Max (0, ScrollExtent - viewportH);
+		double y = Math.Clamp (scrollOffset + lines * LineHeight, 0, max);
+		if (Math.Abs (y - scrollOffset) < 0.5)
+			return;
+		scrollOwner.Offset = new Vector (scrollOwner.Offset.X, y);
 	}
-	/// <summary>Sets scrollLines from a pointer Y position while grabbing the
-	/// thumb (offset = distance from the pointer to the thumb top).</summary>
-	void SetScrollFromThumb (double y)
+	/// <summary>Centers the caret row in the viewport (legacy
+	/// CenterAndFocusCurrentDocument).</summary>
+	void ScrollCenterRow (double row)
 	{
-		var (_, thumbH) = ScrollThumb ();
-		double maxTop = Math.Max (0, Bounds.Height - thumbH);
-		double frac = maxTop > 0 ? Math.Clamp ((y - scrollGrabOffset) / maxTop, 0, 1) : 0;
-		scrollLines = frac * MaxScroll;
-	}
-	/// <summary>Pages toward a track click (legacy scrollbar click-behavior).</summary>
-	void PageScrollToward (double y)
-	{
-		var (top, thumbH) = ScrollThumb ();
-		if (y < top)
-			scrollLines = Math.Max (0, scrollLines - ScrollVisibleLines * 0.9);
-		else if (y > top + thumbH)
-			scrollLines = Math.Min (MaxScroll, scrollLines + ScrollVisibleLines * 0.9);
+		if (scrollOwner is null)
+			return;
+		double max = Math.Max (0, ScrollExtent - viewportH);
+		double y = Math.Clamp (row * LineHeight - (viewportH - LineHeight) / 2, 0, max);
+		scrollOwner.Offset = new Vector (scrollOwner.Offset.X, y);
 	}
 
 	// ----- Gutter hover polish (legacy Mono.TextEditor gutter area): the row
@@ -3018,8 +3050,9 @@ public class SkTextEditor : Control
 	{
 		bool inGutter = p.X <= GutterWidth ();
 		bool inStrip = inGutter && IsInBreakpointStrip (p.X);
+		// p is in document coordinates (ScrollViewer applied the offset).
 		int line = inGutter
-			? Math.Clamp ((int)(p.Y / LineHeight + scrollLines), 0, Math.Max (0, lines.Count - 1))
+			? Math.Clamp ((int)(p.Y / LineHeight), 0, Math.Max (0, lines.Count - 1))
 			: -1;
 		if (inGutter == pointerInGutter && inStrip == pointerInBpStrip && line == hoverGutterLine)
 			return;
@@ -3092,7 +3125,14 @@ public class SkTextEditor : Control
 	public override void Render (DrawingContext context)
 	{
 		int w = Math.Max (1, (int)Math.Ceiling (Bounds.Width));
-		int h = Math.Max (1, (int)Math.Ceiling (Bounds.Height));
+		// The enclosing ScrollViewer arranges the editor at the FULL document height
+		// (MeasureOverride reports it) and translates/clips it to the viewport. We
+		// render only the visible window (the viewport) into a viewport-sized bitmap
+		// and draw it at the current scroll offset, so a large document never
+		// allocates a full-content bitmap.
+		double off = scrollOffset;
+		double vh = viewportH > 0 ? viewportH : Bounds.Height;
+		int h = Math.Max (1, (int)Math.Ceiling (vh));
 		if (renderCount < 3)
 			Console.WriteLine ($"[skrender] #{renderCount} {w}x{h} attached={this.IsAttachedToVisualTree ()} text={Text?.Length ?? 0}");
 		lastRenderW = w; lastRenderH = h;
@@ -3111,7 +3151,7 @@ public class SkTextEditor : Control
 					if (surface is null)
 						Console.WriteLine ("[skeditor] SKSurface.Create returned null");
 					else
-						Draw (surface.Canvas);
+						Draw (surface.Canvas, (float)vh);
 				}
 			}
 			var old = front;
@@ -3123,10 +3163,10 @@ public class SkTextEditor : Control
 			pendingDispose = old; // the just-replaced frame may still be in flight
 		}
 		if (front is not null)
-			context.DrawImage (front, new Rect (0, 0, Bounds.Width, Bounds.Height));
+			context.DrawImage (front, new Rect (0, off, w, h));
 	}
 
-	void Draw (SKCanvas canvas)
+	void Draw (SKCanvas canvas, float vpH)
 	{
 		using var font = CreateFont ();
 		float charW = CharWidth (font);
@@ -3168,13 +3208,13 @@ public class SkTextEditor : Control
 		var commentColor = CurrentCommentColor (fg);
 
 		using var bgPaint = new SKPaint { Color = bg, IsAntialias = false };
-		canvas.DrawRect (0, 0, (float)Bounds.Width, (float)Bounds.Height, bgPaint);
+		canvas.DrawRect (0, 0, (float)Bounds.Width, vpH, bgPaint);
 		using var gutterPaint = new SKPaint { Color = gutterBg, IsAntialias = false };
-		canvas.DrawRect (0, 0, gutterW, (float)Bounds.Height, gutterPaint);
+		canvas.DrawRect (0, 0, gutterW, vpH, gutterPaint);
 		// gutter hover row (legacy Mono.TextEditor gutter hover highlight)
 		if (pointerInGutter && hoverGutterLine >= 0) {
 			float hoverY = (hoverGutterLine - (float)scrollLines) * lineH;
-			if (hoverY >= -lineH && hoverY <= (float)Bounds.Height) {
+			if (hoverY >= -lineH && hoverY <= vpH) {
 				using var hoverRow = new SKPaint { Color = gutterFg.WithAlpha (28), IsAntialias = false };
 				canvas.DrawRect (0, hoverY, (float)Bounds.Width, lineH, hoverRow);
 				// breakpoint strip gets its own stronger band (the hand-cursor zone)
@@ -3185,10 +3225,10 @@ public class SkTextEditor : Control
 			}
 		}
 		using var gutterLinePaint = new SKPaint { Color = gutterFg.WithAlpha (60), IsAntialias = false };
-		canvas.DrawRect (gutterW - 1, 0, 1, (float)Bounds.Height, gutterLinePaint);
+		canvas.DrawRect (gutterW - 1, 0, 1, vpH, gutterLinePaint);
 
 		int firstLine = (int)Math.Max (0, scrollLines);
-		int visible = (int)Math.Ceiling ((float)Bounds.Height / lineH) + 1;
+		int visible = (int)Math.Ceiling (vpH / lineH) + 1;
 		pinnedWatchRects.Clear (); // rebuilt every frame (clickable bubbles)
 
 		using var textPaint = new SKPaint { IsAntialias = true };
@@ -3332,26 +3372,13 @@ public class SkTextEditor : Control
 			foreach (var (sl, sc) in secondaryCarets) {
 				float cx = gutterW + 4 + sc * charW;
 				float cy = (sl - (float)scrollLines) * lineH;
-				if (cy >= -lineH && cy <= (float)Bounds.Height)
-					canvas.DrawRect (cx, Math.Max (0f, cy), 1.2f, Math.Min (lineH * 0.6f, (float)Bounds.Height - Math.Max (0f, cy)), secPaint);
+				if (cy >= -lineH && cy <= vpH)
+					canvas.DrawRect (cx, Math.Max (0f, cy), 1.2f, Math.Min (lineH * 0.6f, vpH - Math.Max (0f, cy)), secPaint);
 			}
 			float caretX = gutterW + 4 + caretCol * charW;
 			float caretY = (caretLine - (float)scrollLines) * lineH;
-			if (caretY >= -lineH && caretY <= (float)Bounds.Height)
-				canvas.DrawRect (caretX, Math.Max (0f, caretY), 1.5f, Math.Min (lineH, (float)Bounds.Height - Math.Max (0f, caretY)), caretPaint);
-		}
-
-		// vertical scrollbar (legacy editor VScrollbar): track at the right edge,
-		// thumb sized to viewport/document ratio, drawn on top of everything
-		// (it never underlaps the gutter, which sits at the left).
-		if (ScrollBarVisible) {
-			var (top, thumbH) = ScrollThumb ();
-			float sbX = (float)Bounds.Width - (float)ScrollBarWidth;
-			bool darkBg = bg.Red * 0.299 + bg.Green * 0.587 + bg.Blue * 0.114 < 128;
-			using var trackPaint = new SKPaint { Color = darkBg ? new SKColor (0x2B, 0x2B, 0x2B) : new SKColor (0xE6, 0xE6, 0xE6), IsAntialias = false };
-			canvas.DrawRect (sbX, 0, (float)ScrollBarWidth, (float)Bounds.Height, trackPaint);
-			using var thumbPaint = new SKPaint { Color = new SKColor (0x6E, 0x6E, 0x6E), IsAntialias = false };
-			canvas.DrawRect (sbX + 2, top, (float)ScrollBarWidth - 4, thumbH, thumbPaint);
+			if (caretY >= -lineH && caretY <= vpH)
+				canvas.DrawRect (caretX, Math.Max (0f, caretY), 1.5f, Math.Min (lineH, vpH - Math.Max (0f, caretY)), caretPaint);
 		}
 	}
 

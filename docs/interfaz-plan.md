@@ -2548,15 +2548,110 @@ de pestañas": el editor solo scrollaba por rueda y la tira no tenía dropdown).
   `MaxScroll = VisibleRowCount - ScrollVisibleLines` (cuenta líneas no ocultas
   por folds).
 
-**Decisiones de diseño**:
-1. **Scrollbar pintada, no control nativo**: la superficie es un canvas Skia
-   sobre `WriteableBitmap`; un `ScrollBar` de Avalonia rompería la coherencia.
-   ~120 líneas a cambio de identidad total con la pintura (misma invalidación,
-   mismo frame).
+**Decisiones de diseño (M31b, históricas)**:
+1. **Scrollbar pintada, no control nativo** — *SUSTITUIDA (ver M31c más abajo)*:
+   la barra se pintaba en el canvas Skia del editor. El operador la rechazó
+   ("Scrollbar no, scrollview"): el editor debe scrollear con un `ScrollViewer`
+   real (equivalente al `GtkScrolledWindow` legacy, scrollbar nativa).
 2. **Fondo negro solo en dark**: dark no mira la paleta (el operador pidió
    negro); light respeta la paleta actual.
 3. **Botón ▾ siempre visible** (como VSCode): no depende de overflow; el menú
    lista todas las tabs y el reveal es un no-op sin overflow.
+
+### M31c — Scrollbar nativa: `ScrollViewer` real en lugar de barra pintada (2026-11-11)
+
+**Pedido**: el operador rechazó la scrollbar pintada en el canvas
+("Scrollbar no, scrollview"): el editor debe scrollear con un **`ScrollViewer`**
+estándar de la shell (el equivalente Avalonia del `GtkScrolledWindow` que
+envolvía el text view legacy), con scrollbar nativa. Elegido explícitamente
+("ScrollViewer real (recomendado)").
+
+**Qué se hizo**:
+- **Montaje en `ScrollViewer`** (`MainWindow.AddDocument`): cada editor
+  `SkTextEditor` se envuelve en **un único** `ScrollViewer` (vertical `Auto` →
+  solo aparece con desborde; horizontal `Disabled`) **una sola vez**, y ese
+  wrapper se guarda como `doc.Content`. `OnDocSelectionChanged` solo re-añade
+  el mismo control al panel (que ya fue desanclado con `Children.Clear()`).
+  **Crear el wrapper por selección** re-papereaba el editor long-lived a un
+  `ScrollContentPresenter` nuevo mientras Avalonia lo seguía viendo hijo del
+  anterior → `InvalidOperationException` al volver a cualquier tab ya abierta
+  (regresión detectada en QA, corregida: el editor se captura ANTES de
+  embolver para que `docs`/F#/dirty/undo sigan cableados).
+- **El editor deja de gestionar scroll internamente** (`SkTextEditor`):
+  eliminada la barra pintada (`ScrollThumb`, `SetScrollFromThumb`,
+  `PageScrollToward`, `draggingScroll`, `scrollGrabOffset`, `ScrollBarWidth`,
+  `MaxScroll`, `ScrollVisibleLines`, `VisibleRowCount`, `ScrollBarVisible`) y
+  el `OnPointerWheelChanged` propio (el `ScrollViewer` scrollea nativamente).
+  El offset/viewport se leen del `ScrollViewer` dueño (`scrollOwner`) en
+  `ScrollChanged` + attach; `scrollLines` pasa a ser propiedad de solo lectura
+  `=> scrollOffset / LineHeight`.
+- **Render viewport-sized**: `Render` dibuja un `WriteableBitmap` **del tamaño
+  del viewport** (`vh`) y lo coloca en `Rect(0, scrollOffset, w, h)`; `Draw`
+  usa `vpH` en vez de `Bounds.Height` (que ahora es la altura total del doc).
+  Un documento de 308 líneas (~5600 px) renderiza un bitmap de ~765×477 —
+  seguro en ficheros grandes.
+- **Coordenadas (clave)**: `GetPosition`/`GetCurrentPoint` sobre el contenido
+  scrolleado llegan en **coordenadas de documento** (offset ya incluido) y
+  `PointToScreen` lo descuenta. En click→línea se quitó el `+ scrollLines`; en
+  los 3 popups (Y de documento para `PointToScreen`) se quitó el `- scrollLines`.
+  **Fix de espacios**: los rects de *pinned-watch bubbles* se registran en
+  espacio de **viewport** (en `Draw`) pero el hit-test del menú contextual
+  recibía el punto en **documento** → se convierte con `- scrollOffset` antes
+  del hit-test (`OnEditorContextRequested`).
+- **`InvalidateMeasure()`** en los puntos que cambian el nº de filas visibles
+  (`SetLines`, `Commit`, `ToggleFolding`, `ToggleAllFoldings`, `FoldDefinitions`,
+  `EnableDisableFolding`) para que el `ScrollViewer` re-pida su extent.
+- **Avalonia 12 no tiene `FindAncestorOfType`**: el walk a `ScrollViewer` usa
+  `GetVisualParent()` (patrón ya usado en `MainWindow`).
+
+**Decisiones de diseño**:
+1. **`ScrollViewer` real, no `ScrollBar` acoplado ni barra pintada**: el
+   `ScrollViewer` posee offset/clip/barra nativa; el editor deja de gestionar
+   scroll. Reutiliza el control estándar de la shell (equivalente al
+   `GtkScrolledWindow` legacy), coherente con §18.4 (reutilización obligatoria).
+2. **Render del frame solo del viewport** (no del documento completo): seguro
+   en ficheros grandes.
+3. **Un `ScrollViewer` por editor, creado una vez**: re-montar el mismo
+   control es seguro; re-embolverlo por selección rompe el parent visual.
+
+**Validación (valores medidos)**:
+- **Build 0 errores** (`-c DebugLinux -m:1`). **Ruta GTK intocada**:
+  `SkTextEditor.cs` solo lo compila la shell (glob `Controls\**\*.cs`);
+  `MonoDevelop.Ide.csproj` = `EnableDefaultCompileItems=false` sin globs.
+- **Smoke (Xvfb `:99`, tema Dark)**: doc largo 308 l → scrollbar nativa Fluent
+  (thumb x≈1088, y=191..230, ~11% de la pista); rueda 8 ticks → contenido de
+  líneas 1-6 a 24-28, thumb 191→224; **arrastre del thumb** scrollea; clic→línea
+  correcto (caret en la línea clicada, breadcrumb actualizado); coloreo + gutter
+  intactos; render `765x477` (viewport, no ~5600px). Doc corto 18 l → **sin
+  scrollbar** (scan de píxeles `thumb=None`).
+- **QA §18.5 recursiva (3 ciclos, 0 hallazgos abiertos)**: ciclo #1 hallazgo
+  crítico (crash `SkTextEditor already has a visual parent` al volver a una tab
+  ya abierta, 5/5) → fix (wrapper único) → ciclo #2 hallazgo (regresión:
+  `docs` vacío → Save no-op, gate dirty inoperante) → fix (capturar el editor
+  antes de embolver) → **ciclo #3 VERDE 0 hallazgos** (`--dupdocs docs=2` +
+  `save-correct`, Save real Ctrl+S/Ctrl+Shift+S a disco, re-montaje VIVO por
+  tira de tabs, gate dirty "Save Files" al cerrar, thumb/rueda/corto, `--tablist`
+  `reveal-ok=True`). Artefactos `~/opencode/qa_scrollview/` (cycle1/2/3).
+
+**Nota de incidencia (regresión de GTK reportada por el operador)**: el
+operador vio "la UI GTK se rompió al abrir una solución". Diagnóstico: el
+arranque `main/build/MonoDevelop.AvaloniaShell --old-gui` (el apphost nativo)
+**no lanza GTK** — el relay `LaunchLegacyGtk` usa `Environment.ProcessPath`,
+que con el apphost apunta al apphost, así que el hijo re-ejecuta la **shell
+Avalonia** (quirk documentado desde antes de M31b; los tests previos lo
+lanzaban vía `dotnet <dll> --old-gui`, que sí relía a `MonoDevelop.dll`). Esa
+shell Avalonia llevaba el crash de re-montaje de este refactor, que crashea
+al abrir una solución de varias pestañas. **Corregido por el mismo fix**
+(wrapper único): `--old-gui <sln>` queda VIVO. La pila GTK real (`MonoDevelop.dll`
++ `MonoDevelop.Ide.dll` + Xwt/SourceEditor) no fue tocada por este cambio
+(`SkTextEditor.cs`/`MainWindow.axaml.cs` no entran en el build GTK); los 3 DLLs
+compartidos reestadiados por el build de la shell (`Core`, `MonoUnixCompat`,
+`MonoRoslynCompat`) son IL-idénticos a builds previos conocidos buenos.
+
+**Archivos** (2 M): `Controls/SkTextEditor.cs` (scroll owner, render
+viewport-sized, coords documento, hit-test pinned-watch, `InvalidateMeasure`,
+eliminación de la barra pintada); `Views/MainWindow.axaml.cs` (wrapper
+`ScrollViewer` único en `AddDocument`, re-montaje en `OnDocSelectionChanged`).
 
 **Validación (valores medidos)**:
 - **Build 0 errores** (`-c DebugLinux -m:1`). **Ruta GTK intocada**:
@@ -5782,6 +5877,19 @@ Es decir: habilitado si hay solución cargada Y (hay fila de proyecto selecciona
 
 **Cierre**: commit por nombre de los ficheros modificados + nuevos (`Controls/`, `Resources/`, 3 docs) + push a `origin/agents/sub-agent-senior-dev-role-report`. Sin submódulos. Artefactos en `~/opencode/highlight_qa/` (fixtures, probe headless, `capture_all.sh`, `analyze_colors.py`, lanzadores, 12 capturas, logs) + `~/opencode/highlight_e2e/` (probe 1a).
 
+## 2026-11-11 — M31c Scrollbar nativa: `ScrollViewer` real en lugar de barra pintada — CERRADO (QA VERDE, 0 hallazgos)
+
+**Estado: CERRADO (QA APROBADO, 0 hallazgos abiertos).** El operador rechazó la scrollbar pintada del canvas de M31b ("Scrollbar no, scrollview"): el editor ahora scrollea con un **`ScrollViewer`** estándar de la shell (equivalente al `GtkScrolledWindow` legacy), scrollbar nativa vertical `Auto` (solo con desborde) y horizontal `Disabled`. Diseño: (1) un `ScrollViewer` **único por editor**, creado una vez en `AddDocument` y re-montado (no re-embuelto) en `OnDocSelectionChanged` — re-embolverlo por selección re-papereaba el editor long-lived a un `ScrollContentPresenter` nuevo → `InvalidOperationException` al volver a cualquier tab ya abierta (regresión que crasheó la app al abrir una solución de varias pestañas, detectada en QA ciclo #1 y corregida); (2) el editor reporta su altura total vía `MeasureOverride`, el `ScrollViewer` posee offset/clip/barra y el **render es solo del viewport** (`WriteableBitmap` del viewport, ~765×477 en un doc de 308 líneas — antes del diseño, un doc grande no era viable); (3) coordenadas de documento: `GetCurrentPoint`/`PointToScreen` ya incluyen el offset → quitado `+ scrollLines` en click→línea y `- scrollLines` en los 3 popups; hit-test de *pinned-watch bubbles* convertido con `- scrollOffset` (los rects se registran en espacio de viewport, el punto llega en documento); (4) `InvalidateMeasure()` en `SetLines`/`Commit`/folds para re-pedir el extent. Eliminado el `OnPointerWheelChanged` propio y toda la plomería de la barra pintada. QA §18.5 recursiva en 3 ciclos: #1 hallazgo crítico (crash de re-montaje, 5/5) → fix → #2 hallazgo (regresión de `docs` vacío → Save no-op, gate dirty inoperante) → fix (capturar el editor antes de embolver) → **#3 VERDE 0 hallazgos** (dupdocs `docs=2` + `save-correct`, Save real a disco, re-montaje VIVO por tira de tabs, gate dirty "Save Files", thumb/rueda/arrastre/clic→línea, doc corto sin barra, `--tablist` `reveal-ok=True`). **Incidencia reportada** ("la UI GTK se rompió al abrir una solución"): el apphost `MonoDevelop.AvaloniaShell --old-gui` re-ejecuta la **shell Avalonia** en lugar de GTK (quirk preexistente del relay, `Environment.ProcessPath`=apphost), y esa shell crasheaba con el bug de re-montaje → **corregido por el mismo fix** (`--old-gui <sln>` VIVO). La pila GTK real no fue tocada (`SkTextEditor.cs`/`MainWindow.axaml.cs` no entran en el build GTK); los DLLs compartidos reestadiados (`Core`/`MonoUnixCompat`/`MonoRoslynCompat`) son IL-idénticos a builds previos. `SkTextEditor.cs` solo compila en la shell → ruta `--old-gui` (vía `dotnet <dll>`) intacta.
+
+**Archivos** (2 M): `Controls/SkTextEditor.cs`; `Views/MainWindow.axaml.cs`. Detalle en § M31c.
+
 ## 2026-11-11 — M31b Fondo negro del editor, scrollbar vertical y botón de lista de pestañas ▾ — CERRADO (QA VERDE, 0 hallazgos)
+
+**Nota (2026-11-11, M31c)**: la **scrollbar pintada** descrita aquí fue
+**sustituida por un `ScrollViewer` real** a petición del operador ("Scrollbar
+no, scrollview") — ver § M31c, que detalla el diseño (montaje en `AddDocument`,
+render viewport-sized, coordenadas de documento) y la corrección de la
+regresión de re-montaje. El fondo negro `#000000` y el botón ▾ de M31b siguen
+vigentes y sin cambios.
 
 **Estado: CERRADO (QA APROBADO, 0 hallazgos abiertos).** Tres piezas pedidas por el operador sobre M31: (1) **fondo del editor negro puro `#000000`** en tema oscuro (no el gris `#1E1E1E` de la paleta Dark+ — pedido explícito: "quería el fondo del editor negro, no gris"; light sigue blanco), (2) **scrollbar vertical del editor** (pintada en el canvas Skia, ya que el editor es 100% custom-drawn: 14px, solo con desborde, thumb arrastrable, clic en track pagina) y (3) **botón ▾ de lista de pestañas** (siempre visible en la tira; menú con todas las tabs — ✓ en la activa, `•` dirty — y reveal de la pestaña elegida; flag QA `--tablist`). La QA §18.5 encontró y se corrigieron además **dos bugs de scroll preexistentes** que la nueva scrollbar hizo alcanzables: (a) **doble sustracción del offset en `Draw`** (editor en blanco con `scrollLines > ~1 viewport`; preexistente desde M16e `0309f21902`; fix `y = (firstLine + drawn - scrollLines)·lineH`) y (b) **gutter duplicando el número de la última línea tras un fold** (fallback `RowToLine` + `MaxScroll` sobre líneas de buffer; fix: `RowToLine` → -1, guarda en el bucle, `MaxScroll = VisibleRowCount - ScrollVisibleLines`). `SkTextEditor.cs` solo compila en la shell → ruta `--old-gui` intacta. QA recursiva en 3 ciclos (blocker scroll → H-1 → **VERDE 0 hallazgos**). Detalle completo en § M31b (subsección de § M31).

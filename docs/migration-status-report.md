@@ -294,6 +294,24 @@ El bucle de migración Gtk → Avalonia continúa por módulos (detalle por hito
   hallazgos). `SkTextEditor.cs` solo compila en la shell → la ruta `--old-gui` no se toca.
   Detalle en `docs/interfaz-plan.md` (§ M31 + registro 2026-11-11 M31b) y
   `docs/session_summary.md` (2026-11-11 (33)).
+- **M31c (2026-11-11, VERDE 0 hallazgos)**: el operador rechazó la scrollbar pintada de
+  M31b ("Scrollbar no, scrollview") → el editor scrollea con un **`ScrollViewer` real**
+  de la shell (equivalente al `GtkScrolledWindow` legacy), vertical `Auto` (solo con
+  desborde) y horizontal `Disabled`. Un `ScrollViewer` **único por editor**, creado una
+  vez en `AddDocument` y re-montado (no re-embuelto) en `OnDocSelectionChanged`; el editor
+  reporta su altura total (`MeasureOverride`) y el **render es solo del viewport**
+  (bitmap ~765×477 en un doc de 308 líneas, no ~5600px). Coordenadas de documento:
+  `GetCurrentPoint`/`PointToScreen` ya incluyen el offset; hit-test de *pinned-watch
+  bubbles* convertido con `- scrollOffset`. Eliminado el `OnPointerWheelChanged` propio y
+  la plomería de la barra pintada. La QA §18.5 (3 ciclos) detectó y se corrigió la
+  regresión de re-montaje (crash al volver a una tab ya abierta — re-parenting doble del
+  editor) y la de `docs` vacío (Save no-op, gate dirty inoperante). **Incidencia**: el
+  apphost `MonoDevelop.AvaloniaShell --old-gui` re-ejecuta la **shell Avalonia** (no GTK)
+  por quirk preexistente del relay, y esa shell crasheaba con el bug de re-montaje al
+  abrir una solución de varias pestañas → corregido por el mismo fix (`--old-gui <sln>`
+  VIVO); la pila GTK real no fue tocada (los DLLs compartidos reestadiados son
+  IL-idénticos a builds previos). Detalle en `docs/interfaz-plan.md` (§ M31c) y
+  `docs/session_summary.md` (2026-11-11 (34)).
   Nuevos servicios `SymbolIndexService` (escáner de una pasada: outline,
   breadcrumb/GoToType/`:t` y árbol de clases) y `CodeIssueService` (diagnósticos
   MSBuild agrupados por severidad); pads auto-ocultos con doble clic que abre

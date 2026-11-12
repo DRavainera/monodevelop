@@ -4913,8 +4913,28 @@ public partial class MainWindow : Window
 	{
 		if (documents.Any (d => d.Tag == tag))
 			return;
+		// The editor mounts inside ONE standard ScrollViewer (the Avalonia
+		// equivalent of the legacy GtkScrolledWindow around the text view): it
+		// owns the offset/clip and the native vertical scrollbar (Auto → shown
+		// only on overflow). The wrapper is created ONCE and stored as the
+		// document content: OnDocSelectionChanged re-mounts it per selection
+		// instead of re-wrapping. Re-wrapping each selection reparents the
+		// long-lived editor to a fresh ScrollContentPresenter while Avalonia
+		// still sees it as a child of the previous one → InvalidOperationException.
+		// Capture the editor BEFORE wrapping: the `docs` registry (and the F# /
+		// dirty / undo wiring below) is keyed on the editor, not the wrapper.
+		var editor = content as MonoDevelop.Ide.Controls.SkTextEditor;
+		if (editor is not null)
+			content = new ScrollViewer {
+				Content = editor,
+				VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+				HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+				HorizontalAlignment = HorizontalAlignment.Stretch,
+				VerticalAlignment = VerticalAlignment.Stretch,
+			};
 		documents.Add ((tag, content));
-		if (content is MonoDevelop.Ide.Controls.SkTextEditor ed && !docs.ContainsKey (tag)) {
+		if (editor is not null && !docs.ContainsKey (tag)) {
+			var ed = editor;
 			docs.Add (tag, ed);
 			// F# language service (phase 5): wire the in-process FCS checker for
 			// F# documents — the full project source list (so cross-file types
@@ -4999,13 +5019,13 @@ public partial class MainWindow : Window
 			var doc = documents.FirstOrDefault (d => d.Tag == tag);
 			if (doc.Content is not null) {
 				DocContent!.Children.Clear ();
-				// DocContent is a plain Panel: children arrange at their desired size,
-				// and the editor's desired size is 0x0 (no content children) — stretch
-				// it to the panel or the code renders nowhere.
+				// The editor documents store their ScrollViewer wrapper as Content
+				// (created once in AddDocument); re-adding the SAME control on tab
+				// switches is safe (it detaches from the old parent via Clear).
 				doc.Content.HorizontalAlignment = HorizontalAlignment.Stretch;
 				doc.Content.VerticalAlignment = VerticalAlignment.Stretch;
 				DocContent.Children.Add (doc.Content);
-				if (doc.Content is MonoDevelop.Ide.Controls.SkTextEditor ed && !string.IsNullOrEmpty (ed.FilePath))
+				if (doc.Content is ScrollViewer { Content: MonoDevelop.Ide.Controls.SkTextEditor ed } && !string.IsNullOrEmpty (ed.FilePath))
 					StatusText!.Text = ed.FilePath;
 			}
 			lastBreadCaretLine = -1;
