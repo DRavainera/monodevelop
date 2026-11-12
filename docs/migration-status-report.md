@@ -3295,3 +3295,19 @@ Habilitado si hay solución cargada Y (fila de proyecto seleccionada **o** la so
 **Queda pendiente** (aceptado por el operador): (a) `CodeGenerationPanel` per-proyecto (project properties — panel de proyecto en el legacy, fuera de la página global); (b) integración VSIX/Marketplace del binding F# (en pausa).
 
 **Cierre**: commit por nombre de los 20 ficheros (4 nuevos + 16 M) + docs ×3, push a `origin/agents/sub-agent-senior-dev-role-report`. Sin submódulos. Artefactos en `~/opencode/` (fixture `fsharp_port/fsls_fs/`, probes `fcs_probe/` + `fs_scanner_probe/`, lanzadores `launch_shell.sh`/`oldgui_smoke.sh`).
+
+### UI legacy Gtk: fix del crash "Could not close/load solution" — colisión de `NuGet.Common` en el ALC del runtime GTK (2026-11-12)
+
+**Estado: CERRADO (QA APROBADO, 0 hallazgos abiertos).** El operador reportó un crash de la UI GTK al abrir una solución: diálogo *"Could not close/load solution '…'"* + `TypeInitializationException` de `PackageManagementServices`. **Preexistente desde el stageo NuGet 7.9.0 de la Oleada 5 Slice A (11-08)** e **intermitente** (9 sesiones con el error, ausente en otras; depende del orden de carga). No es una regresión del trabajo de la UI Avalonia.
+
+**Causa raíz**: colisión de coexistencia de dos `NuGet.Common` en el mismo `AssemblyLoadContext` del proceso GTK. (1) El closure del addin `PackageManagement` en `main/build/AddIns/…` estaba **inconsistente (stale)**: `MonoDevelop.PackageManagement.dll` referencia `NuGet.Common 6.11.2.1` pero el DLL stageado era `5.4.0.3` (del build 26-28 oct, pre-T5). (2) El pin 7.9.0 stagea `NuGet.Common/Configuration/Frameworks` **7.9.0** en la raíz `main/build/` (la shell lo resuelve por deps.json → no se puede quitar). (3) El resolver ALC de `MonoDevelopMain.cs` buscaba **solo en la raíz y sin validar versión**: ante el request de `6.11.2.1` del static ctor cargaba la `7.9.0` → `FileLoadException: Assembly with same name is already loaded` → static ctor fallido permanente → diálogos de cierre/carga. (Nota de migración: el stageo del closure no reflejó el bump NuGet 5.4.0→6.11.2 de T5 en esos DLLs — `project.assets.json` sí declaraba 6.11.2.)
+
+**Fix (2 capas)**: (a) **re-stage del closure a 6.11.2.1** (build tree gitignored, no commiteable); (b) **resolver ALC reforzado** en `MonoDevelopMain.cs` (GTK-only, commiteable): ya-cargado guard + version guard (`AssemblyName.GetAssemblyName`, valida major.minor.build + PKT) + búsqueda en los directorios de addins antes que en la raíz. Corregido además los 2 hallazgos menores del primer ciclo QA (NRE teórica `CanSatisfy`, init no atómico del `Lazy`).
+
+**Validación**: build GTK 0 errores; A/B con fixture NuGet net10.0 (`Newtonsoft.Json 13.0.3`): antes `Could not load solution` + `already loaded`×8 → después restore `result=ok`, `TypeInit=0`, `alreadyLoaded=0`, proceso vivo; **no-regresión**: NuGet 7.9.0 intacto en la raíz + AvaloniaShell arranca limpia (camino por defecto y `--old-gui`).
+
+**QA §18.5** (2 ciclos recursivos): #1 APROBADO con 3 menores (2 corregidos) → #2 **VERDE 0 hallazgos abiertos**.
+
+**Archivos** (1 M): `main/src/core/MonoDevelop.Startup/MonoDevelop.Startup/MonoDevelopMain.cs` (+98/−1). El re-stage del closure es build tree (gitignored), no va al commit.
+
+**Cierre**: commit por nombre de `MonoDevelopMain.cs` + docs ×3, push a `origin/agents/sub-agent-senior-dev-role-report`. Sin submódulos. NO commitear PNGs `MonoDevelop.Avalonia.Icons/` (build-artifact). Artefactos en `~/opencode/qa_scrollview/`.
