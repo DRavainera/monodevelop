@@ -4740,3 +4740,67 @@ Commits pushados a `origin/agents/sub-agent-senior-dev-role-report`: (1) 3 fiche
 ### Cierre
 
 Commit por nombre de los 18 archivos de código + los 4379 PNGs de `MonoDevelop.Avalonia.Icons/` + docs ×2 (`session_summary.md` + `migration-status-report.md`); **`interfaz-plan.md` NO se toca** (documenta el pin de la shell Avalonia, no el claim GTK). Push a `origin/agents/sub-agent-senior-dev-role-report`. **Sin submódulos** (xwt y vs-editor-api limpios, no se tocaron). Artefactos en `~/opencode/`: logs de builds (`canonical_*.log`, `shell_build_*.log`, `gtk_final_run.log`), probes (`tinit_probe`, `typemem_probe`, `refdump2`, `dep_audit`), fixture `qa_scrollview/nugetfix/NuGetFix.sln`, backup `root_nuget_backup/`.
+
+## 2026-11-12 (37) — Habilitar los 3 add-ins legacy (Gettext / Makefile / ChangeLog): fix del manifiesto de detección `MonoDevelop.exe.addins` + limpieza de informes GTK en `interfaz-plan.md`
+
+**Estado: FRONT A CERRADO (QA VERDE, 0 hallazgos). FRONT B (docs) CERRADO.** El operador pidió 2 frentes: (A) habilitar los 3 add-ins legacy que no se activaban "por falta de dependencias" — **Gettext Translations Support** (`MonoDevelop.Gettext`), **Makefile Generation** (`MonoDevelop.Autotools`) y **ChangeLog Add-in** (`MonoDevelop.ChangeLogAddIn`) — "hay que implementar esas dependencias"; (B) limpiar `docs/interfaz-plan.md` quitando los informes de tareas de la UI GTK y conservando solo los de la shell Avalonia.
+
+### Front A (habilitar los 3 add-ins) — causa raíz: manifiesto de detección `MonoDevelop.exe.addins` con rutas relativas stale del layout `net10run`
+
+**Cadena de dependencias** (verificada en `AddinInfo.cs`, ids coinciden, sin mismatch): Gettext → Core, Ide, DesignerSupport, Autotools, **Deployment**; Autotools → Core, Ide, **Deployment**, DesignerSupport; ChangeLogAddIn → Core, Ide, **VersionControl**. Los 3 cuelgan de **dos raíces**: `Deployment` (bloquea Gettext+Autotools) y `VersionControl` (bloquea ChangeLog). Todas las demás deps (Core/Ide/DesignerSupport/SourceEditor2) cargan en el run vivo.
+
+**Causa raíz (confirmada por código + resolución empírica)**: la detección de los closures de `AddIns/` la hace el manifiesto `MonoDevelop.exe.addins` (fuente **trackeada** `main/src/core/MonoDevelop.Startup/MonoDevelop.exe.addins`, `Content` + `CopyToOutputDirectory` → `main/build/MonoDevelop.exe.addins`). Cadena de descubrimiento: `AddinEngine.Initialize` fija `startupDirectory = dir(entryAssembly) = main/build` → `AddinDatabase.Update` → `AddinRegistryUpdater.VisitFolder(StartupDirectory, recursive=false)` → visita `main/build`, parsea el `*.addins` que hay dentro y sigue sus `<Directory>`; `AddinFolderVisitor.OnVisitFolder` (l.99-104) resuelve cada `<Directory>` **relativo a la carpeta que contiene el archivo** (`main/build`). Tras la unificación del build-tree único (M15b: `main/build/` plano; `main/build/net10run` eliminado), el manifiesto seguía apuntando al layout viejo:
+
+| `<Directory>` (stale) | resolvía a | estado |
+|---|---|---|
+| `../AddIns` | `main/AddIns` | **NO existe** → 0 closures escaneados |
+| `../../../local-config` | `main/build/local-config` | NO existe (era `<repo>/local-config` en el layout viejo) |
+
+Con `net10run` el layout era `net10run/` (dir de arranque) + `../AddIns` como hermano → encajaba. Hoy el dir de arranque **es** `main/build` y los closures están en `main/build/AddIns` → las rutas quedaron huérfanas. **Consecuencia**: un registro fresco solo registraba **4** addins (Core, Ide, GnomePlatform, ExtensionTool, que viven en la raíz `main/build`); los 31 closures de `AddIns/` **nunca** se detectaban → `Deployment` y `VersionControl` sin `.maddin` en el dominio vivo → los 3 objetivos no resolvían sus deps y se deshabilitaban **en silencio** (0 "Add-in error" en el log). El run vivo del operador solo mostraba 24 addins por los `.maddin` stale persistidos en el DB (`~/.cache/MonoDevelop/9.0/addin-db-003`, dominio `main/build`); el config vivo traía los 5 (`Gettext`/`Autotools`/`ChangeLogAddIn`/`Deployment`/`Deployment.Linux`) `enabled=True` (habilitados por el operador) pero **sin efecto** (no estaban registrados).
+
+**Fix (mínimo, 1 archivo trackeado, 2 rutas)**:
+- `main/src/core/MonoDevelop.Startup/MonoDevelop.exe.addins`: `../AddIns` → **`AddIns`** (→ `main/build/AddIns`, los 31 closures) y `../../../local-config` → **`../../local-config`** (→ `<repo>/local-config`, la carpeta real, hoy vacía).
+- Propagado al artefacto de build `main/build/MonoDevelop.exe.addins` (gitignored; el build lo regenera de la fuente vía `CopyToOutputDirectory`) para que el siguiente arranque lo vea sin esperar un rebuild del Startup.
+
+**No hace falta borrar el DB de registro**: el `Update()` incremental (`AddinRegistryUpdater.VisitFolder` → `RegisterFileToScan`, l.201: `ChangesFound=true` ante un `.addins` modificado) **detecta el cambio del manifiesto** y registra los closures nuevos. **Verificado con A/B** sobre una **copia del DB vivo del operador** (sin borrar nada, perfil `MONODEVELOP_PROFILE=~/opencode/qa_addin_profile2`): tras el fix y un simple arranque, los 5 objetivos registran `.maddin` en el dominio vivo y cargan.
+
+**Por qué VersionControl carga solo con el fix (Deployment sí necesita el `enabled=True` preexistente)**: `VersionControl` es **raíz** (enabled-by-default, sin estado en `config.xml` → `Enabled=True` al registrarse). `Deployment`/`Gettext`/`Autotools`/`ChangeLogAddIn`/`MonoDeveloperExtensions` son sub-addins: necesitan el estado `enabled=True`, que **ya estaba persistido** en el config vivo del operador (los habilitó en el Add-in Manager); el fix solo les da la detección que les faltaba para que el `enabled` tuviera efecto.
+
+### Front B (limpieza de `interfaz-plan.md`) — retirados 3 informes de tareas de la UI GTK
+
+El operador pidió quitar los **informes de tareas de la UI GTK** conservando los de la shell Avalonia. Se retiran 3 secciones (153 líneas; el documento pasa de 5907 → 5754 líneas):
+- **M20** (l.1315) — "el IDE GTK legacy respetaba el tema del SO (fix de `UserInterfaceTheme` no instalado)": fix de `IdeTheme.cs` del IDE GTK.
+- **T7** (l.3260) — "Gtk# 2.12 → GtkSharp 3.24.24.95 (cierre del pipeline Gtk legacy `--old-gui`)": migración del binding GTK del núcleo.
+- **2026-11-12 — Fix del crash GTK** (l.5897) — "colisión de `NuGet.Common` en el ALC del runtime GTK".
+
+**Se conservan** (shell Avalonia / arquitectura compartida / hoja de ruta de migración): el inventario de diálogos Gtk por migrar (l.174, es la hoja de ruta de M5/M6 *hacia* Avalonia), **M15b** (build unificada en `main/build` + relay `--old-gui` + layout de pads Avalonia; el fix de remoting GTK que contiene es parte de esa tarea de arquitectura y el relay `--old-gui` es infraestructura de convivencia §18.4), y **M16f** (watchdog de arranque + burbujas pinned-watch + esqueleto `Xwt.Avalonia`). Los informes GTK retirados son tareas cerradas de la sesión (su detalle permanece en `session_summary.md` §35-36 y en el git log); el archivo es el plan de migración de la UI y no debe acumular informes de trabajo hecho sobre la GTK legacy.
+
+### Validación (valores medidos, GTK real sobre Xvfb `:98`, perfil aislado `MONODEVELOP_PROFILE`)
+
+- **Perfil aislado DB FRESH** (registro limpio, fix aplicado): **4 → 41 add-ins registrados** (los 5 objetivos + `Deployment`/`Deployment.Linux`/`VersionControl` obtienen `.maddin`); con el config vivo (`enabled=True`) **los 3 objetivos CARGAN**: `Add-in loaded:` = **37** (`Gettext`, `Autotools`, `ChangeLogAddIn`, `Deployment`, `Deployment.Linux`, `VersionControl`+`.Git`+`.Subversion`, `MonoDeveloperExtensions` + los 24 previos). **0 errores nuevos** (solo los preexistentes AspNet `System.Web.*` y `SharpSvn` Windows-only) y el warning `unregistered policy name` (`VersionControlPolicy`/`ChangeLogPolicy`) **desaparece (0)**.
+- **A/B sobre copia del DB vivo** (sin borrar el DB): mismos **37 add-ins**, los 3 objetivos **CARGAN** → confirma que **basta un simple reinicio del IDE en vivo** (el `Update()` incremental registra los closures); no se tocó el DB vivo del operador ni el IDE del operador (DISPLAY `:0` intacto).
+- **No-regresión**: la shell Avalonia **no usa** `Mono.Addins` (módulo propio `MonoDevelop.AvaloniaAddons`, §18.4) → el fix (que solo afecta el host `MonoDevelop.dll` GTK, vía su `startupDirectory`/`host-reference`) **no la toca**. La ruta `--old-gui` (relay) y el camino Avalonia por defecto siguen vivos.
+
+### Archivos (2 M, sin submódulos, sin PNGs)
+
+- `main/src/core/MonoDevelop.Startup/MonoDevelop.exe.addins` — Front A: 2 rutas relativas → layout build-tree actual (`AddIns`, `../../local-config`).
+- `docs/interfaz-plan.md` — Front B: −153 líneas (3 informes GTK: M20, T7, crash GTK).
+
+### QA §18.5 (subagente Tester QA Senior) — VERDE, 0 hallazgos bloqueantes
+
+5 RUNS reales del GTK (perfil fresh, inyección de config, relanzamientos, y **simulación fiel del próximo arranque del operador con su DB vivo**) + run de la shell Avalonia. **Esperado 37 → medido 37** `Add-in loaded`; los 5 objetivos **cargan** (no solo se registran); `unregistered policy name` = **0**; **no-regresión Avalonia** (shell arranca limpia, 0 excepciones); proceso **vivo** (exit 124) en todos. **2 hallazgos MENORES no bloqueantes** (preexistentes, fuera de alcance, no regresión del fix):
+
+- **H-1 (preexistente, fuera de alcance)** — `Add-in error (MonoDevelop.Debugger.Soft.AspNet,9.0)`: `MissingDependencyException: the required addin 'MonoDevelop.AspNet,9.0' is not installed`. Es la **cascada del fallo PREEXISTENTE de AspNet** (`System.Web.*.dll` ausentes, familia Windows-only fuera de alcance, §36): AspNet no instala → su dependiente `Soft.AspNet` (habilitado en el DB del operador) falla al resolver. Solo aparece cuando el DB real tiene el estado; **no** es `FileLoad`/`BadImage`/`TypeLoad`/`FileNotFound`; no afecta a los 3 objetivos, no crashea. El fix solo lo hace *visible* al detectar el closure AspNet. Fuera del alcance de esta tarea (que se centra en los 3 objetivos + Deployment/VersionControl).
+- **H-2 (artefacto de test, no del fix)** — `Could not set property 'Files' in type 'Workbench'` (NRE en `CollectionDataType.Deserialize` al cargar `WorkbenchUserPrefs`). **Demostreado que NO lo causa el fix**: solo aparece en la secuencia específica de inyección de `config.xml` a mitad de sesión del QA; **no** aparece en el run con DB fresco + config desde el inicio (flujo real del operador), ni en el run con DB vivo, ni en ningún log vivo del operador. Caso de borde preexistente en la deserialización de prefs de workspace, independiente de este fix.
+
+### Queda pendiente / notas
+
+- El **artefacto** `main/build/MonoDevelop.exe.addins` (gitignored) se actualizó a mano; un `dotnet build` del Startup lo regenera de la fuente (no va al commit).
+- **H-1** (cascada `Soft.AspNet`) y **H-2** (NRE `Workbench` prefs) quedan **documentados como preexistentes/fuera de alcance**; no se tocan en esta tarea. Si el operador quiere, H-1 se resuelve con la familia AspNet (System.Web) y H-2 es un bug de margen de `WorkbenchUserPrefs`.
+- Para que el **run vivo del operador** refleje el fix, basta **reiniciar MonoDevelop** (el `Update()` incremental detecta el `.addins` modificado). No hace falta borrar `~/.cache/MonoDevelop/9.0/addin-db-003` (regenerable; el A/B lo demuestra sin borrarlo).
+- Los ERRORs de scan `AspNet` (`System.Web.*`) y `SubversionAddinWindows` (`SharpSvn`) son **Windows-only / fuera de alcance** (el Set de fix se centra en los 3 objetivos + sus raíces Deployment/VersionControl).
+- **Humanizer** (dep de VersionControl, `Humanizer.Core 2.14.1` en el csproj) **no** está stageado en el closure ni en la raíz, **pero no bloquea la carga** (VersionControl carga; `Humanizer` no lo referencia en el static ctor ni en la ruta de carga de los 3 objetivos). Se documenta como **no-bloqueador**; no se stagea para no añadir DLLs que el runtime no pide (si en el futuro un flujo lo requiriera, se stagea con el patrón net472 `Private=True`).
+
+### Cierre
+
+Commit por nombre de `main/src/core/MonoDevelop.Startup/MonoDevelop.exe.addins` + `docs/interfaz-plan.md` + docs ×2 (`session_summary.md` §37 + `migration-status-report.md`). Push a `origin/agents/sub-agent-senior-dev-role-report`. **Sin submódulos** (xwt y vs-editor-api limpios). Artefactos en `~/opencode/`: probes `addin_probe/`, `attr_probe/`, `dep_audit/`; perfiles aislados `qa_addin_profile/` (DB fresh) y `qa_addin_profile2/` (copia del DB vivo, A/B); backup del DB vivo `~/opencode/addin-db-backup-20261112_053053`; logs de run `qa_addin_run*.log` y los `Ide.log` de cada perfil.

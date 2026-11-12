@@ -1283,6 +1283,10 @@ Antes de la fase de UI conviene ejecutar el plan de parcheo de seguridad descrit
 
 Estado (2026-10-06): las fases 0 a 3 de este plan están ejecutadas y validadas por QA. La Fase 4 (oleadas de add-ins legacy → Avalonia) está en curso: oleada A completa, oleadas B–E pendientes. El shell Avalonia convive con la UI GTK legacy (`--old-gui`). No se elimina soporte GTK. Los add-ins Avalonia viven en carpetas `MonoDevelop.Avalonia.*`; las carpetas legacy no se tocan.
 
+### Nota (2026-11-12): detección de add-ins de la UI GTK — manifiesto `MonoDevelop.exe.addins` con rutas stale
+
+Los 3 add-ins legacy **Gettext** / **Makefile (Autotools)** / **ChangeLog** (y sus raíces `Deployment`/`VersionControl`) no se habilitaban en la UI GTK por falta de detección, no por falta de dependencias implementadas: el manifiesto `MonoDevelop.exe.addins` (fuente `main/src/core/MonoDevelop.Startup/`, copiado a `main/build/`) declaraba `../AddIns` y `../../../local-config`, rutas válidas en el layout viejo `net10run` pero **huérfanas** en el build-tree único actual (`main/build/` plano). El escáner de `Mono.Addins` resuelve cada `<Directory>` relativo a la carpeta que contiene el archivo → `../AddIns` = `main/AddIns` (no existe) → los 31 closures de `AddIns/` nunca se detectaban → `Deployment`/`VersionControl` sin `.maddin` → los 3 objetivos deshabilitados en silencio. **Fix**: `AddIns` y `../../local-config` (2 rutas). Un registro fresco pasó de 4 → 41 add-ins registrados y los 3 objetivos cargan (A/B sobre copia del DB vivo del operador, sin borrar el DB: el `Update()` incremental detecta el `.addins` modificado). La shell Avalonia (módulo propio, no `Mono.Addins`) no se ve afectada. Detalle completo en `docs/session_summary.md` §37.
+
 ### Objetivo
 
 Alinear el sistema de add-ins de la shell Avalonia con el modelo de extensiones de Visual Studio, migrar Preferences, pads/comandos y hooks de plataforma, y dejar la ruta GTK (`--old-gui`) compilable y funcional.
