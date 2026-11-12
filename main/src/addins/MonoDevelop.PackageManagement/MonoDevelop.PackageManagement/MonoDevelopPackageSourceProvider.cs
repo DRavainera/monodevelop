@@ -62,13 +62,13 @@ namespace MonoDevelop.PackageManagement
 		[Obsolete ("DisablePackageSource(PackageSource source) is deprecated. Please use DisablePackageSource(string name) instead.")]
 		public void DisablePackageSource (PackageSource source)
 		{
-			packageSourceProvider.DisablePackageSource (source);
+			packageSourceProvider.DisablePackageSource (source.Name);
 		}
 
 		[Obsolete ("IsPackageSourceEnabled(PackageSource source) is deprecated. Please use IsPackageSourceEnabled(string name) instead.")]
 		public bool IsPackageSourceEnabled (PackageSource source)
 		{
-			return packageSourceProvider.IsPackageSourceEnabled (source);
+			return packageSourceProvider.IsPackageSourceEnabled (source.Name);
 		}
 
 		public IEnumerable<PackageSource> LoadPackageSources ()
@@ -88,6 +88,11 @@ namespace MonoDevelop.PackageManagement
 		public IReadOnlyList<PackageSource> LoadAuditSources ()
 		{
 			return packageSourceProvider.LoadAuditSources ();
+		}
+
+		public void SaveAuditSources (IEnumerable<PackageSource> sources)
+		{
+			packageSourceProvider.SaveAuditSources (sources);
 		}
 
 		public void SaveActivePackageSource (PackageSource source)

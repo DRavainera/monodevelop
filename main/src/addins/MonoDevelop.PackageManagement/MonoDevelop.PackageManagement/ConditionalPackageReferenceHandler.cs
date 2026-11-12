@@ -27,7 +27,6 @@
 using System;
 using System.Linq;
 using MonoDevelop.Projects.MSBuild;
-using NuGet.Frameworks;
 using NuGet.LibraryModel;
 using NuGet.Packaging.Core;
 using NuGet.ProjectManagement;
@@ -62,7 +61,11 @@ namespace MonoDevelop.PackageManagement
 
 		public void UpdateProject (MSBuildProject project)
 		{
-			foreach (NuGetFramework framework in installationContext.SuccessfulFrameworks) {
+			// En NuGet 7.9.0 SuccessfulFrameworks es List<string> con el TargetAlias
+			// (el moniker TFM tal como está escrito, p. ej. "net472") y el mapa
+			// OriginalFrameworks fue eliminado: la propia string ya es el nombre
+			// original del framework para el condition del ItemGroup.
+			foreach (string framework in installationContext.SuccessfulFrameworks) {
 
 				MSBuildItem packageReference = AddPackageReference (project, framework);
 
@@ -74,13 +77,8 @@ namespace MonoDevelop.PackageManagement
 			}
 		}
 
-		MSBuildItem AddPackageReference (MSBuildProject project, NuGetFramework framework)
+		MSBuildItem AddPackageReference (MSBuildProject project, string originalFramework)
 		{
-			string originalFramework;
-			if (!installationContext.OriginalFrameworks.TryGetValue (framework, out originalFramework)) {
-				originalFramework = framework.GetShortFolderName ();
-			}
-
 			MSBuildItemGroup itemGroup = GetOrAddItemGroup (project, originalFramework);
 			MSBuildItem packageReference = GetOrAddPackageReference (itemGroup);
 

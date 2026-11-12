@@ -182,6 +182,7 @@ namespace MonoDevelop.PackageManagement
 							packagesToRestore,
 							new NuGetProjectContext (solutionManager.Settings),
 							downloadContext,
+							new PackageManagementLogger (packageManagementEvents),
 							cancellationToken);
 					}
 				}

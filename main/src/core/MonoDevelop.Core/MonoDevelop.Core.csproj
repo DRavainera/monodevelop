@@ -70,10 +70,6 @@
       <HintPath>$(NuGetPackageRoot)system.collections.immutable/10.0.1/lib/netstandard2.0/System.Collections.Immutable.dll</HintPath>
       <Private>False</Private>
     </Reference>
-    <Reference Include="Mono.Security">
-      <HintPath>/usr/lib/mono/4.5/Mono.Security.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
     <Reference Include="Mono.Cecil, Version=0.10.1.0, Culture=neutral, PublicKeyToken=50cebf1cceb9d05e">
       <HintPath>/home/daniel/.nuget/packages/mono.cecil/0.10.1/lib/net40/Mono.Cecil.dll</HintPath>
       <Private>False</Private>

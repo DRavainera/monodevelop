@@ -163,6 +163,12 @@ namespace MonoDevelop.Ide.Gui.Components
 		{
 			public InfoBarCloseButton ()
 			{
+				// El Image debe establecerse ANTES que Style=Borderless: este ultimo dispara
+				// SetMiniMode -> SetMiniModeGtk, que mide Widget.Child.GetSizeRequest. Si el
+				// Image (el contenido) aun no existe, Widget.Child es null y se lanza NRE
+				// (antes el Image se asignaba solo en el object-initializer, despues del ctor).
+				// El object-initializer lo reasigna con el mismo valor, sin efecto.
+				Image = closeImageInactive;
 				Style = ButtonStyle.Borderless;
 				BackgroundColor = Styles.NotificationBar.BarBackgroundColor;
 				ImagePosition = ContentPosition.Center;

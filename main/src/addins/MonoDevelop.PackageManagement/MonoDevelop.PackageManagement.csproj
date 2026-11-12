@@ -39,24 +39,46 @@
     <Reference Include="System.ComponentModel.Composition" />
     <Reference Include="System.Runtime.Serialization" />
     <Reference Include="WindowsBase" />
-    <PackageReference Include="NuGet.PackageManagement" Version="$(NuGetVersionNuGet)" PrivateAssets="runtime" />
-    <PackageReference Include="NuGet.Indexing" Version="$(NuGetVersionNuGet)" PrivateAssets="runtime" />
+    <!-- NuGet 7.9.0 emite dos familias TFM con versión de ensamblado distinta
+         (net472 -> 7.9.0.83, net8.0 -> 7.9.0.0) y NuGet.Indexing solo existe en
+         net472: la familia coherente única es net472/7.9.0.83 (la misma que
+         stagea 6.11.2). Se excluye el asset de los PackageReference para que todo
+         el compile venga de las Reference explícitas net472 de abajo; de lo
+         contrario un proyecto net10.0 inyectaría el asset net8.0 (7.9.0.0)
+         transitivamente y chocaría con 7.9.0.83 (CS1705).
+         Con ExcludeAssets="all" el PackageReference tampoco aporta assets de
+         runtime, así que las Reference de abajo pasan a Private=True para
+         stagear la misma familia 7.9.0.83 en el closure (antes la copia venía
+         del asset de runtime del PackageReference). -->
+    <PackageReference Include="NuGet.PackageManagement" Version="$(NuGetVersionNuGet)" ExcludeAssets="all" />
+    <PackageReference Include="NuGet.Indexing" Version="$(NuGetVersionNuGet)" ExcludeAssets="all" />
     <PackageReference Include="NuGet.Protocol" Version="$(NuGetVersionNuGet)" ExcludeAssets="all" />
-    <Reference Include="NuGet.Commands"><HintPath>$(NuGetPackageRoot)nuget.commands\$(NuGetVersionNuGet)\lib\net472\NuGet.Commands.dll</HintPath><Private>False</Private></Reference>
-    <Reference Include="NuGet.Common"><HintPath>$(NuGetPackageRoot)nuget.common\$(NuGetVersionNuGet)\lib\net472\NuGet.Common.dll</HintPath><Private>False</Private></Reference>
-    <Reference Include="NuGet.Configuration"><HintPath>$(NuGetPackageRoot)nuget.configuration\$(NuGetVersionNuGet)\lib\net472\NuGet.Configuration.dll</HintPath><Private>False</Private></Reference>
-    <Reference Include="NuGet.Credentials"><HintPath>$(NuGetPackageRoot)nuget.credentials\$(NuGetVersionNuGet)\lib\net472\NuGet.Credentials.dll</HintPath><Private>False</Private></Reference>
-    <Reference Include="NuGet.Protocol"><HintPath>$(NuGetPackageRoot)nuget.protocol\$(NuGetVersionNuGet)\lib\net472\NuGet.Protocol.dll</HintPath><Private>False</Private></Reference>
-    <Reference Include="NuGet.DependencyResolver.Core"><HintPath>$(NuGetPackageRoot)nuget.dependencyresolver.core\$(NuGetVersionNuGet)\lib\net472\NuGet.DependencyResolver.Core.dll</HintPath><Private>False</Private></Reference>
-    <Reference Include="NuGet.Frameworks"><HintPath>$(NuGetPackageRoot)nuget.frameworks\$(NuGetVersionNuGet)\lib\net472\NuGet.Frameworks.dll</HintPath><Private>False</Private></Reference>
-    <Reference Include="NuGet.Indexing"><HintPath>$(NuGetPackageRoot)nuget.indexing\$(NuGetVersionNuGet)\lib\net472\NuGet.Indexing.dll</HintPath><Private>False</Private></Reference>
-    <Reference Include="NuGet.LibraryModel"><HintPath>$(NuGetPackageRoot)nuget.librarymodel\$(NuGetVersionNuGet)\lib\net472\NuGet.LibraryModel.dll</HintPath><Private>False</Private></Reference>
-    <Reference Include="NuGet.Packaging"><HintPath>$(NuGetPackageRoot)nuget.packaging\$(NuGetVersionNuGet)\lib\net472\NuGet.Packaging.dll</HintPath><Private>False</Private></Reference>
-    <Reference Include="NuGet.ProjectModel"><HintPath>$(NuGetPackageRoot)nuget.projectmodel\$(NuGetVersionNuGet)\lib\net472\NuGet.ProjectModel.dll</HintPath><Private>False</Private></Reference>
-    <Reference Include="NuGet.Protocol"><HintPath>$(NuGetPackageRoot)nuget.protocol\$(NuGetVersionNuGet)\lib\net472\NuGet.Protocol.dll</HintPath><Private>False</Private></Reference>
-    <Reference Include="NuGet.Resolver"><HintPath>$(NuGetPackageRoot)nuget.resolver\$(NuGetVersionNuGet)\lib\net472\NuGet.Resolver.dll</HintPath><Private>False</Private></Reference>
-    <Reference Include="NuGet.Versioning"><HintPath>$(NuGetPackageRoot)nuget.versioning\$(NuGetVersionNuGet)\lib\net472\NuGet.Versioning.dll</HintPath><Private>False</Private></Reference>
-    <Reference Include="NuGet.PackageManagement"><HintPath>$(NuGetPackageRoot)nuget.packagemanagement\$(NuGetVersionNuGet)\lib\net472\NuGet.PackageManagement.dll</HintPath><Private>False</Private></Reference>
+    <Reference Include="NuGet.Commands"><HintPath>$(NuGetPackageRoot)nuget.commands\$(NuGetVersionNuGet)\lib\net472\NuGet.Commands.dll</HintPath><Private>True</Private></Reference>
+    <Reference Include="NuGet.Common"><HintPath>$(NuGetPackageRoot)nuget.common\$(NuGetVersionNuGet)\lib\net472\NuGet.Common.dll</HintPath><Private>True</Private></Reference>
+    <Reference Include="NuGet.Configuration"><HintPath>$(NuGetPackageRoot)nuget.configuration\$(NuGetVersionNuGet)\lib\net472\NuGet.Configuration.dll</HintPath><Private>True</Private></Reference>
+    <Reference Include="NuGet.Credentials"><HintPath>$(NuGetPackageRoot)nuget.credentials\$(NuGetVersionNuGet)\lib\net472\NuGet.Credentials.dll</HintPath><Private>True</Private></Reference>
+    <Reference Include="NuGet.Protocol"><HintPath>$(NuGetPackageRoot)nuget.protocol\$(NuGetVersionNuGet)\lib\net472\NuGet.Protocol.dll</HintPath><Private>True</Private></Reference>
+    <Reference Include="NuGet.DependencyResolver.Core"><HintPath>$(NuGetPackageRoot)nuget.dependencyresolver.core\$(NuGetVersionNuGet)\lib\net472\NuGet.DependencyResolver.Core.dll</HintPath><Private>True</Private></Reference>
+    <Reference Include="NuGet.Frameworks"><HintPath>$(NuGetPackageRoot)nuget.frameworks\$(NuGetVersionNuGet)\lib\net472\NuGet.Frameworks.dll</HintPath><Private>True</Private></Reference>
+    <Reference Include="NuGet.Indexing"><HintPath>$(NuGetPackageRoot)nuget.indexing\$(NuGetVersionNuGet)\lib\net472\NuGet.Indexing.dll</HintPath><Private>True</Private></Reference>
+    <Reference Include="NuGet.LibraryModel"><HintPath>$(NuGetPackageRoot)nuget.librarymodel\$(NuGetVersionNuGet)\lib\net472\NuGet.LibraryModel.dll</HintPath><Private>True</Private></Reference>
+    <Reference Include="NuGet.Packaging"><HintPath>$(NuGetPackageRoot)nuget.packaging\$(NuGetVersionNuGet)\lib\net472\NuGet.Packaging.dll</HintPath><Private>True</Private></Reference>
+    <Reference Include="NuGet.ProjectModel"><HintPath>$(NuGetPackageRoot)nuget.projectmodel\$(NuGetVersionNuGet)\lib\net472\NuGet.ProjectModel.dll</HintPath><Private>True</Private></Reference>
+    <Reference Include="NuGet.Resolver"><HintPath>$(NuGetPackageRoot)nuget.resolver\$(NuGetVersionNuGet)\lib\net472\NuGet.Resolver.dll</HintPath><Private>True</Private></Reference>
+    <Reference Include="NuGet.Versioning"><HintPath>$(NuGetPackageRoot)nuget.versioning\$(NuGetVersionNuGet)\lib\net472\NuGet.Versioning.dll</HintPath><Private>True</Private></Reference>
+    <Reference Include="NuGet.PackageManagement"><HintPath>$(NuGetPackageRoot)nuget.packagemanagement\$(NuGetVersionNuGet)\lib\net472\NuGet.PackageManagement.dll</HintPath><Private>True</Private></Reference>
+    <!-- Dep runtime de NuGet.Configuration (net472): no está en el shared
+         framework de .NET 10 y el 7.9.0 la pide en 8.0.0.0 (la copia 4.x que
+         stageaba 6.11.2 no sirve por up-version). Referencia explícita para
+         que compile y Private=True para stagearla en el closure. -->
+    <Reference Include="System.Security.Cryptography.ProtectedData"><HintPath>$(NuGetPackageRoot)system.security.cryptography.protecteddata\8.0.0\lib\net8.0\System.Security.Cryptography.ProtectedData.dll</HintPath><Private>True</Private></Reference>
+    <!-- Deps runtime de NuGet.Commands (FileSystemGlobbing) y NuGet.PackageManagement
+         (Xdt las arrastra de forma transitiva). 6.0.0.0, sin deps propias. En 6.11.2
+         también las referenciaba NuGet.Commands pero no estaban stageadas en el
+         closure (falla auditada): se añaden ahora a Private=True + whitelist. -->
+    <Reference Include="Microsoft.Extensions.FileSystemGlobbing"><HintPath>$(NuGetPackageRoot)microsoft.extensions.filesystemglobbing\6.0.0\lib\netstandard2.0\Microsoft.Extensions.FileSystemGlobbing.dll</HintPath><Private>True</Private></Reference>
+    <Reference Include="Microsoft.Extensions.FileProviders.Abstractions"><HintPath>$(NuGetPackageRoot)microsoft.extensions.fileproviders.abstractions\6.0.0\lib\netstandard2.0\Microsoft.Extensions.FileProviders.Abstractions.dll</HintPath><Private>True</Private></Reference>
+    <Reference Include="Microsoft.Extensions.Primitives"><HintPath>$(NuGetPackageRoot)microsoft.extensions.primitives\6.0.0\lib\netstandard2.0\Microsoft.Extensions.Primitives.dll</HintPath><Private>True</Private></Reference>
     <Reference Include="System.Collections.Immutable"><HintPath>$(NuGetPackageRoot)system.collections.immutable/10.0.1\lib\netstandard2.0\System.Collections.Immutable.dll</HintPath><Private>False</Private></Reference>
     <Reference Include="System.Memory">
       <HintPath>$(NuGetPackageRoot)system.memory/4.5.5/lib/netstandard2.0/System.Memory.dll</HintPath>
@@ -70,6 +92,10 @@
     <PackageReference Include="System.IO.Compression" Version="4.3.0" ExcludeAssets="all" />
     <IncludeCopyLocal Include="Lucene.Net.dll" />
     <IncludeCopyLocal Include="Microsoft.Web.XmlTransform.dll" />
+    <IncludeCopyLocal Include="Microsoft.Extensions.FileSystemGlobbing.dll" />
+    <IncludeCopyLocal Include="Microsoft.Extensions.FileProviders.Abstractions.dll" />
+    <IncludeCopyLocal Include="Microsoft.Extensions.Primitives.dll" />
+    <IncludeCopyLocal Include="System.Security.Cryptography.ProtectedData.dll" />
     <IncludeCopyLocal Include="NuGet.Commands.dll" />
     <IncludeCopyLocal Include="NuGet.Common.dll" />
     <IncludeCopyLocal Include="NuGet.Configuration.dll" />

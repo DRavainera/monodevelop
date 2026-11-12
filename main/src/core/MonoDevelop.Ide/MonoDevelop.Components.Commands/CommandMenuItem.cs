@@ -241,7 +241,12 @@ namespace MonoDevelop.Components.Commands
 				this.Visible = cmdInfo.Visible && (disabledVisible || cmdInfo.Enabled);
 				
 				if (!cmdInfo.Icon.IsNull && cmdInfo.Icon != lastIcon) {
-					Image = new ImageView (cmdInfo.Icon, Gtk.IconSize.Menu);
+					// Gtk.ImageMenuItem.Image exige un Gtk.Image nativo: el setter llama a
+					// gtk_image_set_pixel_size, cuya asercion GTK_IS_IMAGE fallaba con un
+					// ImageView (un Gtk.Misc). Renderizar el mismo icono (mismo ImageService.GetIcon
+					// que usaba ImageView) en un Gdk.Pixbuf dentro de un Gtk.Image real.
+					var icon = MonoDevelop.Ide.ImageService.GetIcon (cmdInfo.Icon, Gtk.IconSize.Menu);
+					Image = new Gtk.Image { Pixbuf = icon.ToPixbuf () };
 					lastIcon = cmdInfo.Icon;
 				}
 				

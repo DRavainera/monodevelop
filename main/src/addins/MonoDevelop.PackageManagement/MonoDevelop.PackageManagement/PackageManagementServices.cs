@@ -93,10 +93,11 @@ namespace MonoDevelop.PackageManagement
 
 		static PluginDiscoverer InitializeDiscoverer ()
 		{
-			var verifier = EmbeddedSignatureVerifier.Create ();
-
-			string pluginPaths = EnvironmentVariableWrapper.Instance.GetEnvironmentVariable ("NUGET_PLUGIN_PATHS");
-			return new PluginDiscoverer (pluginPaths, verifier);
+			// En NuGet 7.9.0 el ctor de PluginDiscoverer ya no toma (paths, verifier):
+			// lee NUGET_PLUGIN_PATHS / NUGET_NETFX_PLUGIN_PATHS / NUGET_NETCORE_PLUGIN_PATHS
+			// por sí mismo vía EnvironmentVariableWrapper.Instance, y EmbeddedSignatureVerifier
+			// fue eliminado de la API pública.
+			return new PluginDiscoverer ();
 		}
 
 		internal static void InitializeCredentialService ()

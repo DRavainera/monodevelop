@@ -96,7 +96,12 @@
     <PackageReference Include="Microsoft.TemplateEngine.Edge" Version="$(NuGetVersionMicrosoftTemplateEngine)" PrivateAssets="runtime" />
     <PackageReference Include="Microsoft.TemplateEngine.Orchestrator.RunnableProjects" Version="$(NuGetVersionMicrosoftTemplateEngine)" PrivateAssets="runtime" />
     <PackageReference Include="Microsoft.VisualStudio.Threading" Version="16.10.56" />
-    <PackageReference Include="YamlDotNet.Signed" Version="5.2.1" />
+    <!-- YamlDotNet 15.1.2 unsigned (unificado con el pin de la shell Avalonia): el parser
+         de syntax highlighting (Sublime3Format) y la shell compilan los mismos fuentes contra
+         15.1.2; la signed 5.2.1 dejaba la referencia del binario GTK (v5.0.0.0) colisionando
+         con el 15.1.2 stageado en la raíz (YamlMappingNode.Children cambió de IDictionary a
+         IOrderedDictionary en 15.x) y rompiendo el render del editor GTK. -->
+    <PackageReference Include="YamlDotNet" Version="15.1.2" />
     <PackageReference Include="System.Security.Permissions" Version="7.0.0" />
   </ItemGroup>
   <ItemGroup>
@@ -143,9 +148,6 @@
       <HintPath>$(NuGetPackageRoot)microsoft.extensions.objectpool/3.0.0-preview9.19423.4/lib/netstandard2.0/Microsoft.Extensions.ObjectPool.dll</HintPath>
       <Private>False</Private>
     </Reference>
-    <Reference Include="YamlDotNet">
-      <HintPath>$(NuGetPackageRoot)yamldotnet.signed/5.2.1/lib/net45/YamlDotNet.dll</HintPath>
-    </Reference>
     <Reference Include="System.Reflection.Metadata">
       <HintPath>$(NuGetPackageRoot)system.reflection.metadata/7.0.0/lib/netstandard2.0/System.Reflection.Metadata.dll</HintPath>
     </Reference>
@@ -177,6 +179,12 @@
     <IncludeCopyLocal Include="Microsoft.TemplateEngine.Edge.dll" />
     <IncludeCopyLocal Include="Microsoft.TemplateEngine.Orchestrator.RunnableProjects.dll" />
     <IncludeCopyLocal Include="Microsoft.TemplateEngine.Utils.dll" />
+        <!-- MVT: la que stagea Microsoft.VisualStudio.Threading a la raiz plana build/ es la
+         shell Avalonia (su PackageReference MVT 16.10.56 outputa a la raiz sin filtro de
+         whitelist). El MVT del Ide NO entra en su ReferenceCopyLocalPaths (verificado con
+         -p:DebugFilterCopyReferences=true), asi que esta entrada es redundante; se deja
+         como red de seguridad por si alguna configuracion futura lo hace entrar en RCLP. -->
+    <IncludeCopyLocal Include="Microsoft.VisualStudio.Threading.dll" />
     <IncludeCopyLocal Include="Mono.Addins.Gui.dll" />
     <IncludeCopyLocal Include="Mono.Debugging.dll" />
     <IncludeCopyLocal Include="Xamarin.Mac.dll" />

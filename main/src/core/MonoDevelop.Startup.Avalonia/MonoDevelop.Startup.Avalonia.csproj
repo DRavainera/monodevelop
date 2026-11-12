@@ -42,12 +42,28 @@
     <PackageReference Include="Avalonia.Skia" Version="12.1.2" />
     <PackageReference Include="SkiaSharp" Version="3.119.4" />
     <!-- NuGet.Configuration: real backend for the NuGet > Sources preferences panel
-         (Settings/PackageSource). Pinned to 7.9.0 EXPLICITLY (not the shared
-         $(NuGetVersionNuGet) property, which the frozen GTK add-ins keep at
-         6.11.2 — the addins GTK are off-limits per the operator decision; the
-         Avalonia shell is the only 7.9.0 consumer and stages its own closure
-         into main/build). -->
-    <PackageReference Include="NuGet.Configuration" Version="7.9.0" />
+         (Settings/PackageSource). Pinned to 7.9.0 EXPLICITLY: the shared
+         $(NuGetVersionNuGet) property is now 7.9.0 as well (unified), but the
+         explicit pin keeps the shell's pin stable if the property ever diverges
+         again. The shell stages its NuGet 7.9.0 closure into main/build. -->
+    <!-- NuGet.Configuration: se referencia el lib/net472 explicitamente (igual que el addin
+         MonoDevelop.PackageManagement) en lugar del PackageReference simple, que en una app
+         net10.0 resuelve el asset net8.0 (NuGet.* 7.9.0.0). Esa familia net8.0 en la raiz
+         colisionaba con los closures de addins (net472, NuGet.* 7.9.0.83) y rompian
+         DotNetCore/AspNetCore/Packaging con FileLoadException 0x80131040 (mismas identidad,
+         dos versiones). Forzar net472 7.9.0.83 unifica la raiz con el resto (directiva: todo
+         a 7.9.0, nada de NET 8.0). ExcludeAssets para que el asset net8.0 no entre al RCLP. -->
+    <PackageReference Include="NuGet.Configuration" Version="$(NuGetVersionNuGet)" ExcludeAssets="all" />
+    <Reference Include="NuGet.Configuration"><HintPath>$(NuGetPackageRoot)nuget.configuration\$(NuGetVersionNuGet)\lib\net472\NuGet.Configuration.dll</HintPath><Private>True</Private></Reference>
+    <Reference Include="NuGet.Common"><HintPath>$(NuGetPackageRoot)nuget.common\$(NuGetVersionNuGet)\lib\net472\NuGet.Common.dll</HintPath><Private>True</Private></Reference>
+    <Reference Include="NuGet.Frameworks"><HintPath>$(NuGetPackageRoot)nuget.frameworks\$(NuGetVersionNuGet)\lib\net472\NuGet.Frameworks.dll</HintPath><Private>True</Private></Reference>
+    <!-- MVT: la shell outputea a la raiz plana build/ (AppendTargetFrameworkToOutputPath=false)
+         y es el proyecto que stagea Microsoft.VisualStudio.Threading ahi: su RCLP lo incluye
+         de forma transitiva, resuelto a 15.8.192 (file 15.8.0.0) por el pin de vs-editor-api.
+         Sin este pin directo la raiz quedaria con MVT 15.8.0.0 (stale de 2018), que hace fallar
+         a los addins que piden 16.10.0.0 (FileLoadException en PropertyPad). Forzar 16.10.56
+         para que el graph de la shell resuelva 16.10.0.0 y stagee esa version a la raiz. -->
+    <PackageReference Include="Microsoft.VisualStudio.Threading" Version="16.10.56" />
     <!-- F# language service (FCS 43.12.403, the .NET 10 era): in-process
           FSharpChecker for completions/hover/go-to-def/find-refs/diagnostics
           on .fs/.fsi/.fsx/.fsscript documents (FSharpLanguageService). The

@@ -42,8 +42,6 @@ namespace MonoDevelop.PackageManagement
 			referencesReader = new ProjectSystemReferencesReader (project);
 		}
 
-		public IProjectBuildProperties BuildProperties => throw new NotImplementedException ();
-
 		public IProjectSystemCapabilities Capabilities => throw new NotImplementedException ();
 
 		public IProjectSystemReferencesReader ReferencesReader {

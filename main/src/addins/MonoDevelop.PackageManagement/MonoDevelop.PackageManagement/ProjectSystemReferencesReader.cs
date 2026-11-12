@@ -34,6 +34,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using MonoDevelop.Core;
 using MonoDevelop.Projects;
+using MonoDevelop.Projects.MSBuild;
 using NuGet.Common;
 using NuGet.Frameworks;
 using NuGet.LibraryModel;
@@ -56,6 +57,40 @@ namespace MonoDevelop.PackageManagement
 			CancellationToken token)
 		{
 			throw new NotImplementedException ();
+		}
+
+		public Task<IReadOnlyList<(string, string[])>> GetItemsAsync (
+			string itemTypeName,
+			params string[] metadataNames)
+		{
+			return Runtime.RunInMainThread (() => GetItems (itemTypeName, metadataNames));
+		}
+
+		internal IReadOnlyList<(string, string[])> GetItems (string itemTypeName, string[] metadataNames)
+		{
+			var results = new List<(string, string[])> ();
+
+			var msbuildProject = project.MSBuildProject;
+			if (msbuildProject == null || msbuildProject.EvaluatedItems == null) {
+				return results;
+			}
+
+			foreach (IMSBuildItemEvaluated item in msbuildProject.EvaluatedItems) {
+				if (!string.Equals (item.Name, itemTypeName, StringComparison.OrdinalIgnoreCase)) {
+					continue;
+				}
+
+				string[] values = Array.Empty<string> ();
+				if (metadataNames != null && metadataNames.Length > 0) {
+					values = metadataNames
+						.Select (name => item.Metadata.GetValue (name))
+						.ToArray ();
+				}
+
+				results.Add ((item.Include, values));
+			}
+
+			return results;
 		}
 
 		public Task<IEnumerable<ProjectRestoreReference>> GetProjectReferencesAsync (

@@ -189,6 +189,7 @@ namespace MonoDevelop.PackageManagement
 					packages,
 					context,
 					downloadContext,
+					new PackageManagementLogger (packageManagementEvents),
 					cancellationToken);
 			}
 

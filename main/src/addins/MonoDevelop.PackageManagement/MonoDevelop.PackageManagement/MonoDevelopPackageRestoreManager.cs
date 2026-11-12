@@ -102,6 +102,7 @@ namespace MonoDevelop.PackageManagement
 			IEnumerable<PackageRestoreData> packages,
 			INuGetProjectContext nuGetProjectContext,
 			PackageDownloadContext downloadContext,
+			ILogger logger,
 			CancellationToken token)
 		{
 			return restoreManager.RestoreMissingPackagesAsync (
@@ -109,6 +110,7 @@ namespace MonoDevelop.PackageManagement
 				packages,
 				nuGetProjectContext,
 				downloadContext,
+				logger,
 				token
 			);
 		}
@@ -116,11 +118,13 @@ namespace MonoDevelop.PackageManagement
 		public Task<PackageRestoreResult> RestoreMissingPackagesInSolutionAsync (
 			string solutionDirectory,
 			INuGetProjectContext nuGetProjectContext,
+			ILogger logger,
 			CancellationToken token)
 		{
 			return restoreManager.RestoreMissingPackagesInSolutionAsync (
 				solutionDirectory,
 				nuGetProjectContext,
+				logger,
 				token
 			);
 		}
@@ -130,16 +134,6 @@ namespace MonoDevelop.PackageManagement
 			Dictionary<PackageReference, List<string>> packageReferencesDict)
 		{
 			return restoreManager.GetPackagesRestoreData (solutionDirectory, packageReferencesDict);
-		}
-
-		public Task<PackageRestoreResult> RestoreMissingPackagesInSolutionAsync (string solutionDirectory, INuGetProjectContext nuGetProjectContext, ILogger logger, CancellationToken token)
-		{
-			throw new NotImplementedException ();
-		}
-
-		public Task<PackageRestoreResult> RestoreMissingPackagesAsync (string solutionDirectory, IEnumerable<PackageRestoreData> packages, INuGetProjectContext nuGetProjectContext, PackageDownloadContext downloadContext, ILogger logger, CancellationToken token)
-		{
-			throw new NotImplementedException ();
 		}
 	}
 
@@ -159,11 +153,13 @@ namespace MonoDevelop.PackageManagement
 
 			var packages = installedPackages.Select (package => new PackageRestoreData (package, projectNames, isMissing: true));
 
+			var logger = new PackageManagementLogger (PackageManagementServices.PackageManagementEvents);
 			return await restoreManager.RestoreMissingPackagesAsync (
 				solutionDirectory,
 				packages,
 				nuGetProjectContext,
 				downloadContext,
+				logger,
 				token);
 		}
 	}

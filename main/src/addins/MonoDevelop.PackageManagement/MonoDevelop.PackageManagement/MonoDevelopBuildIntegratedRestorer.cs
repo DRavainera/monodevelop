@@ -35,12 +35,12 @@ using NuGet.CommandLine;
 using NuGet.Commands;
 using NuGet.Common;
 using NuGet.Configuration;
-using NuGet.LibraryModel;
 using NuGet.PackageManagement;
 using NuGet.Packaging;
 using NuGet.Packaging.Core;
 using NuGet.ProjectManagement;
 using NuGet.ProjectManagement.Projects;
+using NuGet.ProjectModel;
 using NuGet.Protocol.Core.Types;
 
 namespace MonoDevelop.PackageManagement
@@ -187,23 +187,40 @@ namespace MonoDevelop.PackageManagement
 			var spec = await MonoDevelopDependencyGraphRestoreUtility.GetSolutionRestoreSpec (solutionManager, project, context, cancellationToken);
 			context.AddToCache (spec);
 
-			RestoreResult restoreResult = await DependencyGraphRestoreUtility.RestoreProjectAsync (
+			// NuGet 7.9.0 eliminó RestoreProjectAsync (el restore de un proyecto
+			// individual se hacía con PreviewRestore + Commit). El restore ahora
+			// siempre corre sobre un DependencyGraphSpec vía RestoreAsync; para
+			// restaurar un solo proyecto se estrecha el spec de la solución al
+			// closure de ese proyecto.
+			var packageSpecs = await project.GetPackageSpecsAsync (context);
+			var projectSpec = packageSpecs
+				.Single (e => e.RestoreMetadata.ProjectStyle == ProjectStyle.PackageReference ||
+					e.RestoreMetadata.ProjectStyle == ProjectStyle.ProjectJson);
+			var projectSpecNarrowed = spec.WithProjectClosure (projectSpec.RestoreMetadata.ProjectUniqueName);
+
+			var restoreSummaries = await DependencyGraphRestoreUtility.RestoreAsync (
 				solutionManager,
-				project,
+				projectSpecNarrowed,
 				context,
 				new RestoreCommandProvidersCache (),
 				cacheContextModifier,
 				sourceRepositories,
 				Guid.NewGuid (),
+				forceRestore: false,
+				isRestoreOriginalAction: true,
 				context.Logger,
 				cancellationToken);
 
-			if (restoreResult.Success) {
-				if (!object.Equals (restoreResult.LockFile, restoreResult.PreviousLockFile)) {
-					return restoreResult.LockFilePath;
+			var restoreSummary = restoreSummaries.FirstOrDefault ();
+			if (restoreSummary != null && restoreSummary.Success) {
+				// El return solo se usa como flag "el lock file cambió" (los
+				// llamadores hacen un null-check, nunca leen la ruta), así que
+				// se usa el mismo criterio que en RestorePackages: no-Op = sin cambios.
+				if (!restoreSummary.NoOpRestore) {
+					return restoreSummary.InputPath;
 				}
-			} else {
-				ReportRestoreError (restoreResult);
+			} else if (restoreSummary != null) {
+				ReportRestoreError (restoreSummary);
 			}
 			return null;
 		}
@@ -230,15 +247,14 @@ namespace MonoDevelop.PackageManagement
 			return new DependencyGraphCacheContext (CreateLogger (), settings);
 		}
 
-		void ReportRestoreError (RestoreResult restoreResult)
+		void ReportRestoreError (RestoreSummary restoreSummary)
 		{
 			logger.LogInformation (string.Empty);
 
-			foreach (LibraryRange libraryRange in restoreResult.GetAllUnresolved ()) {
+			foreach (IRestoreLogMessage error in restoreSummary.Errors) {
 				packageManagementEvents.OnPackageOperationMessageLogged (
-					MessageLevel.Info,
-					GettextCatalog.GetString ("Restore failed for '{0}'."),
-					libraryRange.ToString ());
+					MessageLevel.Error,
+					error.Message);
 			}
 			logger.LogSavedErrors ();
 			throw new ApplicationException (GettextCatalog.GetString ("Restore failed."));

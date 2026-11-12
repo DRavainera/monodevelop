@@ -36,36 +36,33 @@ using NuGet.Protocol.Plugins;
 
 namespace MonoDevelop.PackageManagement
 {
-	sealed class MonoDevelopPluginFactory : IPluginFactory
+	// En NuGet 7.9.0 IPluginFactory es internal y el PluginManager pide una
+	// Func<TimeSpan, PluginFactory> (la clase pública). Por eso el wrapper se
+	// construye como subclase de PluginFactory y solo sobrescribe GetOrCreateAsync
+	// (virtual en 7.9.0) para inyectar el host mono en el camino plugin.
+	sealed class MonoDevelopPluginFactory : PluginFactory
 	{
-		readonly PluginFactory pluginFactory;
-
 		public MonoDevelopPluginFactory (TimeSpan idleTimeout)
+			: base (idleTimeout)
 		{
-			pluginFactory = new PluginFactory (idleTimeout);
 		}
 
-		public void Dispose ()
-		{
-			pluginFactory.Dispose ();
-		}
-
-		public Task<IPlugin> GetOrCreateAsync (
-			string filePath,
+		public override Task<IPlugin> GetOrCreateAsync (
+			PluginFile pluginFile,
 			IEnumerable<string> arguments,
 			IRequestHandlers requestHandlers,
 			ConnectionOptions options,
 			CancellationToken sessionCancellationToken)
 		{
 			if (!Platform.IsWindows) {
-				var modifiedCommandLine = GetModifiedCommandLine (filePath, arguments);
+				var modifiedCommandLine = GetModifiedCommandLine (pluginFile.Path, arguments);
 				if (modifiedCommandLine != null) {
-					filePath = modifiedCommandLine.FilePath;
+					pluginFile = new PluginFile (modifiedCommandLine.FilePath, pluginFile.State, false);
 					arguments = modifiedCommandLine.Arguments;
 				}
 			}
 
-			return pluginFactory.GetOrCreateAsync (filePath, arguments, requestHandlers, options, sessionCancellationToken);
+			return base.GetOrCreateAsync (pluginFile, arguments, requestHandlers, options, sessionCancellationToken);
 		}
 
 		ModifiedCommandLineArguments GetModifiedCommandLine (string filePath, IEnumerable<string> arguments)
