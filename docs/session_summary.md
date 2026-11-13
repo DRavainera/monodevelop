@@ -4796,11 +4796,45 @@ El operador pidió quitar los **informes de tareas de la UI GTK** conservando lo
 ### Queda pendiente / notas
 
 - El **artefacto** `main/build/MonoDevelop.exe.addins` (gitignored) se actualizó a mano; un `dotnet build` del Startup lo regenera de la fuente (no va al commit).
-- **H-1** (cascada `Soft.AspNet`) y **H-2** (NRE `Workbench` prefs) quedan **documentados como preexistentes/fuera de alcance**; no se tocan en esta tarea. Si el operador quiere, H-1 se resuelve con la familia AspNet (System.Web) y H-2 es un bug de margen de `WorkbenchUserPrefs`.
+- **H-1** (cascada `Soft.AspNet`) **quedó RESUELTO en §38** (stageo de las 6 `System.Web.*` al closure de AspNet + eliminación del cierre duplicado stale `net10.0/`). **H-2** (NRE `Workbench` prefs) sigue documentado como preexistente/fuera de alcance (bug de margen de `WorkbenchUserPrefs`, no del fix).
 - Para que el **run vivo del operador** refleje el fix, basta **reiniciar MonoDevelop** (el `Update()` incremental detecta el `.addins` modificado). No hace falta borrar `~/.cache/MonoDevelop/9.0/addin-db-003` (regenerable; el A/B lo demuestra sin borrarlo).
-- Los ERRORs de scan `AspNet` (`System.Web.*`) y `SubversionAddinWindows` (`SharpSvn`) son **Windows-only / fuera de alcance** (el Set de fix se centra en los 3 objetivos + sus raíces Deployment/VersionControl).
+- Los ERRORs de scan `SubversionAddinWindows` (`SharpSvn`/`SharpPlink`) son **Windows-only / fuera de alcance**. Los ERRORs de scan `AspNet` (`System.Web.*`) que aquí se listaban como preexistentes **quedaron RESUELTOS en §38** (eran la causa de que AspNet no se instalara y, en cascada, de `Soft.AspNet`).
 - **Humanizer** (dep de VersionControl, `Humanizer.Core 2.14.1` en el csproj) **no** está stageado en el closure ni en la raíz, **pero no bloquea la carga** (VersionControl carga; `Humanizer` no lo referencia en el static ctor ni en la ruta de carga de los 3 objetivos). Se documenta como **no-bloqueador**; no se stagea para no añadir DLLs que el runtime no pide (si en el futuro un flujo lo requiriera, se stagea con el patrón net472 `Private=True`).
 
 ### Cierre
 
 Commit por nombre de `main/src/core/MonoDevelop.Startup/MonoDevelop.exe.addins` + `docs/interfaz-plan.md` + docs ×2 (`session_summary.md` §37 + `migration-status-report.md`). Push a `origin/agents/sub-agent-senior-dev-role-report`. **Sin submódulos** (xwt y vs-editor-api limpios). Artefactos en `~/opencode/`: probes `addin_probe/`, `attr_probe/`, `dep_audit/`; perfiles aislados `qa_addin_profile/` (DB fresh) y `qa_addin_profile2/` (copia del DB vivo, A/B); backup del DB vivo `~/opencode/addin-db-backup-20261112_053053`; logs de run `qa_addin_run*.log` y los `Ide.log` de cada perfil.
+
+## 2026-11-12 (38) — Habilitar el add-in legacy "Mono Soft Debugger Support for ASP.NET" (`Debugger.Soft.AspNet`): stageo de las 6 `System.Web.*` al closure de AspNet
+
+**Estado: CERRADO (QA VERDE, 0 hallazgos).** Tras §37 (los 3 add-ins Gettext/Autotools/ChangeLog), el operador reportó que el add-in **"Mono Soft Debugger Support for ASP.NET"** (`MonoDevelop.Debugger.Soft.AspNet`) tenía "el mismo problema". Es la **cascada H-1** que el QA de §37 documentó como preexistente/fuera de alcance: `Soft.AspNet` no cargaba porque su dependencia `MonoDevelop.AspNet` **no se instalaba**.
+
+**Cadena de dependencias** (verificada en `AddinInfo.cs`): `Debugger.Soft.AspNet` → `Core`, `Debugger`, **`AspNet`**, `Debugger.Soft`. El bloqueante es **`AspNet`**: su manifiesto (`main/src/addins/AspNet/Properties/MonoDevelop.AspNet.addin.xml`) declara 6 `<Import assembly="System.Web.*.dll">` (`Helpers`, `Mvc`, `Razor`, `WebPages.Deployment`, `WebPages.Razor`, `WebPages`) que **no estaban** en su closure `main/build/AddIns/AspNet/` → errores de scan ("referenced in the manifest could not be found") → AspNet no instalado → `Soft.AspNet` fallaba con `MissingDependencyException: The required addin 'MonoDevelop.AspNet,9.0' is not installed`.
+
+**Causa raíz (confirmada con el log del filtro `-p:DebugFilterCopyReferences=true`)**: en `main/src/addins/AspNet/MonoDevelop.AspNet.csproj`, las refs de `System.Web.Razor/Mvc/WebPages/WebPages.Razor` tenían **`<Private>False</Private>`** → no entraban en `ReferenceCopyLocalPaths` → el mecanismo `<IncludeCopyLocal>` de `main/msbuild/MDBuildTasks.targets` (que solo *preserva* ítems ya en esa lista) **no podía stagearlas**; y `System.Web.Helpers`/`System.Web.WebPages.Deployment` **no tenían referencia** (solo `<IncludeCopyLocal>`, que sin la ref correspondiente es inoperante). → las 6 DLLs del manifiesto **nunca** se stageaban al closure. Mismo patrón que la tarea de stageo NuGet de §36: el cierre quedaba incompleto y el add-in no se registraba.
+
+**Fix (2 capas)**:
+1. **Csproj (commiteable, el único código)**: las 4 refs existentes pasan a `<Private>True</Private>` y se añaden **2 refs nuevas** (`System.Web.Helpers`, `System.Web.WebPages.Deployment`) con `<Private>True</Private>` y `HintPath` a la cache NuGet (`microsoft.aspnet.webpages/3.2.7/lib/net45/`; `Helpers` va en el package `webpages`, no en `mvc`). Con `Private=True` entran en `ReferenceCopyLocalPaths` y el build las stagea al closure `main/build/AddIns/AspNet/`. **Verificado**: `dotnet build -c DebugLinux` → **0 errores** y las 6 DLLs presentes en el closure (reproducible, no depende de copia manual).
+2. **Cierre duplicado stale (build tree, gitignored, no va al commit)**: se elimina el subdirectorio `main/build/AddIns/AspNet/net10.0/` — un closure **duplicado** del layout viejo por-TFM (mtime 2026-10-28; el build actual con `AppendTargetFrameworkToOutputPath=false` solo escribe en la raíz). Era la fuente de **6 errores de scan residuales** (referenciaba las `System.Web.*` que no tenía) y del **doble registro** de AspNet. La raíz del closure es **superconjunto verificado** de `net10.0/` (comparación por archivos: ninguno se pierde). Backup en `~/opencode/aspnet_net10_stale_backup_*`.
+
+**Nota de alcance**: el cierre duplicado `net10.0/` es un artefacto **sistémico** (presente en ~28 closures de `main/build/AddIns/`, todos mtime 2026-10-28). Solo se elimina el de **AspNet** (el addin de esta tarea); el resto queda documentado como preexistente (no produce `Add-in error`; AspNet era el caso concreto porque su manifiesto referencia DLLs ausentes).
+
+### Validación (valores medidos, GTK real sobre Xvfb `:98`, perfil aislado fresh)
+
+- **RUN final** (perfil fresh, closure AspNet limpio + 6 DLLs stageadas por el build): **`Add-in loaded: MonoDevelop.AspNet`** y **`Add-in loaded: MonoDevelop.Debugger.Soft.AspNet`** (el objetivo) — **33 add-ins** cargados, proceso **vivo** (exit 124, sin crash).
+- **Errores de scan AspNet = 0** (`grep -c "AddIns/AspNet.*could not be found"` → 0; antes 12: 6 raíz + 6 `net10.0/`). **`Add-in error` = 0**.
+- **QA §18.5 (subagente Tester QA Senior)**: **VERDE, 0 hallazgos**. Confirmó el diff del csproj (4→`Private=True` + 2 refs nuevas), las 6 rutas HintPath en la cache, el closure poblado + `net10.0/` eliminado, el rebuild 0 errores, el run (AspNet + Soft.AspNet cargan, 0 errores AspNet), la shell Avalonia limpia (0 excepciones) y la **no-regresión de §37**: 33 add-ins **idénticos** al baseline fresh anterior (`comm` sin diferencias), y el `Add-in error (Soft.AspNet)` del baseline desapareció.
+- **Fuera de alcance / preexistente**: los 6 `could not be found` restantes son `SubversionAddinWindows` (`SharpSvn*`, Windows-only), idénticos al baseline; no son de AspNet ni de esta tarea.
+
+### Archivos (1 M, sin submódulos, sin PNGs)
+
+- `main/src/addins/AspNet/MonoDevelop.AspNet.csproj` — 4 refs `System.Web.*` a `Private=True` + 2 refs nuevas (`System.Web.Helpers`, `System.Web.WebPages.Deployment`) `Private=True` (+12/−4). El stageo de las 6 DLLs al closure y la eliminación de `net10.0/` son **build tree** (gitignored, no van al commit).
+
+### Queda pendiente / notas
+
+- El **cierre duplicado `net10.0/`** sigue presente en ~28 closures (artefacto del layout viejo por-TFM). Es **preexistente y no bloquea** (solo AspNet producía `Add-in error` porque su manifiesto referencia DLLs ausentes). Si el operador quiere una limpieza global, se puede eliminar el `net10.0/` de todos los closures (son gitignored, regenerables, y la raíz de cada closure es el output real) — **no se hace en esta tarea** para no ampliar el alcance.
+- Para que el **run vivo del operador** refleje el fix, basta **reiniciar MonoDevelop** (el `Update()` incremental detecta el closure AspNet modificado). No hace falta borrar `~/.cache/MonoDevelop/9.0/addin-db-003`.
+
+### Cierre
+
+Commit por nombre de `main/src/addins/AspNet/MonoDevelop.AspNet.csproj` + docs ×2 (`session_summary.md` §38 + nota en `migration-status-report.md`). Push a `origin/agents/sub-agent-senior-dev-role-report`. **Sin submódulos**. Artefactos en `~/opencode/`: perfiles aislados `qa_addin_profile_QA3/` (run final), `qa_softaspnet_profile/` (run QA); backup `aspnet_net10_stale_backup_*`; logs `qa_aspnet_*.log`.

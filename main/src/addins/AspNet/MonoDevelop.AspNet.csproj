@@ -112,19 +112,27 @@
     </Reference>
     <Reference Include="System.Web.Razor">
       <HintPath>$(NuGetPackageRoot)microsoft.aspnet.razor/3.2.7/lib/net45/System.Web.Razor.dll</HintPath>
-      <Private>False</Private>
+      <Private>True</Private>
     </Reference>
     <Reference Include="System.Web.Mvc">
       <HintPath>$(NuGetPackageRoot)microsoft.aspnet.mvc/5.2.7/lib/net45/System.Web.Mvc.dll</HintPath>
-      <Private>False</Private>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="System.Web.Helpers">
+      <HintPath>$(NuGetPackageRoot)microsoft.aspnet.webpages/3.2.7/lib/net45/System.Web.Helpers.dll</HintPath>
+      <Private>True</Private>
     </Reference>
     <Reference Include="System.Web.WebPages">
       <HintPath>$(NuGetPackageRoot)microsoft.aspnet.webpages/3.2.7/lib/net45/System.Web.WebPages.dll</HintPath>
-      <Private>False</Private>
+      <Private>True</Private>
     </Reference>
     <Reference Include="System.Web.WebPages.Razor">
       <HintPath>$(NuGetPackageRoot)microsoft.aspnet.webpages/3.2.7/lib/net45/System.Web.WebPages.Razor.dll</HintPath>
-      <Private>False</Private>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="System.Web.WebPages.Deployment">
+      <HintPath>$(NuGetPackageRoot)microsoft.aspnet.webpages/3.2.7/lib/net45/System.Web.WebPages.Deployment.dll</HintPath>
+      <Private>True</Private>
     </Reference>
     <Reference Include="Microsoft.CodeAnalysis">
       <HintPath>$(NuGetPackageRoot)microsoft.codeanalysis.common/$(NuGetVersionRoslyn)/lib/netstandard2.0/Microsoft.CodeAnalysis.dll</HintPath>
