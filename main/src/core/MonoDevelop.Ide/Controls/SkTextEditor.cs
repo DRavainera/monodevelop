@@ -525,6 +525,69 @@ public class SkTextEditor : Control
 		// Before the first layout the owner's viewport is 0; fall back to the
 		// arranged bounds so the bitmap is never degenerate.
 		viewportH = vp > 0 ? vp : Math.Max (1, Bounds.Height);
+		MinimapScrollChanged?.Invoke (this, EventArgs.Empty);
+	}
+
+	// ----- Minimap hooks (EditorMinimap reads the live document state) -----
+	/// <summary>Fired when the ScrollViewer the editor is mounted in changes its
+	/// offset/viewport — the minimap's viewport-indicator refresh feed.</summary>
+	public event EventHandler? MinimapScrollChanged;
+	/// <summary>Fired by SetBubbles — the minimap's error-marker refresh feed.</summary>
+	public event EventHandler? DiagnosticsChanged;
+
+	/// <summary>Line count the minimap maps its rows to (buffer lines).</summary>
+	public int MinimapLineCount => lines.Count;
+	/// <summary>Total scrollable height in pixels (the editor's ScrollExtent —
+	/// the minimap maps its full height onto this extent).</summary>
+	public double MinimapScrollExtent => ScrollExtent;
+	/// <summary>Snapshot of the line model for background raster computation
+	/// (copy: the minimap's Task must not race the live list).</summary>
+	public string [] MinimapLinesSnapshot ()
+	{
+		int n = lines.Count;
+		var copy = new string [n];
+		lines.CopyTo (copy, 0);
+		return copy;
+	}
+	/// <summary>The palette's base text color of the active theme (the raster's
+	/// fallback per-line color), resolved on the calling (UI) thread.</summary>
+	public SKColor MinimapBaseForeground
+	{
+		get {
+			var theme = CurrentEditorTheme ();
+			if (theme != null && theme.TryGetColor ("foreground", out var c)) {
+				var (r, g, b, a) = c.ToRgba ();
+				return new SKColor (r, g, b, a);
+			}
+			return ToSk (Foreground as ISolidColorBrush) ?? new SKColor (0xD4, 0xD4, 0xD4);
+		}
+	}
+	/// <summary>The palette's base background of the active theme, alpha 0 when
+	/// the editor should keep its surface default (the raster falls back to
+	/// #1E1E1E dark / white light in that case).</summary>
+	public SKColor MinimapBaseBackground
+	{
+		get {
+			var theme = CurrentEditorTheme ();
+			if (theme != null && theme.TryGetColor ("background", out var c)) {
+				var (r, g, b, a) = c.ToRgba ();
+				return new SKColor (r, g, b, a);
+			}
+			return ActualThemeVariant == Avalonia.Styling.ThemeVariant.Light
+				? new SKColor (0xFF, 0xFF, 0xFF, 0xFF)
+				: new SKColor (0x1E, 0x1E, 0x1E, 0xFF);
+		}
+	}
+	/// <summary>The inline diagnostic markers (line → isError) — the minimap's
+	/// error-marker feed (lineBubbles is the single source the editor paints).</summary>
+	public IReadOnlyDictionary<int, bool> MinimapErrorLines
+	{
+		get {
+			var list = new List<KeyValuePair<int, bool>> (lineBubbles.Count);
+			foreach (var kv in lineBubbles)
+				list.Add (new KeyValuePair<int, bool> (kv.Key, kv.Value.isError));
+			return list.ToDictionary (kv => kv.Key, kv => kv.Value);
+		}
 	}
 
 	/// <summary>Full document height (visible rows, folded lines excluded) —
@@ -2021,6 +2084,7 @@ public class SkTextEditor : Control
 		foreach (var b in bubbles)
 			lineBubbles [b.line] = (b.text, b.isError);
 		MarkDirty ();
+		DiagnosticsChanged?.Invoke (this, EventArgs.Empty);
 	}
 
 	/// <summary>Number of inline diagnostic markers currently shown (QA assertion).</summary>

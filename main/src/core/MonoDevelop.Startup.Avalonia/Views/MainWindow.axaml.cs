@@ -636,6 +636,143 @@ public partial class MainWindow : Window
 					Output ("[tablist] after-pick selected=" + (DocTabs.SelectedItem as TabItem)?.Tag +
 						" offset=" + tabStripOffset.ToString ("F0") + " reveal-ok=" + ReferenceEquals (DocTabs.SelectedItem, lastTab));
 				}
+			} else if (qa == "--tabhit") {
+				// QA: tab-list button (▾) hit-area measurement. Opens a real file plus a
+				// few extra tabs (real strip context), then dumps the button's screen
+				// bounds, whether its background resolves, and an Avalonia InputHitTest
+				// grid over the button's rectangle — so we see EXACTLY which points
+				// reach the button (vs. only the glyph) without needing real mouse input.
+				var hitRealFile = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile), "opencode", "highlight_qa", "fixture.cs");
+				if (File.Exists (hitRealFile))
+					OpenFileDocument (hitRealFile);
+				for (int i = 1; i <= 10; i++) {
+					OpenDocumentText ("QaTabHit" + i + ".cs", $"// tabhit {i}\n");
+					await Task.Delay (40);
+				}
+				UpdateTabScrollButtons ();
+				Output ("[tabhit] overflow=" + TabScrollButtonsVisible () + " tabs=" + DocTabs!.Items.OfType<TabItem> ().Count ());
+				var btn = DocTabs.GetVisualDescendants ().OfType<Button> ().FirstOrDefault (b => b.Name == "DocTabList");
+				if (btn is null) {
+					Output ("[tabhit] button-not-found");
+				} else {
+					var winPt = btn.TranslatePoint (new Point (0, 0), this) ?? default;
+					Output ("[tabhit] btn-bounds=" + btn.Bounds.Width.ToString ("F1") + "x" + btn.Bounds.Height.ToString ("F1")
+						+ " win=" + winPt.X.ToString ("F0") + "," + winPt.Y.ToString ("F0")
+						+ " margin=" + btn.Margin);
+					Output ("[tabhit] btn-bg=" + (btn.Background is null ? "null" : btn.Background.ToString ())
+						+ " (style-set=" + (btn.GetValue (Button.BackgroundProperty) is not null) + ")");
+					var cp = btn.GetSelfAndVisualDescendants ().OfType<Avalonia.Controls.Presenters.ContentPresenter> ().FirstOrDefault ();
+					if (cp is not null)
+						Output ("[tabhit] contentPresenter-bg=" + (cp.Background is null ? "null" : "opaque")
+							+ " bounds=" + cp.Bounds.Width.ToString ("F1") + "x" + cp.Bounds.Height.ToString ("F1"));
+					Output ("[tabhit] === button visual subtree (bounds in DocTabs space, hit=IsHitTestVisible) ===");
+					foreach (var d in btn.GetSelfAndVisualDescendants ()) {
+						var tp = d.TranslatePoint (new Point (0, 0), DocTabs);
+						string bg = "";
+						if (d is Avalonia.Controls.Border bd)
+							bg = " bg=" + (bd.Background is null ? "null" : "opaque");
+						else if (d is Avalonia.Controls.Presenters.ContentPresenter cpr)
+							bg = " cp-bg=" + (cpr.Background is null ? "null" : "opaque");
+						Output ("[tabhit]   " + d.GetType ().Name + " @(" + (tp?.X.ToString ("F1") ?? "?") + "," + (tp?.Y.ToString ("F1") ?? "?")
+							+ ") " + d.Bounds.Width.ToString ("F1") + "x" + d.Bounds.Height.ToString ("F1") + bg);
+					}
+					// WINDOW-RELATIVE rects of the elements that share the strip's
+					// right edge (the button's Border#Ext, the clip viewport, and the
+					// overflowing TabItems) so we can map the real pointer hits to
+					// the element actually occupying each on-screen pixel.
+					System.Action<string, System.Func<Avalonia.Visual, bool>> dumpWin = (label, pred) => {
+						foreach (var v in DocTabs.GetSelfAndVisualDescendants ()) {
+							if (!pred (v))
+								continue;
+							var wp = v.TranslatePoint (new Point (0, 0), this);
+							if (wp is null)
+								continue;
+							Output ("[tabhit] winrect " + label + " @(" + wp.Value.X.ToString ("F0") + "," + wp.Value.Y.ToString ("F0")
+								+ ") " + v.Bounds.Width.ToString ("F0") + "x" + v.Bounds.Height.ToString ("F0")
+								+ " " + v.GetType ().Name);
+						}
+					};
+					dumpWin ("Ext", v => v is Avalonia.Controls.Border bb && bb.Name == "Ext");
+					dumpWin ("StripViewport", v => v is Avalonia.Controls.Border sb && sb.Name == "StripViewport");
+					int tiIdx = 0;
+					foreach (var ti in DocTabs.Items.OfType<TabItem> ()) {
+						tiIdx++;
+						var wp = ti.TranslatePoint (new Point (0, 0), this);
+						if (wp is null)
+							continue;
+						Output ("[tabhit] winrect TabItem#" + tiIdx + " @(" + wp.Value.X.ToString ("F0") + "," + wp.Value.Y.ToString ("F0")
+							+ ") " + ti.Bounds.Width.ToString ("F0") + "x" + ti.Bounds.Height.ToString ("F0"));
+					}
+					// Topmost hit test FROM THE WINDOW at each grid point (screen
+					// coords): reveals any higher-Z element that overlaps the button
+					// and intercepts clicks (a DocTabs-scoped hit test can't see it).
+					var winOrigin = btn.TranslatePoint (new Point (0, 0), this) ?? default;
+					double bx = winOrigin.X, by = winOrigin.Y, bw = btn.Bounds.Width, bh = btn.Bounds.Height;
+					int hitBtn = 0, total = 0;
+					Output ("[tabhit] TOPMOST grid from window (BTN=button, else topmost element at that screen point):");
+					for (int gy = 0; gy < 6; gy++) {
+						var line = new List<string> ();
+						for (int gx = 0; gx < 6; gx++) {
+							double sx = bx + bw * (gx + 0.5) / 6.0, sy = by + bh * (gy + 0.5) / 6.0;
+							var hit = this.InputHitTest (new Point (sx, sy));
+							bool isBtn = hit is not null && btn.GetSelfAndVisualDescendants ().Any (d => ReferenceEquals (d, hit));
+							total++;
+							if (isBtn) {
+								hitBtn++;
+								line.Add ("BTN");
+							} else {
+								string t = hit is null ? "none" : hit.GetType ().Name;
+								// if it's a tab item, tag it with its header so we know WHICH tab
+								if (hit is TabItem ti && ti.Header is TextBlock hb)
+									t = "Tab:" + (hb.Text.Length > 4 ? hb.Text.Substring (0, 4) : hb.Text);
+								else if (hit is TabItem ti2)
+									t = "TabItem";
+								line.Add (t.Length > 5 ? t.Substring (0, 5) : t);
+							}
+						}
+						Output ("    " + string.Join (" ", line));
+					}
+					Output ("[tabhit] button-reached(topmost)=" + hitBtn + "/" + total);
+					// Also dump every visual that intersects the button rect, by type.
+					Output ("[tabhit] visuals intersecting button rect:");
+					foreach (var v in this.GetSelfAndVisualDescendants ()) {
+						if (v == null)
+							continue;
+						var vp = v.TranslatePoint (new Point (0, 0), this);
+						if (vp is null)
+							continue;
+						var vr = new Avalonia.Rect (vp.Value.X, vp.Value.Y, v.Bounds.Width, v.Bounds.Height);
+						var btnRect = new Avalonia.Rect (bx, by, bw, bh);
+						if (vr.Intersect (btnRect) != null && vr.Width > 1 && vr.Height > 1) {
+							string tag = "";
+							if (v is TabItem tii)
+								tag = " hdr=" + ((tii.Header is TextBlock hbt) ? hbt.Text : "");
+							Output ("[tabhit]   " + v.GetType ().Name + " @(" + vp.Value.X.ToString ("F0") + "," + vp.Value.Y.ToString ("F0")
+								+ ") " + vr.Width.ToString ("F0") + "x" + vr.Height.ToString ("F0") + tag);
+						}
+					}
+					// DEFINITIVE: log the REAL pointer pipeline at the window level.
+					// Every real (xdotool) click during this run logs the topmost
+					// source element (what actually receives the click) — no
+					// screenshots, no InputHitTest geometry. Raw = window coords, so
+					// we also log the button-relative offset (btnX/btnY). BTN=Y means
+					// the click's source is inside the button's own subtree.
+					this.AddHandler (PointerPressedEvent, (EventHandler<PointerPressedEventArgs>)((_, pe) => {
+						var winPt = pe.GetCurrentPoint (this).Position;
+						bool inBtn = pe.Source is Visual pv0
+							&& btn.GetSelfAndVisualDescendants ().Any (d => ReferenceEquals (d, pv0));
+						// full ancestor chain of the hit source -> identifies the
+						// exact overlapping element intercepting the click.
+						var chain = new List<string> ();
+						for (Visual? v = pe.Source as Visual; v is not null && v != this && chain.Count < 7; v = v.GetVisualParent ())
+							chain.Add (v.GetType ().Name + (v is Control cv && !string.IsNullOrEmpty (cv.Name) ? "#" + cv.Name : "")
+								+ ("(" + v.Bounds.Width.ToString ("F0") + "x" + v.Bounds.Height.ToString ("F0") + ")"));
+						Output ("[tabhit] CLICK win=" + winPt.X.ToString ("F0") + "," + winPt.Y.ToString ("F0")
+							+ " btn-rel=" + (winPt.X - bx).ToString ("F0") + "," + (winPt.Y - by).ToString ("F0")
+							+ " BTN=" + (inBtn ? "Y" : "N") + " chain=" + string.Join (" <", chain));
+					}), RoutingStrategies.Tunnel | RoutingStrategies.Bubble, true);
+					Output ("[tabhit] pointer-logging-armed");
+				}
 			} else if (qa == "--searchpopup") {
 				// QA: toolbar search — live results while typing, category prefixes
 				// and Enter activation opening the picked file.
@@ -2736,6 +2873,77 @@ public partial class MainWindow : Window
 						ed.SetBubbleMode (SkTextEditor.BubbleMode.Never);
 						Output ("[bubbles] hidden: " + (ed.CurrentBubbleMode == SkTextEditor.BubbleMode.Never));
 						ed.SetBubbleMode (SkTextEditor.BubbleMode.ForErrors);
+					}
+				}
+			} else if (qa == "--minimap") {
+				// QA: the editor minimap (file-header piece). Open a long fixture
+				// (a single document scrolls → a real viewport indicator), then
+				// verify the whole pipeline:
+				//   1. the minimap is mounted next to the editor and is wired
+				//      (reads the editor's line model / scroll owner);
+				//   2. the background raster finishes (QaRasterFrames > 0) with
+				//      the right line count — the scaled colored document;
+				//   3. breakpoints + error bubbles appear as overlay dots;
+				//   4. a click (or drag) on the minimap moves the editor caret
+				//      to the mapped line (GotoLine round-trip).
+				var mmFile = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile),
+					"opencode", "minimap_qa", "fixture.cs");
+				if (!File.Exists (mmFile)) {
+					Output ("[minimap] no fixture at " + mmFile);
+				} else {
+					OpenFileDocument (mmFile);
+					var name = DocKey (mmFile);
+					if (docs.TryGetValue (name, out var ed)) {
+						SelectDocument (name);
+						// The minimap lives in the 2-column Grid wrapper (column 1).
+						// We are on the UI thread (the QA hook runs in Opened), so a
+						// direct visual-tree walk is safe.
+						var mm = DocContent?.GetSelfAndVisualDescendants ()
+							.OfType<MonoDevelop.Ide.Controls.EditorMinimap> ()
+							.FirstOrDefault ();
+						if (mm is null) {
+							Output ("[minimap] FAIL: minimap not found in document content");
+						} else {
+							Output ("[minimap] found minimap wired=" + mm.QaWired
+								+ " editorBound=" + ReferenceEquals (mm.QaEditor, ed)
+								+ " lines=" + ed.LineCountForTest);
+							// Wait for the background raster to finish (the colored
+							// scaled document). Poll with a bounded timeout.
+							var sw = System.Diagnostics.Stopwatch.StartNew ();
+							while (mm.QaRasterFrames == 0 && sw.Elapsed < TimeSpan.FromSeconds (30))
+								await System.Threading.Tasks.Task.Delay (100);
+							Output ("[minimap] raster frames=" + mm.QaRasterFrames
+								+ " lines=" + mm.QaLastRasterLines
+								+ " (expected=" + ed.LineCountForTest + ")"
+								+ (mm.QaRasterFrames > 0 ? " RASTER-OK" : " RASTER-TIMEOUT"));
+							// Breakpoint dots + error markers: set a breakpoint and an
+							// error bubble, then confirm the editor state that the
+							// overlay reads (the minimap re-renders from these feeds).
+							ed.GotoLine (10);
+							ed.ToggleBreakpoint ();
+							ed.SetBubbles (new [] { (20, "CS1002: QA error", true) });
+							Output ("[minimap] bp@line=" + (ed.BreakpointLines.ContainsKey (10) ? "10" : "NONE")
+								+ " bubbles=" + ed.BubbleCount);
+							// The caret row after the breakpoint GotoLine.
+							Output ("[minimap] caretLine=" + ed.CurrentLine);
+							// Click→GotoLine: the minimap maps its Y to a line and
+							// moves the editor caret there. The real pointer path is
+							// OnPointerPressed→JumpToY; QaJumpToY drives the SAME
+							// mapping deterministically (the pointer path itself is
+							// covered by the Xvfb click capture).
+							int caretBefore = ed.CurrentLine;
+							mm.QaJumpToY (mm.Bounds.Height * 0.005); // near the top
+							await System.Threading.Tasks.Task.Delay (200);
+							Output ("[minimap] jump top: caretBefore=" + caretBefore
+								+ " caretAfter=" + ed.CurrentLine
+								+ (ed.CurrentLine < 10 ? " JUMP-OK" : " JUMP-CHECK"));
+							mm.QaJumpToY (mm.Bounds.Height * 0.995); // near the bottom
+							await System.Threading.Tasks.Task.Delay (200);
+							int lastLine = ed.LineCountForTest - 1;
+							Output ("[minimap] jump bottom: caretAfter=" + ed.CurrentLine
+								+ " lastLine=" + lastLine
+								+ (ed.CurrentLine > lastLine - 10 ? " JUMP-OK" : " JUMP-CHECK"));
+						}
 					}
 				}
 			} else if (qa == "--compl") {
@@ -4924,14 +5132,44 @@ public partial class MainWindow : Window
 		// Capture the editor BEFORE wrapping: the `docs` registry (and the F# /
 		// dirty / undo wiring below) is keyed on the editor, not the wrapper.
 		var editor = content as MonoDevelop.Ide.Controls.SkTextEditor;
-		if (editor is not null)
-			content = new ScrollViewer {
+		if (editor is not null) {
+			var sv = new ScrollViewer {
 				Content = editor,
 				VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
 				HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
 				HorizontalAlignment = HorizontalAlignment.Stretch,
 				VerticalAlignment = VerticalAlignment.Stretch,
 			};
+			// The document's minimap (file-header piece): a scaled overview of
+			// the whole file with its syntax colors plus a live viewport/caret/
+			// breakpoint/error overlay; a click jumps the editor to that line.
+			// It mounts as the RIGHT column of a 2-column grid — the standard
+			// IDE layout (VS Code/Sublime put it at the editor's right edge).
+			var mm = new MonoDevelop.Ide.Controls.EditorMinimap {
+				Width = MonoDevelop.Ide.Controls.EditorMinimap.DefaultWidth,
+				HorizontalAlignment = HorizontalAlignment.Stretch,
+				VerticalAlignment = VerticalAlignment.Stretch,
+			};
+			mm.Attach (editor, sv);
+			var editorPane = new Panel {
+				HorizontalAlignment = HorizontalAlignment.Stretch,
+				VerticalAlignment = VerticalAlignment.Stretch,
+				Children = { sv },
+			};
+			Grid.SetColumn (editorPane, 0);
+			var mmPane = new Panel {
+				HorizontalAlignment = HorizontalAlignment.Stretch,
+				VerticalAlignment = VerticalAlignment.Stretch,
+				Children = { mm },
+			};
+			Grid.SetColumn (mmPane, 1);
+			content = new Grid {
+				ColumnDefinitions = ColumnDefinitions.Parse ("*," + (int)MonoDevelop.Ide.Controls.EditorMinimap.DefaultWidth),
+				Children = { editorPane, mmPane },
+				HorizontalAlignment = HorizontalAlignment.Stretch,
+				VerticalAlignment = VerticalAlignment.Stretch,
+			};
+		}
 		documents.Add ((tag, content));
 		if (editor is not null && !docs.ContainsKey (tag)) {
 			var ed = editor;

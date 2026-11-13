@@ -4948,3 +4948,64 @@ QA §18.5: VERDE 0 hallazgos (2 ciclos: ciclo #1 con 1 hallazgo menor de cifras 
 
 ### Cierre
 Sin cambios de repo (el build tree es gitignored) → no hay commit de producto. Esta sección queda registrada como incidente de proceso. Artefactos: `~/opencode/highlight_qa/relaunch_verify.log`, `relaunch_verify2.log`, `relaunch_verify2.png`.
+
+## 2026-11-13 (42) — Minimapa del editor (barra de visión reducida a la derecha) + fix del hit-test del botón ▾ de lista de pestañas
+
+**Estado: CERRADO (QA VERDE, 0 hallazgos).** Dos piezas pedidas por el operador sobre la shell Avalonia: (1) *"Agregar una barra scrollview a la derecha del editor que muestra la visión reducida del editor con errores, marcado de puntos de depuración, etc., como lo tienen otros IDE"*; (2) *"Arreglar el botón de lista de pestañas del editor que tiene un área de evento de click muy chica (solo donde está el icono triangular) y el evento debe estar en toda el área del botón"*.
+
+### Pieza 1 — Minimapa
+
+**NUEVO control `EditorMinimap : Control`** (Skia, custom-drawn como el editor) en `MonoDevelop.Ide/Controls/EditorMinimap.cs`, montado **a la derecha del `ScrollViewer` del editor** como 2ª columna de un `Grid` de 2 columnas (`*,110`) en `AddDocument`. Solo para docs de tipo `SkTextEditor` (docs no-editor como Welcome no lo llevan — verificado en QA).
+
+**Qué muestra:**
+- **Raster escalado con colores de sintaxis** del documento **entero** (no solo el viewport). Docs largos (línea sub-píxel) → **barra de densidad** por línea en su color dominante; docs cortos → **texto a escala** con colores.
+- **Overlay barato por frame** (en `Render`, sin re-calcular el raster): **rect de viewport** (regione visible, dim + borde), **banda de caret**, **puntos de breakpoints** (margen izq.), **marcadores de error** (los `lineBubbles` que son error, margen der.).
+- **Click / drag → salta el caret** del editor a la línea mapeada (`GotoLine` + `EnsureCaretVisible`).
+
+**Arquitectura (el raster es caro, el overlay es gratis):**
+- El raster **no puede calcularse por frame** (highlighting ~0,9 ms/línea; 3000 líneas ≈ 2,7 s en UI thread). Corre en un **`Task.Run` de background** con **debounce 15 ms + CTS** (ráfaga de ediciones → cancela + re-agenda) y **doble buffer** (`raster` + `pendingDispose`, release-un-frame-tarde, como `SkTextEditor`).
+- Snapshot de líneas + colores base del tema en el **UI thread** (barato); el highlighting (lo lento) en el task con un **highlighter throwaway** (`SyntaxHighlighting` + `EditorTextDocumentAdapter`) — el highlighter del editor es estado del UI thread, no se toca en paralelo.
+- **Fuente de datos: el propio `SkTextEditor`** (líneas, tema, breakpoints, `lineBubbles`, `ScrollViewer` dueño del scroll). El minimapa **no duplica el modelo**, solo lo lee.
+- **Hooks nuevos en `SkTextEditor`** (solo compila en la shell): `MinimapLineCount`, `MinimapScrollExtent`, `MinimapLinesSnapshot()`, `MinimapBaseForeground/Background`, `MinimapErrorLines`, eventos `MinimapScrollChanged` (fire en `UpdateScrollState`) y `DiagnosticsChanged` (fire en `SetBubbles`).
+
+**Bug crítico resuelto (crash SIGABRT/VerifyAccess en QA):** en Avalonia 12 el `AvaloniaObject.Dispatcher` se captura a `Dispatcher.CurrentDispatcher` **en la construcción**. Los brushes de overlay eran **estáticos** y el type initializer corría en el **hilo background** (lo dispara `RenderRaster` estático leyendo el campo estático `typeface`) → `VerifyAccess` fallaba en `Render` (UI thread). **Fix**: brushes de overlay **instancios creados en el constructor** (UI thread); el `SKTypeface` queda estático (SkiaSharp sin affinity de dispatcher).
+
+### Pieza 2 — Fix del botón ▾ (hit-test solo en el glifo)
+
+**Causa raíz (verificada contra la fuente Avalonia 12, tag `12.1.2`):** el puntero real se hit-testea contra el **árbol de composición** (`RenderDataStream.HitTest.cs`): `OnDrawGlyphRun` SIEMPRE hit-testeable, `OnDrawRectangle` solo si `serverBrush != null`, y el **Background fill del template del Button no se registra como hit topmost** → solo el glifo triangular respondía. **Fix:** `HitTestableBorder : Border, ICustomHitTest` (nuevo, `HitTest => Bounds.Contains(point)`) como **raíz full-size del template `tabstripbtn`** (18×26); `ICustomHitTest` se consulta **ANTES del draw-list** (`CompositionDrawListVisual.HitTest`). Compartido por los 3 botones de la tira; `chromebtn` intocada.
+
+### Regla 18.4 (convivencia Gtk/Avalonia)
+
+Los archivos tocados solo se compilan en la shell: el proyecto GTK `MonoDevelop.Ide.csproj` tiene `EnableDefaultCompileItems=false` y **no incluye `Controls/`** (ni `SkTextEditor.cs` ni `EditorMinimap.cs`); `HitTestableBorder.cs`/`App.axaml` son exclusivos de la shell. **Build GTK `MonoDevelop.Ide.csproj`: 0 errores** (1783 warnings preexistentes). **Smoke `--old-gui`** (Xvfb :99): ventana GTK mapeada, proceso vivo a t=55s, **0 unhandled/abort** (exit 124 = timeout). La captura visual GTK bajo Xvfb :99 es un **artefacto de entorno conocido** (shots previos de 263-290 bytes igualmente vacíos; solo 1 de 5 con contenido).
+
+### Validación (valores medidos)
+
+1. **Minimapa (`--minimap`, fixture 431 líneas):** `wired=True editorBound=True lines=431`; `raster frames=1 lines=431 (expected=431) RASTER-OK`; `bp@line=10 bubbles=1`; `jump top: caretBefore=10 caretAfter=2 JUMP-OK`; `jump bottom: caretAfter=428 lastLine=430 JUMP-OK`. **6/6 asserts OK.**
+2. **Visual (Xvfb :99):** minimapa a la **derecha del editor** (no pisa el texto), raster con **colores de sintaxis** (verde string/comentario, naranja números, gris código — no mancha monolítica), **rect de viewport** + **banda de caret** + **puntos rojos** (bp línea 10 + error línea 20).
+3. **No-regresión (gating):** minimapa **solo** para docs `SkTextEditor` — en Welcome (no-editor) el right-rail queda plano; en doc editor (1 tab, `--outline`) SÍ aparece.
+4. **Botón ▾:** scan 2px limpio (Escape entre clicks) = **140/140 interiores BTN=Y** (rect 18×26 completo; fuera = N). Pre-fix solo glifo (39 puntos). **Esquina TL (1012,82) — el caso que fallaba — abre el menú completo** (captura `T4_corner_crop.png`); 3 botones de la tira presentes (`winrect Ext`, `18x26 HitTestableBorder`).
+5. **Método QA fiable (lección):** tests xdotool por diff de screenshots son **flaky**; el veredicto fiable es el **logging del pipeline de punteros real** (`AddHandler(PointerPressedEvent, ..., Tunnel|Bubble, handledEventsToo:true)` en la window) + grid 2px **con Escape entre cada click** (sin Escape el menú traga clicks y contamina).
+
+### QA §18.5 (recursivo hasta 0 hallazgos)
+
+Ciclo #1 (desarrollo): 6/6 OK + visual. Ciclo #2 (Tester QA Senior): T1 re-ejecución 6/6 OK, T2 visual 4/4 OK, T3 no-regresión ambos sentidos OK, T4 tablist 140/140 + esquina abre menú OK → **VERDE 0 hallazgos**.
+
+### Queda pendiente / notas
+
+- Raster del minimapa: highlighter throwaway por recomputo; para >10k líneas se podría limitar a la región visible o cache incremental (mejora natural, no defecto — el debounce ya evita la ráfaga).
+- Los colores de los dots (breakpoint/error/caret/viewport) son constantes en el minimapa, no leídos de la paleta (si se quieren por tema, se resolverían del `EditorTheme`).
+- `--minimap` abre fixture propio (`~/opencode/minimap_qa/fixture.cs`, 431 líneas), no depende de `~/TestProj`.
+- **Lección thread-affinity (para agentes futuros):** en Avalonia 12 **ningún `Brush`/`Pen`/`AvaloniaObject` debe ser estático** (el type initializer corre en el hilo que primero toca el tipo; brushes creados ahí quedan del dispatcher equivocado → `VerifyAccess` crash en `Render`). Usar **campos instancia creados en el constructor** (UI thread). Los objetos SkiaSharp (`SKTypeface`) no tienen affinity de dispatcher.
+
+### Archivos (4 M, +350/−6, + 2 nuevos, sin submódulos, sin PNGs)
+
+- `main/src/core/MonoDevelop.Ide/Controls/EditorMinimap.cs` **(nuevo, 525 líneas)** — control del minimapa.
+- `main/src/core/MonoDevelop.Startup.Avalonia/Controls/HitTestableBorder.cs` **(nuevo, 23 líneas)** — `Border, ICustomHitTest`.
+- `main/src/core/MonoDevelop.Ide/Controls/SkTextEditor.cs` — hooks de minimapa (64 líneas).
+- `main/src/core/MonoDevelop.Startup.Avalonia/App.axaml` — `xmlns:controls` + template `tabstripbtn` (raíz `controls:HitTestableBorder Name="Ext"`).
+- `main/src/core/MonoDevelop.Startup.Avalonia/Views/MainWindow.axaml.cs` — integración `AddDocument` (Grid 2 col) + handler `--minimap` + probe `--tabhit`.
+- `main/src/core/MonoDevelop.Startup.Avalonia/Program.cs` — allowlist `QaDialogArg`.
+
+### Cierre
+
+QA §18.5: VERDE 0 hallazgos. Commit por nombre de los 6 archivos + docs ×3 (este §42, nota en `migration-status-report.md`, § M31-e en `interfaz-plan.md`). Push a `origin/agents/sub-agent-senior-dev-role-report`. **Sin submódulos.** Artefactos: `~/opencode/minimap_qa/` (`minimap_qa.sh`, `tabhit_*.sh`, `smoke_oldgui*.sh`, `fixture.cs`, capturas `minimap_full.png`/`minimap_crop2.png`/`final_corner_crop.png`, logs) y `~/opencode/qa_senior_m31e/` (QA Senior).

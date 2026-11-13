@@ -1,5 +1,6 @@
 <Application xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="using:MonoDevelop.AvaloniaShell.Controls"
              x:Class="MonoDevelop.AvaloniaShell.App"
              RequestedThemeVariant="Dark">
   <Application.Styles>
@@ -64,10 +65,10 @@
             <Border DockPanel.Dock="Top" Background="Transparent">
               <DockPanel LastChildFill="True">
                 <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" VerticalAlignment="Center" Margin="4,0">
-                  <Button Name="DocScrollLeft" Classes="chromebtn" Width="18" Height="18" Padding="0"
+                  <Button Name="DocScrollLeft" Classes="tabstripbtn" Width="18" Height="18" Padding="0"
                           FontSize="10" Content="‹" HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
                           ToolTip.Tip="Previous tabs" IsVisible="False" />
-                  <Button Name="DocScrollRight" Classes="chromebtn" Width="18" Height="18" Padding="0" Margin="2,0,0,0"
+                  <Button Name="DocScrollRight" Classes="tabstripbtn" Width="18" Height="18" Padding="0" Margin="2,0,0,0"
                           FontSize="10" Content="›" HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
                           ToolTip.Tip="More tabs" IsVisible="False" />
                 </StackPanel>
@@ -75,7 +76,7 @@
                      with every document tab so a hidden tab can be selected
                      without scrolling the strip. Docked right so the viewport
                      (LastChildFill) keeps the middle. -->
-                <Button Name="DocTabList" Classes="chromebtn" DockPanel.Dock="Right" Width="18" Height="18"
+                <Button Name="DocTabList" Classes="tabstripbtn" DockPanel.Dock="Right" Width="18" Height="18"
                         Padding="0" Margin="2,0,4,0" FontSize="10" Content="▾"
                         HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
                         ToolTip.Tip="Select from open tabs" />
@@ -147,6 +148,47 @@
       <Setter Property="Background" Value="{DynamicResource IdeTabHoverBrush}" />
     </Style>
     <Style Selector="Button.chromebtn:pressed /template/ ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource IdeTabActiveBrush}" />
+    </Style>
+    <!-- Tab-strip buttons (‹ › ▾): explicit template whose ROOT is a full-size
+         HitTestableBorder (Border + ICustomHitTest). In Avalonia 12 real pointer
+         input is hit-tested against the composition render tree, where a
+         glyph run is always hit-testable but a templated Button's Background
+         fill is NOT registered as a topmost hit — so the default template only
+         responded over the rendered glyph (the ▾/‹/› text) and the rest of the
+         18×26 cell was dead. ICustomHitTest is consulted BEFORE the render data
+         stream (CompositionDrawListVisual.HitTest), so HitTestableBorder makes
+         the ENTIRE button bounds the click target — the operator-reported "el
+         evento de click solo responde donde está el triángulo" fix. The
+         hover/pressed highlight lives on the full-size root border so the whole
+         cell lights up, not just the glyph. The ‹ › nav buttons and the ▾ list
+         button all share this, so they get the same full-cell hit area. -->
+    <Style Selector="Button.tabstripbtn">
+      <Setter Property="Background" Value="{DynamicResource IdeChromeBgBrush}" />
+      <Setter Property="Foreground" Value="{DynamicResource IdeFgBrush}" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="MinWidth" Value="18" />
+      <Setter Property="MinHeight" Value="26" />
+      <Setter Property="Template">
+        <ControlTemplate>
+          <controls:HitTestableBorder Name="Ext" CornerRadius="3"
+                  Background="{TemplateBinding Background}"
+                  Padding="{TemplateBinding Padding}">
+            <ContentPresenter Name="PART_ContentPresenter"
+                              Content="{TemplateBinding Content}"
+                              ContentTemplate="{TemplateBinding ContentTemplate}"
+                              HorizontalAlignment="Center" VerticalAlignment="Center"
+                              TextElement.Foreground="{TemplateBinding Foreground}"
+                              TextElement.FontSize="{TemplateBinding FontSize}"
+                              TextElement.FontFamily="{TemplateBinding FontFamily}" />
+          </controls:HitTestableBorder>
+        </ControlTemplate>
+      </Setter>
+    </Style>
+    <Style Selector="Button.tabstripbtn:pointerover /template/ Border#Ext">
+      <Setter Property="Background" Value="{DynamicResource IdeTabHoverBrush}" />
+    </Style>
+    <Style Selector="Button.tabstripbtn:pressed /template/ Border#Ext">
       <Setter Property="Background" Value="{DynamicResource IdeTabActiveBrush}" />
     </Style>
   </Application.Styles>
