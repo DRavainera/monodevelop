@@ -5056,7 +5056,7 @@ El QA **re-derivó** el ground truth GTK desde la fuente (cableado del sort, `Ge
 
 - **Hallazgo SEPARADO (fuera de scope, NO corregido):** `LaunchLegacyGtk` (`Program.cs:96`) usa `Environment.ProcessPath` como muxer `dotnet`. Vía **apphost** (`MonoDevelop.AvaloniaShell --old-gui`) el apphost re-ejecuta su app embebida (`AvaloniaShell.dll`) ignorando el arg `MonoDevelop.dll` → el relay **no arranca GTK** (solo funciona vía `dotnet MonoDevelop.AvaloniaShell.dll --old-gui`). Bug preexistente del relay, ajeno a la ordenación de Dependencies → **tarea de seguimiento**.
 - **Paridad estricta de items Projects/Assemblies (MENOR):** GTK ordena por `GetNodeName` = `ProjectReference.Reference` (ruta del include) vs. la shell por nombre visible; en el fixture (un solo directorio) coinciden. La spec pide "por nombre visible" → no es defecto contra la spec.
-- **Plataforma siempre visible en single-TFM (MENOR, intencional):** GTK colapsa el TFM único; la shell siempre muestra la fila TFM (decisión pedida "Dependencies>Platforms shape"). Diferencia de forma, no de orden.
+- **Plataforma en single-TFM (ajustado a petición del operador):** GTK colapsa el TFM único (grupos directos bajo `Dependencies`, sin fila TFM; `GetLoadedDependencyNodes`); la shell lo replicó (filas TFM solo si hay 2+ TFMs). Verificado en el fixture (DepsB/C sin fila `net10.0`; DepsA multi-TFM con sus filas) y re-validado por el QA §18.5 (2ª pasada, VERDE 0 hallazgos).
 
 ### Cierre
 

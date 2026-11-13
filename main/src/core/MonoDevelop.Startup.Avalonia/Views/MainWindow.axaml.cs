@@ -6390,11 +6390,14 @@ public partial class MainWindow : Window
 	// ---- Xwt.TreeView builders (real ProjectPad tree) ----
 
 	// DependenciesNode equivalent (MonoDevelop.DotNetCore): the "Dependencies" folder
-	// with one node per target framework ("Platforms"), and under each platform the
-	// reference groups the Gtk UI shows. TFMs and reference items are read from the
-	// project file (lightweight XML, no MSBuild). The platform level is ALWAYS shown
-	// (no single-TFM collapse), per the requested Dependencies>Platforms shape. Folder
-	// rows use the legacy Stock.OpenReferenceFolder icon.
+	// with, per target framework, the reference groups the Gtk UI shows. TFMs and
+	// reference items are read from the project file (lightweight XML, no MSBuild).
+	// Folder rows use the legacy Stock.OpenReferenceFolder icon.
+	//
+	// TFM LEVEL (the Gtk UI's shape, DependenciesNode.GetLoadedDependencyNodes):
+	// with more than one target framework a "Platforms" row per TFM is shown and the
+	// groups hang under each one; with a SINGLE target framework Gtk COLLAPSES the
+	// TFM row — the groups hang directly under Dependencies.
 	//
 	// SIBLING ORDER (the Gtk UI's, matched below): the Gtk Solution pad sorts its rows
 	// with ExtensibleTreeView.CompareNodes, and the node-builder sort index is 0 for
@@ -6418,13 +6421,20 @@ public partial class MainWindow : Window
 		depNav.SetValues (xwtSolIconField, XwtStockIcon ("folder-component-16.png"),
 			xwtSolTextField, "Dependencies", xwtSolTagField, "dependencies:" + projectPath);
 		var depPos = depNav.CurrentPosition;
-		// TFM rows sorted the same way Gtk does (TargetFrameworkNodeBuilder inherits
-		// the default sort 0, so Gtk orders them case-insensitively by TFM name too).
-		foreach (var tfm in model.TargetFrameworks.OrderBy (t => t, GtkDepNameComparer)) {
-			var nav = xwtSolutionStore!.AddNode (depPos);
-			nav.SetValues (xwtSolIconField, XwtStockIcon ("framework-16.png"),
-				xwtSolTextField, tfm, xwtSolTagField, "platform:" + projectPath + ":" + tfm);
-			AddXwtTfmReferenceGroups (nav.CurrentPosition, projectPath, tfm, model);
+		var tfms = model.TargetFrameworks.OrderBy (t => t, GtkDepNameComparer).ToList ();
+		if (tfms.Count > 1) {
+			// Multi-TFM: one row per TFM (Gtk keeps the TargetFrameworkNode level).
+			foreach (var tfm in tfms) {
+				var nav = xwtSolutionStore!.AddNode (depPos);
+				nav.SetValues (xwtSolIconField, XwtStockIcon ("framework-16.png"),
+					xwtSolTextField, tfm, xwtSolTagField, "platform:" + projectPath + ":" + tfm);
+				AddXwtTfmReferenceGroups (nav.CurrentPosition, projectPath, tfm, model);
+			}
+		} else {
+			// Single TFM: Gtk collapses the TFM row — the reference groups hang
+			// directly under Dependencies (GetLoadedDependencyNodes: 1 framework
+			// node → GetChildNodes(frameworkNodes[0])).
+			AddXwtTfmReferenceGroups (depPos, projectPath, tfms[0], model);
 		}
 	}
 
