@@ -5009,3 +5009,55 @@ Ciclo #1 (desarrollo): 6/6 OK + visual. Ciclo #2 (Tester QA Senior): T1 re-ejecu
 ### Cierre
 
 QA §18.5: VERDE 0 hallazgos. Commit por nombre de los 6 archivos + docs ×3 (este §42, nota en `migration-status-report.md`, § M31-e en `interfaz-plan.md`). Push a `origin/agents/sub-agent-senior-dev-role-report`. **Sin submódulos.** Artefactos: `~/opencode/minimap_qa/` (`minimap_qa.sh`, `tabhit_*.sh`, `smoke_oldgui*.sh`, `fixture.cs`, capturas `minimap_full.png`/`minimap_crop2.png`/`final_corner_crop.png`, logs) y `~/opencode/qa_senior_m31e/` (QA Senior).
+
+## 2026-11-13 (43) — Orden del árbol Dependencies del pad Solution (igualar a la UI GTK) — CERRADO (QA VERDE, 0 hallazgos)
+
+**Estado: CERRADO (QA APROBADO, 0 hallazgos abiertos).** El operador pidió: *"arreglar el orden del árbol Dependencies para que se ordene igual en la UI GTK"* en el pad Solution de la shell Avalonia.
+
+### Qué se hizo
+
+**Causa raíz (verificada contra la fuente GTK).** El Solution pad GTK (`SolutionPad : TreeViewPad`) usa `ExtensibleTreeView`, que cablea `store.DefaultSortFunc = CompareNodes` (`ExtensibleTreeView.cs:212`). `CompareNodes` (`1598–1637`) compara el `GetSortIndex` de cada builder; **todos** los builders de grupo/item/TFM de Dependencies **heredan el default 0** (ningún override que afecte a los 5 grupos hermanos). Con sort index igual, el **tie-break** es `string.Compare(GetNodeName(a), GetNodeName(b), true)` (línea 1631) → **alfabético case-insensitive por `NodeName` legacy**.
+
+Los `NodeName` de los 5 grupos: `AssemblyDependencies` < `FrameworkReferences` < `PackageDependencies` < `ProjectDependencies` < `SdkDependencies` → **orden real GTK = Assemblies → Frameworks → NuGet → Projects → SDK**, que es **distinto** del orden del `yield` de `DependenciesNode.GetChildNodes` (Frameworks → NuGet → SDK → Assemblies → Projects) que la shell replicaba. Los items y los TFMs se ordenan igual (sort 0 heredado → alfabético case-insensitive por nombre visible).
+
+**Fix (solo shell).** La `Xwt.TreeStore` de la shell **no tiene sort func** → las filas se insertan **ya ordenadas**:
+- TFMs: `model.TargetFrameworks.OrderBy(t => t, GtkDepNameComparer)`.
+- Grupos: lista de tuples `(SortKey = NodeName legacy, HasItems, Build)` + `Where(HasItems).OrderBy(SortKey, GtkDepNameComparer)`.
+- Items: `OrderBy(nombre visible, GtkDepNameComparer)` (paquetes por id, frameworks por nombre, assemblies por `Path.GetFileName`, projects por `GetFileNameWithoutExtension`).
+- `GtkDepNameComparer = System.Collections.Generic.Comparer<string>.Create((a,b)=>string.Compare(a,b,true))` (case-insensitive; el nombre `Comparer` es ambiguo en el scope → tipo cualificado completo).
+- Presencia igual a GTK: grupo solo si tiene items; SDK solo si NO hay `FrameworkReferences`.
+
+Se añadió además el **hook QA `--deps`** (volcado del subt Dependencies en orden de store = orden pintado) para poder auditar el orden sin captura.
+
+### Archivos
+
+- `main/src/core/MonoDevelop.Startup.Avalonia/Views/MainWindow.axaml.cs` — reescritura de `AddXwtDependenciesNode` + `AddXwtTfmReferenceGroups` (inserción pre-ordenada) + nuevo `GtkDepNameComparer` + hook `--deps`.
+- `main/src/core/MonoDevelop.Startup.Avalonia/Program.cs` — allowlist `QaDialogArg` (`--deps`).
+- docs ×3 (este §43, § M31-f en `interfaz-plan.md`, nota en `migration-status-report.md`).
+
+**2 M de código, sin submódulos, sin PNGs.**
+
+### Validación (valores medidos)
+
+Fixture `DepsOrder.sln` (`~/opencode/deps_order_qa/`): **DepsA** (2 TFMs `net8.0;net10.0` en orden no alfabético + los 4 tipos de referencias, todas en orden no alfabético y con mezcla de mayúsculas), **DepsB/DepsC** (single TFM, sin refs).
+
+- **Dump `--deps`** (orden de store = pintado): DepsA → **TFMs `net10.0` → `net8.0`**; **grupos Assemblies → Frameworks → NuGet → Projects** (sin SDK, DepsA tiene `FrameworkReferences`); **items alfabéticos case-insensitive** (Assemblies `alpha.dll, mid.dll, zlib.dll`; Frameworks `Microsoft.AspNetCore.App, Microsoft.NETCore.App`; NuGet `Alpha.Pkg, mid.Pkg, zeta.Pkg`; Projects `DepsB, DepsC`). DepsB/DepsC → **solo SDK** (`Microsoft.NETCore.App`). `rows=39`, `[deps] done`, sin abort.
+- **Ground truth GTK**: runtime legacy arrancó (`dotnet MonoDevelop.AvaloniaShell.dll --old-gui <sln>`) con ventana mapeada + `MonoDevelop.MSBuildBuilder.exe` + **0 unhandled/abort**. Capturas GTK bajo Xvfb `:99` vacías (296 bytes, artefacto de entorno conocido) → veredicto GTK por **análisis de fuente** de `CompareNodes` (verificado por el QA contra el código), que el dump Avalonia replica punto por punto.
+
+### Regla 18.4 (ambas interfaces)
+
+`MainWindow.axaml.cs` + `Program.cs` son **exclusivos de la shell Avalonia**; `MonoDevelop.Startup.csproj` (GTK) **no referencia** `MonoDevelop.Startup.Avalonia` → la ruta `--old-gui` no ve el cambio. Builds: `MonoDevelop.Startup.Avalonia.csproj` **0 errores** y `MonoDevelop.Startup.csproj` **0 errores** (solo warnings preexistentes).
+
+### QA §18.5 (subagente Tester QA Senior, recursivo)
+
+El QA **re-derivó** el ground truth GTK desde la fuente (cableado del sort, `GetSortIndex`=0 heredado, sin `override CompareObjects`, `NodeName` de los 5 grupos), re-ejecutó el dump con build fresco y confirmó el orden punto por punto → **VERDE 0 hallazgos bloqueantes/mayores**.
+
+### Queda pendiente / notas
+
+- **Hallazgo SEPARADO (fuera de scope, NO corregido):** `LaunchLegacyGtk` (`Program.cs:96`) usa `Environment.ProcessPath` como muxer `dotnet`. Vía **apphost** (`MonoDevelop.AvaloniaShell --old-gui`) el apphost re-ejecuta su app embebida (`AvaloniaShell.dll`) ignorando el arg `MonoDevelop.dll` → el relay **no arranca GTK** (solo funciona vía `dotnet MonoDevelop.AvaloniaShell.dll --old-gui`). Bug preexistente del relay, ajeno a la ordenación de Dependencies → **tarea de seguimiento**.
+- **Paridad estricta de items Projects/Assemblies (MENOR):** GTK ordena por `GetNodeName` = `ProjectReference.Reference` (ruta del include) vs. la shell por nombre visible; en el fixture (un solo directorio) coinciden. La spec pide "por nombre visible" → no es defecto contra la spec.
+- **Plataforma siempre visible en single-TFM (MENOR, intencional):** GTK colapsa el TFM único; la shell siempre muestra la fila TFM (decisión pedida "Dependencies>Platforms shape"). Diferencia de forma, no de orden.
+
+### Cierre
+
+QA §18.5: **VERDE 0 hallazgos**. Commit por nombre de los 2 archivos de código + docs ×3. Push a `origin/agents/sub-agent-senior-dev-role-report`. **Sin submódulos.** Artefactos: `~/opencode/deps_order_qa/` (fixture `DepsOrder.sln` + `DepsA/B/C`, `avalonia_deps_dump.log`, `qa_deps_dump.log`, logs GTK, `QA_CONTEXT.md`, backup del perfil).

@@ -5833,3 +5833,46 @@ Ciclo #1 (desarrollo, 6 asserts base) → 6/6 OK + visual. Ciclo #2 (Tester QA S
 - `main/src/core/MonoDevelop.Startup.Avalonia/Program.cs` — allowlist `QaDialogArg` (`--tabhit`/`--minimap`).
 
 + docs ×3 (`session_summary.md` §42, nota en `migration-status-report.md`, este § M31-e). Detalle en `docs/session_summary.md` §42. Artefactos en `~/opencode/minimap_qa/` (scripts `minimap_qa.sh`, `tabhit_*.sh`, `smoke_oldgui*.sh`, `fixture.cs`, capturas) y `~/opencode/qa_senior_m31e/` (QA Senior).
+
+## 2026-11-13 — M31-f Orden del árbol Dependencies del pad Solution (igualar a la UI GTK) — CERRADO (QA VERDE, 0 hallazgos)
+
+**Estado: CERRADO (QA APROBADO, 0 hallazgos abiertos).** El operador pidió: *"arreglar el orden del árbol Dependencies para que se ordene igual en la UI GTK"* en el pad Solution de la shell Avalonia.
+
+**Causa raíz (verificada contra la fuente GTK, no dada por supuesto).** El Solution pad GTK (`SolutionPad : TreeViewPad`) usa `ExtensibleTreeView`, que cablea `store.DefaultSortFunc = CompareNodes` (`ExtensibleTreeView.cs:212`). `CompareNodes` (`1598–1637`) compara primero el `GetSortIndex` de cada builder; **todos** los builders de grupo / item / TFM de Dependencies **heredan el default 0** (ningún override que afecte a los 5 grupos hermanos — solo `DependenciesNodeBuilder` = −600, que es el nodo contenedor padre, y `PackageDependencyNodeBuilder` = −500 que solo aplica a diagnostics). Al ser el sort index igual, el **tie-break final** es `string.Compare(GetNodeName(a), GetNodeName(b), true)` (línea 1631) → **alfabético case-insensitive por el `NodeName` legacy**.
+
+Los `NodeName` de los 5 grupos (`*Node.NodeName` en `MonoDevelop.DotNetCore.NodeBuilders`) son `AssemblyDependencies` < `FrameworkReferences` < `PackageDependencies` < `ProjectDependencies` < `SdkDependencies`. Por tanto el **orden real que pinta GTK** es **Assemblies → Frameworks → NuGet → Projects → SDK** — que es **distinto** del orden del `yield` de `DependenciesNode.GetChildNodes` (Frameworks → NuGet → SDK → Assemblies → Projects) que la shell estaba replicando. Los **items** dentro de cada grupo y los **TFMs** se ordenan igual (mismo `CompareNodes`, sort 0 heredado → alfabético case-insensitive por nombre visible).
+
+**Fix (solo shell; `MonoDevelop.Startup.Avalonia`).** La `Xwt.TreeStore` de la shell **NO tiene sort func**, así que las filas se insertan **ya ordenadas** para coincidir con lo que pinta GTK:
+- **TFMs**: `model.TargetFrameworks.OrderBy(t => t, GtkDepNameComparer)`.
+- **Grupos**: se declaran como lista de tuples `(SortKey = NodeName legacy, HasItems, Build)` y se insertan con `groups.Where(g => g.HasItems).OrderBy(g => g.SortKey, GtkDepNameComparer)`.
+- **Items**: cada grupo ordena sus items con `OrderBy(nombre visible, GtkDepNameComparer)` (paquetes por id, frameworks por nombre, assemblies por `Path.GetFileName`, projects por `Path.GetFileNameWithoutExtension`).
+- **Comparador**: `GtkDepNameComparer = System.Collections.Generic.Comparer<string>.Create((a,b) => string.Compare(a,b,true))` (case-insensitive, igual que `string.Compare(…, true)` de GTK). El nombre `Comparer` es ambiguo en scope del archivo → tipo cualificado completo.
+- **Presencia igual a GTK**: un grupo solo se crea si tiene items (`Where(HasItems)`); el grupo **SDK** solo si **NO** hay `FrameworkReferences` (regla legacy `addedFrameworkReferencesNode`).
+
+### Validación (valores medidos)
+
+Fixture `DepsOrder.sln` (en `~/opencode/deps_order_qa/`): **DepsA** con 2 TFMs (`net8.0;net10.0`, declarados en orden NO alfabético) y los 4 tipos de referencias (`PackageReference`, `FrameworkReference`, `Reference`, `ProjectReference`) **todas declaradas en orden NO alfabético y con mezcla de mayúsculas/minúsculas** para forzar el sort real; **DepsB/DepsC** (single TFM, sin refs, para probar la rama SDK).
+
+- **Dump del orden (hook `--deps`)** vía `--sln=<fixture> --deps`: el volcado del subt Dependencies en **orden de store** (= orden pintado, la `Xwt.TreeStore` no tiene sort func) da para DepsA → **TFMs `net10.0` → `net8.0`** ('1' < '8' case-insensitive); **grupos Assemblies → Frameworks → NuGet → Projects** (sin SDK, porque DepsA sí tiene `FrameworkReferences`); **items alfabéticos case-insensitive** (Assemblies `alpha.dll, mid.dll, zlib.dll`; Frameworks `Microsoft.AspNetCore.App, Microsoft.NETCore.App`; NuGet `Alpha.Pkg, mid.Pkg, zeta.Pkg`; Projects `DepsB, DepsC`). DepsB/DepsC → **solo grupo SDK** con `Microsoft.NETCore.App`. **rows=39**, termina con `[deps] done`, sin abort.
+- **Ground truth GTK**: el runtime legacy arrancó (`dotnet MonoDevelop.AvaloniaShell.dll --old-gui <sln>`) y mantuvo la ventana mapeada + `MonoDevelop.MSBuildBuilder.exe` + **0 unhandled/abort**. Las capturas visuales GTK bajo Xvfb `:99` salieron vacías (296 bytes, el **artefacto de entorno conocido** — las de `highlight_qa` son de 263–290 bytes igual); por eso el **veredicto GTK se basa en el análisis de fuente de `CompareNodes`** (documentado arriba y verificado por el QA Senior contra el código real), que el dump Avalonia replica punto por punto.
+- **QA §18.5 (subagente Tester QA Senior, recursivo)**: el QA **re-derivó** el ground truth GTK desde la fuente (cableado del sort, `GetSortIndex`=0 heredado, ausencia de `override CompareObjects`, `NodeName` de los 5 grupos), re-ejecutó el dump con build fresco, y confirmó el orden punto por punto → **VERDE 0 hallazgos bloqueantes/mayores**.
+
+### Regla 18.4 (convivencia Gtk/Avalonia)
+
+El único archivo de código tocado con lógica es `MainWindow.axaml.cs` (+ `Program.cs` solo la allowlist del flag QA), ambos **exclusivos de la shell Avalonia** (`MonoDevelop.Startup.Avalonia`). El proyecto GTK `MonoDevelop.Startup.csproj` **no referencia** `MonoDevelop.Startup.Avalonia` → la ruta `--old-gui` no compila ni ve el cambio. Builds: **`MonoDevelop.Startup.Avalonia.csproj` 0 errores** y **`MonoDevelop.Startup.csproj` 0 errores** (solo warnings preexistentes).
+
+### Hallazgo separado (fuera de scope, NO corregido — tarea de seguimiento)
+
+`LaunchLegacyGtk` (`Program.cs:96`) usa `Environment.ProcessPath` como el muxer `dotnet`. Al lanzarse por el **apphost** (`MonoDevelop.AvaloniaShell --old-gui`) ese `Environment.ProcessPath` es el propio apphost, que **re-ejecuta su app embebida (`AvaloniaShell.dll`) ignorando el argumento `MonoDevelop.dll`** → el relay **NO arranca el GTK** (las primeras capturas "GTK" de la sesión eran en realidad la shell Avalonia con su welcome page). Solo relays correctamente al lanzarse por `dotnet MonoDevelop.AvaloniaShell.dll --old-gui` (donde `Environment.ProcessPath` es el muxer real). Es un **bug preexistente del relay**, ajeno a la ordenación de Dependencies; se documenta aquí para una tarea de seguimiento.
+
+### Queda pendiente / notas
+
+- **Paridad estricta de la clave de orden de items Projects/Assemblies (MENOR, no bloqueante):** GTK ordena estos items por `GetNodeName` = `ProjectReference.Reference` (la **ruta del include**, p.ej. `..\DepsB\DepsB.csproj`), mientras la shell ordena por **nombre visible** (`GetFileNameWithoutExtension` / `GetFileName`). En el fixture (y en el caso general de un solo directorio) coinciden; solo divergiría si dos referencias de distinto directorio tuvieran el mismo nombre de hoja pero distinto orden de ruta. La spec de la tarea declara "items por nombre visible" y así es → no es un defecto contra la spec; opción de seguimiento si se exige paridad byte-a-byte con GTK.
+- **Plataforma siempre visible en single-TFM (MENOR, intencional y documentado):** GTK colapsa el TFM único (los grupos cuelgan directo de `Dependencies`); la shell **siempre** muestra la fila del TFM. Está documentado en el código como decisión pedida ("platform level is ALWAYS shown, per the requested Dependencies>Platforms shape"). Es una diferencia de **forma del árbol**, no de **orden**, fuera del alcance de "ordenarse igual".
+
+### Archivos (2 M, sin submódulos, sin PNGs)
+
+- `main/src/core/MonoDevelop.Startup.Avalonia/Views/MainWindow.axaml.cs` — reescritura de `AddXwtDependenciesNode` + `AddXwtTfmReferenceGroups` (inserción pre-ordenada por `GtkDepNameComparer`) + nuevo comparador `GtkDepNameComparer` + hook QA `--deps` (volcado del subt Dependencies en orden de store).
+- `main/src/core/MonoDevelop.Startup.Avalonia/Program.cs` — allowlist `QaDialogArg` (`--deps`).
+
++ docs ×3 (este § M31-f, `session_summary.md` §43, nota en `migration-status-report.md`). Detalle en `docs/session_summary.md` §43. Artefactos en `~/opencode/deps_order_qa/` (fixture `DepsOrder.sln` + proyectos `DepsA/B/C`, dump `avalonia_deps_dump.log`, `qa_deps_dump.log` del QA, logs GTK, `QA_CONTEXT.md`, backup del perfil).

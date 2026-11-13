@@ -338,6 +338,66 @@ public partial class MainWindow : Window
 				var dlg = new PreferencesDialog { WindowStartupLocation = WindowStartupLocation.CenterOwner };
 				dlg.DumpTreeForQa ();
 				dlg.ShowDialog (this);
+			} else if (qa == "--deps") {
+				// QA (pad Solution, Dependencies): dump every project's Dependencies
+				// subtree from xwtSolutionStore IN STORE ORDER (the Xwt.TreeStore has
+				// no sort func, so store order == painted order). One line per row,
+				// indented by depth: [deps] <text> | <tag>. Lets a QA compare the
+				// exact group / item / TFM order against the Gtk UI without a shot.
+				if (xwtSolutionStore is null) {
+					Output ("[deps] FAIL no solution loaded (pass --sln=<fixture.sln>)");
+					Close ();
+					return;
+				}
+				// Rows of the Dependencies subtrees (the rest of the pad is not part
+				// of this check): Dependencies, platform, depgrp and item tags. Items
+				// of the Projects group carry the referenced project's file path as
+				// tag (XwtReferencedProjectFile), so inside a group every child is
+				// printed regardless of its tag.
+				bool IsDepRow (string tag) =>
+					tag.StartsWith ("dependencies:", StringComparison.Ordinal)
+					|| tag.StartsWith ("platform:", StringComparison.Ordinal)
+					|| tag.StartsWith ("depgrp:", StringComparison.Ordinal)
+					|| tag.StartsWith ("package:", StringComparison.Ordinal)
+					|| tag.StartsWith ("fwref:", StringComparison.Ordinal)
+					|| tag.StartsWith ("sdkpkg:", StringComparison.Ordinal)
+					|| tag.StartsWith ("asmref:", StringComparison.Ordinal);
+				bool IsGroupRow (string tag) => tag.StartsWith ("depgrp:", StringComparison.Ordinal);
+				var lines = new List<string> ();
+				void Walk (Xwt.TreeNavigator nav, int depth, bool insideGroup) {
+					if (!nav.MoveToChild ())
+						return;
+					do {
+						var tag = nav.GetValue (xwtSolTagField) as string ?? "";
+						bool match;
+						if (insideGroup) {
+							match = true; // every child of a reference group is an item row
+						} else if (IsDepRow (tag)) {
+							match = true;
+						} else if (tag.StartsWith ("project:", StringComparison.Ordinal)) {
+							// A project row hosts its Dependencies subtree (and other
+							// rows the filter below discards) — descend and let the
+							// recursion keep only the dependency rows.
+							Walk (nav, depth, false);
+							continue;
+						} else {
+							match = false;
+						}
+						if (!match)
+							continue;
+						var text = nav.GetValue (xwtSolTextField) as string ?? "";
+						lines.Add (new string (' ', depth * 2) + text + " | " + tag);
+						Walk (nav, depth + 1, IsGroupRow (tag));
+					} while (nav.MoveNext ());
+					nav.MoveToParent ();
+				}
+				var root = xwtSolutionStore.GetFirstNode ();
+				if (root is not null)
+					Walk (root, 0, false);
+				Output ("[deps] rows=" + lines.Count);
+				foreach (var l in lines)
+					Output ("[deps] " + l);
+				Output ("[deps] done");
 			} else if (qa == "--prefs-sourcewrite") {
 				// QA: exercise the global-policy write for naming/header, dump and restore.
 				var dlg = new PreferencesDialog { WindowStartupLocation = WindowStartupLocation.CenterOwner };
@@ -6331,11 +6391,21 @@ public partial class MainWindow : Window
 
 	// DependenciesNode equivalent (MonoDevelop.DotNetCore): the "Dependencies" folder
 	// with one node per target framework ("Platforms"), and under each platform the
-	// reference groups the Gtk UI showed (DependenciesNode.GetChildNodes order):
-	// Frameworks → NuGet → SDK → Assemblies → Projects. TFMs and reference items are
-	// read from the project file (lightweight XML, no MSBuild). The platform level is
-	// ALWAYS shown (no single-TFM collapse), per the requested Dependencies>Platforms
-	// shape. Folder rows use the legacy Stock.OpenReferenceFolder icon.
+	// reference groups the Gtk UI shows. TFMs and reference items are read from the
+	// project file (lightweight XML, no MSBuild). The platform level is ALWAYS shown
+	// (no single-TFM collapse), per the requested Dependencies>Platforms shape. Folder
+	// rows use the legacy Stock.OpenReferenceFolder icon.
+	//
+	// SIBLING ORDER (the Gtk UI's, matched below): the Gtk Solution pad sorts its rows
+	// with ExtensibleTreeView.CompareNodes, and the node-builder sort index is 0 for
+	// ALL five reference groups (and for the per-item builders, and for the TFM rows),
+	// so the tie-break is a case-insensitive alphabetical compare on the LEGACY node
+	// name (string.Compare(name, true)): Assemblies (AssemblyDependencies) →
+	// Frameworks (FrameworkReferences) → NuGet (PackageDependencies) → Projects
+	// (ProjectDependencies) → SDK (SdkDependencies). That is NOT the
+	// DependenciesNode.GetChildNodes yield order (Frameworks → NuGet → SDK →
+	// Assemblies → Projects). This shell's Xwt.TreeStore has NO sort func, so the rows
+	// must be INSERTED already in that order to paint identically to Gtk.
 	void AddXwtDependenciesNode (Xwt.TreePosition projPos, string projectPath)
 	{
 		// Oleada 4 (slice 2): the project model (ConfigurationService.
@@ -6348,7 +6418,9 @@ public partial class MainWindow : Window
 		depNav.SetValues (xwtSolIconField, XwtStockIcon ("folder-component-16.png"),
 			xwtSolTextField, "Dependencies", xwtSolTagField, "dependencies:" + projectPath);
 		var depPos = depNav.CurrentPosition;
-		foreach (var tfm in model.TargetFrameworks) {
+		// TFM rows sorted the same way Gtk does (TargetFrameworkNodeBuilder inherits
+		// the default sort 0, so Gtk orders them case-insensitively by TFM name too).
+		foreach (var tfm in model.TargetFrameworks.OrderBy (t => t, GtkDepNameComparer)) {
 			var nav = xwtSolutionStore!.AddNode (depPos);
 			nav.SetValues (xwtSolIconField, XwtStockIcon ("framework-16.png"),
 				xwtSolTextField, tfm, xwtSolTagField, "platform:" + projectPath + ":" + tfm);
@@ -6356,70 +6428,86 @@ public partial class MainWindow : Window
 		}
 	}
 
-	// One reference-group folder per non-empty item set, in the legacy
-	// DependenciesNode.GetChildNodes order:
-	//  1. Frameworks   — <FrameworkReference> items (only when present; when
-	//                    absent the SDK group is shown instead, like legacy).
-	//  2. NuGet        — <PackageReference> items (PackageDependencyNode label: id,
-	//                    icon md-package-dependency).
-	//  3. SDK          — SdkDependenciesNode.GetDefaultNodes: net* →
-	//                    Microsoft.NETCore.App, netstandard* → NETStandard.Library.
-	//  4. Assemblies   — <Reference> items (ProjectReferenceNodeBuilder:
-	//                    GetFileName, icon md-reference-folder).
-	//  5. Projects     — <ProjectReference> items (ProjectReferenceNodeBuilder:
-	//                    project name, icon md-reference-project). Activating a row
-	//                    opens the referenced project's main file, like the legacy
-	//                    ProjectReferenceNodeCommandHandler.ActivateItem.
+	// Gtk Solution pad sibling order: the Dependencies node builders all return the
+	// default sort index (0), so ExtensibleTreeView.CompareNodes tie-breaks with a
+	// case-insensitive alphabetical compare on the node name (string.Compare(x, true)).
+	// This Xwt.TreeStore has no sort func, so rows are inserted pre-sorted with this.
+	static readonly System.Collections.Generic.IComparer<string> GtkDepNameComparer =
+		System.Collections.Generic.Comparer<string>.Create ((a, b) => string.Compare (a, b, true));
+
+	// One reference-group folder per non-empty item set, INSERTED in the Gtk order
+	// (case-insensitive alphabetical by legacy node name): Assemblies → Frameworks →
+	// NuGet → Projects → SDK. The group is built only when it has items (same presence
+	// gating as before):
+	//   Frameworks   — <FrameworkReference> items (when absent the SDK group shows
+	//                  instead, like legacy).
+	//   NuGet        — <PackageReference> items (label: id, icon md-package-dependency).
+	//   SDK          — SdkDependenciesNode.GetDefaultNodes: net* →
+	//                  Microsoft.NETCore.App, netstandard* → NETStandard.Library.
+	//   Assemblies   — <Reference> items (label: GetFileName, icon reference-assembly).
+	//   Projects     — <ProjectReference> items (label: project name, icon
+	//                  reference-project); activating a row opens the referenced
+	//                  project's main file (legacy ProjectReferenceNodeCommandHandler).
+	// Each group's items are ALSO sorted case-insensitively by their visible name, the
+	// same tie-break Gtk applies to the per-item rows.
 	void AddXwtTfmReferenceGroups (Xwt.TreePosition tfmPos, string projectPath, string tfm, MonoDevelop.Ide.Services.ConfigurationService.ProjectFileModel model)
 	{
 		var dir = Path.GetDirectoryName (projectPath);
-		var hasFrameworks = false;
-		if (model.FrameworkReferences.Count > 0) {
-			var grp = AddXwtReferenceGroup (tfmPos, "Frameworks", "depgrp:" + projectPath + ":" + tfm + ":frameworks");
-			foreach (var name in model.FrameworkReferences) {
-				var nav = xwtSolutionStore!.AddNode (grp);
-				nav.SetValues (xwtSolIconField, XwtStockIcon ("reference-16.png"),
-					xwtSolTextField, name, xwtSolTagField, "fwref:" + projectPath + ":" + tfm + ":" + name);
-			}
-			hasFrameworks = true;
-		}
-		if (model.PackageReferences.Count > 0) {
-			var grp = AddXwtReferenceGroup (tfmPos, "NuGet", "depgrp:" + projectPath + ":" + tfm + ":nuget");
-			foreach (var id in model.PackageReferences) {
-				var nav = xwtSolutionStore!.AddNode (grp);
-				nav.SetValues (xwtSolIconField, XwtStockImage ("md-package-dependency"),
-					xwtSolTextField, id, xwtSolTagField, "package:" + projectPath + ":" + tfm + ":" + id);
-			}
-		}
-		if (!hasFrameworks) {
-			var sdk = tfm.StartsWith ("netstandard", StringComparison.OrdinalIgnoreCase)
-				? "NETStandard.Library"
-				: tfm.StartsWith ("net", StringComparison.OrdinalIgnoreCase) ? "Microsoft.NETCore.App" : null;
-			if (sdk is not null) {
+		var hasFrameworks = model.FrameworkReferences.Count > 0;
+		var sdk = tfm.StartsWith ("netstandard", StringComparison.OrdinalIgnoreCase)
+			? "NETStandard.Library"
+			: tfm.StartsWith ("net", StringComparison.OrdinalIgnoreCase) ? "Microsoft.NETCore.App" : null;
+
+		// (sort key = the legacy node name Gtk compares case-insensitively, whether
+		// the group has items, build action). Gtk builds a group node only when it has
+		// children, so empty groups are skipped before the sorted insert.
+		var groups = new List<(string SortKey, bool HasItems, Action Build)> {
+			("FrameworkReferences", model.FrameworkReferences.Count > 0, () => {
+				var grp = AddXwtReferenceGroup (tfmPos, "Frameworks", "depgrp:" + projectPath + ":" + tfm + ":frameworks");
+				foreach (var name in model.FrameworkReferences.OrderBy (n => n, GtkDepNameComparer)) {
+					var nav = xwtSolutionStore!.AddNode (grp);
+					nav.SetValues (xwtSolIconField, XwtStockIcon ("reference-16.png"),
+						xwtSolTextField, name, xwtSolTagField, "fwref:" + projectPath + ":" + tfm + ":" + name);
+				}
+			}),
+			("PackageDependencies", model.PackageReferences.Count > 0, () => {
+				var grp = AddXwtReferenceGroup (tfmPos, "NuGet", "depgrp:" + projectPath + ":" + tfm + ":nuget");
+				foreach (var id in model.PackageReferences.OrderBy (id => id, GtkDepNameComparer)) {
+					var nav = xwtSolutionStore!.AddNode (grp);
+					nav.SetValues (xwtSolIconField, XwtStockImage ("md-package-dependency"),
+						xwtSolTextField, id, xwtSolTagField, "package:" + projectPath + ":" + tfm + ":" + id);
+				}
+			}),
+			// SDK group only when there is no FrameworkReferences group (legacy rule).
+			("SdkDependencies", sdk is not null && !hasFrameworks, () => {
 				var grp = AddXwtReferenceGroup (tfmPos, "SDK", "depgrp:" + projectPath + ":" + tfm + ":sdk");
 				var nav = xwtSolutionStore!.AddNode (grp);
 				nav.SetValues (xwtSolIconField, XwtStockImage ("md-package-dependency"),
 					xwtSolTextField, sdk, xwtSolTagField, "sdkpkg:" + projectPath + ":" + tfm + ":" + sdk);
-			}
-		}
-		if (model.AssemblyReferences.Count > 0) {
-			var grp = AddXwtReferenceGroup (tfmPos, "Assemblies", "depgrp:" + projectPath + ":" + tfm + ":assemblies");
-			foreach (var name in model.AssemblyReferences) {
-				var nav = xwtSolutionStore!.AddNode (grp);
-				nav.SetValues (xwtSolIconField, XwtStockIcon ("reference-assembly-16.png"),
-					xwtSolTextField, Path.GetFileName (name.Replace ('\\', Path.DirectorySeparatorChar)),
-					xwtSolTagField, "asmref:" + projectPath + ":" + tfm + ":" + name);
-			}
-		}
-		if (model.ProjectReferences.Count > 0) {
-			var grp = AddXwtReferenceGroup (tfmPos, "Projects", "depgrp:" + projectPath + ":" + tfm + ":projects");
-			foreach (var inc in model.ProjectReferences) {
-				var name = Path.GetFileNameWithoutExtension (inc.Replace ('\\', Path.DirectorySeparatorChar));
-				var nav = xwtSolutionStore!.AddNode (grp);
-				nav.SetValues (xwtSolIconField, XwtStockIcon ("reference-project-16.png"),
-					xwtSolTextField, name, xwtSolTagField, XwtReferencedProjectFile (dir, inc));
-			}
-		}
+			}),
+			("AssemblyDependencies", model.AssemblyReferences.Count > 0, () => {
+				var grp = AddXwtReferenceGroup (tfmPos, "Assemblies", "depgrp:" + projectPath + ":" + tfm + ":assemblies");
+				foreach (var name in model.AssemblyReferences.OrderBy (n => Path.GetFileName (n.Replace ('\\', Path.DirectorySeparatorChar)), GtkDepNameComparer)) {
+					var nav = xwtSolutionStore!.AddNode (grp);
+					nav.SetValues (xwtSolIconField, XwtStockIcon ("reference-assembly-16.png"),
+						xwtSolTextField, Path.GetFileName (name.Replace ('\\', Path.DirectorySeparatorChar)),
+						xwtSolTagField, "asmref:" + projectPath + ":" + tfm + ":" + name);
+				}
+			}),
+			("ProjectDependencies", model.ProjectReferences.Count > 0, () => {
+				var grp = AddXwtReferenceGroup (tfmPos, "Projects", "depgrp:" + projectPath + ":" + tfm + ":projects");
+				foreach (var inc in model.ProjectReferences.OrderBy (i => Path.GetFileNameWithoutExtension (i.Replace ('\\', Path.DirectorySeparatorChar)), GtkDepNameComparer)) {
+					var name = Path.GetFileNameWithoutExtension (inc.Replace ('\\', Path.DirectorySeparatorChar));
+					var nav = xwtSolutionStore!.AddNode (grp);
+					nav.SetValues (xwtSolIconField, XwtStockIcon ("reference-project-16.png"),
+						xwtSolTextField, name, xwtSolTagField, XwtReferencedProjectFile (dir, inc));
+				}
+			}),
+		};
+
+		// Insert only the populated groups, in Gtk's alphabetical order.
+		foreach (var g in groups.Where (g => g.HasItems).OrderBy (g => g.SortKey, GtkDepNameComparer))
+			g.Build ();
 	}
 
 	// Reference-group folder row (Stock.OpenReferenceFolder icon, like legacy).
