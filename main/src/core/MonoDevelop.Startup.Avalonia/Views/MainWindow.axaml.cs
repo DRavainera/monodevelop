@@ -279,14 +279,24 @@ public partial class MainWindow : Window
 		// Oleada 4 (slice D): the run-configuration combo starts with the legacy
 		// in-memory "Default"; opening a solution re-populates it from the
 		// startup project's real run configurations (RefreshConfigurationSelectors).
+		// The GTK MainToolbar hides the run-configuration combo while it holds a
+		// single run config (RunConfigurationVisible), so it starts hidden too.
 		RunConfigCombo!.PlaceholderText = "Default";
 		RunConfigCombo.Items.Add ("Default");
+		RunConfigCombo.IsVisible = false;
 		// Default toolbar configs (the legacy combo shows the workspace configs when
 		// a solution opens — see RefreshConfigurationSelectors).
 		ConfigCombo!.Items.Add ("Debug");
 		ConfigCombo.Items.Add ("Release");
 		ConfigCombo.SelectedIndex = 0;
-		// The legacy runtime combo was dropped: runtimes are selected per project.
+		// The 2nd combo is the runtime/TFM selector (legacy MainToolbar
+		// runtimeCombo): the startup project's target frameworks when the project
+		// is multi-TFM (TargetFrameworkExecutionTarget). Like GTK it is NEVER
+		// hidden — only made insensitive and left empty with a single target
+		// framework (PlatformSensitivity = runtimes > 1).
+		TfmCombo!.SelectedItem = null;
+		TfmCombo.IsVisible = true;
+		TfmCombo.IsEnabled = false;
 
 		// The placement convention (mac left, Windows/Linux right) is handled in
 		// OnOpened by re-parenting the caption buttons to the requested side; the
@@ -348,6 +358,18 @@ public partial class MainWindow : Window
 					Output ("[deps] FAIL no solution loaded (pass --sln=<fixture.sln>)");
 					Close ();
 					return;
+				}
+				// Toolbar state (1st combo = active configuration, 2nd = TFM/
+				// runtime selector, 3rd = run configuration, hidden with a single
+				// run config like the GTK RunConfigurationVisible rule): one line
+				// per combo with visibility, enabled state and items, so the QA
+				// can verify the GTK order and the multi-TFM entries without a shot.
+				(string Label, ComboBox? Cb)[] Combos = {
+					("config", ConfigCombo), ("tfm", TfmCombo), ("runcfg", RunConfigCombo),
+				};
+				foreach (var (label, cb) in Combos) {
+					var items = string.Join (",", cb!.Items.OfType<string> ().ToList ());
+					Output ($"[deps] combo {label}: visible={(cb.IsVisible ? "yes" : "no")} selected={cb.SelectedItem as string ?? "-"} items=[{items}]");
 				}
 				// Rows of the Dependencies subtrees (the rest of the pad is not part
 				// of this check): Dependencies, platform, depgrp and item tags. Items
@@ -1109,6 +1131,57 @@ public partial class MainWindow : Window
 					Output ("[activeconfig] after-switch=" + after + " persisted=" + File.ReadAllText (loadedSolutionPath.Substring (0, loadedSolutionPath.Length - 4) + ".userprefs").Contains ("Release") + " combo=" + (ConfigCombo?.SelectedItem as string ?? "?"));
 					OnMenuCommand ("MonoDevelop.Ide.Commands.ProjectCommands.SelectActiveConfiguration:Debug");
 					Output ("[activeconfig] restored=" + MonoDevelop.Ide.Services.ConfigurationService.GetActiveConfiguration (loadedSolutionPath));
+				}
+			} else if (qa == "--tfmcombo") {
+				// QA (toolbar TFM combo, the GTK runtimeCombo port): the 1st combo
+				// is the active configuration, the 2nd the startup project's target
+				// frameworks (visible + sensitive only when multi-TFM), the run
+				// configuration combo hidden with a single run config, the chosen
+				// TFM persisted as PreferredExecutionTarget and re-selected on
+				// refresh. The fixture startup project (DepsA) is net8.0;net10.0.
+				if (loadedSolutionPath is null) {
+					Output ("[tfmcombo] no solution loaded");
+				} else {
+					int ok = 0, fail = 0;
+					void R (bool pass, string what) { if (pass) ok++; else fail++; Output ("[tfmcombo] " + (pass ? "ok  " : "FAIL") + " " + what); }
+					var sln = loadedSolutionPath;
+					var projs = SolutionProjects (sln);
+					var startup = PickStartupProject (projs);
+					R (startup is not null && startup.EndsWith ("DepsA.csproj", StringComparison.Ordinal), "startup project is the multi-TFM one: " + (startup ?? "null"));
+					// 1st combo: the active configuration (previously the 2nd combo).
+					R (ConfigCombo?.Items.OfType<string> ().Contains ("Debug") == true && ConfigCombo?.Items.OfType<string> ().Contains ("Release") == true,
+						"config combo lists the solution configurations: " + string.Join (",", ConfigCombo?.Items.OfType<string> () ?? new List<string> ()));
+					// 2nd combo: the startup project's TFMs, GTK TargetFrameworkExecutionTarget
+					// order (the csproj order: net8.0;net10.0).
+					R (TfmCombo?.Items.OfType<string> ().SequenceEqual (new[] { "net8.0", "net10.0" }) == true,
+						"tfm combo lists the startup project TFMs: " + string.Join (",", TfmCombo?.Items.OfType<string> () ?? new List<string> ()));
+					R (TfmCombo?.IsVisible == true && TfmCombo?.IsEnabled == true, "multi-TFM: tfm combo visible + enabled");
+					// run configuration combo: hidden with the single "Default" run config
+					// (GTK RunConfigurationVisible rule), which makes the active
+					// configuration the 1st visible combo.
+					R (RunConfigCombo?.IsVisible == false, "run-configuration combo hidden with a single run config");
+					// persistence round-trip (GTK PreferredExecutionTarget).
+					MonoDevelop.Ide.Services.ConfigurationService.SetPreferredExecutionTarget (sln, "net10.0");
+					R (MonoDevelop.Ide.Services.ConfigurationService.GetPreferredExecutionTarget (sln, TfmCombo?.Items.OfType<string> ().ToList () ?? new List<string> ()) == "net10.0",
+						"set: PreferredExecutionTarget=net10.0 persisted");
+					RefreshConfigurationSelectors ();
+					R (TfmCombo?.SelectedItem as string == "net10.0", "refresh: persisted TFM re-selected: " + (TfmCombo?.SelectedItem as string ?? "?"));
+					// switching back updates the persisted value through the real
+					// combo-change path the UI uses (SelectionChanged → persist).
+					TfmCombo!.SelectedItem = "net8.0";
+					R (MonoDevelop.Ide.Services.ConfigurationService.GetPreferredExecutionTarget (sln, TfmCombo?.Items.OfType<string> ().ToList () ?? new List<string> ()) == "net8.0",
+						"switch: combo change persists the new TFM");
+					// single-TFM startup project: the combo stays VISIBLE but empty
+					// and insensitive (the GTK runtimeCombo is never hidden; only
+					// PlatformSensitivity = runtimes > 1 greys it out).
+					MonoDevelop.Ide.Services.ConfigurationService.SetSolutionStartupItem (sln, "DepsB/DepsB.csproj");
+					RefreshConfigurationSelectors ();
+					R (TfmCombo?.IsVisible == true && TfmCombo?.IsEnabled == false, "single-TFM startup: tfm combo visible + insensitive (GTK PlatformSensitivity)");
+					R (TfmCombo?.Items.Count == 0 && TfmCombo?.SelectedItem == null, "single-TFM startup: tfm combo empty + no selection: " + TfmCombo?.Items.Count);
+					MonoDevelop.Ide.Services.ConfigurationService.RemoveSolutionStartupItem (sln);
+					RefreshConfigurationSelectors ();
+					R (TfmCombo?.IsVisible == true && TfmCombo?.IsEnabled == true && TfmCombo?.SelectedItem as string == "net8.0", "restored multi-TFM startup: tfm combo back, persisted TFM re-selected: " + (TfmCombo?.SelectedItem as string ?? "?"));
+					Output ("[tfmcombo] " + (fail == 0 ? "all pass" : "FAIL " + fail));
 				}
 			} else if (qa == "--runcfg") {
 				// Oleada 4 (slice D) QA: run configurations via model — the
@@ -6390,14 +6463,17 @@ public partial class MainWindow : Window
 	// ---- Xwt.TreeView builders (real ProjectPad tree) ----
 
 	// DependenciesNode equivalent (MonoDevelop.DotNetCore): the "Dependencies" folder
-	// with, per target framework, the reference groups the Gtk UI shows. TFMs and
-	// reference items are read from the project file (lightweight XML, no MSBuild).
-	// Folder rows use the legacy Stock.OpenReferenceFolder icon.
+	// with the reference groups the Gtk UI shows. Reference items are read from the
+	// project file (lightweight XML, no MSBuild). Folder rows use the legacy
+	// Stock.OpenReferenceFolder icon.
 	//
-	// TFM LEVEL (the Gtk UI's shape, DependenciesNode.GetLoadedDependencyNodes):
-	// with more than one target framework a "Platforms" row per TFM is shown and the
-	// groups hang under each one; with a SINGLE target framework Gtk COLLAPSES the
-	// TFM row — the groups hang directly under Dependencies.
+	// TFM LEVEL: the Gtk UI shows a per-TFM row only while the multi-TFM dependency
+	// evaluation is loading; once resolved, a group appears only for the TFMs whose
+	// resolved references actually differ (in a typical project the 5 reference sets
+	// are identical across TFMs, so NO per-TFM rows remain). The shell keeps the
+	// project-level model (references are not per-TFM in the csproj), so the resolved
+	// shape is the one always: groups hang DIRECTLY under Dependencies, with the
+	// per-TFM items deduplicated (same item under several TFMs = one row).
 	//
 	// SIBLING ORDER (the Gtk UI's, matched below): the Gtk Solution pad sorts its rows
 	// with ExtensibleTreeView.CompareNodes, and the node-builder sort index is 0 for
@@ -6420,22 +6496,10 @@ public partial class MainWindow : Window
 		var depNav = xwtSolutionStore!.AddNode (projPos);
 		depNav.SetValues (xwtSolIconField, XwtStockIcon ("folder-component-16.png"),
 			xwtSolTextField, "Dependencies", xwtSolTagField, "dependencies:" + projectPath);
-		var depPos = depNav.CurrentPosition;
-		var tfms = model.TargetFrameworks.OrderBy (t => t, GtkDepNameComparer).ToList ();
-		if (tfms.Count > 1) {
-			// Multi-TFM: one row per TFM (Gtk keeps the TargetFrameworkNode level).
-			foreach (var tfm in tfms) {
-				var nav = xwtSolutionStore!.AddNode (depPos);
-				nav.SetValues (xwtSolIconField, XwtStockIcon ("framework-16.png"),
-					xwtSolTextField, tfm, xwtSolTagField, "platform:" + projectPath + ":" + tfm);
-				AddXwtTfmReferenceGroups (nav.CurrentPosition, projectPath, tfm, model);
-			}
-		} else {
-			// Single TFM: Gtk collapses the TFM row — the reference groups hang
-			// directly under Dependencies (GetLoadedDependencyNodes: 1 framework
-			// node → GetChildNodes(frameworkNodes[0])).
-			AddXwtTfmReferenceGroups (depPos, projectPath, tfms[0], model);
-		}
+		// No per-TFM level: the reference groups hang directly under Dependencies
+		// (the Gtk resolved shape; the shell's model is per-project, so the per-TFM
+		// rows would only repeat identical content).
+		AddXwtTfmReferenceGroups (depNav.CurrentPosition, projectPath, model);
 	}
 
 	// Gtk Solution pad sibling order: the Dependencies node builders all return the
@@ -6460,52 +6524,56 @@ public partial class MainWindow : Window
 	//                  project's main file (legacy ProjectReferenceNodeCommandHandler).
 	// Each group's items are ALSO sorted case-insensitively by their visible name, the
 	// same tie-break Gtk applies to the per-item rows.
-	void AddXwtTfmReferenceGroups (Xwt.TreePosition tfmPos, string projectPath, string tfm, MonoDevelop.Ide.Services.ConfigurationService.ProjectFileModel model)
+	void AddXwtTfmReferenceGroups (Xwt.TreePosition depPos, string projectPath, MonoDevelop.Ide.Services.ConfigurationService.ProjectFileModel model)
 	{
 		var dir = Path.GetDirectoryName (projectPath);
 		var hasFrameworks = model.FrameworkReferences.Count > 0;
-		var sdk = tfm.StartsWith ("netstandard", StringComparison.OrdinalIgnoreCase)
+		// SDK item: netstandard* → NETStandard.Library, net* → Microsoft.NETCore.App
+		// (SdkDependenciesNode.GetDefaultNodes). Any-TFM semantics (the model is
+		// per-project), so the first TFM drives the choice.
+		var firstTfm = model.TargetFrameworks [0];
+		var sdk = firstTfm.StartsWith ("netstandard", StringComparison.OrdinalIgnoreCase)
 			? "NETStandard.Library"
-			: tfm.StartsWith ("net", StringComparison.OrdinalIgnoreCase) ? "Microsoft.NETCore.App" : null;
+			: firstTfm.StartsWith ("net", StringComparison.OrdinalIgnoreCase) ? "Microsoft.NETCore.App" : null;
 
 		// (sort key = the legacy node name Gtk compares case-insensitively, whether
 		// the group has items, build action). Gtk builds a group node only when it has
 		// children, so empty groups are skipped before the sorted insert.
 		var groups = new List<(string SortKey, bool HasItems, Action Build)> {
 			("FrameworkReferences", model.FrameworkReferences.Count > 0, () => {
-				var grp = AddXwtReferenceGroup (tfmPos, "Frameworks", "depgrp:" + projectPath + ":" + tfm + ":frameworks");
+				var grp = AddXwtReferenceGroup (depPos, "Frameworks", "depgrp:" + projectPath + ":frameworks");
 				foreach (var name in model.FrameworkReferences.OrderBy (n => n, GtkDepNameComparer)) {
 					var nav = xwtSolutionStore!.AddNode (grp);
 					nav.SetValues (xwtSolIconField, XwtStockIcon ("reference-16.png"),
-						xwtSolTextField, name, xwtSolTagField, "fwref:" + projectPath + ":" + tfm + ":" + name);
+						xwtSolTextField, name, xwtSolTagField, "fwref:" + projectPath + ":" + name);
 				}
 			}),
 			("PackageDependencies", model.PackageReferences.Count > 0, () => {
-				var grp = AddXwtReferenceGroup (tfmPos, "NuGet", "depgrp:" + projectPath + ":" + tfm + ":nuget");
+				var grp = AddXwtReferenceGroup (depPos, "NuGet", "depgrp:" + projectPath + ":nuget");
 				foreach (var id in model.PackageReferences.OrderBy (id => id, GtkDepNameComparer)) {
 					var nav = xwtSolutionStore!.AddNode (grp);
 					nav.SetValues (xwtSolIconField, XwtStockImage ("md-package-dependency"),
-						xwtSolTextField, id, xwtSolTagField, "package:" + projectPath + ":" + tfm + ":" + id);
+						xwtSolTextField, id, xwtSolTagField, "package:" + projectPath + ":" + id);
 				}
 			}),
 			// SDK group only when there is no FrameworkReferences group (legacy rule).
 			("SdkDependencies", sdk is not null && !hasFrameworks, () => {
-				var grp = AddXwtReferenceGroup (tfmPos, "SDK", "depgrp:" + projectPath + ":" + tfm + ":sdk");
+				var grp = AddXwtReferenceGroup (depPos, "SDK", "depgrp:" + projectPath + ":sdk");
 				var nav = xwtSolutionStore!.AddNode (grp);
 				nav.SetValues (xwtSolIconField, XwtStockImage ("md-package-dependency"),
-					xwtSolTextField, sdk, xwtSolTagField, "sdkpkg:" + projectPath + ":" + tfm + ":" + sdk);
+					xwtSolTextField, sdk, xwtSolTagField, "sdkpkg:" + projectPath + ":" + sdk);
 			}),
 			("AssemblyDependencies", model.AssemblyReferences.Count > 0, () => {
-				var grp = AddXwtReferenceGroup (tfmPos, "Assemblies", "depgrp:" + projectPath + ":" + tfm + ":assemblies");
+				var grp = AddXwtReferenceGroup (depPos, "Assemblies", "depgrp:" + projectPath + ":assemblies");
 				foreach (var name in model.AssemblyReferences.OrderBy (n => Path.GetFileName (n.Replace ('\\', Path.DirectorySeparatorChar)), GtkDepNameComparer)) {
 					var nav = xwtSolutionStore!.AddNode (grp);
 					nav.SetValues (xwtSolIconField, XwtStockIcon ("reference-assembly-16.png"),
 						xwtSolTextField, Path.GetFileName (name.Replace ('\\', Path.DirectorySeparatorChar)),
-						xwtSolTagField, "asmref:" + projectPath + ":" + tfm + ":" + name);
+						xwtSolTagField, "asmref:" + projectPath + ":" + name);
 				}
 			}),
 			("ProjectDependencies", model.ProjectReferences.Count > 0, () => {
-				var grp = AddXwtReferenceGroup (tfmPos, "Projects", "depgrp:" + projectPath + ":" + tfm + ":projects");
+				var grp = AddXwtReferenceGroup (depPos, "Projects", "depgrp:" + projectPath + ":projects");
 				foreach (var inc in model.ProjectReferences.OrderBy (i => Path.GetFileNameWithoutExtension (i.Replace ('\\', Path.DirectorySeparatorChar)), GtkDepNameComparer)) {
 					var name = Path.GetFileNameWithoutExtension (inc.Replace ('\\', Path.DirectorySeparatorChar));
 					var nav = xwtSolutionStore!.AddNode (grp);
@@ -7931,10 +7999,23 @@ public partial class MainWindow : Window
 	{
 		if (sender is not ComboBox cb || cb.SelectedItem is not string sel)
 			return;
-		var name = cb == ConfigCombo ? "configuration" : cb == RunConfigCombo ? "run configuration" : "runtime";
+		var name = cb == ConfigCombo ? "configuration" : cb == TfmCombo ? "target framework" : "run configuration";
+		// Target framework (the 2nd combo, legacy MainToolbar runtimeCombo): for a
+		// multi-TFM startup project the TFMs are the execution targets (the Sdk
+		// project's TargetFrameworkExecutionTarget) and the choice is persisted
+		// like the GTK PreferredExecutionTarget.
+		if (cb == TfmCombo && !suppressToolbarSync && !string.IsNullOrEmpty (loadedSolutionPath)) {
+			try {
+				MonoDevelop.Ide.Services.ConfigurationService.SetPreferredExecutionTarget (loadedSolutionPath, sel);
+				Output ($"[toolbar] {name} → {sel} (saved to {Path.GetFileName (loadedSolutionPath)})");
+			} catch (Exception ex) {
+				Output ($"[toolbar] {name} → {sel} (persist failed: {ex.Message})");
+			}
+			return;
+		}
 		// Active configuration: persisted in <sln>.userprefs like RootWorkspace
 		// (WorkspaceUserData.ActiveConfiguration) and echoed to the Project menu.
-		if (cb == ConfigCombo && !suppressConfigSync && !string.IsNullOrEmpty (loadedSolutionPath)) {
+		if (cb == ConfigCombo && !suppressToolbarSync && !string.IsNullOrEmpty (loadedSolutionPath)) {
 			try {
 				MonoDevelop.Ide.Services.ConfigurationService.SetActiveConfiguration (loadedSolutionPath, sel);
 				activeConfiguration = sel;
@@ -7948,7 +8029,7 @@ public partial class MainWindow : Window
 		Output ($"[toolbar] {name} → {sel}");
 	}
 
-	bool suppressConfigSync;
+	bool suppressToolbarSync;
 	string activeConfiguration = "Debug";
 
 	// Oleada 3 (slice 11): legacy NavigationHistoryService `switching` flag —
@@ -7968,14 +8049,14 @@ public partial class MainWindow : Window
 			return;
 		var active = MonoDevelop.Ide.Services.ConfigurationService.GetActiveConfiguration (loadedSolutionPath);
 		activeConfiguration = active;
-		suppressConfigSync = true;
+		suppressToolbarSync = true;
 		try {
 			ConfigCombo!.Items.Clear ();
 			foreach (var c in configs)
 				ConfigCombo.Items.Add (c);
 			ConfigCombo.SelectedItem = configs.Contains (active) ? active : configs [0];
 		} finally {
-			suppressConfigSync = false;
+			suppressToolbarSync = false;
 		}
 		// Oleada 4 (slice D): the run-configuration combo shows the startup
 		// project's real run configurations (legacy RunConfigurationComboMenu).
@@ -7987,10 +8068,53 @@ public partial class MainWindow : Window
 		if (runCfgs.Count == 0)
 			runCfgs.Add ("Default"); // legacy ImportDefaultRunConfiguration
 		var prevRunCfg = RunConfigCombo?.SelectedItem as string;
-		RunConfigCombo!.Items.Clear ();
-		foreach (var rc in runCfgs)
-			RunConfigCombo.Items.Add (rc);
-		RunConfigCombo.SelectedItem = runCfgs.Contains (prevRunCfg) ? prevRunCfg : runCfgs [0];
+		suppressToolbarSync = true;
+		try {
+			RunConfigCombo!.Items.Clear ();
+			foreach (var rc in runCfgs)
+				RunConfigCombo.Items.Add (rc);
+			RunConfigCombo.SelectedItem = runCfgs.Contains (prevRunCfg) ? prevRunCfg : runCfgs [0];
+			// The GTK MainToolbar hides the run-configuration combo while it holds
+			// a single run config (RunConfigurationVisible), leaving the active
+			// configuration as the 1st combo of the toolbar.
+			RunConfigCombo.IsVisible = runCfgs.Count > 1;
+		} finally {
+			suppressToolbarSync = false;
+		}
+		// Target framework combo (the GTK runtimeCombo, 2nd position): a multi-TFM
+		// startup project exposes its target frameworks as execution targets
+		// (SdkProjectExecutionTarget / TargetFrameworkExecutionTarget), and the
+		// combo is insensitive with a single target (PlatformSensitivity =
+		// runtimes > 1). The TFMs keep the csproj declaration order (the GTK
+		// TargetFrameworkMonikers array order, NOT alphabetical); the persisted
+		// PreferredExecutionTarget selects the entry, the first TFM is the fallback.
+		var tfms = startupProj is not null
+			? MonoDevelop.Ide.Services.ConfigurationService.LoadProjectModel (startupProj)?.TargetFrameworks
+				.ToList () ?? new List<string> ()
+			: new List<string> ();
+		var multiTfm = tfms.Count > 1;
+		suppressToolbarSync = true;
+		try {
+			TfmCombo!.Items.Clear ();
+			// GTK fills the runtime combo from the project's execution targets
+			// (MainToolbarController.FillRuntimes): only a multi-TFM .NET project
+			// exposes its target frameworks (TargetFrameworkExecutionTarget), so
+			// the combo lists TFMs only in that case. The combo itself is NEVER
+			// hidden — it is only made insensitive when there is nothing to
+			// select (PlatformSensitivity = runtimes > 1), so it stays visible,
+			// empty and greyed for a single-TFM startup project.
+			if (multiTfm)
+				foreach (var tfm in tfms)
+					TfmCombo.Items.Add (tfm);
+			var preferred = multiTfm
+				? MonoDevelop.Ide.Services.ConfigurationService.GetPreferredExecutionTarget (loadedSolutionPath, tfms)
+				: null;
+			TfmCombo.SelectedItem = preferred ?? (multiTfm ? tfms [0] : null);
+			TfmCombo.IsVisible = true;
+			TfmCombo.IsEnabled = multiTfm;
+		} finally {
+			suppressToolbarSync = false;
+		}
 		BuildMenu ();
 	}
 
@@ -8543,8 +8667,8 @@ public partial class MainWindow : Window
 				try {
 					MonoDevelop.Ide.Services.ConfigurationService.SetActiveConfiguration (loadedSolutionPath, cfgName);
 					activeConfiguration = cfgName;
-					suppressConfigSync = true;
-					try { ConfigCombo!.SelectedItem = cfgName; } finally { suppressConfigSync = false; }
+					suppressToolbarSync = true;
+					try { ConfigCombo!.SelectedItem = cfgName; } finally { suppressToolbarSync = false; }
 					BuildMenu ();
 					Output ($"[config] active configuration → {cfgName}");
 				} catch (Exception ex) {

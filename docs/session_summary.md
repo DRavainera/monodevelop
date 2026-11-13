@@ -5061,3 +5061,58 @@ El QA **re-derivó** el ground truth GTK desde la fuente (cableado del sort, `Ge
 ### Cierre
 
 QA §18.5: **VERDE 0 hallazgos**. Commit por nombre de los 2 archivos de código + docs ×3. Push a `origin/agents/sub-agent-senior-dev-role-report`. **Sin submódulos.** Artefactos: `~/opencode/deps_order_qa/` (fixture `DepsOrder.sln` + `DepsA/B/C`, `avalonia_deps_dump.log`, `qa_deps_dump.log`, logs GTK, `QA_CONTEXT.md`, backup del perfil).
+
+## 2026-11-13 (44) — TFMs en la 2ª combobox de la toolbar + quitar el nivel TFM del pad Dependencies (igualar a la UI GTK) — CERRADO (QA VERDE, 0 hallazgos)
+
+**Estado: CERRADO (QA APROBADO, 0 hallazgos abiertos).** El operador pidió (tres peticiones acumuladas sobre el mismo nodo Dependencies del pad Solution de la shell Avalonia):
+1. Quitar el subárbol `net10.0`/`net8.0` (el **nivel TFM**) del árbol Dependencies — *"si en la UI GTK no está, no debe estar en la shell Avalonia"*.
+2. Mostrar `net10.0`/`net8.0` en la **segunda combobox de la toolbar**, como hace la UI GTK.
+3. Que el **primer combobox visible** sea el de **Active configuration** (Debug/Release), que antes estaba en el segundo — *"como está en la UI GTK"*.
+
+### Qué se hizo
+
+**Ground truth GTK (verificado contra fuente).** La `MainToolbar` GTK packea tres combos en orden: `runConfigurationCombo` → `configurationCombo` → `runtimeCombo` (`MainToolbar.cs:143-170`). El run-config combo se **oculta** con ≤1 run config (`RunConfigurationVisible`, controller l.199) → el **1er combo visible** es el de configuración (Debug/Release). El `runtimeCombo` (2º visible, "plataformas") se puebla con los **execution targets** del proyecto startup (`MainToolbarController.FillRuntimes` l.207-275); para un .NET **multi-TFM**, `SdkProjectExtension.OnGetExecutionTargets` (`SdkProjectExtension.cs:267-293`) devuelve un `TargetFrameworkExecutionTarget` por TFM (`Id = framework.ShortName` → `net8.0`/`net10.0`), el combo es **insensible** con 1 target (`PlatformSensitivity = runtimes > 1`) y **nunca se oculta**; single-TFM → 0 targets de TFM → combo vacío + insensible. El TFM elegido persiste como `PreferredExecutionTarget` (controller l.482/510/518). El pad Dependencies GTK resuelve el TFM **desde la toolbar**, no del pad.
+
+**Fix (solo shell Avalonia + servicio compartido aditivo):**
+- `Views/MainWindow.axaml`: orden de combos igual a GTK — `RunConfigCombo` (hidden con 1 run config) → `ConfigCombo` (active configuration, 1er visible) → `TfmCombo` (nuevo, 2º visible = target framework).
+- `Views/MainWindow.axaml.cs`:
+  - Constructor: `RunConfigCombo.IsVisible = false` inicial; `TfmCombo` visible/insensible/vacío inicial.
+  - `RefreshConfigurationSelectors`: `TfmCombo` con los TFMs del proyecto **STARTUP** en **orden de declaración del csproj** (no alfabético, igual que el array `TargetFrameworkMonikers` de GTK) **solo si multi-TFM**; `IsVisible=true` siempre, `IsEnabled=multiTfm`; pre-selecciona el `PreferredExecutionTarget` persistido o el 1er TFM. `RunConfigCombo.IsVisible = runCfgs.Count > 1`.
+  - `OnToolbarConfigChanged`: caso `TfmCombo` → persiste `SetPreferredExecutionTarget`.
+  - `AddXwtDependenciesNode`/`AddXwtTfmReferenceGroups`: **sin nivel TFM** — los 5 grupos cuelgan **directos** bajo `Dependencies`.
+  - Probe QA `--tfmcombo` (nuevo) + hook `--deps` extendido (ahora volca el estado de los 3 combos).
+- `Services/ConfigurationService.cs`: `SetPreferredExecutionTarget`/`GetPreferredExecutionTarget` (aditivos; escriben/leen `<sln>.userprefs` con la forma legacy `<MonoDevelop.Ide.Workspace><Property name="PreferredExecutionTarget"/>`; solo la shell los invoca).
+
+### Archivos
+
+- `main/src/core/MonoDevelop.Startup.Avalonia/Views/MainWindow.axaml` — orden de combos + `TfmCombo`.
+- `main/src/core/MonoDevelop.Startup.Avalonia/Views/MainWindow.axaml.cs` — TfmCombo (constructor/refresh/handler/persistencia), pad sin nivel TFM, probe `--tfmcombo`, hook `--deps` extendido.
+- `main/src/core/MonoDevelop.Startup.Avalonia/Program.cs` — allowlist `QaDialogArg` (`--tfmcombo`).
+- `main/src/core/MonoDevelop.Ide/Services/ConfigurationService.cs` — `Set/GetPreferredExecutionTarget` (aditivos).
+- docs ×3 (este §44, § M31-g en `interfaz-plan.md`, nota en `migration-status-report.md`).
+
+**4 M de código, sin submódulos, sin PNGs.**
+
+### Validación (valores medidos)
+
+Fixture `DepsOrder.sln` (`~/opencode/deps_order_qa/`): **DepsA** (Exe multi-TFM `net8.0;net10.0` + los 4 tipos de referencia en orden no alfabético), **DepsB/DepsC** (Library single-TFM sin refs).
+
+- **Probe `--tfmcombo`** (12/12 `ok` → `[tfmcombo] all pass`): 1er combo visible = config (Debug/Release); 2º = TFM `[net8.0, net10.0]` en orden de declaración, visible+enabled; `RunConfigCombo` visible=**no** (1 sola run config); persistencia `PreferredExecutionTarget=net10.0` → re-selecciona en refresh → cambio a `net8.0` persiste; single-TFM (DepsB startup) → combo visible + insensible + vacío.
+- **Dump `--deps`**: `combo config: visible=yes items=[Debug,Release]` · `combo tfm: visible=yes selected=net8.0 items=[net8.0,net10.0]` · `combo runcfg: visible=no items=[Default]` · **21 filas**, **sin ninguna fila `platform:`/TFM**: DepsA → Assemblies→Frameworks→NuGet→Projects; DepsB/C → solo SDK.
+
+### Regla 18.4 (ambas interfaces)
+
+`MainWindow.axaml` + `MainWindow.axaml.cs` + `Program.cs` son **exclusivos de la shell Avalonia**. `ConfigurationService.cs` vive en el assembly compartido `MonoDevelop.Ide` (también compila la ruta GTK), pero los 2 métodos añadidos son **aditivos y solo los invoca la shell** → GTK los compila sin ejecutarlos; sin cambio de comportamiento. Builds: `MonoDevelop.Startup.Avalonia.csproj` **0 errores** y `MonoDevelop.Startup.csproj` **0 errores** (solo warnings preexistentes).
+
+### QA §18.5 (subagente Tester QA Senior, recursivo)
+
+El QA corrió sus propias pruebas (no releyó los logs del dev), re-derivó el ground truth GTK desde la fuente y validó los 8 puntos (pad sin nivel TFM, orden GTK, 1er combo = config, 2º combo = TFM, single-TFM, persistencia, builds, operador intacto) → **VERDE 0 hallazgos**. Nota (no hallazgo): la paridad single-TFM "vacío+insensible" se confirmó por traza de código del core (0 targets de TFM), no por corrida GTK en vivo; riesgo residual bajo.
+
+### Queda pendiente / notas
+
+- **El pad no filtra por TFM (limitación del modelo, documentada):** la shell mantiene un modelo **por proyecto** (las referencias no son por-TFM en el parser; el fixture no tiene `<ItemGroup Condition>`). Elegir un TFM persiste el `PreferredExecutionTarget` y, en un proyecto real, la build/ejecución lo usaría, pero el **contenido del pad no cambia** porque las referencias declaradas no varían por TFM en este fixture. Fiel a la forma resuelta GTK (grupos directos bajo Dependencies) y a la petición del operador (quitar el nivel TFM del pad).
+- **Bug del relay `--old-gui`** (documentado en §43/M31-f) sigue sin corregir (fuera de scope).
+
+### Cierre
+
+QA §18.5: **VERDE 0 hallazgos**. Commit por nombre de los 4 archivos de código + docs ×3. Push a `origin/agents/sub-agent-senior-dev-role-report`. **Sin submódulos.** Artefactos: `~/opencode/deps_order_qa/` (fixture `DepsOrder.sln` + `DepsA/B/C`, `tfmcombo.log`, `deps_dump4.log`, backups del perfil y de `DepsOrder.userprefs`).

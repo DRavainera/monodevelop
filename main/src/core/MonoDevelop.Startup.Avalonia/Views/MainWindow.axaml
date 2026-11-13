@@ -75,10 +75,19 @@
                 Click="OnToolbarDebug" ToolTip.Tip="Start Debugging (F5)">
           <Image x:Name="DebugIcon" Width="16" Height="16" />
         </Button>
-        <ComboBox x:Name="RunConfigCombo" Width="150" Height="22" FontSize="12"
+        <!-- GTK MainToolbar order: run-configuration, configuration, runtime.
+             The run-configuration combo is hidden with a single run config
+             (legacy RunConfigurationVisible), so the visible order is:
+             Active configuration (1st) and the TFM/runtime selector (2nd),
+             which shows the startup project's target frameworks when it is
+             multi-targeted (SdkProjectExecutionTarget: TFMs as execution
+             targets) and is insensitive for a single target framework. -->
+        <ComboBox x:Name="RunConfigCombo" Width="150" Height="22" FontSize="12" IsVisible="False"
                   ToolTip.Tip="Run configuration" SelectionChanged="OnToolbarConfigChanged" />
-        <ComboBox x:Name="ConfigCombo" Width="150" Height="22" FontSize="12" Margin="8,0"
+        <ComboBox x:Name="ConfigCombo" Width="150" Height="22" FontSize="12"
                   ToolTip.Tip="Active configuration" SelectionChanged="OnToolbarConfigChanged" />
+        <ComboBox x:Name="TfmCombo" Width="150" Height="22" FontSize="12" Margin="8,0"
+                  ToolTip.Tip="Target framework" SelectionChanged="OnToolbarConfigChanged" />
         <!-- Right cluster: the search box is right-most, ':' selects a category (":c"
              commands, ":f" files) and Enter runs the search like SearchPopupWindow. -->
         <Grid DockPanel.Dock="Right" Width="220" Height="22">

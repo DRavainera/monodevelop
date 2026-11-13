@@ -299,6 +299,61 @@ public static class ConfigurationService
 		doc.Save (prefs);
 	}
 
+	/// <summary>Stores the active target framework in &lt;sln&gt;.userprefs as
+	/// &lt;MonoDevelop.Ide.Workspace&gt;&lt;Property name="PreferredExecutionTarget"
+	/// value="…"/&gt; — the legacy MainToolbarController persists the selected
+	/// runtime target per workspace the same way (TargetFrameworkExecutionTarget
+	/// Id for a multi-TFM .NET project).</summary>
+	public static void SetPreferredExecutionTarget (string slnPath, string targetFramework)
+	{
+		var prefs = slnPath.Substring (0, slnPath.Length - Path.GetExtension (slnPath).Length) + ".userprefs";
+		System.Xml.Linq.XDocument doc;
+		if (File.Exists (prefs)) {
+			try {
+				doc = System.Xml.Linq.XDocument.Load (prefs);
+			} catch {
+				doc = new System.Xml.Linq.XDocument (new System.Xml.Linq.XElement ("Properties"));
+			}
+		} else
+			doc = new System.Xml.Linq.XDocument (new System.Xml.Linq.XElement ("Properties"));
+		var root = doc.Root!;
+		var ws = root.Element ("MonoDevelop.Ide.Workspace");
+		if (ws is null) {
+			ws = new System.Xml.Linq.XElement ("MonoDevelop.Ide.Workspace");
+			root.Add (ws);
+		}
+		var prop = ws.Elements ("Property").FirstOrDefault (p => (string?)p.Attribute ("name") == "PreferredExecutionTarget");
+		if (prop is null) {
+			prop = new System.Xml.Linq.XElement ("Property");
+			prop.SetAttributeValue ("name", "PreferredExecutionTarget");
+			ws.Add (prop);
+		}
+		prop.SetAttributeValue ("value", targetFramework);
+		doc.Save (prefs);
+	}
+
+	/// <summary>Reads the persisted active target framework (see
+	/// <see cref="SetPreferredExecutionTarget"/>); null when absent or when it is
+	/// not one of the project's declared target frameworks.</summary>
+	public static string? GetPreferredExecutionTarget (string slnPath, IReadOnlyList<string> targetFrameworks)
+	{
+		if (targetFrameworks.Count == 0)
+			return null;
+		var prefs = slnPath.Substring (0, slnPath.Length - Path.GetExtension (slnPath).Length) + ".userprefs";
+		if (!File.Exists (prefs))
+			return null;
+		try {
+			var doc = System.Xml.Linq.XDocument.Load (prefs);
+			var stored = doc.Descendants ("Property")
+				.Where (p => (string?)p.Attribute ("name") == "PreferredExecutionTarget")
+				.Select (p => (string?)p.Attribute ("value"))
+				.FirstOrDefault ();
+			if (stored is not null)
+				return targetFrameworks.FirstOrDefault (tf => tf.Equals (stored, StringComparison.OrdinalIgnoreCase));
+		} catch { /* corrupt prefs: no persisted target */ }
+		return null;
+	}
+
 	/// <summary>Adds an existing .csproj/.fsproj into an existing .sln (legacy
 	/// ProjectOperations.AddSolutionItem): Project entry with a fresh GUID, the
 	/// per-language project type GUID (C# vs F#), plus the ActiveCfg/Build.0
