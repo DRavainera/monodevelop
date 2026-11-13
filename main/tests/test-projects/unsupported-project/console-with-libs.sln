@@ -1,6 +1,8 @@
 
-Microsoft Visual Studio Solution File, Format Version 11.00
-# Visual Studio 2010
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "console-with-libs", "console-with-libs\console-with-libs.csproj", "{EAB80A13-FC3E-4E53-8950-E6B9F19E4C90}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "library1", "library1\library1.csproj", "{7F63CBE6-2FE7-47A7-8930-EA078DA05062}"

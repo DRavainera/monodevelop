@@ -1,6 +1,8 @@
 
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio 15
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ExampleFormsSolution.Android", "ExampleFormsSolution.Android\ExampleFormsSolution.Android.csproj", "{94BAC716-2C7F-496D-A9C4-6D31324C9146}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ExampleFormsSolution.iOS", "ExampleFormsSolution.iOS\ExampleFormsSolution.iOS.csproj", "{F1E11DE2-FDB1-40C3-9414-67441DB58702}"

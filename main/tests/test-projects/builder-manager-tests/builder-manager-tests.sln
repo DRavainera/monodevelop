@@ -1,6 +1,8 @@
 
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio 2012
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "App", "builder-manager-tests\App.csproj", "{187801CB-3D22-4EC1-886B-B39897ACAA5A}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SyncTask", "SyncTask\SyncTask.csproj", "{6DDC0879-F3D8-4A28-8227-CA1534D14CCF}"

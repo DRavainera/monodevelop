@@ -1,6 +1,8 @@
 
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio 15
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ExpandFacadesTrue", "ExpandFacadesTrue.csproj", "{CA998AF3-90D0-4E99-BC08-5D8A0D88DED5}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ExpandFacadesFalse", "ExpandFacadesFalse.csproj", "{BA998AF3-90D0-4E99-BC08-5D8A0D88DEDB}"

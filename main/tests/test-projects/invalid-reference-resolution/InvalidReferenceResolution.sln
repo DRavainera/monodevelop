@@ -1,6 +1,8 @@
 
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio 2012
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "InvalidReference", "InvalidReferenceResolution\InvalidReference.csproj", "{33489F20-0B73-45D9-944D-7F3E04F2EA6C}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ReferencingProject", "ReferencingProject\ReferencingProject.csproj", "{1D38B6A0-3999-449A-9885-66CBA12E3906}"

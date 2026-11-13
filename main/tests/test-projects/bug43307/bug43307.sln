@@ -1,6 +1,8 @@
 
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio 2012
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
 Project("{f2a71f9b-5d33-465a-a702-920d77279786}") = "bug43307", "bug43307\bug43307.fsproj", "{13DD1602-57E5-45FB-B978-53A57CAEE218}"
 EndProject
 Global

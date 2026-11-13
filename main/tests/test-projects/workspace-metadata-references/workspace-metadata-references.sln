@@ -1,6 +1,8 @@
 
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio 15
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "workspace-metadata-references", "workspace-metadata-references\workspace-metadata-references.csproj", "{8348024A-4F94-47A1-B03B-5864E8E6E4B9}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "library-project", "library-project\library-project.csproj", "{8696FE11-7528-4063-B9AF-16608A10D970}"

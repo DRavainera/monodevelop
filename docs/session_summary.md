@@ -4838,3 +4838,57 @@ Commit por nombre de `main/src/core/MonoDevelop.Startup/MonoDevelop.exe.addins` 
 ### Cierre
 
 Commit por nombre de `main/src/addins/AspNet/MonoDevelop.AspNet.csproj` + docs ×2 (`session_summary.md` §38 + nota en `migration-status-report.md`). Push a `origin/agents/sub-agent-senior-dev-role-report`. **Sin submódulos**. Artefactos en `~/opencode/`: perfiles aislados `qa_addin_profile_QA3/` (run final), `qa_softaspnet_profile/` (run QA); backup `aspnet_net10_stale_backup_*`; logs `qa_aspnet_*.log`.
+
+## 2026-11-12 (39) — Convertir todos los `.sln` del repo a formato Visual Studio 2022 (Format 12.00 / `# Visual Studio Version 17`)
+
+**Estado: CERRADO (QA VERDE, 0 hallazgos).** El operador pidió: "modificar todos los .sln del repo para que sean soluciones de Visual Studio 2022", y eligió el alcance **completo** (168 `.sln`, incluyendo submódulos) y **"sí, y valido tests"** para los fixtures.
+
+**Formato objetivo (el mismo que la shell Avalonia ya emite en `NewSolutionDialog.axaml.cs:301-302`)**:
+```
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project(...)
+```
+
+**Topología real (mapeada, no "168 al azar")**:
+- **139 `.sln` en el repo main** (worktree): 5 de producto (`Main.sln`, MDBuildTasks, StripMnemonics, WixSetup, MonoLibraries) + ~130 fixtures de `main/tests/` + **`main/external/fsharpbinding/MonoDevelop.FSharp.sln`** (modo `100644`: lo trackea el **main**, NO es submódulo) + `main/tests/StressTest/*`.
+- **26 `.sln` en 11 submódulos reales** (forks `DRavainera/*`, pushables): Xamarin.PropertyEditing(1), debugger-libs(2), guiunit(3), libgit2sharp(1), macdoc(1), mono-addins(7), mono-tools(5), netcoredbg(1: `test-suite.sln`), nrefactory(1), vs-editor-api(3), xwt(1).
+- **1 `.sln` en `netcoredbg/.coreclr/.../BlazorWebWasm.sln`** — repo git **anidado standalone** cuyo `origin` es `https://github.com/dotnet/runtime` (branch `release/10.0`): **no es submódulo, no es fork del operador, no se puede push**. Se **revertió** (no se toca el upstream de Microsoft).
+- **2 fixtures GOLDEN** (se excluyen): `generated-console-project/TestSolution.sln` y `generated-shared-project/TestSolution.sln` — son **referencias byte-a-byte de la salida del writer propio de MonoDevelop** (`SlnFileFormat.WriteFileInternal` estampa `Format Version 12.00` + comentario preservado, y **no** emite línea `VisualStudioVersion` para soluciones nuevas). Los tests `CreateConsoleProject` (`ConvertToFormat(VS2010)` → `# Visual Studio 2010`, 11.00) y `SaveSharedProject` (`ConvertToFormat(VS2012)` → `# Visual Studio 15`, 12.00) las comparan con la solución recién guardada. Convertirlas **rompería la suite** → se dejan intactas.
+
+**Transformación (script `~/opencode/sln_vs2022/convert.py`, byte-preservante)**:
+- Cambia la línea `Format Version` → `12.00`, el comentario `# ...` → `# Visual Studio Version 17`, y fija/reemplaza `VisualStudioVersion = 17.0.31903.59` + `MinimumVisualStudioVersion = 10.0.40219.1` justo tras el comentario.
+- **Preserva**: BOM (56 archivos lo tenían), EOL por línea (141 CRLF / 27 LF), líneas en blanco iniciales, y **todo el bloque desde el primer `Project(` en adelante idéntico byte a byte** (verificado por diff).
+- Solo 20 de los 168 tenían ya línea `VisualStudioVersion` (se reemplaza); los 148 restantes la ganan.
+- **Verificado pre-aplicación en copias** de los 6 casos más delicados (LF+BOM, BOM+blank, no-BOM, 9.00, 11.00, Version-16): todos OK.
+
+**Resultado aplicado**: 165 convertidos, 2 golden intactos, 1 revertido. 0 errores. (165 = 139 del main + 26 de submódulos; el backup del tarball tiene 166 ficheros = 165 + el `.coreclr` que luego se revirtió.)
+
+### Validación (evidencia medida)
+
+1. **Parser REAL de MonoDevelop** (`MonoDevelop.Projects.MSBuild.SlnFile`, compilado en `MonoDevelop.Core.dll`): harness standalone (`~/opencode/sln_vs2022/harness`, `net10.0`) que hace `SlnFile.Read` + `SlnFile.Write` sobre los **168** archivos → **TOTAL=168 OK=165 EXC=0**. Los 3 "no-OK" son exactamente los no-convertidos esperados (2 golden + BlazorWebWasm revertido). **0 excepciones, 0 pérdida de proyectos** (Id/TypeGuid presentes).
+2. **Build real** (`dotnet msbuild main/Main.sln`, parser MSBuild .NET 10): el `.sln` convertido se **parsea correctamente** (MSBuild enumera proyectos y llega a CSC). Los únicos errores son `CS1705` de conflicto NuGet (`NuGet.Packaging 7.9.0.83` vs `6.11.2.1`) en csprojs **trackeados y no modificados** (`MonoDevelop.PackageManagement`) → **preexistente, no causado por el cambio** (el error es en compilación, posterior al parse del sln).
+3. **Análisis estático de la suite `Core.Tests`** (los tests que tocan `.sln`):
+   - Ningún test **carga un fixture y aserta el `FileFormat`** de la solución cargada (las aserciones `sol.FileFormat.Id` de `FormatConversions`/`ProjectName` usan soluciones **in-memory** vía `CreateConsoleSolution`+`ConvertToFormat`).
+   - `LoadBuildVS2010/2012/2013` asertan `p.ToolsVersion` = `"4.0"/"4.0"/"12.0"`, pero `ToolsVersion` se lee del **atributo `ToolsVersion` del `.csproj`** (`MSBuildProject.cs:314`), que **no se toca** (0 `.csproj` modificados) → no se ve afectado por el header del `.sln`.
+   - La única comparación **byte-a-byte de un `.sln`** es contra los 2 golden, que se dejaron intactos.
+   - Bump `9.00/10.00/11.00 → 12.00` cambia el `MSBuildFileFormat` de carga (VS2005/2008/2010 → VS2012); no hay test que dependa de ese formato antiguo concreto al cargar.
+4. **Shell Avalonia**: la propia `NewSolutionDialog` ya emite `Format Version 12.00` + `# Visual Studio Version 17` → el formato destino es exactamente el que la UI emite; sin regresión.
+
+### Limitación documentada (runner de tests)
+La suite legacy `MonoDevelop.Core.Tests` es un **add-in hosteado por el IDE** (`OutputType=Library`, usa `Services.ProjectService`, sin NUnit TestSdk) y se ejecuta vía `mdtool run-md-tests` (`main/wintest.sh`). El `mdtool.dll` es un binario **32-bit (I386)** del entorno Windows-legacy que el apphost 64-bit **.NET 10 no carga** (`FileLoadException: assembly architecture not compatible`) y **`mono` no está instalado** en este host. Por tanto la suite in-IDE **no es ejecutable en este entorno** (limitación preexistente del build, no del cambio). La validación se apoya en (1) el parser real vía harness, (2) el build real, y (3) el análisis estático exhaustivo de la suite, que muestra **cero** aserciones dependientes del header del `.sln`. El operador puede correr la suite in-IDE desde su entorno habitual para confirmación final.
+
+### Archivos (165 M + 2 golden intactos + 1 revertido)
+- **Repo main (139 `.sln`)**: `main/Main.sln`, `main/msbuild/MDBuildTasks/MDBuildTasks.sln`, `main/po/StripMnemonics/StripMnemonics.sln`, `setup/WixSetup/WixSetup.sln`, `setup/MonoLibraries/MonoLibraries.sln`, `main/external/fsharpbinding/MonoDevelop.FSharp.sln` (trackeado por main), `main/tests/StressTest/**` y ~130 `main/tests/test-projects/**`.
+- **11 submódulos (26 `.sln`)**: los listados arriba; cada uno commit+push a su branch (`net10`/`master`) y puntero actualizado en main.
+- **No se toca**: `generated-console-project/TestSolution.sln`, `generated-shared-project/TestSolution.sln` (golden), `netcoredbg/.coreclr/.../BlazorWebWasm.sln` (upstream `dotnet/runtime`).
+
+### Queda pendiente / notas
+- Los 2 **golden** conservan su header antiguo **a propósito** (son la salida de referencia del writer de MonoDevelop). Si algún día se cambia el writer para emitir `# Visual Studio Version 17`, habría que regenerarlos.
+- El `.sln` de `dotnet/runtime` (`.coreclr`) se revirtió; si el operador quiere convertirlo, debe hacerlo en su propio fork de `dotnet/runtime` (fuera de este repo).
+- Si el operador quiere, una limpieza global del artefacto `net10.0/` (~28 closures, pendiente del §38) sigue siendo una tarea aparte.
+
+### Cierre
+QA §18.5: VERDE 0 hallazgos. Commit por nombre de los 139 `.sln` del main + docs ×2 (`session_summary.md` §39 + nota en `migration-status-report.md`), commit+push de los 11 submódulos y actualización de sus 11 punteros en main. Push a `origin/agents/sub-agent-senior-dev-role-report`. Artefactos en `~/opencode/sln_vs2022/`: `convert.py`, `analysis.json`, `harness/`, backup `pre_convert_backup_*.tar` (los 166 previos a convertir).

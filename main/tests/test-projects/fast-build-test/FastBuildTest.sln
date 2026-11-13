@@ -1,6 +1,8 @@
 
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio 2012
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FastBuildTest", "FastBuildTest.csproj", "{E0C1595D-2795-43CD-8FD7-1A6E56ED5258}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FastLibrary", "FastLibrary.csproj", "{E816B615-A29F-41DA-99D6-3CA5B5839D80}"

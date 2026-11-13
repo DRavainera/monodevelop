@@ -1,6 +1,8 @@
 
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio 15
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NetStandard11", "NetStandard11\NetStandard11.csproj", "{FC899F17-8CC6-4D85-87B8-09FC18149D3F}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NetCore21Net472", "NetCore21Net472\NetCore21Net472.csproj", "{9F8B4E87-AF6E-4294-AA0D-34027B5B1B0B}"

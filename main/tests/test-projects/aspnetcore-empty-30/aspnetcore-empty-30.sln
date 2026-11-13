@@ -1,6 +1,8 @@
 
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio 15
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "aspnetcore-empty-30", "aspnetcore-empty-30\aspnetcore-empty-30.csproj", "{B179B42C-2702-4E1C-958A-0EF44CEDD11B}"
 EndProject
 Global

@@ -1,6 +1,8 @@
 
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio 2012
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "conditional-project-reference", "conditional-project-reference\conditional-project-reference.csproj", "{DAC04D9B-8B03-4EBC-9B3E-609305C22FCA}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "commonLib", "commonLib\commonLib.csproj", "{92D8316A-4AE1-41FD-A141-BEEF4C6C2BCB}"

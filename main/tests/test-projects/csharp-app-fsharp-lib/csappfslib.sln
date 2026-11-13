@@ -1,6 +1,8 @@
 
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio 2012
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "csappfslib", "csappfslib\csappfslib.csproj", "{A23AB281-DF12-4AA9-BB50-319C80990758}"
 EndProject
 Project("{f2a71f9b-5d33-465a-a702-920d77279786}") = "fslib", "fslib\fslib.fsproj", "{BB3A5E1D-3CFD-46B8-B690-B2F29F1A2CB1}"

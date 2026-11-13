@@ -1,6 +1,8 @@
 
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio 15
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NetFrameworkProject", "NetFrameworkProject\NetFrameworkProject.csproj", "{3DD86499-45B8-4538-AB43-3333129D0363}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NetStandardProject", "NetStandardProject\NetStandardProject.csproj", "{97EBB5B4-6356-4899-9229-DF67AA6F088E}"
