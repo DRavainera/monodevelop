@@ -44,6 +44,10 @@ public class PadHost : Border
 		internal ToggleButton? HeaderButton;
 		internal Control? RailButton;
 		internal Button? CloseButton;
+		// The icon Images are built once in AddTab; RefreshIcons swaps their
+		// Source on a theme change instead of rebuilding the tab chrome.
+		internal Avalonia.Controls.Image? HeaderIconImage;
+		internal Avalonia.Controls.Image? RailIconImage;
 	}
 
 	readonly StackPanel tabBar;          // horizontal strip (expanded)
@@ -272,7 +276,8 @@ public class PadHost : Border
 		};
 		var headerRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4 };
 		if (tab.Icon is not null && IconService.GetImage (tab.Icon) is Bitmap bmp) {
-			headerRow.Children.Add (new Avalonia.Controls.Image { Source = bmp, Width = 16, Height = 16, VerticalAlignment = VerticalAlignment.Center });
+			tab.HeaderIconImage = new Avalonia.Controls.Image { Source = bmp, Width = 16, Height = 16, VerticalAlignment = VerticalAlignment.Center };
+			headerRow.Children.Add (tab.HeaderIconImage);
 		}
 		headerRow.Children.Add (label);
 		headerRow.Children.Add (closeBtn);
@@ -296,11 +301,13 @@ public class PadHost : Border
 			btn.IsVisible = false;
 
 		// Rail twin: icon-only rotated toggle, bound to the same state.
+		var railIcon = new Avalonia.Controls.Image {
+			Width = 16, Height = 16,
+			Source = (tab.Icon is not null ? IconService.GetImage (tab.Icon) : null) ?? IconService.GetImage ("md-plugin"),
+		};
+		tab.RailIconImage = railIcon;
 		var rail = new ToggleButton {
-			Content = new Avalonia.Controls.Image {
-				Width = 16, Height = 16,
-				Source = (tab.Icon is not null ? IconService.GetImage (tab.Icon) : null) ?? IconService.GetImage ("md-plugin"),
-			},
+			Content = railIcon,
 			FontSize = 11,
 			Padding = new Thickness (4, 6),
 			CornerRadius = new CornerRadius (3),
@@ -315,6 +322,26 @@ public class PadHost : Border
 		railBar.Children.Add (rail);
 		if (!tab.Visible)
 			rail.IsVisible = false;
+	}
+
+	/// <summary>Re-resolves every tab icon against the CURRENT theme variant and
+	/// swaps the already-built Image sources. The tab chrome is constructed once
+	/// (AddTab) and its IconService.GetImage call captures whatever variant the
+	/// platform reported at that instant; Avalonia surfaces the OS dark/light
+	/// variant asynchronously (first Light, then Dark on a dark OS), so tabs added
+	/// before the real variant is known keep the wrong (light) PNG. The shell calls
+	/// this from its ActualThemeVariantChanged handler so pad tabs re-tint like the
+	/// toolbar icons do. IconService caches per variant, so the swap is cheap.</summary>
+	public void RefreshIcons ()
+	{
+		foreach (var t in tabs) {
+			if (t.Icon is null)
+				continue;
+			if (t.HeaderIconImage is { } header)
+				header.Source = IconService.GetImage (t.Icon);
+			if (t.RailIconImage is { } railIcon)
+				railIcon.Source = IconService.GetImage (t.Icon);
+		}
 	}
 
 	public void SetTabVisible (string tabId, bool visible)

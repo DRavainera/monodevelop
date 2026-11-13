@@ -5926,3 +5926,46 @@ Tres de los cuatro archivos son **exclusivos de la shell Avalonia** (`MainWindow
 - `main/src/core/MonoDevelop.Ide/Services/ConfigurationService.cs` — `Set/GetPreferredExecutionTarget` (aditivos).
 
 + docs ×3 (este § M31-g, `session_summary.md` §44, nota en `migration-status-report.md`). Artefactos: `~/opencode/deps_order_qa/` (fixture `DepsOrder.sln` + `DepsA/B/C`, `tfmcombo.log`, `deps_dump4.log`, backups del perfil y del `DepsOrder.userprefs`).
+
+## 2026-11-13 — M31-h Iconos de los tabs de pads: re-tinteo con la variante dark/light del tema — CERRADO (QA VERDE, 0 hallazgos)
+
+**Estado: CERRADO (QA APROBADO, 0 hallazgos abiertos).** Problema de diseño reportado por el operador: los iconos de los tabs de pads de la shell Avalonia **no seguían el tema** — en tema **oscuro** se veían **oscuros** cuando deberían ser **claros**.
+
+**Causa raíz (verificada, 3 piezas).** (1) Los tabs de `PadHost` se crean **una sola vez** en el **constructor** de `MainWindow` y el `Image` de cada tab (header + rail) se rellena con `IconService.GetImage(tab.Icon)` — un `Bitmap` resuelto según la **variante de tema de ese instante** (`PadHost.cs` `AddTab`). (2) Avalonia reporta la variante del SO **asíncronamente: primero Light, luego Dark** en un sistema oscuro (comentario `MainWindow.axaml.cs:310-313`) → en la fase del constructor la variante es aún **Light** y se cachea el PNG claro (oscuro-sobre-claro). (3) **Nada refrescaba** los `Image` de los pads al cambiar la variante (los de la toolbar sí: `ActualThemeVariantChanged → SetToolbarIcons()`). Los 15 iconos de pad **sí tienen variante `~dark`** (p. ej. `MonoDevelop.Avalonia.Icons/pad-solution-16~dark.png`) y `IconService` la resuelve por variante (`Variants()` prueba `~dark` antes que la base cuando `dark=true`) → el problema era **solo de refresco**, no de assets.
+
+**Fix (solo shell Avalonia).**
+- `MonoDevelop.Ide/Controls/PadHost.cs`: `PadTab` guarda `HeaderIconImage`/`RailIconImage` (`internal`), los dos `Image` creados en `AddTab` (header strip l.274 + rail twin l.299). Nuevo método público `RefreshIcons()`: itera los tabs y re-resuelve `IconService.GetImage(tab.Icon)` cambiando el `Source` de los `Image` ya construidos (sin reconstruir el chrome). `IconService` cachea por `(stockId, dark, disabled, scale)`, así que el swap es barato.
+- `MonoDevelop.Startup.Avalonia/Views/MainWindow.axaml.cs`: helper `RefreshPadIcons()` (los 3 hosts: `LeftPads`/`RightPads`/`BottomPads`), invocado en **dos puntos**: (a) en el handler `Opened` junto a `SetToolbarIcons` — cubre "el OS reporta Dark entre el constructor y el `Opened`"; (b) en `ActualThemeVariantChanged` junto a `SetToolbarIcons` — cubre el **switch en vivo**. Probe QA `--padicons` (nuevo, allowlist en `Program.cs`): fuerza `RequestedThemeVariant` **Light→Dark→Light** y verifica por **identidad de referencia** contra `IconService.GetImage("md-solution-pad")` que el `Source` de header y rail del tab `solution` se re-punta al `Bitmap` cacheado de la variante vigente, con `ResolveFilePath` como ground truth del path. Restaura `ThemeVariant.Default` al final.
+  - *Limitación de Avalonia 11 (documentada):* `Bitmap` **no expone `Filename`**, así que el probe no puede leer el path del bitmap cargado; la verificación es por **identidad de referencia** contra la cache de `IconService` (el mismo bitmap que serviría una llamada nueva de `GetImage` con la variante vigente) + `ResolveFilePath` para el path de referencia (patrón del probe `--iconsqa`).
+- `MonoDevelop.Startup.Avalonia/Program.cs`: `--padicons` en la allowlist `QaDialogArg`.
+
+**Alcance:** solo los tabs de `PadHost` (3 hosts). La restore strip solo usa texto. Los iconos del árbol Xwt se resuelven por `ResolveFilePath` en build (sin este bug; fuera de alcance).
+
+### Validación (valores medidos)
+
+Fixture `DepsOrder.sln` (`~/opencode/deps_order_qa/`), Xvfb `:99` (SO `prefer-dark` — el escenario real del operador).
+
+- **Probe `--padicons` (10/10 `ok` → `[padicons] all pass`)**: Light → `ResolveFilePath` = `pad-solution-16.png` (base) + header/rail = bitmap cacheado light; Dark → `ResolveFilePath` = `pad-solution-16~dark.png` + header/rail **swapeados al bitmap cacheado `~dark`** (referencia nueva, no el light viejo); Light (restore) → **swapeados de vuelta** al light (re-resolución bidireccional).
+- **Visual dark (corrida A, sin flag → arranca DARK por el OS)**: tema oscuro (menu `srgb(45,45,45)`, editor `srgb(30,30,30)`); iconos de pads **CLAROS** en Solution (izq.), Properties (der.), Output y Errors (abajo) — variantes `~dark` legibles sobre los tabs; toolbar (logo/run/debug) también clara → coherente.
+- **Visual light tras switch en vivo (corrida B, `--themetoggle`)**: conmuta Dark→Light por la **ruta de producción** (`ApplyThemeVariant`); log `[themetoggle] fixture.cs: Dark -> Light renderCount 3 -> 4 RECLORED`; tras la conmutación, iconos de pads **OSCUROS** sobre fondo claro → re-tint en vivo correcto.
+
+### Regla 18.4 (convivencia Gtk/Avalonia)
+
+`PadHost.cs` e `IconService.cs` viven en `MonoDevelop.Ide` pero **NO se compilan en la ruta GTK**: `MonoDevelop.Ide.csproj` usa `EnableDefaultCompileItems=false` con lista explícita que **no los incluye**; la shell los compila vía los globs `..\MonoDevelop.Ide\Services\**\*.cs` / `Controls\**\*.cs` (`MonoDevelop.Startup.Avalonia.csproj` l.157-158). Verificado en binarios: `MonoDevelop.Ide.dll` (GTK) **no contiene** `PadHost`/`RefreshIcons`; `MonoDevelop.AvaloniaShell.dll` **sí** (también `RefreshPadIcons` y el literal `--padicons`). → **impacto GTK nulo**. Builds: **`MonoDevelop.Startup.Avalonia.csproj` 0 errores** y **`MonoDevelop.Startup.csproj` 0 errores** (solo warnings preexistentes). Smoke GTK (`MonoDevelop.dll --old-gui`) vivo 44 s, 0 stack traces.
+
+### QA §18.5 (subagente Tester QA Senior, recursivo)
+
+El QA corrió sus propias pruebas: review estática del diff, re-ejecutó los 2 builds, relanzó el probe (10/10), verificación **visual en temas** (corrida A dark + corrida B switch en vivo, zoom + medición por píxel) y smoke GTK → **VERDE 0 hallazgos**. Dos apuntes **INFO** (no bloqueantes): (1) `--themetoggle` conmuta Dark→Light a los ~1 s → las capturas de la corrida B quedaron en light; el estado dark con iconos claros lo cubre la corrida A y el re-tint el log + el probe; (2) `RefreshIcons` omite tabs con `Icon == null` — sin impacto práctico (los 22 `AddTab` de la shell llevan `Icon`; brecha teórica, no alcanzable).
+
+### Queda pendiente / notas
+
+- **El operador debe relanzar su shell** para ver el cambio (DLL vieja en memoria en su sesión).
+- El probe verifica el tab `solution` (header + rail) como caso representativo; la fix cubre todos los tabs de los 3 hosts (mismo `PadHost.RefreshIcons`).
+
+### Archivos (3 M, sin submódulos, sin PNGs)
+
+- `main/src/core/MonoDevelop.Ide/Controls/PadHost.cs` — `HeaderIconImage`/`RailIconImage` en `PadTab`, refs en `AddTab`, método `RefreshIcons()`.
+- `main/src/core/MonoDevelop.Startup.Avalonia/Views/MainWindow.axaml.cs` — `RefreshPadIcons()` + llamadas en `Opened` y `ActualThemeVariantChanged`, probe `--padicons`.
+- `main/src/core/MonoDevelop.Startup.Avalonia/Program.cs` — allowlist `QaDialogArg` (`--padicons`).
+
++ docs ×3 (este § M31-h, `session_summary.md` §45, nota en `migration-status-report.md`). Artefactos: `~/opencode/deps_order_qa/padicons/` (logs + capturas + zooms), `~/opencode/deps_order_qa/padicons_probe.log`, backups del perfil y de `DepsOrder.userprefs`.

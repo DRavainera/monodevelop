@@ -313,9 +313,18 @@ public partial class MainWindow : Window
 			// on the current variant, and refresh it when the platform variant changes.
 			Background = Brushes.Transparent;
 			SetToolbarIcons ();
+			// The pad tab icons were built in the ctor, before the platform dark
+			// variant (if any) is known — re-resolve them now, against the variant
+			// active at window-open time, like SetToolbarIcons does for the toolbar.
+			RefreshPadIcons ();
 			if (Application.Current is not null)
 				Application.Current.ActualThemeVariantChanged += (_, _) => {
 					SetToolbarIcons ();
+					// The OS variant can still flip after the window opens (and on a
+					// live theme switch) — re-resolve the pad tab icons against the
+					// variant now active so they re-tint dark/light like the toolbar
+					// icons (IconService picks the ~dark PNG per theme).
+					RefreshPadIcons ();
 					// The editor paints its colors from the active theme at Draw time (not
 					// cached), but a theme switch does not itself invalidate a control: the
 					// bound brushes are the same instances with their Color mutated in place,
@@ -1183,6 +1192,48 @@ public partial class MainWindow : Window
 					R (TfmCombo?.IsVisible == true && TfmCombo?.IsEnabled == true && TfmCombo?.SelectedItem as string == "net8.0", "restored multi-TFM startup: tfm combo back, persisted TFM re-selected: " + (TfmCombo?.SelectedItem as string ?? "?"));
 					Output ("[tfmcombo] " + (fail == 0 ? "all pass" : "FAIL " + fail));
 				}
+			} else if (qa == "--padicons") {
+				// QA (pad icon theme): the pad tab icons are built once in the ctor,
+				// before the platform dark variant is known, so they used to keep
+				// the light (dark-on-light) PNG under a dark theme. The fix re-resolves
+				// them against the current variant at window-open and on every theme
+				// change (RefreshPadIcons → PadHost.RefreshIcons). Verified here
+				// deterministically: force Light, then Dark, and confirm the tab icon
+				// Source re-points to the ~dark PNG (and back to light on restore),
+				// for the header AND the rail twin. The theme is restored to Default.
+				int ok = 0, fail = 0;
+				void R (bool pass, string what) { if (pass) ok++; else fail++; Output ("[padicons] " + (pass ? "ok  " : "FAIL") + " " + what); }
+				var app = Application.Current!;
+				var solTab = LeftPads.Tabs.FirstOrDefault (t => t.Id == "solution");
+				R (solTab?.HeaderIconImage is not null && solTab?.RailIconImage is not null, "solution tab has header + rail icon Images: " + (solTab?.HeaderIconImage is not null ? "hdr" : "nohdr") + "," + (solTab?.RailIconImage is not null ? "rail" : "norail"));
+				if (solTab?.HeaderIconImage is { } hdr && solTab?.RailIconImage is { } rail) {
+					// IconService caches one Bitmap per (id, variant) — GetImage is
+					// the source of truth for the current variant's bitmap, so the
+					// probe asserts by reference identity against it (Avalonia 11
+					// Bitmap does not expose Filename) + ResolveFilePath for the
+					// variant ground truth (the ~dark path, like --iconsqa).
+					app.RequestedThemeVariant = ThemeVariant.Light;
+					var lightFile = MonoDevelop.Ide.Services.IconService.ResolveFilePath ("md-solution-pad");
+					var lightBmp = MonoDevelop.Ide.Services.IconService.GetImage ("md-solution-pad");
+					R (lightFile is not null && !lightFile.Contains ("~dark", StringComparison.Ordinal), "light: resolves the base (non ~dark) PNG: " + (lightFile ?? "null"));
+					R (ReferenceEquals (hdr.Source, lightBmp), "light: header icon Source is the cached light bitmap of the current variant");
+					R (ReferenceEquals (rail.Source, lightBmp), "light: rail icon Source is the same cached light bitmap");
+					// Switch to Dark: the ActualThemeVariantChanged handler runs
+					// RefreshPadIcons, which must re-point both icons to ~dark.
+					app.RequestedThemeVariant = ThemeVariant.Dark;
+					var darkFile = MonoDevelop.Ide.Services.IconService.ResolveFilePath ("md-solution-pad");
+					R (darkFile is not null && darkFile.Contains ("~dark", StringComparison.Ordinal), "dark: resolves the ~dark PNG: " + (darkFile ?? "null"));
+					R (ReferenceEquals (hdr.Source, MonoDevelop.Ide.Services.IconService.GetImage ("md-solution-pad")), "dark: header icon Source swapped to the ~dark cached bitmap (the fix)");
+					R (!ReferenceEquals (hdr.Source, lightBmp), "dark: header Source is a NEW bitmap (not the stale light one)");
+					R (ReferenceEquals (rail.Source, hdr.Source), "dark: rail icon Source swapped to the same ~dark bitmap (the fix)");
+					// Switch back to Light: the icons must re-point to the base PNG.
+					app.RequestedThemeVariant = ThemeVariant.Light;
+					R (ReferenceEquals (hdr.Source, lightBmp), "light (restore): header icon Source back to the cached light bitmap (two-way re-resolve)");
+					R (ReferenceEquals (rail.Source, lightBmp), "light (restore): rail icon Source back to the cached light bitmap");
+				}
+				// Restore the OS-driven variant (Default follows the platform).
+				app.RequestedThemeVariant = ThemeVariant.Default;
+				Output ("[padicons] " + (fail == 0 ? "all pass" : "FAIL " + fail));
 			} else if (qa == "--runcfg") {
 				// Oleada 4 (slice D) QA: run configurations via model — the
 				// startup project's run configs, the persisted StartupItem
@@ -7639,6 +7690,17 @@ public partial class MainWindow : Window
 				grace.Start ();
 			};
 		}
+	}
+
+	// The pad tab icons (PadHost) are built once in the ctor — before the platform
+	// dark variant is known — so they are re-resolved against the current variant
+	// at window open and on every theme change, exactly like SetToolbarIcons does
+	// for the toolbar glyphs (IconService picks the ~dark PNG per theme).
+	void RefreshPadIcons ()
+	{
+		LeftPads.RefreshIcons ();
+		RightPads.RefreshIcons ();
+		BottomPads.RefreshIcons ();
 	}
 
 	// Legacy MainToolbar behavior: the debug step buttons live right of the
