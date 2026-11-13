@@ -12,9 +12,10 @@
 //
 // Contract the editor needs:
 //   - AllBundles: the built-in language bundle, populated from the embedded
-//     syntax definitions (the legacy .sublime-syntax rules for C#/F#/Markdown/
-//     YAML + the VSCode TextMate grammars for C/C++/XML/JSON) plus the two
-//     built-in color themes (Dark+/Light+).
+//     syntax definitions (the full VSCode C# grammar + the legacy
+//     .sublime-syntax rules for F#/Markdown/YAML + the VSCode TextMate
+//     grammars for C/C++/XML/JSON) plus the two built-in color themes
+//     (Dark+/Light+).
 //   - GetSyntaxHighlightingDefinition(path): extension-based language
 //     resolution (same "longest extension wins" rule as the legacy).
 //   - GetEditorTheme(name): theme lookup for the color palettes.
@@ -192,7 +193,7 @@ namespace MonoDevelop.Ide.Editor.Highlighting
 			//     (YAML) -> Sublime3Format, .tmLanguage.json (JSON) ->
 			//     TextMateFormat.ReadHighlightingFromJson, .tmLanguage (PLIST/XML)
 			//     -> TextMateFormat.ReadHighlighting. ---
-			Register ("csharp.sublime-syntax", "C#", new [] { ".cs", ".csx", ".cake" });
+			Register ("csharp.tmLanguage.plist", "C#", new [] { ".cs", ".csx", ".cake" });
 			Register ("fsharp.sublime-syntax", "F#", new [] { ".fs", ".fsi", ".fsx", ".fsscript" });
 			Register ("markdown.sublime-syntax", "Markdown", new [] { ".md", ".markdown", ".mdown" });
 			Register ("yaml.sublime-syntax", "YAML", new [] { ".yaml", ".yml" });
@@ -237,7 +238,7 @@ namespace MonoDevelop.Ide.Editor.Highlighting
 				// The scopeName the legacy service registers each language
 				// under (it is also what scope: includes match against).
 				switch (System.IO.Path.GetFileName (resource)) {
-				case "csharp.sublime-syntax": return "source.cs";
+				case "csharp.tmLanguage.plist": return "source.cs";
 				case "fsharp.sublime-syntax": return "source.fs";
 				case "markdown.sublime-syntax": return "text.html.markdown";
 				case "yaml.sublime-syntax": return "source.yaml";

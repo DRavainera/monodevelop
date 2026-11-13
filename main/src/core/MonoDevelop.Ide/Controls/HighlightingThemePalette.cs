@@ -83,13 +83,32 @@ namespace MonoDevelop.Ide.Controls
 				("support.function", FG ("#DCDCAA")),
 				("variable", FG ("#9CDCFE")),
 				("variable.parameter", FG ("#9CDCFE")),
+				("support.variable", FG ("#9CDCFE")),
+				("constant.character", FG ("#CE9178")),
+				("constant.other", FG ("#569CD6")),
 				("preprocessor", FG ("#C586C0")),
+				// C# full grammar (source.cs) emits entity.name.tag.* for generic
+				// type arguments (List<int> -> <int>) and for XML-doc tags; the
+				// base "source.cs" scope has no color, so without this the
+				// identifiers inside the angle brackets fell through to the base
+				// foreground (uncolored). VSCode renders both in the type teal.
+				("entity.name.tag", FG ("#4EC9B0")),
+				("entity.name.field", FG ("#9CDCFE")),
+				("invalid", FG ("#F44747")),
 				("markup.heading", FG ("#569CD6", "bold")),
 				("markup.italic", FG ("#D4D4D4", "italic")),
 				("markup.bold", FG ("#D4D4D4", "bold")),
 				("markup.inline.raw", FG ("#CE9178")),
 				("markup.underline.link", FG ("#3794FF", "underline")),
+				("markup.underline", FG ("#3794FF", "underline")),
+				("markup.emoji", FG ("#E16D66")),
+				("markup.strong", FG ("#D4D4D4", "bold")),
+				("markup.italic.markdown", FG ("#D4D4D4", "italic")),
+				("markup.deleted", FG ("#E06C75")),
+				("markup.inserted", FG ("#4EC9B0")),
+				("markup.strikethrough", FG ("#8A8A8A")),
 				("meta.attribute", FG ("#4EC9B0")),
+				("meta.preprocessor", FG ("#C586C0")),
 			});
 		}
 
@@ -121,13 +140,30 @@ namespace MonoDevelop.Ide.Controls
 				("support.function", FG ("#795E26")),
 				("variable", FG ("#001080")),
 				("variable.parameter", FG ("#001080")),
+				("support.variable", FG ("#001080")),
+				("constant.character", FG ("#A31515")),
+				("constant.other", FG ("#0000FF")),
 				("preprocessor", FG ("#AF00DB")),
+				// Same coverage as Dark+: the C# full grammar (source.cs) emits
+				// entity.name.tag.* for generic type arguments and XML-doc tags;
+				// without this they fall through to the base foreground.
+				("entity.name.tag", FG ("#267F99")),
+				("entity.name.field", FG ("#001080")),
+				("invalid", FG ("#CD3131")),
 				("markup.heading", FG ("#0000FF", "bold")),
 				("markup.italic", FG ("#000000", "italic")),
 				("markup.bold", FG ("#000000", "bold")),
 				("markup.inline.raw", FG ("#A31515")),
 				("markup.underline.link", FG ("#0000FF", "underline")),
+				("markup.underline", FG ("#0000FF", "underline")),
+				("markup.emoji", FG ("#E16D66")),
+				("markup.strong", FG ("#000000", "bold")),
+				("markup.italic.markdown", FG ("#000000", "italic")),
+				("markup.deleted", FG ("#CD3131")),
+				("markup.inserted", FG ("#267F99")),
+				("markup.strikethrough", FG ("#808080")),
 				("meta.attribute", FG ("#267F99")),
+				("meta.preprocessor", FG ("#AF00DB")),
 			});
 		}
 	}

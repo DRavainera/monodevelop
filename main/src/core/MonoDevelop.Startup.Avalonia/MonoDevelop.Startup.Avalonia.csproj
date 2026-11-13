@@ -266,10 +266,15 @@
 		<Compile Include="..\MonoDevelop.Ide\MonoDevelop.Ide.Editor\LineEventArgs.cs" />
 		<Compile Include="..\MonoDevelop.Ide\MonoDevelop.Ide.Editor.Util\Diff.cs" />
 		<!-- The embedded syntax rule files (legacy grammars: .sublime-syntax YAML
-		     for C#/F#/Markdown/YAML, VSCode TextMate grammars for C/C++/XML/JSON)
-		     as manifest resources with deterministic names, loaded through the
-		     legacy ResourceStreamProvider by SyntaxHighlightingService. -->
-		<EmbeddedResource Include="..\MonoDevelop.Ide\MonoDevelop.Ide.Editor.Highlighting\Resources\csharp.sublime-syntax" LogicalName="MonoDevelop.AvaloniaShell.Highlighting.Resources.csharp.sublime-syntax" />
+		     for F#/Markdown/YAML, VSCode TextMate grammars for C/C++/XML/JSON and
+		     the FULL C# grammar) as manifest resources with deterministic names,
+		     loaded through the legacy ResourceStreamProvider by
+		     SyntaxHighlightingService. C# uses the full VSCode csharp.tmLanguage
+		     (XML plist) — its LogicalName ends in .plist so the loader picks
+		     TextMateFormat.ReadHighlighting; the minimalist csharp.sublime-syntax
+		     is superseded because it never tokenized identifiers (types,
+		     functions, variables), which rendered them in the base foreground. -->
+		<EmbeddedResource Include="..\MonoDevelop.Ide\MonoDevelop.Ide.Editor.Highlighting\syntaxes\CSharp\csharp.tmLanguage" LogicalName="MonoDevelop.AvaloniaShell.Highlighting.Resources.csharp.tmLanguage.plist" />
 		<EmbeddedResource Include="..\MonoDevelop.Ide\MonoDevelop.Ide.Editor.Highlighting\Resources\fsharp.sublime-syntax" LogicalName="MonoDevelop.AvaloniaShell.Highlighting.Resources.fsharp.sublime-syntax" />
 		<EmbeddedResource Include="..\MonoDevelop.Ide\MonoDevelop.Ide.Editor.Highlighting\Resources\markdown.sublime-syntax" LogicalName="MonoDevelop.AvaloniaShell.Highlighting.Resources.markdown.sublime-syntax" />
 		<EmbeddedResource Include="..\MonoDevelop.Ide\MonoDevelop.Ide.Editor.Highlighting\Resources\yaml.sublime-syntax" LogicalName="MonoDevelop.AvaloniaShell.Highlighting.Resources.yaml.sublime-syntax" />
