@@ -6078,3 +6078,45 @@ El cambio vive en `MonoDevelop.Core` (`UserProfile.cs`), compartido: **GTK** lee
 - `main/src/core/MonoDevelop.Startup.Avalonia/Views/PreferencesDialog.axaml.cs` — UserDataRoot/VcConfigFile/PropertiesFile/inline sin `9.0` (4 sitios + comment).
 
 + docs ×3 (este §, `session_summary.md` §47, nota en `migration-status-report.md`). Artefactos: `~/opencode/no9_qa/` (probe `probe/`, simulador `migsim/`, `cmp90.sh`, `backup_pre/` del perfil completo, logs `log_launch1/2/3.txt` + `log_gtk.txt` + arranques del QA).
+
+## 2026-11-14 — Memoria de geometría de ventana en la shell Avalonia (tamaño + estado maximizado) — CERRADO (QA VERDE, 0 hallazgos)
+
+**Estado: CERRADO (QA APROBADO, 0 hallazgos abiertos; validación recursiva §18.5 del Tester QA Senior, 2 pases: ROJO 7 hallazgos → VERDE 0).** El operador pidió que la shell Avalonia **recuerde y restaure** el **tamaño de la ventana** y si estaba **maximizada** al cerrarse, y que abra en ese estado. Sigue el patrón de persistencia de `PadsLayout` (M31-i): clave en `SettingsStore`, primitiva `Save*` incondicional en `Closing` + persist-on-change guardado + restore en arranque.
+
+**Diseño (una clave, tres puntos de anclaje).**
+- **Clave `Monodevelop.WindowGeo` = `w|h|max`** (p. ej. `1400|900|1`) en `SettingsStore` (mismo store/formato legado que `Monodevelop.PadsLayout`). `w|h` = **último tamaño en estado Normal**; `max` = `1` solo si estaba Maximizada en el último persist. **No se persiste la posición**: la ventana vuelve a su placement XAML (`CenterScreen`) con el tamaño/estado recordados.
+- **Punto de anclaje 1 — save incondicional**: `SaveWindowGeo()` en `OnMainWindowClosing` (tras `SavePadsLayout`), en cada intento de cierre.
+- **Punto de anclaje 2 — persist-on-change**: `QueueWindowGeoPersist` (debounce 400 ms, `DispatcherTimer` reutilizado del archivo) disparado por `SizeChanged` y `PropertyChanged WindowState`. Guardado por `AutoWindowPersistIsEnabled` (`QaDialogArg is "" or "--wingeo"`) y `winGeoReady`.
+- **Punto de anclaje 3 — restore**: `RestoreWindowGeo` suscrito en el ctor vía `Opened += (_, _) => RestoreWindowGeo ()` (la ventana ya está mapeada, el backend X11 honra tamaño y maximize antes de que se asiente el frame). Sin registro/inválido → defaults XAML (1280x800, Normal).
+
+**El matiz crítico — Avalonia 12.1.2 no tiene `RestoreBounds`.** Se inspeccionó el metadata de `Avalonia.Controls.dll`: no existe el símbolo. Consecuencia: una vez Maximizada, `Bounds` devuelve el **área de trabajo de la pantalla** (1440x900 en el Xvfb), **no** el tamaño real del usuario. Solución: `winNormalW/H` cachea el último tamaño **en Normal** (en `SizeChanged`, solo cuando `WindowState==Normal` y `winGeoReady`) y se **primes** en el restore (el registro ES el último tamaño normal, incluso si predice a un maximize). Si se guardara `Bounds` directamente, un maximize corruptaría el tamaño restaurado (el QA lo verificó con el run C: maximizar → close → `1000|600|1` intacto, no `1440x900`).
+
+**Lección H1 de M31-i aplicada** — persistir **al cambiar**, no solo al salir: el guardado por señal SIGTERM no es fiable (dbus/systemd preempe al handler del CLR). El persist-on-change deja el registro fresco en disco tras cada cambio (sobrevive `timeout`/`kill`); el save en `Closing` es la red de seguridad.
+
+**Allowlist positiva (no pisar el estado del operador)** — solo una sesión de usuario real (`""`) o el probe pasivo `--wingeo` (en perfil **aislado** `HOME→scratch`) escriben el registro. `RestoreWindowGeo` solo **lee**; la escritura queda guardada, así un probe puede restaurar pero nunca pisar el registro del operador.
+
+### Validación (valores medidos)
+
+Driver `~/opencode/wingeo_qa/wingeo_driver.sh` (perfil aislado `HOME=iso_home`, Xvfb `:99` + `metacity` para el maximize, clicks reales de `xdotool`): **9/9 VERDE** — A: perfil nuevo → 1280x800 sin restore, close → `1280|800|0`; B: restaura 1280x800 → resize 1000x600 → persist → close → `1000|600|0`; C: restaura 1000x600 → maximiza (click `maxBtn`) → close → `1000|600|1`; D: restaura 1000x600 **maximizada** → abre maximizada → close → `1000|600|1` (invariante); E1: probe + cross-check real `winTopLeft(100,100) ~ xdotool(100,100) dxy=0,0`; E2: sesión de usuario real (sin flag) → persist → close → `900|500|0`; G: arranque real del runtime GTK (`--old-gui`). Probes extra: T1 minimizar+cerrar (cache no se corrompe), T2 registro basura → fallback sin crash, T3 bajo mínimo → fallback. **3/3 verde.** Builds Avalonia + GTK **0 errores**. Perfil del operador: `Monodevelop.WindowGeo`=0 (mi probe nunca escribe ahí), datos reales intactos.
+
+### QA §18.5 (subagente Tester QA Senior, recursivo)
+
+- **Pase 1 → ROJO 7 hallazgos** (0 bloqueantes): F1 run G falso positivo (el hijo GTK renombra `comm` a `monodevelop`, escapaba a `pgrep -x dotnet`; solo comprobaba que el relay vivía), F2 `winTopLeft` siempre (0,0) por `TopLevel.Bounds` + cross-check muerto, F3 `kill_app` dejaba huérfanos `monodevelop`, F4 errores GTK contados en stdout (siempre vacío), F5 crash preexistente de `RecentFileStorage` (fuera de scope), F6 probe indexaba `btns[1]/[2]` sin comprobar, F7 cache sin guard `winGeoReady`.
+- **Pase 2 → VERDE 0 hallazgos abiertos**: los 6 fixes confirmados por código + ejecución (driver 9/9, probes extra 3/3, builds 0/0, perfil del operador sin `Monodevelop.WindowGeo`, 0 huérfanos). F5 confirmado fuera de scope (commit `b48fa78b60`, no lo toca este diff; el run G asierte el boot en ~1 s antes de la welcome page y el crash es no-fatal).
+
+### Regla 18.4 (convivencia Gtk/Avalonia)
+
+Avalonia: feature validada en vivo. GTK `--old-gui`: **build 0 errores** + runtime **arranca** (hijo `comm=monodevelop` vivo + banner `Starting MonoDevelop` en el `Ide.log` del scratch). El **mapeo de ventana** es imposible en esta box headless por depender de `mdhost.exe` (artefacto **Windows-only** ausente en Linux) — limitación de plataforma **preexistente**, no regresión (el csproj GTK no compila ningún archivo tocado por este cambio).
+
+### Queda pendiente / notas
+
+- El **mapeo de la ventana GTK** no se puede validar en vivo en esta box (necesitaría un escritorio con `mdhost.exe`/Windows o el entorno real del operador); la garantía GTK es build 0 errores + arranque del runtime + sesiones previas de escritorio real.
+- **F5 (preexistente)**: `RecentFileStorage`/`RecentOpen` crashea cuando `SpecialFolder.Personal` resuelve vacío (perfil scratch sin carpeta `Documents`); no bloquea el QA de esta tarea pero haría flaquear futuros QAs GTK con scratch profiles. Pendiente de fix separado en `MonoDevelop.Ide`.
+- La **posición de la ventana** no se persiste (por diseño: vuelve a `CenterScreen`); si se pidiera, se añadiría un segmento `x|y` y se guardaría `Position`.
+
+### Archivos (2 M, sin submódulos)
+
+- `main/src/core/MonoDevelop.Startup.Avalonia/Views/MainWindow.axaml.cs` (+184/−2) — campos `winNormalW/H`/`winGeoReady`/`winGeoDebounce`; cablo `SizeChanged`/`PropertyChanged WindowState`/`Opened`; `SaveWindowGeo`/`QueueWindowGeoPersist`/`AutoWindowPersistIsEnabled`/`RestoreWindowGeo`; probe `--wingeo`; `SaveWindowGeo` en `OnMainWindowClosing`.
+- `main/src/core/MonoDevelop.Startup.Avalonia/Program.cs` (+1/−1) — `--wingeo` en el allowlist de `QaDialogArg`.
+
++ docs ×3 (este §, `session_summary.md` §48, nota en `migration-status-report.md`). Artefactos: `~/opencode/wingeo_qa/` (driver `wingeo_driver.sh`, logs `run_*.log`, `profile_forensic.sh`).

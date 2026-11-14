@@ -70,6 +70,20 @@ public partial class MainWindow : Window
 	// with a partial state, e.g. row height applied but hosts not yet collapsed).
 	bool restoringPadsLayout;
 
+	// Window geometry memory (size + maximized state, one "w|h|max" settings
+	// entry): the last NORMAL bounds are cached while they are still readable —
+	// Avalonia 12.1.2 has no RestoreBounds, so once the window is Maximized,
+	// Bounds reports the screen work area and the cache is the only source for
+	// the user's real size. Primed on restore (the record IS the last normal
+	// size) and on every normal-size change; read back by SaveWindowGeo.
+	int? winNormalW, winNormalH;
+	// True once RestoreWindowGeo has RUN (any path): until then the window holds
+	// the fresh XAML defaults (1280x800), and persisting them would clobber the
+	// operator's record — same guard role as padsLayoutReady.
+	bool winGeoReady;
+	string winGeoDebounceWhy = "";
+	Avalonia.Threading.DispatcherTimer? winGeoDebounce;
+
 	// Wave-3 real Xwt.TreeView in the Solution pad: created lazily (the Xwt engine
 	// initializes on demand); the pad hosts its native Avalonia control.
 	DockPanel? xwtSolutionHost;
@@ -166,6 +180,10 @@ public partial class MainWindow : Window
 		// Restore the persisted pad layout (visible tabs, collapse, active tab,
 		// row height) once the dispatcher runs — hosts exist and settings are loaded.
 		Avalonia.Threading.Dispatcher.UIThread.Post (RestorePadsLayout, Avalonia.Threading.DispatcherPriority.Background);
+		// Restore the persisted window geometry (size + maximized state). Runs in
+		// Opened (after the window is mapped, so the platform can honor it) and
+		// before the QA/launch probes read the size — see RestoreWindowGeo.
+		Opened += (_, _) => RestoreWindowGeo ();
 
 		// Legacy DirtyFilesDialog gate: closing the window with modified documents
 		// shows "Save Files" before quitting (Workbench.OnDeleteEvent).
@@ -309,8 +327,27 @@ public partial class MainWindow : Window
 		// native resize loop; maximized/fullscreen hides them along with the frame.
 		AttachResizeCursors ();
 		PropertyChanged += (s, e) => {
-			if (e.Property == WindowStateProperty)
+			if (e.Property == WindowStateProperty) {
 				UpdateResizeChrome ();
+				// Window geometry memory: state changes (maximize/restore/minimize)
+				// persist after a short settle — see QueueWindowGeoPersist.
+				QueueWindowGeoPersist ("state:" + WindowState);
+			}
+		};
+		SizeChanged += (_, _) => {
+			// Cache the last NORMAL bounds (Avalonia 12.1.2 has no RestoreBounds —
+			// once Maximized/Minimized, Bounds reports the screen or nothing).
+			// Guarded by winGeoReady: during initial mapping the window still holds
+			// the fresh XAML defaults, and caching those before the restore runs
+			// would just be re-cached noise (restore overwrites the cache; without a
+			// record the value equals the XAML default anyway) — keep the cache
+			// strictly "post-restore user state".
+			if (winGeoReady && WindowState == WindowState.Normal && !double.IsNaN (Bounds.Width)) {
+				winNormalW = (int)Math.Round (Bounds.Width);
+				winNormalH = (int)Math.Round (Bounds.Height);
+			}
+			// Persist the geometry after a short settle, debouncing the drag stream.
+			QueueWindowGeoPersist ("resize");
 		};
 
 		// Toolbar content mirrors the GTK MainToolbar: run button, configuration/run
@@ -1379,6 +1416,47 @@ public partial class MainWindow : Window
 				Output ("[padgeo] drag-left:  xdotool mousemove --sync <leftS.x+3> <leftS.y+H/2> mousedown 1 mousemove --sync <leftS.x+3+80> <leftS.y+H/2> mouseup 1   # expect leftW +=" + leftDragPx);
 				Output ("[padgeo] drag-right: xdotool mousemove --sync <rightS.x+3> <rightS.y+H/2> mousedown 1 mousemove --sync <rightS.x+3-70> <rightS.y+H/2> mouseup 1   # expect rightW +=" + rightDragPx);
 				Output ("[padgeo] drag-bot:   xdotool mousemove --sync <botS.x+W/2> <botS.y+3> mousedown 1 mousemove --sync <botS.x+W/2> <botS.y+3-60> mouseup 1   # expect rowH -=" + bottomDragPx);
+			} else if (qa == "--wingeo") {
+				// QA (window geometry memory, window-level only — NOT pad drag): loop-dump
+				// the window state, the current size and the caption buttons' SCREEN rects
+				// (the maximize / close buttons — the window paints its own chrome), so an
+				// external xdotool driver can: 1) click maximize → expect state=Maximized,
+				// 2) resize the bottom/right edge → expect size to change, 3) close → the
+				// close-time SaveWindowGeo writes the record the driver greps from the
+				// profile. --wingeo is in the AutoWindowPersistIsEnabled allowlist so the
+				// change-driven persists fire like a user's; the probe runs on an ISOLATED
+				// profile (HOME→scratch), so it can never clobber the operator's record.
+				void DumpWinGeo () {
+					// Caption buttons are the StackPanel's direct children in XAML
+					// order: [0]=Minimize, [1]=Maximize/Restore, [2]=Close.
+					var btns = CaptionButtons.Children.OfType <Avalonia.Controls.Button> ().ToList ();
+					if (btns.Count < 3) {
+						// Auto-diagnose a caption-button XAML change instead of throwing
+						// IndexOutOfRangeException inside the Opened handler.
+						Output ("[wingeo] FAIL caption buttons changed (expected 3, found " + btns.Count + ")");
+						return;
+					}
+					var maxBtn = btns [1];
+					var closeBtn = btns [2];
+					Point Mp = maxBtn.TranslatePoint (new Point (0, 0), this) ?? new Point ();
+					Point Cp = closeBtn.TranslatePoint (new Point (0, 0), this) ?? new Point ();
+					// Window.Position is the on-screen (frame) position in pixels — the
+					// value an xdotool driver needs to reach the window. (TopLevel.Bounds
+					// on a parentless TopLevel is always the origin, so it can't be used.)
+					var pos = Position;
+					Output ("[wingeo] state=" + WindowState
+						+ " size=" + (int)Bounds.Width + "x" + (int)Bounds.Height
+						+ " maxBtn=(" + (int)Mp.X + "," + (int)Mp.Y + "," + (int)maxBtn.Bounds.Width + "x" + (int)maxBtn.Bounds.Height + ")"
+						+ " closeBtn=(" + (int)Cp.X + "," + (int)Cp.Y + "," + (int)closeBtn.Bounds.Width + "x" + (int)closeBtn.Bounds.Height + ")"
+						+ " winTopLeft=(" + (int)pos.X + "," + (int)pos.Y + ")");
+				}
+				DumpWinGeo ();
+				var wint = new Avalonia.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds (250) };
+				wint.Tick += (_, _) => DumpWinGeo ();
+				wint.Start ();
+				Output ("[wingeo] maximize: xdotool mousemove --sync <winTopLeft.x+maxBtn.x+W/2> <winTopLeft.y+maxBtn.y+H/2> click 1   # expect state=Maximized");
+				Output ("[wingeo] resize:   xdotool mousemove --sync <winTopLeft.x+W-3> <winTopLeft.y+H-3> mousedown 1 mousemove --sync <winTopLeft.x+W-120> <winTopLeft.y+H-80> mouseup 1   # expect size smaller");
+				Output ("[wingeo] close:    xdotool mousemove --sync <winTopLeft.x+closeBtn.x+W/2> <winTopLeft.y+closeBtn.y+H/2> click 1   # app exits; grep Monodevelop.WindowGeo in the profile");
 			} else if (qa == "--runcfg") {
 				// Oleada 4 (slice D) QA: run configurations via model — the
 				// startup project's run configs, the persisted StartupItem
@@ -4386,6 +4464,108 @@ public partial class MainWindow : Window
 			Console.WriteLine ($"[pads] layout restore failed: {ex.Message}");
 		} finally {
 			restoringPadsLayout = false;
+		}
+	}
+
+	// Window geometry memory: one settings entry (Monodevelop.WindowGeo =
+	// "w|h|max", e.g. "1400|900|0") remembers the window size and maximized
+	// state, like the legacy IDE's workbench state. w/h are the LAST NORMAL
+	// size (Avalonia 12.1.2 has no RestoreBounds — once Maximized, Bounds
+	// reports the screen work area, so SaveWindowGeo reads the winNormalW/H
+	// cache primed by RestoreWindowGeo / SizeChanged); max is 1 only when the
+	// window was Maximized at the last persist. Position is intentionally not
+	// persisted: the window returns to its XAML startup placement (CenterScreen)
+	// with the remembered size/state. This is the UNCONDITIONAL primitive: it
+	// writes whatever the in-memory state is. Callers pick when: Window.Closing
+	// (always) and QueueWindowGeoPersist (the guarded, change-driven persist that
+	// keeps the record fresh across a non-graceful exit — signal-path saves are
+	// unreliable here, same lesson as the pads layout).
+	void SaveWindowGeo ()
+	{
+		try {
+			var w = winNormalW ?? (int)Width;
+			var h = winNormalH ?? (int)Height;
+			SettingsStore.SetString ("Monodevelop.WindowGeo",
+				$"{w}|{h}|{(WindowState == WindowState.Maximized ? 1 : 0)}");
+		} catch (Exception ex) {
+			Console.WriteLine ($"[wingeo] save failed: {ex.Message}");
+		}
+	}
+
+	// Persist the current window geometry NOW because it just changed (a resize
+	// settled, or the state flipped). Debounced (400 ms): a drag fires
+	// SizeChanged continuously, and every SetString rewrites the whole
+	// MonoDevelopProperties.xml — settling once per drag is enough, the record
+	// is small. Guarded like PersistPadsLayoutNow: only a real user session
+	// (AutoWindowPersistIsEnabled) may write it, never a QA probe, and never
+	// before the startup restore ran (winGeoReady) — the fresh XAML defaults
+	// are not user state. Runs on the UI thread only, like the pads persist.
+	void QueueWindowGeoPersist (string why)
+	{
+		if (!winGeoReady || !AutoWindowPersistIsEnabled)
+			return;
+		winGeoDebounceWhy = why;
+		if (winGeoDebounce is null) {
+			winGeoDebounce = new Avalonia.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds (400) };
+			winGeoDebounce.Tick += (_, _) => {
+				winGeoDebounce.Stop ();
+				SaveWindowGeo ();
+				Console.WriteLine ("[wingeo] persisted (" + winGeoDebounceWhy + ")");
+			};
+		}
+		winGeoDebounce.Stop ();
+		winGeoDebounce.Start ();
+	}
+
+	// Positive rule (safe default: OFF) — window auto-persist (the change-driven
+	// debounced write) is enabled ONLY for: a real user session (no --qa arg),
+	// where every change is the user's intent; and the passive --wingeo probe,
+	// which only DUMPS geometry while a real xdotool change is driven under an
+	// ISOLATED profile (HOME→scratch) — under it the change must persist exactly
+	// as a user's would, so the driver can verify the on-disk record. Probes run
+	// on scratch profiles, so this can never clobber the operator's record; the
+	// close-time save still runs unconditionally for every probe that needs to
+	// observe it. The pads layout uses the same pattern ("" plus its own passive
+	// probe --padgeo); each feature allowlists its own passive probe.
+	static bool AutoWindowPersistIsEnabled => Program.QaDialogArg is "" or "--wingeo";
+
+	// Apply the persisted window geometry (size + maximized state) once the
+	// window is mapped (called from Opened, so the X11 backend can honor both
+	// the size and a maximize before the frame settles). No record or an
+	// invalid one keeps the XAML defaults (1280x800, Normal). The size is
+	// applied FIRST and only while Normal, then the state flips: setting the
+	// size while Maximized is a no-op (Bounds is the screen), and priming
+	// winNormalW/H from the record keeps the next SaveWindowGeo from falling
+	// back to the pre-restore requested size. Runs under every profile (the
+	// --wingeo probe relies on it to dump the restored state); it only READS
+	// the settings entry — the write side stays guarded by
+	// AutoWindowPersistIsEnabled, so a probe can restore but never overwrite.
+	void RestoreWindowGeo ()
+	{
+		winGeoReady = true;
+		try {
+			var raw = SettingsStore.GetString ("Monodevelop.WindowGeo");
+			if (string.IsNullOrWhiteSpace (raw))
+				return;
+			var segs = raw.Split ('|');
+			if (segs.Length < 3)
+				return;
+			if (!int.TryParse (segs [0], out var w) || w < 300)
+				w = (int)Width;
+			if (!int.TryParse (segs [1], out var h) || h < 200)
+				h = (int)Height;
+			bool max = segs [2] == "1";
+			if (WindowState == WindowState.Normal) {
+				Width = w;
+				Height = h;
+				winNormalW = w; // the record IS the last normal size (may predate a maximize)
+				winNormalH = h;
+			}
+			if (max)
+				WindowState = WindowState.Maximized;
+			Output ("[wingeo] restored " + w + "x" + h + (max ? " (maximized)" : ""));
+		} catch (Exception ex) {
+			Console.WriteLine ($"[wingeo] restore failed: {ex.Message}");
 		}
 	}
 
@@ -7859,6 +8039,9 @@ public partial class MainWindow : Window
 		// Persist the pad layout on EVERY close attempt (before any dirty-files
 		// dialog early-returns) like the legacy DockFrame layout save.
 		SavePadsLayout ();
+		// Same for the window geometry (size + maximized state) — the close-time
+		// write is the safety net under the change-driven (debounced) persists.
+		SaveWindowGeo ();
 		// Only intercept user-initiated closes; programmatic closes after the
 		// dialog already ran must go through.
 		if (e.IsProgrammatic || closeConfirmed)
