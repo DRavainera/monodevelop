@@ -58,6 +58,17 @@ public partial class MainWindow : Window
 	// WITHOUT the height restore so the drag itself grows the row from the rail.
 	double? bottomSavedRowH;
 	bool dragExpandingBottom;
+	// True once the startup restore post has RUN (any path). Until then the
+	// in-memory layout is the fresh XAML defaults, and persisting it would
+	// overwrite the operator's on-disk record — the first AddTab/Select already
+	// ran in the ctor, so this guard (not just restoringPadsLayout) is what
+	// keeps a startup-time selection change from clobbering the record.
+	bool padsLayoutReady;
+	// True while RestorePadsLayout is applying the restored state: those
+	// CollapseChanged/visibility/selection transitions are ours, not the user's,
+	// and must not trigger a persist (which would rewrite the record mid-restore
+	// with a partial state, e.g. row height applied but hosts not yet collapsed).
+	bool restoringPadsLayout;
 
 	// Wave-3 real Xwt.TreeView in the Solution pad: created lazily (the Xwt engine
 	// initializes on demand); the pad hosts its native Avalonia control.
@@ -213,8 +224,9 @@ public partial class MainWindow : Window
 					bottomSavedRowH = row.Height.Value;
 				row.Height = new GridLength (34);
 			} else if (!dragExpandingBottom) {
-				row.Height = new GridLength (bottomSavedRowH ?? 170);
+				row.Height = new GridLength (bottomSavedRowH ?? 180);
 			}
+			PersistPadsLayoutNow ("bottom collapse=" + collapsed);
 		};
 		EditorBottomSplitter.DragStarted += () => {
 			if (!BottomPads.IsCollapsed)
@@ -223,6 +235,33 @@ public partial class MainWindow : Window
 			BottomPads.ToggleCollapse ("splitter-drag");
 			dragExpandingBottom = false;
 		};
+		// Persist on every completed drag (user resize) so the layout survives a
+		// non-graceful exit — the record is written at change time, not shutdown.
+		EditorBottomSplitter.DragEnded += () => PersistPadsLayoutNow ("drag: bottom");
+
+		// Editor <-> side-pad resize (legacy DockFrame: drag the shared edge). Each
+		// PadSplitter resizes its side pad's Width (the Auto column follows); the
+		// collapse mechanism (which also drives the Width) is untouched, so a
+		// collapse saves/restores the user's resized width. The opposite pad is
+		// passed so the editor ("*" column) keeps a usable minimum when both side
+		// pads are wide. Dragging a collapsed side pad expands it first (like the
+		// bottom), then the drag grows it from the rail.
+		LeftPadSplitter.TargetControl = LeftPads;
+		LeftPadSplitter.OppositeControl = RightPads;
+		LeftPadSplitter.HorizontalGrowSign = 1;   // pad is LEFT of the edge: right drag grows it
+		RightPadSplitter.TargetControl = RightPads;
+		RightPadSplitter.OppositeControl = LeftPads;
+		RightPadSplitter.HorizontalGrowSign = -1;  // pad is RIGHT of the edge: left drag grows it
+		// Dragging a collapsed side pad expands it first (like the bottom), so the
+		// drag then grows the pad from the rail instead of fighting the collapse.
+		LeftPadSplitter.DragStarted += () => { if (LeftPads.IsCollapsed) LeftPads.ToggleCollapse ("splitter-drag"); };
+		RightPadSplitter.DragStarted += () => { if (RightPads.IsCollapsed) RightPads.ToggleCollapse ("splitter-drag"); };
+		// Persist at every user change (drag end, collapse/expand) so the layout
+		// survives a non-graceful exit — written at change time, not shutdown.
+		LeftPadSplitter.DragEnded += () => PersistPadsLayoutNow ("drag: left");
+		RightPadSplitter.DragEnded += () => PersistPadsLayoutNow ("drag: right");
+		LeftPads.CollapseChanged += c => PersistPadsLayoutNow ("left collapse=" + c);
+		RightPads.CollapseChanged += c => PersistPadsLayoutNow ("right collapse=" + c);
 
 		// The breadcrumb follows the caret like the legacy widget: SkTextEditor has
 		// no caret-changed event, so poll the active editor's line and refresh the
@@ -1234,6 +1273,112 @@ public partial class MainWindow : Window
 				// Restore the OS-driven variant (Default follows the platform).
 				app.RequestedThemeVariant = ThemeVariant.Default;
 				Output ("[padicons] " + (fail == 0 ? "all pass" : "FAIL " + fail));
+			} else if (qa == "--padresize") {
+				// QA (pad resize): the editor<->side-pad and editor<->bottom-pad
+				// edges are draggable (PadSplitter). The real mouse drag is covered
+				// by the visual QA; this probe verifies deterministically (no
+				// synthetic pointer) the three things that could silently break:
+				// (1) the three splitters are wired to the right targets with the
+				// right grow signs and opposite pads; (2) the existing side-pad
+				// collapse PRESERVES a user-resized width (the new resize and the
+				// collapse mechanism must agree on the Width); (3) the new
+				// side-pad widths round-trip through the layout persistence. The
+				// operator's original persisted layout is restored at the end.
+				int ok = 0, fail = 0;
+				void R (bool pass, string what) { if (pass) ok++; else fail++; Output ("[padresize] " + (pass ? "ok  " : "FAIL") + " " + what); }
+				// 1. Wiring: each splitter points at the right pad/direction.
+				R (ReferenceEquals (LeftPadSplitter.TargetControl, LeftPads), "left splitter targets LeftPads");
+				R (LeftPadSplitter.HorizontalGrowSign == 1, "left splitter grow sign +1 (right drag grows the left pad)");
+				R (ReferenceEquals (LeftPadSplitter.OppositeControl, RightPads), "left splitter opposite pad = RightPads");
+				R (ReferenceEquals (RightPadSplitter.TargetControl, RightPads), "right splitter targets RightPads");
+				R (RightPadSplitter.HorizontalGrowSign == -1, "right splitter grow sign -1 (left drag grows the right pad)");
+				R (ReferenceEquals (RightPadSplitter.OppositeControl, LeftPads), "right splitter opposite pad = LeftPads");
+				R (ReferenceEquals (EditorBottomSplitter.TargetRow, WorkbenchGrid.RowDefinitions [1]), "bottom splitter targets the bottom row");
+				// 1b. The Auto column must FOLLOW the pad's Width: that is the whole
+				// resize mechanism (the drag sets the Width, the Auto column sizes to
+				// it, the editor "*" column takes the rest). Set the left pad's Width
+				// to a distinct value, let a layout pass run, and confirm the column
+				// tracks it. This is the part the visual drag exercises, verified
+				// here without a pointer. Relative to the current (restored/default)
+				// width so a persisted leftW doesn't break the assertion.
+				double leftWinit = LeftPads.Width;
+				var col0w = WorkbenchGrid.ColumnDefinitions [0].ActualWidth;
+				R (Math.Abs (col0w - leftWinit) < 1, "column 0 (left pad) tracks the pad's initial Width " + Math.Round (leftWinit, 0) + ": col=" + Math.Round (col0w, 0));
+				if (Math.Abs (leftWinit - 300) < 1)
+					R (true, "left pad default Width is 300 (GTK defaultItemWidth)");
+				LeftPads.Width = leftWinit + 40;
+				await System.Threading.Tasks.Task.Delay (120); // settle the layout pass
+				var col0w2 = WorkbenchGrid.ColumnDefinitions [0].ActualWidth;
+				R (Math.Abs (col0w2 - (leftWinit + 40)) < 1, "column 0 follows the pad Width (+" + 40 + "): " + Math.Round (col0w, 0) + " -> " + Math.Round (col0w2, 0));
+				LeftPads.Width = leftWinit;
+				await System.Threading.Tasks.Task.Delay (60);
+				// 2. Collapse preserves a user-resized side-pad width.
+				double leftW0 = LeftPads.Width, rightW0 = RightPads.Width;
+				var row0 = (BottomPads.Parent is Grid g0 && g0.RowDefinitions.Count > 1 && g0.RowDefinitions [1].Height.IsAbsolute) ? g0.RowDefinitions [1].Height.Value : 180;
+				var origLayout = MonoDevelop.Ide.Services.SettingsStore.GetString ("Monodevelop.PadsLayout");
+				LeftPads.Width = 350;
+				LeftPads.ToggleCollapse ("probe-collapse"); // collapse -> rail
+				R (Math.Abs (LeftPads.Width - 34) < 1, "collapsed left pad pins to the 34px rail: " + LeftPads.Width);
+				R (Math.Abs (LeftPads.EffectiveWidth - 350) < 1, "collapsed EffectiveWidth keeps the pre-collapse 350: " + LeftPads.EffectiveWidth);
+				LeftPads.ToggleCollapse ("probe-expand");  // expand -> restore
+				R (Math.Abs (LeftPads.Width - 350) < 1, "expanded left pad restores the 350 width: " + LeftPads.Width);
+				LeftPads.Width = leftW0;
+				// 3. Persistence round-trip of the side-pad widths.
+				LeftPads.Width = 320;
+				RightPads.Width = 280;
+				SavePadsLayout ();
+				var saved = MonoDevelop.Ide.Services.SettingsStore.GetString ("Monodevelop.PadsLayout");
+				var segs = saved is null ? Array.Empty<string> () : saved.Split ('|');
+				R (segs.Length == 15, "persisted layout has 15 segments (hosts + leftW|rightW|rowH): " + segs.Length);
+				R (segs.Length == 15 && segs [12] == "320", "persisted leftW = 320: " + (segs.Length == 15 ? segs [12] : "?"));
+				R (segs.Length == 15 && segs [13] == "280", "persisted rightW = 280: " + (segs.Length == 15 ? segs [13] : "?"));
+				// Reset to the XAML defaults, then restore from the saved record.
+				LeftPads.Width = leftW0;
+				RightPads.Width = rightW0;
+				if (BottomPads.Parent is Grid pg && pg.RowDefinitions.Count > 1)
+					pg.RowDefinitions [1].Height = new GridLength (180);
+				RestorePadsLayout ();
+				R (Math.Abs (LeftPads.Width - 320) < 1, "restored leftW = 320: " + LeftPads.Width);
+				R (Math.Abs (RightPads.Width - 280) < 1, "restored rightW = 280: " + RightPads.Width);
+				// 4. Clean up: restore the operator's original layout + sizes.
+				MonoDevelop.Ide.Services.SettingsStore.SetString ("Monodevelop.PadsLayout", origLayout ?? "");
+				LeftPads.Width = leftW0;
+				RightPads.Width = rightW0;
+				if (BottomPads.Parent is Grid cg && cg.RowDefinitions.Count > 1)
+					cg.RowDefinitions [1].Height = new GridLength (row0);
+				Output ("[padresize] " + (fail == 0 ? "all pass" : "FAIL " + fail));
+			} else if (qa == "--padgeo") {
+				// QA (pad resize, drag with a REAL mouse via xdotool): loop-dump the
+				// three splitters' SCREEN bounds (the absolute pixel where the drag
+				// must press) plus the side-pad widths / bottom-row height, so an
+				// external driver (xdotool) can press on the splitter and we observe
+				// the pad sizes change line-by-line. The window is moved to a fixed
+				// position by the driver; the LAST line before the drag is the
+				// source of truth for the press coordinates.
+				int leftDragPx = 80, rightDragPx = 70, bottomDragPx = 60;
+				// SCREEN coords: c.Bounds is relative to the parent (the
+				// WorkbenchGrid), which sits BELOW the toolbar — using it raw would
+				// miss the splitter by the toolbar height. Translate the control's
+				// top-left into the window content space instead; the driver parks
+				// the window at screen (0,0), so window content coords == screen
+				// coords for a client-decorated window.
+				System.Func<Control, Point> Pt = c => c.TranslatePoint (new Point (0, 0), this) ?? new Point (c.Bounds.X, c.Bounds.Y);
+				void DumpGeo () {
+					Point Sl = Pt (LeftPadSplitter), Rl = Pt (RightPadSplitter), Bt = Pt (EditorBottomSplitter);
+					Output ("[padgeo] leftS=(" + (int)Sl.X + "," + (int)Sl.Y + "," + (int)LeftPadSplitter.Bounds.Width + "x" + (int)LeftPadSplitter.Bounds.Height + ")"
+						+ " rightS=(" + (int)Rl.X + "," + (int)Rl.Y + "," + (int)RightPadSplitter.Bounds.Width + "x" + (int)RightPadSplitter.Bounds.Height + ")"
+						+ " botS=(" + (int)Bt.X + "," + (int)Bt.Y + "," + (int)EditorBottomSplitter.Bounds.Width + "x" + (int)EditorBottomSplitter.Bounds.Height + ")"
+						+ " leftW=" + Math.Round (LeftPads.Width, 0) + " rightW=" + Math.Round (RightPads.Width, 0)
+						+ " rowH=" + (BottomPads.Parent is Grid g3 && g3.RowDefinitions.Count > 1 && g3.RowDefinitions [1].Height.IsAbsolute ? g3.RowDefinitions [1].Height.Value : -1)
+						+ " win=" + (int)Bounds.Width + "x" + (int)Bounds.Height);
+				}
+				DumpGeo ();
+				var geot = new Avalonia.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds (250) };
+				geot.Tick += (_, _) => DumpGeo ();
+				geot.Start ();
+				Output ("[padgeo] drag-left:  xdotool mousemove --sync <leftS.x+3> <leftS.y+H/2> mousedown 1 mousemove --sync <leftS.x+3+80> <leftS.y+H/2> mouseup 1   # expect leftW +=" + leftDragPx);
+				Output ("[padgeo] drag-right: xdotool mousemove --sync <rightS.x+3> <rightS.y+H/2> mousedown 1 mousemove --sync <rightS.x+3-70> <rightS.y+H/2> mouseup 1   # expect rightW +=" + rightDragPx);
+				Output ("[padgeo] drag-bot:   xdotool mousemove --sync <botS.x+W/2> <botS.y+3> mousedown 1 mousemove --sync <botS.x+W/2> <botS.y+3-60> mouseup 1   # expect rowH -=" + bottomDragPx);
 			} else if (qa == "--runcfg") {
 				// Oleada 4 (slice D) QA: run configurations via model — the
 				// startup project's run configs, the persisted StartupItem
@@ -4083,8 +4228,17 @@ public partial class MainWindow : Window
 	}
 
 	// Legacy DockFrame layout persistence: visible tabs, collapsed state, each
-	// host's active tab and the editor/bottom row split survive restarts (one
-	// pipe-separated settings entry, four segments per pad host + row height).
+	// host's active tab, the side-pad widths and the editor/bottom row split
+	// survive restarts (one pipe-separated settings entry: four segments per pad
+	// host + leftW|rightW|rowH). The side-pad widths (resized via the PadSplitter
+	// edges) persist like the bottom row height; older 13-segment records (no
+	// widths) are still read — see RestorePadsLayout.
+	//
+	// This is the UNCONDITIONAL primitive: it writes whatever the in-memory state
+	// is. Callers pick when: Window.Closing (always) and PersistPadsLayoutNow
+	// (the guarded, user-change-driven persist — drag end, collapse), which is
+	// what makes the record survive a non-graceful exit (SIGTERM/timeout/kill)
+	// without relying on a shutdown hook the platform may not run.
 	void SavePadsLayout ()
 	{
 		try {
@@ -4093,7 +4247,18 @@ public partial class MainWindow : Window
 				host.IsCollapsed ? "1" : "0",
 				string.Join (",", host.Tabs.Where (t => t.Visible).Select (t => t.Id)),
 				host.SelectedId ?? "");
-			var rowH = 170.0;
+			// A side pad's Width is always set (XAML default 300 or a restored /
+			// dragged value); if it were ever NaN/0, persist the XAML default
+			// rather than a garbage segment (restore ignores values < 34 anyway,
+			// but the record should stay self-describing).
+			double SideW (PadHost pad)
+			{
+				var w = pad.EffectiveWidth;
+				return !double.IsNaN (w) && w >= 34 ? w : 300;
+			}
+			var leftW = SideW (LeftPads);
+			var rightW = SideW (RightPads);
+			var rowH = 180.0;
 			if (BottomPads.Parent is Grid g && g.RowDefinitions.Count > 1 && g.RowDefinitions [1].Height.IsAbsolute)
 				rowH = g.RowDefinitions [1].Height.Value;
 			// Collapsed pins the row at 34 — persist the PRE-collapse height so a
@@ -4101,14 +4266,62 @@ public partial class MainWindow : Window
 			if (BottomPads.IsCollapsed && bottomSavedRowH is { } saved)
 				rowH = saved;
 			SettingsStore.SetString ("Monodevelop.PadsLayout",
-				$"{HostState (LeftPads)}|{HostState (RightPads)}|{HostState (BottomPads)}|{(int)Math.Round (rowH)}");
+				$"{HostState (LeftPads)}|{HostState (RightPads)}|{HostState (BottomPads)}|{(int)Math.Round (leftW)}|{(int)Math.Round (rightW)}|{(int)Math.Round (rowH)}");
 		} catch (Exception ex) {
 			Console.WriteLine ($"[pads] layout save failed: {ex.Message}");
 		}
 	}
 
+	// Persist the current layout NOW because the USER just changed it (drag end,
+	// collapse/expand, tab close). This is what makes the layout survive a
+	// non-graceful exit (SIGTERM/timeout/kill): the on-disk record is written at
+	// change time, so no shutdown hook is needed (the full app loads native
+	// libraries — dbus/systemd — that install a SIGTERM handler which preempts
+	// the CLR's managed one, so a signal-path save is unreliable here).
+	//
+	// Guarded so a QA probe can never rewrite the operator's record with probe
+	// state: it only fires when AutoPersistIsEnabled (a real user session, or a
+	// passive probe under which a real drag is driven), and not while the
+	// startup restore is still applying state (restoringPadsLayout). Runs on
+	// the UI thread — the only thread that owns the pad state — so it is safe.
+	void PersistPadsLayoutNow (string why)
+	{
+		if (!padsLayoutReady)
+			return; // startup: the fresh XAML defaults are not user state
+		if (!AutoPersistIsEnabled)
+			return; // a QA probe is running; it owns the on-disk record
+		if (restoringPadsLayout)
+			return;
+		SavePadsLayout ();
+		Console.WriteLine ("[pads] persisted (" + why + ")");
+	}
+
+	// Positive rule (safe default: OFF) — auto-persist is enabled ONLY for:
+	//  - a real user session (no --qa arg: QaDialogArg == ""), where every pad
+	//    change is the user's intent and must survive any exit; and
+	//  - the passive --padgeo probe, which only DUMPS geometry while a real
+	//    xdotool drag is driven — under it a drag must persist exactly as a
+	//    user's would (that is how the persist-on-change H1 fix is verified).
+	// Every other QA probe is excluded by the default, including the ones that
+	// drive pad state synchronously (--padsqa, --collapse, ...) AND the deferred
+	// debug ones (--frame, --immcompl, --locals, --watch, --pinwatch,
+	// --attachreal, --attachdlg, ...) that mutate AFTER the restore: a negative
+	// skip list would have to remember each of those, and a future probe would
+	// silently re-enable auto-persist. A positive allowlist can't drift that way.
+	static bool AutoPersistIsEnabled => Program.QaDialogArg is "" or "--padgeo";
+
 	void RestorePadsLayout ()
 	{
+		// The restore applies the persisted state (visibility, collapse, widths,
+		// row height) in one synchronous block. Those transitions are OURS, not
+		// the user's, so restoringPadsLayout suppresses the persist-on-change
+		// hooks (CollapseChanged & co.) for the duration — otherwise the first
+		// CollapseChanged mid-restore would save a PARTIAL layout (e.g. row height
+		// applied but the hosts not yet collapsed) over the good record. From
+		// this post on, whatever the in-memory layout is, a user change may
+		// persist it: padsLayoutReady.
+		padsLayoutReady = true;
+		restoringPadsLayout = true;
 		try {
 			// The collapse QA hooks toggle from the startup state — a restored
 			// collapsed flag would make their toggle EXPAND instead. The pad
@@ -4127,6 +4340,15 @@ public partial class MainWindow : Window
 			var segs = raw.Split ('|');
 			if (segs.Length < 12)
 				return;
+			// New format: 4 segs/host + leftW|rightW|rowH (15). Legacy: 4 segs/host
+			// + rowH (13, no side-pad widths) — still read, widths keep the XAML
+			// default. rowH moves from segs[12] to segs[14].
+			string leftWSeg = "", rightWSeg = "";
+			string rowHSeg = segs.Length >= 15 ? segs [14] : segs [12];
+			if (segs.Length >= 15) {
+				leftWSeg = segs [12];
+				rightWSeg = segs [13];
+			}
 			void RestoreHost (PadHost host, string visible, string collapsed, string tabIds, string selected) {
 				host.IsVisible = visible == "1";
 				var visibleIds = tabIds.Split (',', StringSplitOptions.RemoveEmptyEntries);
@@ -4141,20 +4363,29 @@ public partial class MainWindow : Window
 				if (collapsed == "1" && !host.IsCollapsed)
 					host.ToggleCollapse ("layout-restore");
 			}
-			// Row height FIRST: collapsing the bottom host below saves it into
-			// bottomSavedRowH via the CollapseChanged coupling, so expanding after a
-			// restart returns to the persisted split.
-			if (int.TryParse (segs [12], out var h) && h >= 34
+			// SIZES FIRST: a collapsed side pad below would otherwise overwrite its
+			// Width with the 34px rail, losing the persisted width (EffectiveWidth
+			// saves it, but set the Width before the collapse toggle so the rail and
+			// the saved width agree). Row height first for the same reason as before
+			// (collapsing the bottom host saves it into bottomSavedRowH via the
+			// CollapseChanged coupling, so expanding returns to the persisted split).
+			if (int.TryParse (rowHSeg, out var h) && h >= 34
 				&& BottomPads.Parent is Grid g && g.RowDefinitions.Count > 1)
 				g.RowDefinitions [1].Height = new GridLength (h);
+			if (!double.IsNaN (LeftPads.Width) && int.TryParse (leftWSeg, out var lw) && lw >= 34)
+				LeftPads.Width = lw;
+			if (!double.IsNaN (RightPads.Width) && int.TryParse (rightWSeg, out var rw) && rw >= 34)
+				RightPads.Width = rw;
 			RestoreHost (LeftPads, segs [0], segs [1], segs [2], segs [3]);
 			RestoreHost (RightPads, segs [4], segs [5], segs [6], segs [7]);
 			RestoreHost (BottomPads, segs [8], segs [9], segs [10], segs [11]);
-			Output ("[pads] layout restored: rowH=" + segs [12] + " bottom=[vis=" + segs [8] + " coll=" + segs [9] + " tabs=" + segs [10] + " sel=" + segs [11] + "]");
+			Output ("[pads] layout restored: leftW=" + (leftWSeg.Length > 0 ? leftWSeg : "default") + " rightW=" + (rightWSeg.Length > 0 ? rightWSeg : "default") + " rowH=" + rowHSeg + " bottom=[vis=" + segs [8] + " coll=" + segs [9] + " tabs=" + segs [10] + " sel=" + segs [11] + "]");
 			UpdateRestoreStrip ();
 			BuildMenu (); // checks mirror the restored visibility
 		} catch (Exception ex) {
 			Console.WriteLine ($"[pads] layout restore failed: {ex.Message}");
+		} finally {
+			restoringPadsLayout = false;
 		}
 	}
 
@@ -4515,9 +4746,13 @@ public partial class MainWindow : Window
 		BottomPads.BorderBrush = (Brush)Application.Current!.FindResource ("IdeChromeBgBrush")!;
 
 		// View > Pads mirrors every close like the legacy DockItem.Closed → menu
-		// check refresh (plus the hidden-pads restore strip).
-		LeftPads.PadTabClosed += _ => { UpdateRestoreStrip (); BuildMenu (); DumpPadsMenuChecks ("closed"); };
-		RightPads.PadTabClosed += _ => { UpdateRestoreStrip (); BuildMenu (); DumpPadsMenuChecks ("closed"); };
+		// check refresh (plus the hidden-pads restore strip). The PersistPadsLayoutNow
+		// writes the record at change time (a tab close mutates the visible-tab list,
+		// and a tab click mutates the active-tab segment — the record carries it).
+		LeftPads.PadTabClosed += _ => { UpdateRestoreStrip (); BuildMenu (); DumpPadsMenuChecks ("closed"); PersistPadsLayoutNow ("tab closed (left)"); };
+		RightPads.PadTabClosed += _ => { UpdateRestoreStrip (); BuildMenu (); DumpPadsMenuChecks ("closed"); PersistPadsLayoutNow ("tab closed (right)"); };
+		LeftPads.SelectionChanged += id => PersistPadsLayoutNow ("select left=" + id);
+		RightPads.SelectionChanged += id => PersistPadsLayoutNow ("select right=" + id);
 		BottomPads.PadTabClosed += padId => {
 			UpdateRestoreStrip ();
 			BuildMenu ();
@@ -4530,7 +4765,9 @@ public partial class MainWindow : Window
 			if (padId == "fsi")
 				FsiKillSession ();
 			DumpPadsMenuChecks ("closed");
+			PersistPadsLayoutNow ("tab closed (bottom)");
 		};
+		BottomPads.SelectionChanged += id => PersistPadsLayoutNow ("select bottom=" + id);
 
 		// Solution pad (legacy ProjectPad): tree of the loaded solution.
 		// Legacy ProjectPad is a TreeView: Solution ▸ project ▸ files (double-click opens
@@ -4922,6 +5159,7 @@ public partial class MainWindow : Window
 		UpdateRestoreStrip ();
 		BuildMenu ();
 		DumpPadsMenuChecks ($"SetPadVisible {padId}={visible}");
+		PersistPadsLayoutNow ("visibility " + padId + "=" + visible);
 	}
 
 	public bool IsPadVisible (string padId)
@@ -4953,6 +5191,7 @@ public partial class MainWindow : Window
 		if (pad is null) return;
 		pad.IsVisible = visible;
 		UpdateRestoreStrip ();
+		PersistPadsLayoutNow ("group " + id + "=" + visible);
 	}
 
 	public void TogglePad (string id)
@@ -4970,6 +5209,7 @@ public partial class MainWindow : Window
 		if (pad is null) return;
 		pad.IsVisible = !pad.IsVisible;
 		UpdateRestoreStrip ();
+		PersistPadsLayoutNow ("toggle " + id + "=" + pad.IsVisible);
 	}
 
 	// ---------- Welcome page (startup document, legacy default) ----------

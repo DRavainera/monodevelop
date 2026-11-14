@@ -149,14 +149,16 @@
       </Grid.ColumnDefinitions>
       <Grid.RowDefinitions>
         <RowDefinition Height="*" />
-        <RowDefinition Height="170" />
+        <RowDefinition Height="180" />
       </Grid.RowDefinitions>
 
       <!-- Left pads: Solution / Classes (legacy ProjectPad + ClassPad).
            RowSpan=2: side pads reach the window bottom; the bottom pad now spans
-           only the editor column (same width as the editor, wave-3 layout). -->
+           only the editor column (same width as the editor, wave-3 layout).
+           Width 300 = the GTK DockFrame default (defaultItemWidth). The column is
+           Auto and follows the pad's Width; LeftPadSplitter resizes that Width. -->
       <controls:PadHost x:Name="LeftPads" Grid.Row="0" Grid.RowSpan="2" Grid.Column="0"
-                        Width="260" DockOrientation="Vertical" />
+                        Width="300" DockOrientation="Vertical" />
 
       <!-- Center: document area (Welcome page behaves as the startup document) -->
       <Border x:Name="DocumentPane" Grid.Row="0" Grid.Column="1"
@@ -184,14 +186,10 @@
       </Border>
 
       <!-- Right pads: Properties / Toolbox / Document Outline / Unit Tests (the
-           legacy layout's "right dock group"), full height like the left ones. -->
+           legacy layout's "right dock group"), full height like the left ones.
+           Width 300 = the GTK DockFrame default (defaultItemWidth). -->
       <controls:PadHost x:Name="RightPads" Grid.Row="0" Grid.RowSpan="2" Grid.Column="2"
-                        Width="240" DockOrientation="Vertical" />
-
-      <GridSplitter Grid.Row="0" Grid.Column="1" Width="3" HorizontalAlignment="Left"
-                    Background="Transparent" ResizeDirection="Columns" />
-      <GridSplitter Grid.Row="0" Grid.Column="2" Width="3" HorizontalAlignment="Left"
-                    Background="Transparent" ResizeDirection="Columns" />
+                        Width="300" DockOrientation="Vertical" />
 
       <!-- Bottom dock (legacy bottom group): Output | Errors | Tasks | Code Issues
            | Search Results | Call Stack | Locals | Watch | Threads | Bookmarks |
@@ -203,7 +201,24 @@
       <!-- Editor <-> bottom-pad splitter (wave-3: drag the shared edge).
            Custom PadSplitter: the GridSplitter ignored real pointer drags at this
            edge; this one adjusts the row height directly (wired in the ctor). -->
-      <controls:PadSplitter x:Name="EditorBottomSplitter" Grid.Row="1" Grid.Column="1" />
+      <!-- VerticalAlignment=Top: the 6px strip sits at the editor/bottom-pad
+           boundary (the top of row 1), not centered in the row. The side
+           splitters keep the default Stretch (full height). -->
+      <controls:PadSplitter x:Name="EditorBottomSplitter" Grid.Row="1" Grid.Column="1"
+                            Height="6" VerticalAlignment="Top" />
+      <!-- Editor <-> side-pad splitters (same custom PadSplitter as the bottom
+           edge: the GridSplitter ignored real pointer drags here too). Each
+           resizes its side pad's Width (the Auto column follows); the targets
+           and grow signs are wired in the ctor (LeftPadSplitter grows the left
+           pad to the right, RightPadSplitter grows the right pad to the left).
+           Both sit in the editor column at its left/right edges, full height
+           (rowspan 2) to match the side pads. Declared LAST: the side pads'
+           columns reach the bottom row, so these must be above the bottom pad
+           in the z-order or its top strip would steal the drag at the lower end. -->
+      <controls:PadSplitter x:Name="LeftPadSplitter" Grid.Row="0" Grid.RowSpan="2" Grid.Column="1"
+                            Width="6" HorizontalAlignment="Left" />
+      <controls:PadSplitter x:Name="RightPadSplitter" Grid.Row="0" Grid.RowSpan="2" Grid.Column="1"
+                            Width="6" HorizontalAlignment="Right" />
     </Grid>
 
     <!-- Welcome page overlay: covers the whole workbench (pads included) like the

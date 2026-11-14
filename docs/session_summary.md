@@ -5174,3 +5174,64 @@ El QA corrió sus propias pruebas (no releyó logs del dev): review estática de
 ### Cierre
 
 QA §18.5: **VERDE 0 hallazgos**. Commit por nombre de los 3 archivos de código + docs ×3. Push a `origin/agents/sub-agent-senior-dev-role-report`. **Sin submódulos.** Artefactos: `~/opencode/deps_order_qa/padicons/` (logs + capturas + zooms), `~/opencode/deps_order_qa/padicons_probe.log`, backups del perfil y de `DepsOrder.userprefs`.
+
+## 2026-11-13 (46) — Pads redimensionables por drag (izq/der) + defaults 300/300/180 + persistencia al cambiar (shell Avalonia) — CERRADO (QA VERDE, 0 hallazgos)
+
+**Estado: CERRADO (QA APROBADO, 0 hallazgos abiertos tras 3 pases recursivos §18.5).** El operador pidió: (1) redimensionar **por drag del ratón** los límites editor↔pad izquierdo y editor↔pad derecho (el editor↔inferior ya existía, wave-3, como referencia); (2) defaults nuevos: pads laterales **300** (decisión del operador *"A 300 (default GTK)"*, igualados al `defaultItemWidth=300` de `DockFrame.cs:60-61`) y pad inferior 170→**180**.
+
+### Qué se hizo
+
+- `MonoDevelop.Ide/Controls/PadSplitter.cs` — **reescrito a dual-axis** (el `GridSplitter` de Avalonia ignoraba los drags reales en estos bordes). Vertical (`TargetRow`): borde editor↔inferior, el drag ajusta la **altura de la fila** (cursor `BottomSide`). Horizontal (`TargetControl`): borde editor↔lateral, el drag ajusta el **`PadHost.Width`** (las columnas laterales del `WorkbenchGrid` son `Auto` y siguen al `Width`), con `HorizontalGrowSign` (+1 izq / −1 der) y `OppositeControl` (el pad opuesto, para que la columna `*` del editor mantenga un mínimo). Fallbacks NaN, min 34 (rail), max = ancho grid − opuesto − 150. Nuevos eventos `DragStarted` (expandir el pad colapsado antes del drag) y **`DragEnded`** (gacha de la persistencia: dispara en `OnPointerReleased` **y** `OnPointerCaptureLost`).
+- `MonoDevelop.Ide/Controls/PadHost.cs` — nueva prop pública **`EffectiveWidth`** (el `Width` expandido o el `savedWidth` pre-colapso si colapsado; NaN→0) y nuevo evento **`SelectionChanged`** (solo cuando el id de la tab activa **cambia de verdad**, no en el "bring to front").
+- `Views/MainWindow.axaml` — defaults **300/300/180**; `EditorBottomSplitter Height=6 VerticalAlignment=Top`; splitters laterales `LeftPadSplitter`/`RightPadSplitter` **al final** del `WorkbenchGrid` (z-order: si no, `BottomPads` les tapaba la parte baja).
+- **Persistencia 13→15 segmentos**: `Monodevelop.PadsLayout` = `hosts×4 + leftW|rightW|rowH`; **backward-compatible** con 13-seg (`rowH=segs[12]`, anchos por default).
+- **Persistencia al cambiar (la fix del hallazgo mayor H1)**: el layout se escribe a disco **en el momento** en que el usuario lo cambia (`PersistPadsLayoutNow`), no en shutdown. Cableado: 3× `DragEnded`, 3× `CollapseChanged`, 3× `PadTabClosed`, 3× `SelectionChanged`, `SetPadVisible`, `SetGroupVisible`, `TogglePad`. Guards: `padsLayoutReady` (startup), `AutoPersistIsEnabled` (probes de QA), `restoringPadsLayout` (try/finally en el restore). `SavePadsLayout()` = primitiva sin guard (la llama `Window.Closing`, que sigue en pie, y el probe `--padresize`).
+- **Regla positiva del auto-persist (la fix del hallazgo menor H5)**: `AutoPersistIsEnabled => Program.QaDialogArg is "" or "--padgeo"` — ON solo para una **sesión real de usuario** y el probe **pasivo** `--padgeo` (un drag real bajo él persiste igual que el de un usuario; así se valida H1). **Cualquier** otro probe queda excluido **por el default** (safe default OFF), incluidos los probes de debug diferidos (`--frame`, `--immcompl`, `--locals`, `--watch`, `--pinwatch`, `--attachreal`, `--attachdlg`) que la primera versión (lista negativa) omitía.
+- `Program.cs` — allowlist `QaDialogArg` (`--padresize`/`--padgeo`); el handler de señales (`PosixSignalRegistration`) se **revertió por completo**.
+
+### Causa raíz de H1 (por qué falló el handler de señales)
+
+`SavePadsLayout` solo corría en `Window.Closing`; una muerte por señal (SIGTERM/`timeout`/`kill`) perdía los anchos. Se intentó `PosixSignalRegistration` (SIGTERM/SIGINT) + `SavePadsLayoutThreadSafe`: en la app real el handler quedaba **armado** (log "handlers armed", `SigCgt` con el bit SIGTERM) pero **nunca corría** (morte ~0s, perfil intacto). Diagnóstico con repros: plain .NET **y** Avalonia X11/Skia **sí** disparan el handler, pero la app real carga `libdbus-1.so.3` y `libsystemd.so.0.42` (los repros no) y **su handler SIGTERM nativo preempe al gestionado del CLR**. Luch contra un handler nativo era un rabbit hole con riesgo de regresión → **persist-on-change** (escribir al cambiar, no al salir): cualquier salida pierde nada. El handler de señales se revertió.
+
+### Validación (valores medidos)
+
+Fixture `DepsOrder.sln` (`~/opencode/deps_order_qa/`), Xvfb `:99` **sin WM** (el input xdotool llega a Avalonia). BASE de referencia (ventana 1280×800 a (0,0), perfil limpio): `leftS=(307,78,6x694) rightS=(967,78,6x694) botS=(307,592,666x6) leftW=300 rightW=300 rowH=180 win=1280x800`.
+
+- **Probe `--padresize` 18/18 `ok` → `all pass`** (wiring, columna Auto sigue el `Width` 300→340, default 300, colapso pinnea al rail 34, `EffectiveWidth` 350 pre-colapso, registro 15-seg, round-trip 15-seg 320/280).
+- **Drags REALES (xdotool)**: inferior `rowH 180→240` (`botS.y 592→532`, franja **pegada al borde** → no-regresión de `VerticalAlignment=Top`); izq `leftW 300→380`; der (sign −1) `rightW 300→370`; inverso `leftW≈250` (clamp min 34); **drag sobre colapsado** → `toggle(splitter-drag) → collapsed=False`, `leftW 34→440`; drag lateral a y=650 (sobre `BottomPads`) funciona.
+- **H1 persist-on-change ante señal**: drag bajo `--padgeo` → `[pads] persisted (drag: left)` + `leftW=380` → perfil **ya** 15-seg `leftW=380` **antes** del SIGTERM → `kill -TERM` → muerte ~0s → **perfil intacto con `leftW=380`** (pre-fix: ausente).
+- **Selección**: clic real en la tab `Errors` → `persist antes = 0`, `[pads] persisted (select bottom=errors)`, perfil 15-seg `selectedId=errors` + `rowH=274` (respeta el 13-seg) → SIGTERM intacto.
+- **Backward-compat 13-seg**: perfil `|274` → BASE `rowH=274 leftW=300 rightW=300`, `[pads] layout restored: leftW=default rightW=default rowH=274`.
+- **Canary probes de estado**: `--padsqa`/`--padsqa2` con **auto-persist = 0** y round-trip `rowH=237` aguantado.
+- **Builds** Avalonia + GTK **0 errores** (solo warnings preexistentes).
+
+### Regla 18.4 (ambas interfaces)
+
+`PadHost.cs`/`PadSplitter.cs` viven en `MonoDevelop.Ide` pero **NO se compilan en la ruta GTK** (csproj GTK con `EnableDefaultCompileItems=false` y lista explícita que no los incluye; la shell los compila por globs) → **impacto GTK nulo** (el `--old-gui` no usa `PadHost`/`PadSplitter`/`PadsLayout`). Builds 0 errores en las dos rutas.
+
+### QA §18.5 (subagente Tester QA Senior, recursivo — 3 pases)
+
+- **Pase 1** → **ROJO 1 mayor (H1)** + H2 menor + H3/H4 informativos (no persistía ante señal; `VerticalAlignment=Top` como invariant implícito; `EffectiveWidth` NaN→0; sin impacto GTK).
+- **Pase 2** (tras la fix H1) → **ROJO 1 menor (H5)**: la lista negativa de skip omitía los probes de debug **diferidos** (mutan tras el restore) que habrían pisado el registro — latente, no reproducible (requieren sesión de debug).
+- **Pase 3** (tras la fix H5 con regla positiva `AutoPersistIsEnabled`) → **VERDE 0 hallazgos**: confirma `QaDialogArg == ""` en sesión real (nunca null), los 7 probes diferidos quedan excluidos **estructuralmente**, y re-valida en verde toda la regresión.
+
+### Queda pendiente / notas
+
+- **El operador debe relanzar su shell** para ver el cambio (la DLL vieja sigue en memoria en su sesión). Con el persist-on-change, el perfil del operador **solo se toca en sesiones reales** (sin `--qa`) o bajo `--padgeo` (pasivo); los probes de estado están exentos. Su layout (rowH 274) se respeta.
+- El guard del cierre gracioso (`Window.Closing → SavePadsLayout`) **sigue** en pie como red de seguridad (idempotente con el persist-on-change).
+- El contrato de alineación de `PadSplitter` (la franja de 6px debe pinnearse en el eje de drag: `VerticalAlignment=Top` inferior, `HorizontalAlignment=Left/Right` laterales — **load-bearing**) quedó documentado en su doc comment (H2).
+
+### Archivos
+
+- `main/src/core/MonoDevelop.Ide/Controls/PadSplitter.cs` — reescrito dual-axis + `DragStarted`/`DragEnded` + doc comment del contrato de alineación.
+- `main/src/core/MonoDevelop.Ide/Controls/PadHost.cs` — `EffectiveWidth` + `SelectionChanged`.
+- `main/src/core/MonoDevelop.Startup.Avalonia/Views/MainWindow.axaml` — defaults 300/300/180, `VerticalAlignment=Top`, z-order de los splitters laterales.
+- `main/src/core/MonoDevelop.Startup.Avalonia/Views/MainWindow.axaml.cs` — cableado, persistencia 15-seg (backward-compat 13), persist-on-change (`PersistPadsLayoutNow`/`AutoPersistIsEnabled`/guards), `SavePadsLayout` primitiva, probes `--padresize`/`--padgeo`.
+- `main/src/core/MonoDevelop.Startup.Avalonia/Program.cs` — allowlist `QaDialogArg` (`--padresize`/`--padgeo`).
+- docs ×3 (este §46, § M31-i en `interfaz-plan.md`, nota en `migration-status-report.md`).
+
+**5 M de código, sin submódulos.**
+
+### Cierre
+
+QA §18.5: **VERDE 0 hallazgos** (pase 3). Commit por nombre de los 5 archivos de código + docs ×3. Push a `origin/agents/sub-agent-senior-dev-role-report`. **Sin submódulos.** Artefactos: `~/opencode/padresize_qa/` (logs `h1_v2.log`/`sel_test2.log`/`padresize_*.log`/`canary_*.log`/`p2_*`/`p3_*`, capturas, backup del perfil `MonoDevelopProperties.xml.bak2`, scripts `h1_test2.sh`/`sel_test2.sh`/`preqa_canary.sh`, repros de señal `sigrepro*`).

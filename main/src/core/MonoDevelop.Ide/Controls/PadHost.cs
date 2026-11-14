@@ -34,6 +34,12 @@ public class PadHost : Border
 	/// returns the row to its previous height.</summary>
 	public event Action<bool>? CollapseChanged;
 
+	/// <summary>Raised when the active tab actually CHANGES (Select with a new
+	/// id) so the owning shell can persist the new selection — the layout
+	/// record carries the active tab per host, and the on-disk copy is only
+	/// trustworthy if it is written when the selection changes.</summary>
+	public event Action<string>? SelectionChanged;
+
 	public sealed class PadTab
 	{
 		public string Id = "";
@@ -80,6 +86,18 @@ public class PadHost : Border
 	double savedWidth = double.NaN;
 	double savedHeight = double.NaN;
 	public bool IsCollapsed => collapsed;
+
+	// Width to persist: the live Width when expanded, or the PRE-collapse Width
+	// when collapsed (a side pad's rail is pinned to 34px, which must not be
+	// saved). Mirrors the bottom pad's "persist the pre-collapse height" behavior.
+	public double EffectiveWidth {
+		get {
+			var w = Width;
+			if (collapsed && DockOrientation == Orientation.Vertical && !double.IsNaN (savedWidth))
+				w = savedWidth;
+			return double.IsNaN (w) ? 0 : w;
+		}
+	}
 
 	// Parameterless ctor for XAML instantiation; Id/Title are then set by the owner.
 	public PadHost () : this ("", "") { }
@@ -368,6 +386,9 @@ public class PadHost : Border
 		var t = tabs.FirstOrDefault (x => x.Id == tabId && x.Visible);
 		if (t is null)
 			return;
+		// Select is also the "bring to front" path (SetPadVisible re-selects the
+		// already-active tab); only an ACTUAL change is a selection change.
+		var changed = SelectedId != tabId;
 		SelectedId = tabId;
 		content.Content = t.Content;		foreach (var x in tabs) {
 			if (x.HeaderButton is not null)
@@ -378,6 +399,8 @@ public class PadHost : Border
 				x.RailButton.Opacity = x.Id == tabId ? 1 : 0.9;
 				
 		}
+		if (changed)
+			SelectionChanged?.Invoke (tabId);
 	}
 
 	/// <summary>Shows/hides the whole pad host (ViewCommands Single/SideBySide mode).</summary>
