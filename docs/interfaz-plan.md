@@ -6120,3 +6120,43 @@ Avalonia: feature validada en vivo. GTK `--old-gui`: **build 0 errores** + runti
 - `main/src/core/MonoDevelop.Startup.Avalonia/Program.cs` (+1/−1) — `--wingeo` en el allowlist de `QaDialogArg`.
 
 + docs ×3 (este §, `session_summary.md` §48, nota en `migration-status-report.md`). Artefactos: `~/opencode/wingeo_qa/` (driver `wingeo_driver.sh`, logs `run_*.log`, `profile_forensic.sh`).
+
+## 2026-11-14 — M31-j Port completo del pad Errors (ErrorListPad GTK) a la shell Avalonia — CERRADO (QA VERDE, 0 hallazgos)
+
+**Estado: CERRADO (QA APROBADO, 0 hallazgos abiertos; validación recursiva §18.5 del Tester QA Senior, 2 pases: ROJO 1 mayor → VERDE 0).** El operador pidió portar el pad Errors GTK por completo a la shell Avalonia "viéndose y funcionando igual que el de la UI GTK": comportamientos, toolbar, iconos e imágenes, diseño de tabla y funcionalidades. El tab "Errors" anterior era un placeholder de texto (un `TextBlock` + una lista de líneas).
+
+**Diseño (un control nuevo, sin separación de carpetas §18.4).**
+- **`ErrorsPad.cs` (954 líneas, nuevo)** en `MonoDevelop.Startup.Avalonia/Views/` — el port de `MonoDevelop.Ide.Gui.Pads.ErrorListPad` (GTK, 1141 líneas, fuente de verdad leída línea a línea):
+  - **Toolbar** (legacy `DockItemToolbar`): 3 toggles de severidad "N Errors / N Warnings / N Messages" (iconos `gtk-dialog-error/warning/info` vía `IconService`), toggle "Build Output" (`md-message-log`) y campo **Search** (filtro en vivo, legacy `TreeModelFilter`).
+  - **Tabla 8 columnas** en orden legacy: `!` (icono), `Marked` (checkbox), `Line`, `Description` (wrap), `File`, `Project`, `Path`, `Category`. Bold=no leído (`DataColumns.Read`), strikethrough=completado (`CellRendererToggle`), multi-selección, sort por header (Type/Project/File/Category, `TreeModelSort`: 1er click asc / invierte, con ▲/▼).
+  - **Doble click → RowActivated** → `OpenFileDocumentAtLine` + `GotoLinePopupColumn` + `MarkRead` (legacy `OnTaskJumpto`).
+  - **Menú contextual legacy**: Go to Reference (google por el código, `App.Platform.ShowUrl`), Go to Task, Copy (formato legacy `OnTaskCopied`), submenú Columns checkable (persistido bajo `Monodevelop.ErrorListColumns`, tokens `TRUE/FALSE`).
+  - **Icono de tab dinámico** (legacy `UpdatePadIcon`): `md-errors-list` → `-has-errors` → `-has-warnings`.
+  - **Log "Build Output"**: `TextBox` read-only acotado a 300 k chars + auto-scroll (legacy `LogView`); `ParseBuildMessage` lo alimenta con todas las líneas.
+  - **Auto-show**: el tab nace oculto y aparece al primer problema de build (`RowCountsChanged` → `SetPadVisible`).
+- **Control de tabla = custom Avalonia** (header `Grid` + `ListBox` multi-selección + filas `ErrorRowView : Border > Grid` 8 celdas). **Descartado Xwt.TreeView**: el backend `Xwt.Avalonia` renderiza `TextCellView` como `TextBlock` plano (sin bold/strikethrough/wrap/sort — verificado en `Xwt.Avalonia/ListBackends.cs`). **Descartado `Avalonia.Controls.DataGrid`**: package aparte no disponible offline (`DisableDownloadNupkg=true`). Patrón establecido de la shell (pads en código).
+- **Modelo `ErrorRow` con relleno del dueño**: `TaskService`/`TaskListEntry` son GTK-side (no compilan en la shell); `MainWindow` llena todos los campos, incluido Project/Path (equivalentes a `TaskListEntry.GetProject`/`GetPath` vía `SolutionProjectsOf`/`RelativeToProjectDir`).
+- **Settings compartidas con GTK** (mismas keys): `SharpDevelop.TaskList.ShowErrors/ShowWarnings/ShowMessages`, `OutputViewVisible`, `LogSeparatorPosition`, `Monodevelop.ErrorListColumns`.
+
+**Matiz crítico 1 — dedup por firma de diagnostic.** El .NET SDK emite **cada** diagnostic dos veces (pase del compilador + resumen final) y el build mezcla stdout+stderr en un solo stream de líneas. El legacy `TaskStore` no sostenía duplicados (el log MSBuild estructurado da id único). `ParseBuildMessage` descarta la 2ª línea con la misma firma `file|line|col|level|code` (`errorRowSigs`, reseteada en cada `BeginBuild`/cierre de workspace). Sin esto el build real dejaba 6 filas para 3 problemas.
+
+**Matiz crítico 2 — persistencia del separador (hallazgo F2 del round 1 QA, corregido).** Legacy `HandleSwSizeAllocated` (`ErrorListPad.cs:377-383`) guarda la posición como fracción del ancho al mover el `HPaned`. El port lo replica con `logSplitter.DragCompleted` → `PersistLogSeparator()`: el `GridSplitter`/`Thumb` de Avalonia 12.1.2 **commit**a el ancho de columna 0 a píxeles *antes* de disparar `DragCompleted`, así se lee `ColumnDefinitions[0].Width` commitado (un ancho star = nunca movido → no se guarda). La restauración al arrancar usa `ApplyLogSeparator()` (legacy `SetInitialOutputViewSize`) desde `bodyGrid.SizeChanged` la primera vez con ancho real (el ctor corre sin layout, ancho 0; `initialLogShow` como flag).
+
+**Matiz crítico 3 — fidelidad del toggle log (bug del restore, corregido).** Legacy `MakeButton("md-message-log", ..., false, ...)` (`ErrorListPad.cs:212`) arranca el toggle log **desmarcado**. El port original creaba todos los toggles con `IsChecked=true`; aplicar el estado persistido al final del ctor (`logBtn.IsChecked = true`) **no** disparaba `IsCheckedChanged` (valor sin cambio) → un perfil con `OutputViewVisible=True` no restauraba el panel. Solución: `MakeToolbarToggle` recibe el estado inicial (log `false`), de modo que la asignación persistida sí dispara el handler y reabre el panel (legacy `logView.Visible = OutputViewVisible`, l.327).
+
+**Deviaciones documentadas (no hallazgos):** (F3) el Copy escribe `File(Line,Col)`, corrigiendo el typo literal del legacy `File(Column,Column)` (`ErrorListPad.cs:578-580` escribe `task.Column` dos veces); (F4) el menú omite "Go to Log" (feature `BuildOutput` no portada) y "Go to Reference" no usa `DocumentationLink`/`HelpKeyword` (no existen en `ErrorRow`).
+
+**Validación (valores medidos).**
+- **Builds 0 errores**: shell Avalonia (TFM `net10.0` y `net10.0-windows`) y proyecto GTK `MonoDevelop.Startup` (`EnableDefaultCompileItems=false`, no referencia el proyecto Avalonia; garantía §18.4 = build 0 errores). Warnings preexistentes (MSB3277 SQLitePCLRaw).
+- **Probe `--errorspad` (perfil fresh)**: oracles exactos `errors=2 warnings=1 messages=0 rows=3 visible=3 log=off … logLines=1`, `no-errors filter → visible=1`, `search=CS1002 → visible=1`, `build-output → log=on`, `separator=0.35 → stored=0.35`, `rowactivated → jumped`, `[dblclick] caret in Program.cs at line 7 (expected 7)`, `tab-icon=md-errors-list-has-errors`. Settings persistidos `ShowErrors=True`, `OutputViewVisible=True`, `LogSeparatorPosition=0.35`. **rows=3 pese a 2 líneas repetidas = dedup OK.**
+- **Variante RESTORE** (mismo perfil persistido): el primer dump arranca `log=on` (panel restaurado al arrancar).
+- **Build real `--build`** (fixture `errpad_fixture/` con 2×CS0103 + 1×CS0219): cada diagnostic **una vez** (dedup), `[build] Build FAILED with exit code 1` (esperado), auto-show OK, 0 excepciones.
+- **QA §18.5 (recursivo)**: round 1 → **ROJO 1 mayor** (F2: separador no se persistía al arrastrar + restore del panel log fallaba; F1 de proceso: smoke en paralelo del dev borró la carpeta de artefactos → no lanzar probes en paralelo al subagente) → dev corrigió → round 2 → **VERDE 0 hallazgos** (8/8 oracles exactas byte a byte vía `diff`, settings 3/3, restore `log=on`, build real sin duplicados, apps matadas por HOME de perfil, repo intacto). Reportes `~/opencode/errors_pad_qa/qa_report_round{1,2}.md`.
+
+**Nota 18.4 (GTK)** — build 0 errores + la ruta `--old-gui` sigue intacta (el csproj GTK no compila ningún archivo tocado). El mapeo de ventana GTK en vivo es imposible en esta box (`mdhost.exe` Windows-only, limitación **preexistente**); la paridad de diseño se validó contra la fuente `ErrorListPad.cs` línea a línea.
+
+**Queda pendiente** — (1) paridad visual GTK en vivo (limitación de plataforma, preexistente); (2) desviaciones documentadas F3/F4.
+
+**Archivos (1 A + 2 M, +1145/−41, sin submódulos):** `main/src/core/MonoDevelop.Startup.Avalonia/Views/ErrorsPad.cs` (**A**, 954), `main/src/core/MonoDevelop.Startup.Avalonia/Views/MainWindow.axaml.cs` (+189/−40), `main/src/core/MonoDevelop.Startup.Avalonia/Program.cs` (+1/−1).
+
++ docs ×3 (este §, `session_summary.md` §49, nota en `migration-status-report.md`). Artefactos: `~/opencode/errors_pad_qa/` (fixture `errpad_fixture/`, `qa_brief.md`, logs `fresh.log`/`restore.log`/`round*.log`, screenshots, reportes round 1-2).

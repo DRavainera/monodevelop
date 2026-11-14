@@ -4101,9 +4101,66 @@ public partial class MainWindow : Window
 				// Roslyn analyzer host, so the pad mirrors the build output).
 				buildErrors.Clear ();
 				errorRows.Clear ();
+				errorRowSigs.Clear ();
 				SetPadVisible ("codeissues", true);
 				Output ($"[codeissues] rows={codeIssueRows.Count}");
 				DumpCodeIssueRows ();
+			} else if (qa == "--errorspad") {
+				// QA: Errors pad (port of the legacy ErrorListPad). Feeds the pad the
+				// same way a real build does — ParseBuildMessage per diagnostic line —
+				// then exercises the legacy behaviors headlessly: the severity
+				// filters, the search entry, the Build Output log toggle, the
+				// sortable headers, the double-click → jump (RowActivated) and the
+				// tab icon. Dumps the pad state from its model.
+				buildErrors.Clear ();
+				errorRows.Clear ();
+				errorRowSigs.Clear ();
+				errorsPad?.BeginBuild ();
+				SetPadVisible ("errors", true);
+				string probeFile = Path.Combine (Path.GetDirectoryName (Program.SolutionArg) ?? ".", "Program.cs");
+				if (!File.Exists (probeFile) && !string.IsNullOrEmpty (loadedSolutionPath)) {
+					var proj = SolutionProjects (loadedSolutionPath).FirstOrDefault ();
+					probeFile = proj is null ? probeFile : Path.Combine (Path.GetDirectoryName (proj)!, "Program.cs");
+				}
+				string baseFile = File.Exists (probeFile) ? probeFile : "Probe.cs";
+				ParseBuildMessage ($"{baseFile}(7,1): error CS1002: ; expected");
+				ParseBuildMessage ($"{baseFile}(12,5): warning CS0219: The variable 'unused' is assigned but its value is never used");
+				ParseBuildMessage ($"{baseFile}(23,1): error CS0103: The name 'Missing' does not exist in the current context");
+				ParseBuildMessage ($"Info line that is not a diagnostic (goes only to the Build Output log)");
+				// The .NET SDK prints each diagnostic twice (compiler pass + final
+				// summary); the pad must keep one row per unique problem (legacy
+				// TaskService never held duplicates). The repeated line must NOT grow
+				// the row count.
+				ParseBuildMessage ($"{baseFile}(7,1): error CS1002: ; expected");
+				ParseBuildMessage ($"{baseFile}(7,1): error CS1002: ; expected");
+				await System.Threading.Tasks.Task.Delay (300); // let the row rebuild settle
+				Output ("[errorspad] " + (errorsPad?.DumpStatus () ?? "(pad missing)"));
+				// Legacy FilterTasks: the severity toggles hide their rows.
+				errorsPad?.SetSeverityFilters (errors: false, warnings: true, messages: true);
+				Output ("[errorspad] no-errors filter → visible=" + errorsPad?.VisibleRowCount ());
+				errorsPad?.SetSeverityFilters (errors: true, warnings: true, messages: true);
+				// Legacy searchPatternChanged: the search entry filters live.
+				errorsPad?.SetSearch ("CS1002");
+				Output ("[errorspad] search=CS1002 → visible=" + errorsPad?.VisibleRowCount ());
+				errorsPad?.SetSearch ("");
+				// Legacy Build Output toggle: opens the text log beside the rows.
+				errorsPad?.SetLogVisible (true);
+				Output ("[errorspad] build-output → " + (errorsPad?.DumpStatus () ?? ""));
+				// Legacy HandleSwSizeAllocated: moving the separator persists the
+				// position (SharpDevelop.TaskList.LogSeparatorPosition). Headless
+				// equivalent of the drag: move to 35% and read the stored value.
+				Output ("[errorspad] separator=0.35 → stored=" + errorsPad?.SimulateLogSeparatorMove (0.35));
+				// Legacy RowActivated (double click) → OnTaskJumpto: the first
+				// visible row opens its file at its line.
+				if (errorsPad is { } ep && ep.ActivateFirstRow ())
+					Output ("[errorspad] rowactivated → jumped to first visible row");
+				else
+					Output ("[errorspad] rowactivated → no visible row to activate");
+				if (File.Exists (baseFile))
+					VerifyCaret (baseFile, 7);
+				// Tab icon reflects the severity counts (md-errors-list-has-errors).
+				var (_, errTab) = FindPad ("errors");
+				Output ("[errorspad] tab-icon=" + (errTab?.Icon ?? "(none)"));
 			} else if (qa == "--dblclick" || qa.StartsWith ("--dblclick=", StringComparison.Ordinal)) {
 				// QA: exercises the three pad double-click handlers without XTEST.
 				// Each pad selects a node with a known target and calls the same
@@ -4141,6 +4198,7 @@ public partial class MainWindow : Window
 
 				buildErrors.Clear ();
 				errorRows.Clear ();
+				errorRowSigs.Clear ();
 				RefreshCodeIssuesPad ();
 				SetPadVisible ("codeissues", true);
 				var issueRow = codeIssueRows.Keys.FirstOrDefault ();
@@ -4409,7 +4467,7 @@ public partial class MainWindow : Window
 			if (qaArg is "--collapse" or "--collapsebottom"
 				|| qaArg.StartsWith ("--outline", StringComparison.Ordinal)
 				|| qaArg.StartsWith ("--unittests", StringComparison.Ordinal)
-				|| qaArg is "--classes" or "--codeissues" or "--helptree" or "--toolbox"
+				|| qaArg is "--classes" or "--codeissues" or "--errorspad" or "--helptree" or "--toolbox"
 				|| qaArg is "--fsi" or "--fsls")
 				return;
 			var raw = SettingsStore.GetString ("Monodevelop.PadsLayout");
@@ -4852,7 +4910,10 @@ public partial class MainWindow : Window
 	// ---------- Pads (legacy DockFrame groups) ----------
 
 	TextBox? outputTextBox;
-	TextBlock? errorsText;
+	// Errors pad (port of the legacy ErrorListPad): the pad table lives in
+	// ErrorsPad; MainWindow keeps the owner-side state — the parsed diagnostics
+	// (buildErrors) and the row objects fed to the pad in arrival order.
+	ErrorsPad? errorsPad;
 	TextBlock? tasksText;
 	StackPanel? propertiesHeader;
 	StackPanel? propertiesList;
@@ -5155,10 +5216,38 @@ public partial class MainWindow : Window
 		outputTextBox.Bind (TextBox.ForegroundProperty, Application.Current.GetResourceObservable ("IdeFgBrush"));
 		BottomPads.AddTab (new PadHost.PadTab { Id = "output", Label = "Output", Icon = "md-output-icon", Content = outputTextBox });
 
-		// Errors pad (legacy ErrorListPad, auto-hidden).
-		errorsText = new TextBlock { Padding = new Thickness (8, 6), Text = "No errors" };
-		errorsText.Bind (TextBlock.ForegroundProperty, Application.Current.GetResourceObservable ("IdeFgBrush"));
-		BottomPads.AddTab (new PadHost.PadTab { Id = "errors", Label = "Errors", Icon = "md-errors-list", Content = errorsText, Visible = false });
+		// Errors pad (legacy ErrorListPad, auto-hidden): a real table — toolbar with
+		// the severity toggles (N Errors / N Warnings / N Messages), a "Build Output"
+		// toggle that opens the build text log beside the rows, and a search entry;
+		// the rows come from the parsed build diagnostics with the legacy
+		// unread-bold / completed-strikethrough / wrapped-description cells, the
+		// multi-select, the sortable headers, the context menu and the dynamic tab
+		// icon (md-errors-list → -has-errors / -has-warnings).
+		errorsPad = new ErrorsPad ();
+		errorsPad.RowActivated += row => {
+			if (row is null || string.IsNullOrEmpty (row.File))
+				return;
+			// Legacy OnTaskJumpto: open the file at the row position and mark the
+			// row read (it leaves the bold "unread" state).
+			OpenFileDocumentAtLine (row.File, row.Line);
+			if (docs.TryGetValue (DocKey (row.File), out var ed))
+				ed.GotoLinePopupColumn (row.Col);
+			errorsPad.MarkRead (row.File, row.Line);
+		};
+		errorsPad.PadIconChanged += icon => {
+			var (_, tab) = FindPad ("errors");
+			if (tab is not null)
+				tab.Icon = icon;
+			BottomPads.RefreshIcons ();
+		};
+		// Legacy auto-show: the pad is hidden until a build reports a problem, then
+		// it appears (the pre-port placeholder did the same via SetErrors). The count
+		// only grows during a build (BeginBuild resets it to 0), so > 0 is the signal.
+		errorsPad.RowCountsChanged += count => {
+			if (count > 0)
+				SetPadVisible ("errors", true);
+		};
+		BottomPads.AddTab (new PadHost.PadTab { Id = "errors", Label = "Errors", Icon = "md-errors-list", Content = errorsPad.Root, Visible = false });
 
 		// Tasks pad (legacy TaskListPad, auto-hidden).
 		tasksText = new TextBlock { Padding = new Thickness (8, 6), Text = "No tasks" };
@@ -8026,7 +8115,8 @@ public partial class MainWindow : Window
 		if (classesTree is not null)
 			FillSymbolTree (classesTree, "No solution loaded");
 		buildErrors.Clear ();
-		errorRows.Clear ();
+		errorRowSigs.Clear ();
+		errorsPad?.BeginBuild ();
 		RefreshCodeIssuesPad ();
 		ShowWelcomePage ();
 		Output ("[window] workspace closed");
@@ -8124,6 +8214,7 @@ public partial class MainWindow : Window
 		LeftPads.RefreshIcons ();
 		RightPads.RefreshIcons ();
 		BottomPads.RefreshIcons ();
+		errorsPad?.RefreshIcons ();
 	}
 
 	// Legacy MainToolbar behavior: the debug step buttons live right of the
@@ -12053,7 +12144,8 @@ public partial class MainWindow : Window
 		// Legacy BuildCycle: the ErrorListPad starts each build empty and keeps the
 		// diagnostics of the finished build on screen.
 		buildErrors.Clear ();
-		errorRows.Clear ();
+		errorRowSigs.Clear ();
+		errorsPad?.BeginBuild ();
 		// Build each project directly: `dotnet build <sln>` only restores the solution
 		// shell without compiling the projects in this SDK setup.
 		var projs = SolutionProjects (sln);
@@ -12989,15 +13081,15 @@ public partial class MainWindow : Window
 				stoppedByUserProc = null;
 			Avalonia.Threading.Dispatcher.UIThread.Post (() => {
 				Output (wasStopped ? $"[process] stopped by user (exit code {code})" : $"[process] exited with {code}");
-				// SetErrors and RefreshCodeIssuesPad both read buildErrors, so the pads
-				// are filled here and the collections are reset by the caller that owns
-				// the build (RunBuildAsync), not per process — otherwise the Errors pad
-				// would always end up empty (legacy ErrorListPad kept the diagnostics of
-				// the finished build on screen).
-				if (code == 0)
-					SetErrors ("Build succeeded.");
-				else if (!wasStopped && buildErrors.Count == 0)
-					SetErrors ($"Build FAILED with exit code {code}.");
+				// The Errors pad is filled live by ParseBuildMessage (legacy
+				// TaskAdded); the collection reset happens in the caller that
+				// owns the build (RunBuildAsync), not per process — otherwise
+				// the pad would end up empty (legacy ErrorListPad kept the
+				// diagnostics of the finished build on screen).
+				if (code == 0 && buildErrors.Count == 0)
+					Output ("[build] Build succeeded.");
+				else if (code != 0 && !wasStopped)
+					Output ($"[build] Build FAILED with exit code {code}.");
 				RefreshCodeIssuesPad ();
 				// Oleada 3 (slice 5): the process exited — re-enable the
 				// build/run gates and disable Stop.
@@ -13011,14 +13103,51 @@ public partial class MainWindow : Window
 	// Parses MSBuild error/warning lines into the Errors pad, like the legacy
 	// BuildCycle → ErrorListPad flow ("file(line,col): error CODE: message").
 	readonly List<(string File, int Line, int Col, string Level, string Code, string Message)> buildErrors = new ();
-	readonly Dictionary<string, (string File, int Line, int Col, string Level, string Code, string Message)> errorRows = new ();
+	// One row object per diagnostic, in arrival order — the owner-side twin of the
+	// ErrorRow objects fed to errorsPad (both are populated in ParseBuildMessage).
+	readonly List<ErrorsPad.ErrorRow> errorRows = new ();
+	// The .NET SDK emits every diagnostic twice (the compiler pass and the final
+	// summary) and this build merges stdout+stderr into one line stream, so the
+	// legacy "one row per problem" rule (TaskService deduped by signature) is kept
+	// here: a second line for the same file/line/col/level/code is not a new row.
+	readonly HashSet<string> errorRowSigs = new ();
 
 	void ParseBuildMessage (string line)
 	{
-		if (MonoDevelop.Ide.Services.CodeIssueService.Parse (line) is not { } issue)
+		if (MonoDevelop.Ide.Services.CodeIssueService.Parse (line) is not { } issue) {
+			// The raw line still feeds the "Build Output" text log of the pad
+			// (legacy LogView shows the whole build output, not just the
+			// diagnostics).
+			errorsPad?.AppendLogLine (line);
+			return;
+		}
+		// One row per unique problem (legacy: the structured MSBuild log gave each
+		// diagnostic a unique id, so the store never held two of the same). The raw
+		// text lines this parses from can repeat a diagnostic, so skip the repeat.
+		if (!errorRowSigs.Add (issue.File + "|" + issue.Line + "|" + issue.Col + "|"
+			+ issue.Severity + "|" + issue.Code))
 			return;
 		buildErrors.Add ((issue.File, issue.Line, issue.Col, issue.Severity, issue.Code, issue.Message));
-		SetErrors ($"{buildErrors.Count} problem(s) — last: {issue.Message}");
+		// Legacy TaskAdded: one row per diagnostic in the table. The Project/Path
+		// columns are resolved like the legacy TaskListEntry helpers (containing
+		// project name / path relative to the project directory).
+		var row = new ErrorsPad.ErrorRow {
+			File = issue.File,
+			Line = issue.Line,
+			Col = issue.Col,
+			Level = issue.Severity,
+			Code = issue.Code,
+			Message = issue.Message,
+		};
+		var proj = SolutionProjectsOf (issue.File);
+		if (proj is not null) {
+			row.Project = Path.GetFileNameWithoutExtension (proj);
+			row.Path = RelativeToProjectDir (proj, issue.File);
+		}
+		row.Category = issue.Code;
+		errorRows.Add (row);
+		errorsPad?.UpdateRow (row);
+		Output ($"[build] {issue.Severity} {issue.Code} {Path.GetFileName (issue.File)}({issue.Line},{issue.Col}): {issue.Message}");
 		// Live message bubble on the affected line of the open document
 		// (legacy MessageBubble appears as soon as the error is reported).
 		if (docs.TryGetValue (DocKey (issue.File), out var bubbleEd)) {
@@ -13029,29 +13158,49 @@ public partial class MainWindow : Window
 		}
 	}
 
-	void SetErrors (string text)
+	// Legacy TaskListEntry.GetProject: the name of the project the file belongs to
+	// ("" when the file is outside every project of the loaded solution).
+	string? SolutionProjectsOf (string file)
 	{
-		errorsText!.Text = text;
-		// Legacy ErrorListPad: one clickable row per parsed problem.
-		var list = new ListBox { Background = Brushes.Transparent, FontSize = 12 };
-		list.Bind (ListBox.ForegroundProperty, Application.Current!.GetResourceObservable ("IdeFgBrush"));
-		var rows = new System.Collections.ObjectModel.ObservableCollection<string> ();
-		foreach (var err in buildErrors) {
-			var row = $"{Path.GetFileName (err.File)} ({err.Line},{err.Col}): {err.Level} {err.Code}: {err.Message}";
-			rows.Add (row);
-			errorRows [row] = err;
+		var sln = loadedSolutionPath;
+		if (string.IsNullOrEmpty (sln))
+			return null;
+		string full;
+		try {
+			full = Path.GetFullPath (file);
+		} catch {
+			return null;
 		}
-		list.ItemsSource = rows;
-		list.DoubleTapped += (_, _) => {
-			// Legacy pad double-click → jump to file(line,col).
-			if (list.SelectedItem is string s && errorRows.TryGetValue (s, out var hit)) {
-				OpenFileDocumentAtLine (hit.File, hit.Line);
-				if (docs.TryGetValue (DocKey (hit.File), out var ed))
-					ed.GotoLinePopupColumn (hit.Col);
+		// Longest project directory wins (a file in a nested project is not
+		// attributed to its parent).
+		string? best = null;
+		int bestLen = -1;
+		foreach (var p in SolutionProjects (sln)) {
+			string dir;
+			try {
+				dir = Path.GetDirectoryName (Path.GetFullPath (p)) ?? "";
+			} catch {
+				continue;
 			}
-		};
-		BottomPads.ReplaceTabContent ("errors", WrapWithHeader (text, list));
-		BottomPads.SetTabVisible ("errors", true);
+			if (full.StartsWith (dir, StringComparison.Ordinal) && dir.Length > bestLen) {
+				best = p;
+				bestLen = dir.Length;
+			}
+		}
+		return best;
+	}
+
+	// Legacy FileService.AbsoluteToRelativePath: the file path relative to the
+	// project directory (falls back to the raw name).
+	static string RelativeToProjectDir (string proj, string file)
+	{
+		try {
+			var dir = Path.GetDirectoryName (Path.GetFullPath (proj))!;
+			var full = Path.GetFullPath (file);
+			if (full.StartsWith (dir + Path.DirectorySeparatorChar, StringComparison.Ordinal))
+				return full [(dir.Length + 1)..];
+		} catch { }
+		return Path.GetFileName (file);
 	}
 
 	// VersionControlCommands helper: run git in the solution directory and stream the
