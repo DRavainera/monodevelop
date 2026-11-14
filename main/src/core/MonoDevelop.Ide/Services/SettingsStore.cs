@@ -33,11 +33,11 @@ public static class SettingsStore
 	//   <schemes version="1.0"><scheme name="current">
 	//     <binding command="MonoDevelop.Ide.Commands.FileCommands.Save" shortcut="Control+S"/>
 	//   </scheme></schemes>
-	// to ~/.local/share/MonoDevelop/9.0/KeyBindings/Custom.kb.xml.
+	// to ~/.local/share/MonoDevelop/KeyBindings/Custom.kb.xml.
 
 	static string KeyBindingsPath => Path.Combine (
 		Environment.GetFolderPath (Environment.SpecialFolder.UserProfile),
-		".local", "share", "MonoDevelop", "9.0", "KeyBindings", "Custom.kb.xml");
+		".local", "share", "MonoDevelop", "KeyBindings", "Custom.kb.xml");
 
 	public static Dictionary<string, string> LoadKeyBindings ()
 	{
@@ -92,7 +92,7 @@ public static class SettingsStore
 
 	static string ToolsPath => Path.Combine (
 		Environment.GetFolderPath (Environment.SpecialFolder.UserProfile),
-		".config", "MonoDevelop", "9.0", "MonoDevelop-tools.xml");
+		".config", "MonoDevelop", "MonoDevelop-tools.xml");
 
 	public static List<ExternalTool> LoadTools ()
 	{

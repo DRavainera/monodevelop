@@ -14,6 +14,14 @@ internal static class Program
 	[STAThread]
 	public static int Main (string [] args)
 	{
+		// The current Unix profile is unversioned (<xdg>/MonoDevelop, no "9.0" subfolder).
+		// Touching UserProfile runs the one-time migration of the legacy <xdg>/MonoDevelop/9.0
+		// data (UserProfile's static ctor) before anything below resolves profile paths —
+		// the shell otherwise bypasses UserProfile with its own hardcoded paths. It also
+		// covers --old-gui: the migration runs here, and the GTK child's own trigger is then
+		// a no-op.
+		_ = MonoDevelop.Core.UserProfile.Current;
+
 		// Legacy GTK UI compatibility switch: there is a single project with a
 		// single build tree (main/build); the GTK# UI is kept as hidden legacy
 		// compatibility during the 9.x branch and only shows up with --old-gui,

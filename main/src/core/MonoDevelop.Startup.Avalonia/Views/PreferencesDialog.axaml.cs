@@ -1301,7 +1301,7 @@ public partial class PreferencesDialog : Window
 			var baseDir = string.IsNullOrEmpty (xdg)
 				? Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile), ".local", "share")
 				: xdg;
-			return Path.Combine (baseDir, "MonoDevelop", "9.0");
+			return Path.Combine (baseDir, "MonoDevelop");
 		}
 	}
 	static string ColorThemesDir => Path.Combine (UserDataRoot, "ColorThemes");
@@ -1669,7 +1669,7 @@ public partial class PreferencesDialog : Window
 
 	// ---------- Version Control → General (global config) ----------
 	// VersionControlService persists VersionControlConfiguration with XmlDataSerializer
-	// into ~/.config/MonoDevelop/9.0/VersionControl.config. The Disabled [ItemProperty] is
+	// into ~/.config/MonoDevelop/VersionControl.config. The Disabled [ItemProperty] is
 	// rendered by the canonical serializer as a ROOT ATTRIBUTE (<VersionControlConfiguration
 	// Disabled="True">); older/hand-written files may use a <Disabled> child element. We
 	// read both (attribute first, matching the GTK reader) and write the canonical attribute,
@@ -1677,7 +1677,7 @@ public partial class PreferencesDialog : Window
 
 	static string VcConfigFile => Path.Combine (
 		Environment.GetFolderPath (Environment.SpecialFolder.UserProfile),
-		".config", "MonoDevelop", "9.0", "VersionControl.config");
+		".config", "MonoDevelop", "VersionControl.config");
 
 	void LoadVcGeneralPanel ()
 	{
@@ -1909,7 +1909,7 @@ public partial class PreferencesDialog : Window
 
 	static string PropertiesFile => Path.Combine (
 		Environment.GetFolderPath (Environment.SpecialFolder.UserProfile),
-		".config", "MonoDevelop", "9.0", "MonoDevelopProperties.xml");
+		".config", "MonoDevelop", "MonoDevelopProperties.xml");
 
 	static bool ReadNested (string parent, string key, bool def)
 	{
@@ -2410,7 +2410,7 @@ public partial class PreferencesDialog : Window
 		// Associations: keys starting with "Association" inside XmlEditor.AddIn.Options.
 		var assoc = new List<string> ();
 		try {
-			var props = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile), ".config", "MonoDevelop", "9.0", "MonoDevelopProperties.xml");
+			var props = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile), ".config", "MonoDevelop", "MonoDevelopProperties.xml");
 			if (File.Exists (props)) {
 				var root = System.Xml.Linq.XDocument.Load (props, LoadOptions.PreserveWhitespace).Root?
 					.Elements ("Property").FirstOrDefault (e => (string?)e.Attribute ("key") == "XmlEditor.AddIn.Options");

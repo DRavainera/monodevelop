@@ -55,6 +55,13 @@ namespace MonoDevelop.Core
 
 		static UserProfile ()
 		{
+			// The 9.x current profile is unversioned on Unix (no "9.0" subfolder). One-time
+			// migration of the previously-versioned profile into it, idempotent, before the
+			// current profile is resolved (so every consumer sees the merged data and
+			// PropertyService never migrates a stale older version over it). Must not depend
+			// on BrandingService/LoggingService: either could trigger this same static ctor
+			// from an earlier failure path, and a re-entrant call would re-enter here.
+			MigrateUnixCurrentProfile ();
 			Current = GetProfile (ProfileVersions[ProfileVersions.Length-1]);
 		}
 		
@@ -255,7 +262,13 @@ namespace MonoDevelop.Core
 			if (xdgCacheHome.IsNullOrEmpty)
 				xdgCacheHome = home.Combine (".cache");
 			
-			string appId = GetAppId (version);
+			// The current profile (the last known version) is unversioned on Unix: it lives
+			// in <xdg>/MonoDevelop directly, not <xdg>/MonoDevelop/<version>. Older versions
+			// (used only as migration sources by GetMigratableProfile) keep their versioned
+			// subfolder so version-migration still finds them.
+			string appId = version == ProfileVersions [ProfileVersions.Length - 1]
+				? BrandingService.ProfileDirectoryName
+				: GetAppId (version);
 			FilePath data = xdgDataHome.Combine (appId);
 			FilePath config = xdgConfigHome.Combine (appId);
 			FilePath cache = xdgCacheHome.Combine (appId);
@@ -270,6 +283,86 @@ namespace MonoDevelop.Core
 				TempDir = cache.Combine ("Temp"),
 				LogDir = cache.Combine ("Logs"),
 			};
+		}
+
+		// One-time move of the last versioned current profile out of its "9.0" subfolder into
+		// the now-unversioned profile, across all three XDG roots (<xdg-config|cache|data>/
+		// MonoDevelop/9.0 -> <...>/MonoDevelop). Runs from the static ctor on Unix only — the
+		// only platform whose layout changed; Windows/Mac keep their versioned layout and need
+		// no migration. Idempotent: once a root's 9.0 subfolder is empty or gone there is
+		// nothing to do. The current profile is resolved with ensureCreated=false so resolving
+		// it does not (re)create the old 9.0 subfolders. When a file exists in both the versioned
+		// source and the unversioned target, the newer copy wins (a re-run after the app already
+		// wrote a newer file must not resurrect the stale one). A root's versioned subfolder is
+		// removed only after every source file is verified present in the target, so an
+		// interruption can never lose data.
+		static void MigrateUnixCurrentProfile ()
+		{
+			if (!Platform.IsLinux)
+				return;
+
+			// Best effort: a failure must never prevent the IDE from starting, so any error is
+			// reported and swallowed (the versioned profile is left in place; data is not lost).
+			try {
+				string currentVersion = ProfileVersions [ProfileVersions.Length - 1];
+				var currentProfile = GetProfile (currentVersion, false);
+
+				// LocalConfigDir == ConfigDir, TempDir/LogDir are under CacheDir and
+				// LocalInstallDir under UserDataRoot on Unix, so migrating these three primary
+				// roots covers every profile location.
+				foreach (string root in new[] {
+					currentProfile.ConfigDir.ToString (),
+					currentProfile.CacheDir.ToString (),
+					currentProfile.UserDataRoot.ToString (),
+				}) {
+					MigrateVersionedSubdir (root, currentVersion);
+				}
+			} catch (Exception ex) {
+				Console.Error.WriteLine ("[profile-migration] failed to move the " +
+					ProfileVersions [ProfileVersions.Length - 1] + " profile into the unversioned location: " + ex.Message);
+			}
+		}
+
+		static void MigrateVersionedSubdir (string root, string version)
+		{
+			string versioned = Path.Combine (root, version);
+			if (!Directory.Exists (versioned))
+				return;
+
+			// Capture the full set of source files (relative paths) before moving, so each can
+			// be verified to have landed in the target afterwards.
+			var sourceFiles = Directory.EnumerateFiles (versioned, "*", SearchOption.AllDirectories)
+				.Select (f => Path.GetRelativePath (versioned, f))
+				.ToList ();
+
+			MergeDirectory (versioned, root);
+
+			// Remove the versioned tree only once every source file exists in the target (moved
+			// into it, or already present there as the authoritative copy). If any is missing a
+			// move failed; leave the versioned tree so no data is lost.
+			if (sourceFiles.All (rel => File.Exists (Path.Combine (root, rel))))
+				Directory.Delete (versioned, true);
+		}
+
+		static void MergeDirectory (string source, string target)
+		{
+			Directory.CreateDirectory (target);
+			foreach (string file in Directory.EnumerateFiles (source)) {
+				string dest = Path.Combine (target, Path.GetFileName (file));
+				// Newest wins: move the source into the target, overwriting the target only
+				// when the source copy is strictly newer. A file already present and at least
+				// as new in the target is the authoritative copy, so the (stale) source is
+				// simply dropped. This keeps the most recent data without ever losing it.
+				if (!File.Exists (dest)
+					|| File.GetLastWriteTimeUtc (file) > File.GetLastWriteTimeUtc (dest)) {
+					File.Move (file, dest, overwrite: true);
+				} else {
+					File.Delete (file);
+				}
+			}
+			foreach (string sub in Directory.EnumerateDirectories (source)) {
+				MergeDirectory (sub, Path.Combine (target, Path.GetFileName (sub)));
+			}
 		}
 
 		// On .NET Framework/Mono, SpecialFolder.Personal returned $HOME, but on .NET Core/5+ it maps

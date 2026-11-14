@@ -5235,3 +5235,45 @@ Fixture `DepsOrder.sln` (`~/opencode/deps_order_qa/`), Xvfb `:99` **sin WM** (el
 ### Cierre
 
 QA §18.5: **VERDE 0 hallazgos** (pase 3). Commit por nombre de los 5 archivos de código + docs ×3. Push a `origin/agents/sub-agent-senior-dev-role-report`. **Sin submódulos.** Artefactos: `~/opencode/padresize_qa/` (logs `h1_v2.log`/`sel_test2.log`/`padresize_*.log`/`canary_*.log`/`p2_*`/`p3_*`, capturas, backup del perfil `MonoDevelopProperties.xml.bak2`, scripts `h1_test2.sh`/`sel_test2.sh`/`preqa_canary.sh`, repros de señal `sigrepro*`).
+
+## 2026-11-14 (47) — Perfil sin versión 9.0: quitar el sufijo `9.0` de `.config`/`.cache`/`.local/share` (MonoDevelop) + migración one-time de datos — CERRADO (QA VERDE, 0 hallazgos)
+
+**Estado: CERRADO (QA APROBADO, 0 hallazgos abiertos §18.5).** El operador pidió eliminar la carpeta de versión `9.0` del perfil XDG en las **tres** raíces (config, cache, userData — confirmado para las tres): `~/.config/MonoDevelop/9.0/` → `~/.config/MonoDevelop/` etc. Restricciones: no perder el dato del operador (layout pads `|274`, keybindings, properties, cache) ni la migración de versiones vieja (los `8.0`/`2.6`… deben seguir versionados).
+
+### Qué se hizo
+
+- **`UserProfile.ForUnix` (cambio central)**: el perfil **actual** (último de `ProfileVersions` = `9.0`) pasa a `<xdg>/MonoDevelop` **sin versión** (`appId = ProfileDirectoryName`); las versiones viegas conservan `GetAppId(version)` (versionadas, formato original: barra ≥7.0, guion <7.0). `GetAppId` y las rutas Windows/Mac **sin tocar**.
+- **7 hardcodes de la shell** (que bypass `UserProfile`): `UserPreferences.cs` (props), `SettingsStore.cs` (KeyBindings, Tools), `PreferencesDialog.axaml.cs` (UserDataRoot, VcConfigFile, PropertiesFile, inline) — quitado el `9.0`. Barrido por grep: **cero** rutas de perfil `…/9.0/` residuales en `main/src`.
+- **Migración de datos one-time** (`MigrateUnixCurrentProfile` en el static ctor de `UserProfile`): mueve `…/MonoDevelop/9.0/*` → `…/MonoDevelop/*` en las 3 raíces, solo Linux, **antes** de que `PropertyService` resuelva (su static ctor depende de `UserProfile.Current` → orden garantizado en GTK **y** Avalonia). Propiedades: idempotente; **newest-wins** por mtime (no resucita el 9.0 viejo si la app ya escribió en la nueva ruta); solo borra `9.0` tras **verificar** que todos sus ficheros están en el destino; best-effort (try/catch, nunca impide arrancar).
+- **Trigger en la shell** (`Program.Main`): `_ = UserProfile.Current;` — la shell no toca `UserProfile` en su camino de arranque (hardcodea), así que sin esto la migración nunca correría en Avalonia; al ir antes de `LaunchLegacyGtk` también cubre `--old-gui`.
+
+### Bug real atrapado en el camino (lección)
+
+`FilePath.FileName` devuelve el **leaf** (`Path.GetFileName`), no la ruta completa: la 1ª versión de la migración resolvió `versioned = "MonoDevelop/9.0"` **relativa** (contra el CWD) → no-op silencioso en 2 arranques reales (el diagnóstico temporal que imprimía `configDir=MonoDevelop` lo delató). Fix: `ToString()`.
+
+### Validación (valores medidos)
+
+- **Probe sobre la DLL construida** (perfil aislado `XDG_*_HOME`→scratch): 8/8 OK → VERDE; re-corrida: VERDE (idempotencia). `GetProfile(8.0)`/`GetProfile(2.6)` siguen versionados (migración vieja intacta).
+- **Simulador** del algoritmo: migrate/idempotent/conflict/duplicate = 4/4 VERDE.
+- **Migración real** (arranque shell, perfil del operador): 3×`9.0` drenadas y eliminadas; `8.0` intacto (124+2 fich); arranque limpio, `[pads] layout restored … rowH=274`.
+- **No-loss**: 703 ficheros del backup → 0 faltantes; checksums de VersionControl/EditingLayout/KeyBindings/Policies idénticos; props versionless con `…|358|274`.
+- **GTK `--old-gui` en vivo**: sesión completa sobre el perfil versionless, sin re-crear `9.0`, sin migración errónea; los 67 ERROR del log son los preexistentes de add-ins Windows-only.
+- **Builds**: Avalonia + GTK **0 errores**.
+
+### QA §18.5 (Tester QA Senior, recursivo)
+
+Pase 1 → **VERDE 0 hallazgos** (re-ejecutó probe, migsim, barridos, no-loss, builds y 2 arranques frescos por interface). 2 notas informativas (no hallazgos): `ForMD24()` resuelve a la misma ruta en Linux (guard de `PropertyService` lo hace inofensivo, preexistente); stdout de GTK vacío por diseño.
+
+### Archivos
+
+- `main/src/core/MonoDevelop.Core/MonoDevelop.Core/UserProfile.cs` (+94/−1) — `ForUnix` sin versión para el actual; migración one-time (3 métodos) desde el static ctor.
+- `main/src/core/MonoDevelop.Startup.Avalonia/Program.cs` (+8) — trigger de migración al inicio de `Main`.
+- `main/src/core/MonoDevelop.Ide/Services/UserPreferences.cs` (+2/−2) — props sin `9.0`.
+- `main/src/core/MonoDevelop.Ide/Services/SettingsStore.cs` (+3/−3) — KeyBindings/Tools sin `9.0`.
+- `main/src/core/MonoDevelop.Startup.Avalonia/Views/PreferencesDialog.axaml.cs` (+5/−5) — 4 rutas sin `9.0`.
+
+**5 M de código, +112/−11, sin submódulos.** docs ×3 (este §47, § nuevo en `interfaz-plan.md`, nota en `migration-status-report.md`).
+
+### Cierre
+
+QA §18.5: **VERDE 0 hallazgos**. Commit por nombre de los 5 archivos de código + docs ×3. Push a `origin/agents/sub-agent-senior-dev-role-report`. **Sin submódulos.** Artefactos: `~/opencode/no9_qa/` (probe, simulador, `cmp90.sh`, `backup_pre/` completo del perfil, logs de arranque).

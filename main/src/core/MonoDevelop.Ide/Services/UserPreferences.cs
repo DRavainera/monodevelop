@@ -7,7 +7,7 @@ using System.Xml.Linq;
 namespace MonoDevelop.Ide.Services;
 
 /// <summary>
-/// Minimal read/write access to ~/.config/MonoDevelop/9.0/MonoDevelopProperties.xml
+/// Minimal read/write access to ~/.config/MonoDevelop/MonoDevelopProperties.xml
 /// using the same Property/key/value format as the legacy IdeApp.Properties, so
 /// settings created here stay compatible with the GTK UI.
 /// </summary>
@@ -15,7 +15,7 @@ public static class UserPreferences
 {
 	static readonly string filePath = Path.Combine (
 		Environment.GetFolderPath (Environment.SpecialFolder.UserProfile),
-		".config", "MonoDevelop", "9.0", "MonoDevelopProperties.xml");
+		".config", "MonoDevelop", "MonoDevelopProperties.xml");
 
 	static readonly object loadLock = new ();
 
