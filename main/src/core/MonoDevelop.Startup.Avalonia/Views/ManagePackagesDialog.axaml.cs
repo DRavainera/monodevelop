@@ -52,6 +52,12 @@ public class ManagePackagesDialog : DialogWindow
 	/// <summary>Packages removed during the dialog (QA / menu assertions).</summary>
 	public List<string> RemovedPackages { get; } = new ();
 
+	/// <summary>True once OK ran Apply() successfully (the csproj was rewritten). The
+	/// owner uses this to trigger the follow-up restore in the Package Console (legacy
+	/// BackgroundPackageActionRunner: the dialog OK runs the add/remove operation, which
+	/// is the restore).</summary>
+	public bool WasApplied { get; private set; }
+
 	/// <summary>Package versions keyed by id for the current install state.</summary>
 	public IReadOnlyDictionary<string, string> InstalledVersions {
 		get {
@@ -290,6 +296,7 @@ public class ManagePackagesDialog : DialogWindow
 				MainWindow.Instance.Output ("[manage-pkgs] error saving");
 			return false;
 		}
+		WasApplied = true;
 		Close ();
 		return true;
 	}

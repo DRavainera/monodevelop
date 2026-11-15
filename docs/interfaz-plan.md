@@ -6160,3 +6160,37 @@ Avalonia: feature validada en vivo. GTK `--old-gui`: **build 0 errores** + runti
 **Archivos (1 A + 2 M, +1145/−41, sin submódulos):** `main/src/core/MonoDevelop.Startup.Avalonia/Views/ErrorsPad.cs` (**A**, 954), `main/src/core/MonoDevelop.Startup.Avalonia/Views/MainWindow.axaml.cs` (+189/−40), `main/src/core/MonoDevelop.Startup.Avalonia/Program.cs` (+1/−1).
 
 + docs ×3 (este §, `session_summary.md` §49, nota en `migration-status-report.md`). Artefactos: `~/opencode/errors_pad_qa/` (fixture `errpad_fixture/`, `qa_brief.md`, logs `fresh.log`/`restore.log`/`round*.log`, screenshots, reportes round 1-2).
+
+## 2026-11-14 — M31-k Port del pad Package Console (DefaultMonitorPad GTK, output pad NuGet) a la shell Avalonia — CERRADO (QA VERDE, 0 hallazgos)
+
+**Estado: CERRADO (QA APROBADO, 0 hallazgos abiertos; validación recursiva §18.5 del Tester QA Senior, 2 pases: ROJO 1 mayor (F-001) → VERDE 0).** El operador pidió portar el **Package Console** por completo: comportamientos, la **barra de la derecha del pad** (toolbar), iconos e imágenes y funcionalidades.
+
+**Fuente (leída línea a línea):** el "Package Console" NO es un pad custom del addin NuGet — es un **`DefaultMonitorPad` genérico** creado por `PackageManagementProgressMonitorFactory.CreatePackageConsoleOutputMonitor()` → `ProgressMonitors.GetOutputProgressMonitor("PackageConsole", "Package Console", Stock.Console, visible: false)`. Rasgo distintivo: **toolbar DERECHA** (`DockItemToolbar`, `DockPositionType.Right`) — Stop / Clear console / Pin — sobre un `LogView` de solo-lectura.
+
+**Diseño (un control nuevo, sin separación de carpetas §18.4).**
+- **`PackageConsolePad.cs` (361 líneas, nuevo)** en `MonoDevelop.Startup.Avalonia/Views/` (mismo patrón que `ErrorsPad.cs`):
+  - **Toolbar derecha** (legacy `DockItemToolbar`, `DockPositionType.Right`): Stop (`md-stop`, solo habilitado mientras corre una operación — legacy `buttonStop.Sensitive`), Clear console (`md-clear`), Pin toggle (`md-pin-up`↔`md-pin-down`, el toggle cambia el icono — legacy `OnButtonPinClick`). PNGs stock legacy vía `IconService`.
+  - **Body (legacy `LogView`)**: consola monospace de solo-lectura, un `TextBlock` por línea coloreada (error rojo negrita `#c42c3e`/dark `#f48771`, debug azul `#5785bd`/dark `#9cc8ff`, info gris `#767676`, resto `IdeFgBrush`), wrap + auto-scroll al final, cap legacy 4000×1024 y sanitizer ANSI legacy (`\e[...m`, `\b`).
+  - **Estado (legacy `DefaultMonitorPad`)**: nace auto-oculto; `BeginOperation` (legacy `BeginProgress`, `ClearOnBeginProgress` default true); `EndOperation` (legacy `EndProgress`) devuelve la última línea error/aviso/éxito para la barra de estado; Stop → `StopRequested` (legacy `monitor.Cancel`).
+- **Integración (`MainWindow.axaml.cs`, +216/−9)**: tab `packageconsole` (grupo bottom, auto-oculto, icono `md-console`); **`RunPackageOperation`** = `dotnet restore` REAL cuyo log (stdout+stderr clasificados por línea) fluye por la consola; el pad se abre al frente (legacy `ShowPackageConsole`→`BringToFront`); Stop cancela la operación (CTS propio, no el build); `Restore NuGet Packages` (menú) y `Manage NuGet Packages` (solo si el diálogo aplicó cambios, flag `WasApplied` — análogo al `BackgroundPackageActionRunner` legacy) la disparan; `FindPad`/`RefreshPadIcons`/`RestorePadsLayout` lo incluyen; probe QA `--packageconsole`.
+- **`ViewCommands.cs` (+4, solo rama Avalonia)**: View > Pads → "Package Console". Rama GTK intacta.
+
+**Matiz clave — consola por líneas, no `Inlines`.** Verificado en Avalonia 12.1.2 (test `~/opencode/package_console_qa/inline_test/`): `TextBlock.Text` NO se computa de `Inlines` (son propiedades independientes) y `Inlines = null` hace que el siguiente `Add` lance NRE. Por eso el body es un `StackPanel` con un `TextBlock` por línea: el color por línea, `LineCount`, `LastStatusMessage`, el cap (descarta líneas antiguas) y el clear quedan consistentes y assertables headless.
+
+**Matiz clave — clasificación por línea de stdout+stderr.** El banner first-run "Welcome to .NET" del SDK se emite por **stderr**; pintarlo todo de rojo (stderr→error) rompería la fidelidad. La clasificación es por contenido (`: error `/`error `→rojo negrita, `: warning `→azul, resto foreground normal) y se aplica a ambos streams.
+
+**Deviaciones documentadas (no hallazgos).** (1) **Pin = solo cosmético** (icono up↔down, paridad del `OnButtonPinClick` visible): el `AllowReuse`/destrucción-del-pad-al-ocultar del legacy no aplica porque la shell no destruye/recrea pads al ocultarlos. (2) El **search-box del `LogView` legacy no se porta** (precedente ErrorsPad: acotar a toolbar `DockItemToolbar` + body). (3) El cap descarta líneas enteras donde el legacy recortaba caracteres (umbral 4 MB, prácticamente inerte).
+
+**Validación (valores medidos).**
+- **Builds 0 errores**: shell Avalonia (TFM `net10.0` y `net10.0-windows`) y proyecto GTK `MonoDevelop.Startup` (garantía §18.4 = build 0 errores; el csproj GTK no referencia el proyecto Avalonia).
+- **Probe `--packageconsole` (perfil fresh, fixture `pkconsole_fixture/PkConsole.sln`, 1 proyecto net10.0)**: oráculos `tab label=Package Console icon=md-console host=bottom`; `starts hidden=True`; `after-show visible=True`; `begin → working=True pinned=False stop-enabled=True pin-icon=md-pin-up lines=0`; `end → status='error NU1107: Version conflict detected for QA.Pkg'`; `clear → lines=0`; `pin md-pin-up → md-pin-down pinned=True`; `stop-enabled idle=False`; `restore started`/`restore exited 0`; `real-restore shown=True (was True) lines=22 laststatus='[Package Console] restore PkConsole.sln succeeded (exit code 0)'`; 0 excepciones.
+- **Capturas a ojo**: pre-fix `shot_pkgconsole.png`/`shot_pkgconsole2.png` (toolbar aún horizontal — origen de F-001); post-fix `shot_fix_f001.png`/`qa_shot_r2.png` + zoom `pad_right_zone.png` (barra Stop/Clear/Pin apilada **en columna vertical** a la DERECHA del pad), iconos legibles, consola monospace con el restore real coloreado (banner del SDK en foreground normal).
+- **QA §18.5 (recursivo)**: round 1 **ROJO 1 mayor** (F-001: toolbar en fila horizontal vs `VBox` legacy) → dev corrigió (`Orientation.Vertical`, spacing 3) → round 2 **VERDE 0 hallazgos** (13/13 oráculos, F-001 resuelto con evidencia de captura). Reportes `~/opencode/package_console_qa/qa_report_round{1,2}.md`.
+
+**Nota 18.4 (GTK).** Build 0 errores + la ruta `--old-gui` intacta: `ViewCommands.cs` es `#if !AVALONIA_SHELL`/`#else` y solo se tocó la rama Avalonia; el csproj GTK no compila ningún archivo de la shell. Paridad de diseño validada contra `DefaultMonitorPad.cs`/`LogView.cs` línea a línea.
+
+**Queda pendiente** — desviaciones documentadas (pin cosmético, search-box del LogView no portado, cap por líneas).
+
+**Archivos (1 A + 4 M, +589/−10, sin submódulos):** `MonoDevelop.Startup.Avalonia/Views/PackageConsolePad.cs` (**A**, 361), `MonoDevelop.Startup.Avalonia/Views/MainWindow.axaml.cs` (+216/−9), `MonoDevelop.Startup.Avalonia/Program.cs` (+1/−1), `MonoDevelop.Startup.Avalonia/Views/ManagePackagesDialog.axaml.cs` (+7), `MonoDevelop.Ide/MonoDevelop.Ide.Commands/ViewCommands.cs` (+4).
+
++ docs ×3 (este § M31-k, `session_summary.md` §50, nota en `migration-status-report.md`). Artefactos: `~/opencode/package_console_qa/` (fixture `pkconsole_fixture/`, `pkconsole_probe.sh`, `qa_brief.md`, logs, capturas, reportes, test `inline_test/`).

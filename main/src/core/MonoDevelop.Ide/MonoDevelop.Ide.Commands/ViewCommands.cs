@@ -528,6 +528,10 @@ namespace MonoDevelop.Ide.Commands
 			AddPad (pl, "tasks", "Tasks");
 			AddPad (pl, "codeissues", "Code Issues");
 			AddPad (pl, "searchresults", "Search Results");
+			// Package Console (NuGet add-in's output pad, ported as an Avalonia
+			// bottom pad like the other auto-hidden pads): listed with them so it
+			// is reachable from View > Pads, check-state from real visibility.
+			AddPad (pl, "packageconsole", "Package Console");
 			// F# Interactive (F# port, phase 4): a bottom pad (legacy
 			// defaultPlacement="Bottom"), so it lists with the other bottom pads.
 			AddPad (pl, "fsi", "F# Interactive");

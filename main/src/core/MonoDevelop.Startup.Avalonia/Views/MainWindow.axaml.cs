@@ -3903,6 +3903,68 @@ public partial class MainWindow : Window
 					Output ($"[managepkgs-qa] model after-clean refs={after?.References.Count ?? 0} package={after?.PackageReferences.Count ?? 0}");
 				} else
 					Output ("[managepkgs-qa] no project");
+			} else if (qa == "--packageconsole") {
+				// QA: Package Console pad (port of the legacy DefaultMonitorPad / NuGet
+				// output pad). Verifies the tab (label + legacy md-console icon), the
+				// auto-hidden start state, the right-side toolbar (Stop/Clear/Pin), the
+				// colored console lines + status report, the clear, the pin icon swap,
+				// and — with a solution loaded — a REAL `dotnet restore` streamed through
+				// the console (the operation the pad exists for), then dumps the model.
+				var pc = packageConsolePad;
+				if (pc is null) {
+					Output ("[pkgconsole] (pad missing)");
+					return;
+				}
+				var (pcHost, pcTab) = FindPad ("packageconsole");
+				Output ("[pkgconsole] tab label=" + pcTab?.Label + " icon=" + pcTab?.Icon + " host=" + (pcHost is not null ? pcHost.Id : "(none)"));
+				Output ("[pkgconsole] starts hidden=" + !IsPadVisible ("packageconsole"));
+
+				// Legacy DefaultMonitorPad: the pad is auto-hidden until an operation
+				// shows it (the NuGet factory creates it with visible=false).
+				SetPadVisible ("packageconsole", true);
+				Output ("[pkgconsole] after-show visible=" + IsPadVisible ("packageconsole"));
+
+				// Begin an operation (legacy BeginProgress, ClearOnBeginProgress=true):
+				// console starts empty, Stop enabled, working on.
+				pc.BeginOperation (clearOnBeginProgress: true);
+				Output ("[pkgconsole] begin → " + pc.DumpStatus ());
+				pc.AppendLine ("[Package Console] Restoring packages for QA...");
+				pc.AppendInfo ("  Restored package Foo 1.0.0");
+				pc.AppendDebug ("  (debug) source nuget.org");
+				pc.AppendError ("  error NU1107: Version conflict detected for QA.Pkg");
+				await System.Threading.Tasks.Task.Delay (150); // let the auto-scroll post
+				string status = pc.EndOperation ();
+				Output ("[pkgconsole] end → status='" + status + "'");
+				Output ("[pkgconsole] dump → " + pc.DumpStatus ());
+
+				// Legacy OnButtonClearClick: empties the console.
+				pc.QaClear ();
+				Output ("[pkgconsole] clear → lines=" + pc.LineCount ());
+
+				// Legacy OnButtonPinClick: the pin toggle swaps the icon (up → down).
+				string pinBefore = pc.PinIconId;
+				pc.QaTogglePin ();
+				string pinAfter = pc.PinIconId;
+				Output ("[pkgconsole] pin " + pinBefore + " → " + pinAfter + " pinned=" + pc.IsPinned);
+				pc.QaTogglePin (); // back to un-pinned (legacy default)
+
+				// Legacy OnButtonStopClick → monitor.Cancel: enabled only while working.
+				Output ("[pkgconsole] stop-enabled idle=" + pc.IsStopEnabled);
+
+				// REAL operation: with a solution loaded, run `dotnet restore` through
+				// the console (the operation the pad exists for) and verify the pad is
+				// shown, has lines, and reports a status.
+				if (!string.IsNullOrEmpty (loadedSolutionPath)) {
+					var shownBefore = IsPadVisible ("packageconsole");
+					await RunPackageOperation ("restore", "dotnet", $"restore \"{loadedSolutionPath}\"");
+					await System.Threading.Tasks.Task.Delay (200); // let the final status post
+					Output ("[pkgconsole] real-restore shown=" + IsPadVisible ("packageconsole")
+						+ " (was " + shownBefore + ") lines=" + pc.LineCount ()
+						+ " laststatus='" + pc.LastStatusMessage () + "'");
+					Output ("[pkgconsole] real-restore dump → " + pc.DumpStatus ());
+				} else {
+					Output ("[pkgconsole] real-restore skipped (no solution loaded)");
+				}
 			} else if (qa == "--extensionsdlg") {
 				// QA: show the Extensions (Add-in Manager) dialog with the chrome frame.
 				_ = new AddinManagerDialog { WindowStartupLocation = WindowStartupLocation.CenterOwner }.ShowDialog (this);
@@ -4468,7 +4530,7 @@ public partial class MainWindow : Window
 				|| qaArg.StartsWith ("--outline", StringComparison.Ordinal)
 				|| qaArg.StartsWith ("--unittests", StringComparison.Ordinal)
 				|| qaArg is "--classes" or "--codeissues" or "--errorspad" or "--helptree" or "--toolbox"
-				|| qaArg is "--fsi" or "--fsls")
+				|| qaArg is "--fsi" or "--fsls" or "--packageconsole")
 				return;
 			var raw = SettingsStore.GetString ("Monodevelop.PadsLayout");
 			if (string.IsNullOrWhiteSpace (raw))
@@ -4910,6 +4972,13 @@ public partial class MainWindow : Window
 	// ---------- Pads (legacy DockFrame groups) ----------
 
 	TextBox? outputTextBox;
+	// Package Console pad (port of the legacy DefaultMonitorPad / NuGet output pad):
+	// the console + right toolbar live in PackageConsolePad; MainWindow feeds it the
+	// NuGet operation output and opens it on first use (legacy ShowPackageConsole).
+	PackageConsolePad? packageConsolePad;
+	// The in-flight package operation (restore) the console's Stop button cancels
+	// (legacy monitor.Cancel → the monitor's own CancellationTokenSource).
+	System.Threading.CancellationTokenSource? packageRestoreCts;
 	// Errors pad (port of the legacy ErrorListPad): the pad table lives in
 	// ErrorsPad; MainWindow keeps the owner-side state — the parsed diagnostics
 	// (buildErrors) and the row objects fed to the pad in arrival order.
@@ -5216,6 +5285,30 @@ public partial class MainWindow : Window
 		outputTextBox.Bind (TextBox.ForegroundProperty, Application.Current.GetResourceObservable ("IdeFgBrush"));
 		BottomPads.AddTab (new PadHost.PadTab { Id = "output", Label = "Output", Icon = "md-output-icon", Content = outputTextBox });
 
+		// Package Console pad (legacy DefaultMonitorPad, the NuGet add-in's output
+		// pad, auto-hidden): a read-only monospace console (legacy LogView, colored
+		// lines, auto-scroll) with the legacy RIGHT-side DockItemToolbar — Stop /
+		// Clear console / Pin (icons md-stop / md-clear / md-pin-up↔md-pin-down,
+		// legacy Stock.Stop / Stock.Broom / Stock.PinUp-PinDown). The tab icon is
+		// the legacy Stock.Console (md-console). The NuGet operations (Manage
+		// packages Add/Remove + Restore) feed it and open it on first use
+		// (legacy ShowPackageConsole → BringToFront); Stop cancels the running
+		// operation; the pin toggle swaps its icon (legacy OnButtonPinClick).
+		packageConsolePad = new PackageConsolePad ();
+		packageConsolePad.StopRequested += () => {
+			// Legacy monitor.Cancel: cancel the running package operation (the restore
+			// process), not a build — each monitor cancels only its own operation.
+			packageRestoreCts?.Cancel ();
+			packageConsolePad?.EndOperation ();
+		};
+		BottomPads.AddTab (new PadHost.PadTab {
+			Id = "packageconsole",
+			Label = PackageConsolePad.PadLabel,
+			Icon = PackageConsolePad.PadIcon,
+			Content = packageConsolePad.Root,
+			Visible = false,
+		});
+
 		// Errors pad (legacy ErrorListPad, auto-hidden): a real table — toolbar with
 		// the severity toggles (N Errors / N Warnings / N Messages), a "Build Output"
 		// toggle that opens the build text log beside the rows, and a search entry;
@@ -5443,7 +5536,7 @@ public partial class MainWindow : Window
 		"toolbox" or "properties" or "documentoutline" or "unittests" => (RightPads, RightPads.Tabs.FirstOrDefault (t => t.Id == padId)),
 		"output" or "errors" or "tasks" or "codeissues" or "searchresults"
 			or "callstack" or "locals" or "watch" or "breakpoints" or "threads" or "bookmarks"
-			or "attach" or "fsi"
+			or "attach" or "fsi" or "packageconsole"
 			=> (BottomPads, BottomPads.Tabs.FirstOrDefault (t => t.Id == padId)),
 		_ => (null, null),
 	};
@@ -8215,6 +8308,7 @@ public partial class MainWindow : Window
 		RightPads.RefreshIcons ();
 		BottomPads.RefreshIcons ();
 		errorsPad?.RefreshIcons ();
+		packageConsolePad?.RefreshIcons ();
 	}
 
 	// Legacy MainToolbar behavior: the debug step buttons live right of the
@@ -8910,20 +9004,35 @@ public partial class MainWindow : Window
 				return;
 			}
 			var mDlg = new ManagePackagesDialog (mProj, loadedSolutionPath);
-			mDlg.Closed += (_, _) => {
-				foreach (var a in mDlg.AddedPackages)
-					Output ($"[manage-pkgs] added '{a}' to {Path.GetFileName (mProj)}");
-				foreach (var r in mDlg.RemovedPackages)
-					Output ($"[manage-pkgs] removed '{r}' from {Path.GetFileName (mProj)}");
-			};
 			_ = mDlg.ShowDialog (this);
+			foreach (var a in mDlg.AddedPackages)
+				Output ($"[manage-pkgs] added '{a}' to {Path.GetFileName (mProj)}");
+			foreach (var r in mDlg.RemovedPackages)
+				Output ($"[manage-pkgs] removed '{r}' from {Path.GetFileName (mProj)}");
+			// Legacy ManagePackagesDialogRunner.OK → BackgroundPackageActionRunner:
+			// the applied add/remove set runs as a package operation, shown in the
+			// Package Console. The shell's equivalent of that operation is a
+			// `dotnet restore` on the project (it resolves the new references); the
+			// console streams the restore log and reports the result.
+			if (mDlg.WasApplied) {
+				var restoreTarget = !string.IsNullOrEmpty (loadedSolutionPath) ? loadedSolutionPath : mProj;
+				_ = RunPackageOperation ("restore", "dotnet", $"restore \"{restoreTarget}\"");
+			}
 			return;
 		}
 		case "MonoDevelop.PackageManagement.Commands.UpdateAllPackagesInSolution":
 			Output ("[manage-pkgs] Update NuGet Packages: no solution-wide update in the shell (open Manage NuGet Packages per project)");
 			return;
 		case "MonoDevelop.PackageManagement.Commands.RestorePackages":
-			Output ("[manage-pkgs] Restore NuGet Packages: no package restore in the shell (dotnet restore covers the projects)");
+			// Legacy RestorePackagesHandler: runs the restore and shows the Package
+			// Console (the NuGet add-in's output pad) with the restore log. The shell
+			// runs `dotnet restore` on the solution's projects through the console
+			// pad (real, cancellable operation), exactly the way the legacy
+			// ProgressMonitor feeds the DefaultMonitorPad.
+			if (!string.IsNullOrEmpty (loadedSolutionPath))
+				_ = RunPackageOperation ("restore", "dotnet", $"restore \"{loadedSolutionPath}\"");
+			else
+				Output ("[manage-pkgs] Restore NuGet Packages: no solution loaded");
 			return;
 		case "MonoDevelop.Ide.Commands.FileCommands.ReloadFile":
 			// Legacy ReloadFile: reverts the active editor to the on-disk content.
@@ -13036,6 +13145,104 @@ public partial class MainWindow : Window
 				p.Kill (true);
 			} catch { }
 			Output ("[run] stopped");
+		}
+	}
+
+	/// <summary>
+	/// Runs a NuGet package operation (e.g. restore) through the Package Console pad —
+	/// the Avalonia equivalent of the legacy ProgressMonitor feeding the
+	/// DefaultMonitorPad. Opens the pad and brings it to front (legacy
+	/// ShowPackageConsole → BringToFront), clears it for a fresh operation (legacy
+	/// ClearOnBeginProgress, default true), streams every process line to the console
+	/// with the legacy color scheme, and on exit reports the last error/warning/
+	/// success line to the status line (legacy EndProgress → StatusBar.ShowMessage).
+	/// The pad's Stop button cancels THIS operation (legacy monitor.Cancel).
+	/// </summary>
+	async System.Threading.Tasks.Task RunPackageOperation (string op, string exe, string args)
+	{
+		var pad = packageConsolePad;
+		if (pad is null) {
+			Output ("[pkconsole] pad not ready");
+			return;
+		}
+
+		// Legacy ShowPackageConsole → pad.BringToFront: show + select the pad.
+		SetPadVisible ("packageconsole", true);
+
+		// A clean display name for the operation target: the args are a full
+		// command (e.g. `restore "/abs/path.sln"`), so take the last quoted token's
+		// file name (no trailing quote).
+		string target = Path.GetFileName (args.Split ('"').Where (s => s.Length > 0).LastOrDefault () ?? args);
+
+		// Legacy BeginProgress (ClearOnBeginProgress = true): fresh console per op.
+		pad.BeginOperation (clearOnBeginProgress: true);
+
+		packageRestoreCts?.Cancel ();
+		var cts = new System.Threading.CancellationTokenSource ();
+		packageRestoreCts = cts;
+
+		string lastStatus = "";
+		try {
+			var psi = new System.Diagnostics.ProcessStartInfo (exe, args) {
+				RedirectStandardOutput = true,
+				RedirectStandardError = true,
+				UseShellExecute = false,
+				CreateNoWindow = true,
+			};
+			var proc = System.Diagnostics.Process.Start (psi);
+			if (proc is null) {
+				pad.AppendError ("Failed to start " + exe);
+				lastStatus = pad.EndOperation ();
+				if (lastStatus.Length > 0)
+					StatusText!.Text = lastStatus;
+				return;
+			}
+			Output ($"[pkconsole] {op} started");
+			pad.AppendLine ($"[Package Console] {op}: {exe} {args}");
+
+			await System.Threading.Tasks.Task.Run (async () => {
+				// Legacy LogView tag scheme, applied per line: error lines bold red,
+				// warning lines the information blue, the rest normal foreground. Both
+				// streams are classified the same way — the .NET SDK emits its first-run
+				// banner on STDERR, which must not all be painted as an error.
+				void EmitLine (string line)
+				{
+					Avalonia.Threading.Dispatcher.UIThread.Post (() => {
+						if (line.Contains (": error ", StringComparison.Ordinal) || line.StartsWith ("error ", StringComparison.OrdinalIgnoreCase))
+							pad.AppendError (line);
+						else if (line.Contains (": warning ", StringComparison.Ordinal) || line.StartsWith ("warning ", StringComparison.OrdinalIgnoreCase))
+							pad.AppendDebug (line);
+						else
+							pad.AppendLine (line);
+					});
+				}
+				proc.OutputDataReceived += (_, e) => { if (e.Data is not null) EmitLine (e.Data); };
+				proc.ErrorDataReceived += (_, e) => { if (e.Data is not null) EmitLine (e.Data); };
+				proc.BeginOutputReadLine ();
+				proc.BeginErrorReadLine ();
+				await proc.WaitForExitAsync (cts.Token);
+			});
+			var code = proc.ExitCode;
+			var cancelled = cts.IsCancellationRequested;
+			if (cancelled) {
+				pad.AppendError ($"[Package Console] {op} cancelled by user");
+				Output ($"[pkconsole] {op} cancelled");
+			} else {
+				string outcome = code == 0 ? "succeeded" : "FAILED";
+				pad.AppendLine ($"[Package Console] {op} {target} {outcome} (exit code {code})");
+				Output ($"[pkconsole] {op} exited {code}");
+			}
+		} catch (System.OperationCanceledException) {
+			pad.AppendError ($"[Package Console] {op} cancelled by user");
+			Output ($"[pkconsole] {op} cancelled");
+		} catch (Exception ex) {
+			pad.AppendError ("[Package Console] " + ex.Message);
+			Output ("[pkconsole] " + op + " failed: " + ex.Message);
+		} finally {
+			// Legacy EndProgress: last error/warning/success → status bar.
+			lastStatus = pad.EndOperation ();
+			if (lastStatus.Length > 0)
+				StatusText!.Text = lastStatus;
 		}
 	}
 
