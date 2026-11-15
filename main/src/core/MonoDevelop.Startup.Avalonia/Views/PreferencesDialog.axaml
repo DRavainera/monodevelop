@@ -691,6 +691,108 @@
                         Content="Show function type signatures in the editor" />
             </StackPanel>
 
+            <!-- ===== DocFood (legacy DocFood options group: the GTK panels were inert
+                 stubs; this port wires the real persistence — WordLists / WordExpansions /
+                 Macros / Rules — as a DocFood.config.xml schema string in SettingsStore,
+                 the same XML the legacy DocConfig.Read understands) ===== -->
+            <StackPanel x:Name="PanelDocFoodOptions" Margin="16" Spacing="8" IsVisible="False">
+              <CheckBox x:Name="DfEnabled" Content="Enable automatic documentation" />
+              <TextBlock Text="Macros" FontWeight="SemiBold" />
+              <Grid ColumnDefinitions="*,Auto">
+                <ListBox x:Name="DfMacrosList" Grid.Column="0" MinHeight="120" MaxHeight="180"
+                         SelectionMode="Single" Margin="0,0,6,0" />
+                <StackPanel Grid.Column="1" Spacing="6">
+                  <Button Content="Add…" Click="OnDfMacroAdd" />
+                  <Button Content="Remove" Click="OnDfMacroRemove" />
+                </StackPanel>
+              </Grid>
+              <TextBlock Opacity="0.7" FontSize="11" TextWrapping="Wrap"
+                         Text="Macros expand as ${Tag} in the documentation templates. Stored in the DocFood config (Macros), the same XML the generator reads." />
+            </StackPanel>
+
+            <StackPanel x:Name="PanelDocFoodExpansions" Margin="16" Spacing="8" IsVisible="False">
+              <TextBlock Opacity="0.7" FontSize="11" TextWrapping="Wrap"
+                         Text="Expansions map an abbreviation to its full word (e.g. 'arg' → 'argument') so the generator reads 'arguments' instead of 'arg'." />
+              <TextBlock Text="Expansions" FontWeight="SemiBold" />
+              <Grid ColumnDefinitions="*,Auto">
+                <ListBox x:Name="DfExpansionsList" Grid.Column="0" MinHeight="140" MaxHeight="220"
+                         SelectionMode="Single" Margin="0,0,6,0" />
+                <StackPanel Grid.Column="1" Spacing="6">
+                  <Button Content="Add…" Click="OnDfExpansionAdd" />
+                  <Button Content="Remove" Click="OnDfExpansionRemove" />
+                </StackPanel>
+              </Grid>
+            </StackPanel>
+
+            <StackPanel x:Name="PanelDocFoodAcronyms" Margin="16" Spacing="8" IsVisible="False">
+              <TextBlock Opacity="0.7" FontSize="11" TextWrapping="Wrap"
+                         Text="All words that consist of only consonants (like sql) and/or upper case letters (like HTML) are treated as acronyms. However the acronym recognition can be improved by defining acronyms." />
+              <TextBlock Text="Acronyms" FontWeight="SemiBold" />
+              <Grid ColumnDefinitions="*,Auto" RowDefinitions="*,Auto">
+                <ListBox x:Name="DfAcronymsList" Grid.Column="0" Grid.Row="0" Grid.RowSpan="2"
+                         MinHeight="140" MaxHeight="220" SelectionMode="Single" Margin="0,0,6,0" />
+                <Button Grid.Column="1" Grid.Row="0" Content="Remove" Click="OnDfAcronymRemove"
+                        Margin="0,0,0,6" />
+                <StackPanel Grid.Column="1" Grid.Row="1" Orientation="Horizontal" Spacing="6">
+                  <TextBox x:Name="DfAcronymEntry" MinWidth="120" />
+                  <Button Content="Add" Click="OnDfAcronymAdd" />
+                </StackPanel>
+              </Grid>
+            </StackPanel>
+
+            <StackPanel x:Name="PanelDocFoodNoThe" Margin="16" Spacing="8" IsVisible="False">
+              <TextBlock Opacity="0.7" FontSize="11" TextWrapping="Wrap"
+                         Text="Words that never take the 'the' prefix in generated summaries (e.g. 'the index' becomes 'the index' only if 'index' is not in this list)." />
+              <TextBlock Text='"No the" Words' FontWeight="SemiBold" />
+              <Grid ColumnDefinitions="*,Auto" RowDefinitions="*,Auto">
+                <ListBox x:Name="DfNoTheList" Grid.Column="0" Grid.Row="0" Grid.RowSpan="2"
+                         MinHeight="140" MaxHeight="220" SelectionMode="Single" Margin="0,0,6,0" />
+                <Button Grid.Column="1" Grid.Row="0" Content="Remove" Click="OnDfNoTheRemove"
+                        Margin="0,0,0,6" />
+                <StackPanel Grid.Column="1" Grid.Row="1" Orientation="Horizontal" Spacing="6">
+                  <TextBox x:Name="DfNoTheEntry" MinWidth="120" />
+                  <Button Content="Add" Click="OnDfNoTheAdd" />
+                </StackPanel>
+              </Grid>
+            </StackPanel>
+
+            <StackPanel x:Name="PanelDocFoodOfThe" Margin="16" Spacing="10" IsVisible="False">
+              <TextBlock Opacity="0.7" FontSize="11" TextWrapping="Wrap"
+                         Text="Words that may be reordered with the leading 'of the' (e.g. 'a list of the items') and the prefix words that trigger the reordering." />
+              <TextBlock Text='"Of the" Reordering' FontWeight="SemiBold" />
+              <Grid ColumnDefinitions="*,Auto" RowDefinitions="*,Auto">
+                <ListBox x:Name="DfOfTheList" Grid.Column="0" Grid.Row="0" Grid.RowSpan="2"
+                         MinHeight="110" MaxHeight="150" SelectionMode="Single" Margin="0,0,6,0" />
+                <Button Grid.Column="1" Grid.Row="0" Content="Remove" Click="OnDfOfTheRemove"
+                        Margin="0,0,0,6" />
+                <StackPanel Grid.Column="1" Grid.Row="1" Orientation="Horizontal" Spacing="6">
+                  <TextBox x:Name="DfOfTheEntry" MinWidth="120" />
+                  <Button Content="Add" Click="OnDfOfTheAdd" />
+                </StackPanel>
+              </Grid>
+              <TextBlock Text="Prefix words for the reordering" FontWeight="SemiBold" />
+              <Grid ColumnDefinitions="*,Auto" RowDefinitions="*,Auto">
+                <ListBox x:Name="DfPrefixTheList" Grid.Column="0" Grid.Row="0" Grid.RowSpan="2"
+                         MinHeight="110" MaxHeight="150" SelectionMode="Single" Margin="0,0,6,0" />
+                <Button Grid.Column="1" Grid.Row="0" Content="Remove" Click="OnDfPrefixRemove"
+                        Margin="0,0,0,6" />
+                <StackPanel Grid.Column="1" Grid.Row="1" Orientation="Horizontal" Spacing="6">
+                  <TextBox x:Name="DfPrefixEntry" MinWidth="120" />
+                  <Button Content="Add" Click="OnDfPrefixAdd" />
+                </StackPanel>
+              </Grid>
+            </StackPanel>
+
+            <Grid x:Name="PanelDocFoodRules" Margin="16" RowDefinitions="Auto,*,Auto" IsVisible="False">
+              <TextBlock Grid.Row="0" Opacity="0.7" FontSize="11" TextWrapping="Wrap"
+                         Text="The documentation rules are defined using XML. Click Help for a full explanation."
+                         Margin="0,0,0,6" />
+              <TextBox x:Name="DfRulesText" Grid.Row="1" AcceptsReturn="True" TextWrapping="NoWrap"
+                       FontSize="11" />
+              <Button Grid.Row="2" Content="Help" Click="OnDfRulesHelp" HorizontalAlignment="Left"
+                      Margin="0,8,0,0" />
+            </Grid>
+
             <StackPanel x:Name="PanelPlaceholder" Margin="16" IsVisible="False" Spacing="8">
               <TextBlock Text="This options panel is provided by an add-in and has not been wired to the new UI yet."
                          TextWrapping="Wrap" Opacity="0.7" />

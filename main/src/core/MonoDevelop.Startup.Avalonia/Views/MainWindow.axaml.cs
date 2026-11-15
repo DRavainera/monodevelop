@@ -516,6 +516,13 @@ public partial class MainWindow : Window
 				var dlg = new PreferencesDialog { WindowStartupLocation = WindowStartupLocation.CenterOwner };
 				dlg.QaFSharpRoundTrip ();
 				dlg.Close ();
+			} else if (qa == "--prefs-docfood") {
+				// QA (DocFood port): exercise the DocFood config persistence round-trip
+				// (DocFood.Config / DocFood.Enabled keys in the GTK-compatible store),
+				// dump the loaded panel, then restore.
+				var dlg = new PreferencesDialog { WindowStartupLocation = WindowStartupLocation.CenterOwner };
+				dlg.QaDocFoodRoundTrip ();
+				dlg.Close ();
 			} else if (qa.StartsWith ("--prefs=", StringComparison.Ordinal)) {
 				var arg = qa.Substring ("--prefs=".Length);
 				var dlg = new PreferencesDialog { WindowStartupLocation = WindowStartupLocation.CenterOwner };

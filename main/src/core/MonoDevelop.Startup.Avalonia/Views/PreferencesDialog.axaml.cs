@@ -14,6 +14,7 @@ using Avalonia.Media.Imaging;
 using Avalonia.Platform.Storage;
 using Avalonia.Styling;
 using MonoDevelop.Ide.Services;
+using MonoDevelop.AvaloniaShell.Services;
 using MonoDevelop.Components.Commands;
 using MonoDevelop.AvaloniaAddons.Manifests;
 using NuGet.Configuration;
@@ -79,6 +80,10 @@ public partial class PreferencesDialog : Window
 		"nugetgeneral", "packagesources", "debugger", "netcore", "runtimes", "perfdiag", "xml", "intellisense-appearance", "intellisense-behavior", "analysis", "csharpformat", "xmlschemas",
 		// F# port phase 6: the legacy FSharpSettingsPanel (global options, FSharpBinding.* keys).
 		"fsharp",
+		// DocFood options group (Preferences > Other > DocFood): the legacy GTK panels were
+		// inert stubs; this port wires real persistence (WordLists/WordExpansions/Macros/Rules).
+		"docfoodoptions", "docfoodexpansions", "docfoodacronyms",
+		"docfoodnothe", "docfoodofthereordering", "docfoodrules",
 	};
 
 	string? pendingLanguage;
@@ -87,6 +92,10 @@ public partial class PreferencesDialog : Window
 
 	// Editable models of the panels (re-stored on OK like OptionsPanel.ApplyChanges).
 	List<SettingsStore.ExternalTool> tools = new ();
+
+	// DocFood: the editable config (WordLists/WordExpansions/Macros/Rules), loaded once
+	// and re-stored as a SettingsStore string on OK (legacy ApplyChanges).
+	DocFoodConfig docFood = DocFoodConfig.Load ();
 
 	public PreferencesDialog ()
 	{
@@ -134,6 +143,7 @@ public partial class PreferencesDialog : Window
 		FsCompilerBrowse!.Click += OnFsCompilerBrowse;
 		FsCompilerUseDefault!.IsCheckedChanged += (_, _) => UpdateFsCompilerDisplay (FsCompilerUseDefault!.IsChecked == true);
 		SetupCmEditors ();
+		LoadDocFoodPanel ();
 		LoadCommitMessagePanel ();
 		LoadChangeLogPanel ();
 		GenWordWrap!.IsCheckedChanged += (_, _) => GenWordWrapGlyphs!.IsEnabled = GenWordWrap.IsChecked == true;
@@ -192,6 +202,9 @@ public partial class PreferencesDialog : Window
 		["/MonoDevelop/Ide/GlobalOptionsDialog/Other"] = new (StringComparer.Ordinal) {
 			["FSharp"] = "fsharp",
 			["Performance Diagnostics"] = "perfdiag",
+			// The add-in manifest registers the DocFood node with id "DocFood"; map it to
+			// the skeleton group id so the merge dedups instead of adding a second leaf.
+			["DocFood"] = "docfood",
 		},
 	};
 
@@ -359,7 +372,17 @@ public partial class PreferencesDialog : Window
 		Cat ("Other",
 			Leaf ("feedback", "Feedback", "md-prefs-feedback"),
 			Leaf ("maintenance", "MonoDevelop Maintenance", "md-prefs-maintenance"),
-			Leaf ("fsharp", "F# Settings", "md-prefs-source")),
+			Leaf ("fsharp", "F# Settings", "md-prefs-source"),
+			// DocFood options group (legacy group: the 6 sub-panels). The id "docfood"
+			// dedups with the add-in manifest node under /Other (same label "DocFood").
+			new PrefsNode ("docfood", "DocFood", "md-prefs-generic", new () {
+				Leaf ("docfoodoptions", "Options", "md-prefs-generic"),
+				Leaf ("docfoodexpansions", "Expansions", "md-prefs-generic"),
+				Leaf ("docfoodacronyms", "Acronyms", "md-prefs-generic"),
+				Leaf ("docfoodnothe", "\"No the\" Words", "md-prefs-generic"),
+				Leaf ("docfoodofthereordering", "\"Of the\" Reordering", "md-prefs-generic"),
+				Leaf ("docfoodrules", "Rules", "md-prefs-generic"),
+			})),
 		Cat ("Performance Diagnostics",
 			Leaf ("perfdiag", "General", "md-prefs-performance")),
 	};
@@ -2511,6 +2534,14 @@ public partial class PreferencesDialog : Window
 		PanelCompletionAppearance!.IsVisible = id == "intellisense-appearance";
 		PanelChangeLog!.IsVisible = id == "changelog";
 		PanelFSharp!.IsVisible = id == "fsharp";
+		// DocFood group: the 6 leaves each have a real panel; selecting the group
+		// heading (no panel) falls through to the placeholder (like "SDK Locations").
+		PanelDocFoodOptions!.IsVisible = id == "docfoodoptions";
+		PanelDocFoodExpansions!.IsVisible = id == "docfoodexpansions";
+		PanelDocFoodAcronyms!.IsVisible = id == "docfoodacronyms";
+		PanelDocFoodNoThe!.IsVisible = id == "docfoodnothe";
+		PanelDocFoodOfThe!.IsVisible = id == "docfoodofthereordering";
+		PanelDocFoodRules!.IsVisible = id == "docfoodrules";
 		PanelPlaceholder!.IsVisible = !functionalPanels.Contains (id);
 
 		HeaderTitle!.Text = node.Label;
@@ -2585,6 +2616,7 @@ public partial class PreferencesDialog : Window
 		StoreXmlSchemasPanel ();
 		StoreCompletionAppearancePanel ();
 		StoreFSharpPanel ();
+		StoreDocFoodPanel ();
 		StoreThemePanel ();
 		Close ();
 	}
@@ -2668,6 +2700,320 @@ public partial class PreferencesDialog : Window
 			+ " mutables=" + (FsHighlightMutables!.IsChecked == true)
 			+ " typesigs=" + (FsTypeSignatures!.IsChecked == true)
 			+ " fsc=" + (FsCompilerUseDefault!.IsChecked == true ? "(default)" : FsCompilerPath!.Text));
+	}
+
+	// ---------- DocFood options (legacy group of 6 panels, all of them inert stubs) ----------
+	//
+	// The legacy GTK panels only built their layout; ApplyChanges was empty and the
+	// widgets were never bound to DocConfig, so the options never took effect. This port
+	// wires the real persistence: WordLists / WordExpansions / Macros / Rules are edited
+	// here and stored as a DocFood.config.xml-schema string in SettingsStore (the same
+	// "store a whole XML document as a string" mechanism as UserPreferences FontProperties,
+	// and the same string-key cross-boundary the F# panel uses). The Rules panel is the
+	// legacy editable XML area, bound to the Rules block as raw text.
+
+	// A word-list panel: the list shows the words; Add/Remove edit docFood.WordLists[key].
+	void DfLoadList (ListBox list, string key)
+	{
+		list.Items.Clear ();
+		if (docFood.WordLists.TryGetValue (key, out var words))
+			foreach (var w in words)
+				list.Items.Add (w);
+	}
+
+	void DfRefreshList (ListBox list, string key)
+	{
+		var words = new List<string> ();
+		foreach (var item in list.Items.OfType<string> ())
+			words.Add (item);
+		docFood.WordLists[key] = words;
+	}
+
+	static async System.Threading.Tasks.Task<string> DfPrompt (Window owner, string title, string label)
+	{
+		var dlg = new InputDialog (title, label) { WindowStartupLocation = WindowStartupLocation.CenterOwner };
+		await dlg.ShowDialog (owner);
+		return dlg.Confirmed && !string.IsNullOrWhiteSpace (dlg.Value) ? dlg.Value.Trim () : "";
+	}
+
+	void DfRemoveFromList (ListBox list, string key)
+	{
+		if (list.SelectedItem is not string word)
+			return;
+		list.Items.Remove (word);
+		DfRefreshList (list, key);
+	}
+
+	// Macro: tag -> value, shown as "tag = value". The item IS the exact display
+	// string, so Remove matches it back exactly (F4) instead of Split('=',2), which
+	// would corrupt a tag that itself contains '='.
+	void DfLoadMacros ()
+	{
+		DfMacrosList!.Items.Clear ();
+		foreach (var (tag, value) in docFood.Macros)
+			DfMacrosList!.Items.Add (tag + " = " + value);
+	}
+
+	async void OnDfMacroAdd (object? sender, RoutedEventArgs e)
+	{
+		var tag = await DfPrompt (this, "Add macro", "Macro tag (e.g. True):");
+		if (tag.Length == 0)
+			return;
+		var value = await DfPrompt (this, "Add macro", $"Value for ${tag} (e.g. <c>true</c>):");
+		if (value.Length == 0)
+			return;
+		docFood.Macros[tag] = value;
+		DfLoadMacros ();
+	}
+
+	void OnDfMacroRemove (object? sender, RoutedEventArgs e)
+	{
+		if (DfMacrosList!.SelectedItem is not string item)
+			return;
+		// Exact-match the display back to the (tag,value) it was built from.
+		foreach (var (tag, value) in docFood.Macros) {
+			if (tag + " = " + value == item) {
+				docFood.Macros.Remove (tag);
+				DfLoadMacros ();
+				return;
+			}
+		}
+	}
+
+	// Expansion: from -> to, shown as "from → to" (same exact-match pattern).
+	void DfLoadExpansions ()
+	{
+		DfExpansionsList!.Items.Clear ();
+		foreach (var (from, to) in docFood.WordExpansions)
+			DfExpansionsList!.Items.Add (from + " → " + to);
+	}
+
+	async void OnDfExpansionAdd (object? sender, RoutedEventArgs e)
+	{
+		var from = await DfPrompt (this, "Add expansion", "Abbreviation (e.g. arg):");
+		if (from.Length == 0)
+			return;
+		var to = await DfPrompt (this, "Add expansion", $"Expansion of '{from}' (e.g. argument):");
+		if (to.Length == 0)
+			return;
+		docFood.WordExpansions[from] = to;
+		DfLoadExpansions ();
+	}
+
+	void OnDfExpansionRemove (object? sender, RoutedEventArgs e)
+	{
+		if (DfExpansionsList!.SelectedItem is not string item)
+			return;
+		foreach (var (from, to) in docFood.WordExpansions) {
+			if (from + " → " + to == item) {
+				docFood.WordExpansions.Remove (from);
+				DfLoadExpansions ();
+				return;
+			}
+		}
+	}
+
+	// Acronyms / No the / Of the / Prefix: simple word lists.
+	async void OnDfAcronymAdd (object? sender, RoutedEventArgs e)
+		=> await DfAddToEntryList (DfAcronymsList!, DfAcronymEntry!, "acronyms", "Add acronym");
+	async System.Threading.Tasks.Task DfAddToEntryList (ListBox list, TextBox entry, string key, string title)
+	{
+		var value = entry.Text?.Trim () ?? "";
+		if (value.Length == 0 || list.Items.Contains (value))
+			return;
+		list.Items.Add (value);
+		entry.Text = "";
+		DfRefreshList (list, key);
+	}
+	void OnDfAcronymRemove (object? sender, RoutedEventArgs e) => DfRemoveFromList (DfAcronymsList!, "acronyms");
+
+	async void OnDfNoTheAdd (object? sender, RoutedEventArgs e)
+		=> await DfAddToEntryList (DfNoTheList!, DfNoTheEntry!, "noThe", "Add “no the” word");
+	void OnDfNoTheRemove (object? sender, RoutedEventArgs e) => DfRemoveFromList (DfNoTheList!, "noThe");
+
+	async void OnDfOfTheAdd (object? sender, RoutedEventArgs e)
+		=> await DfAddToEntryList (DfOfTheList!, DfOfTheEntry!, "ofThe", "Add “of the” word");
+	void OnDfOfTheRemove (object? sender, RoutedEventArgs e) => DfRemoveFromList (DfOfTheList!, "ofThe");
+
+	async void OnDfPrefixAdd (object? sender, RoutedEventArgs e)
+		=> await DfAddToEntryList (DfPrefixTheList!, DfPrefixEntry!, "prefixThe", "Add prefix word");
+	void OnDfPrefixRemove (object? sender, RoutedEventArgs e) => DfRemoveFromList (DfPrefixTheList!, "prefixThe");
+
+	// The legacy "gtk-help" opened monodoc; the shell has no monodoc and Avalonia 12 has
+	// no MessageBox, so the explanation is reported to the Output pad (the shell's
+	// standard info channel, and a deterministic QA oracle).
+	void OnDfRulesHelp (object? sender, RoutedEventArgs e)
+		=> MainWindow.Instance?.Output (
+			"[prefs-docfood-rules-help] DocFood rules are an XML tree of <Switch>/<Case>/<If>/<IfNot>/"
+			+ "<Section> elements that decide, per member kind, which documentation sections to generate "
+			+ "(summary, returns, params …) using tokens like ${AllWords}, ${DeclaringType} and "
+			+ "${ParameterList}. Full documentation in the DocFood project README (the legacy GTK panel "
+			+ "opened monodoc, which the shell does not ship).");
+
+	void LoadDocFoodPanel ()
+	{
+		DfEnabled!.IsChecked = DocFoodConfig.LoadEnabled ();
+		DfLoadMacros ();
+		DfLoadExpansions ();
+		DfLoadList (DfAcronymsList!, "acronyms");
+		DfLoadList (DfNoTheList!, "noThe");
+		DfLoadList (DfOfTheList!, "ofThe");
+		DfLoadList (DfPrefixTheList!, "prefixThe");
+		DfRulesText!.Text = docFood.RulesXml;
+		MainWindow.Instance?.Output ("[prefs-docfood] loaded: enabled=" + (DfEnabled!.IsChecked == true)
+			+ " acronyms=" + docFood.WordLists.GetValueOrDefault ("acronyms")?.Count
+			+ " expansions=" + docFood.WordExpansions.Count
+			+ " macros=" + docFood.Macros.Count
+			+ " rules=" + (docFood.RulesXml.Length > 0 ? "present" : "empty"));
+	}
+
+	void StoreDocFoodPanel ()
+	{
+		// Refresh every word list from its controls (they were edited in place on add/remove).
+		DfRefreshList (DfAcronymsList!, "acronyms");
+		DfRefreshList (DfNoTheList!, "noThe");
+		DfRefreshList (DfOfTheList!, "ofThe");
+		DfRefreshList (DfPrefixTheList!, "prefixThe");
+		// Macros and expansions were already applied to docFood on add/remove; keep the
+		// rules text current.
+		docFood.RulesXml = DfRulesText!.Text ?? "";
+		var enabled = DfEnabled!.IsChecked == true;
+		// F3: an invalid rules XML is preserved in the store as an XML comment (not
+		// silently dropped) — but the user must be told it will not be applied by the
+		// generator, so warn to the Output pad instead of failing silently.
+		var rulesValid = DocFoodConfig.RulesAreValid (docFood.RulesXml);
+		DocFoodConfig.Save (docFood, enabled);
+		MainWindow.Instance?.Output ("[prefs-docfood] stored: enabled=" + enabled
+			+ " acronyms=" + docFood.WordLists.GetValueOrDefault ("acronyms")?.Count
+			+ " noThe=" + docFood.WordLists.GetValueOrDefault ("noThe")?.Count
+			+ " ofThe=" + docFood.WordLists.GetValueOrDefault ("ofThe")?.Count
+			+ " prefixThe=" + docFood.WordLists.GetValueOrDefault ("prefixThe")?.Count
+			+ " expansions=" + docFood.WordExpansions.Count
+			+ " macros=" + docFood.Macros.Count
+			+ " rules=" + (rulesValid ? (docFood.RulesXml.Length > 0 ? "valid" : "empty") : "INVALID(preserved-as-comment)"));
+		if (!rulesValid)
+			MainWindow.Instance?.Output ("[prefs-docfood] WARNING: the Rules XML is not well-formed; it was "
+				+ "preserved in the store (as a comment) but the generator will ignore it until fixed.");
+	}
+
+	// QA guard: same as the other Df* controls — no-op if the panel was not
+	// instantiated (the QA hook constructs PreferencesDialog, so this is defensive).
+	bool DfReady => DfEnabled is not null && DfMacrosList is not null && DfRulesText is not null;
+
+	/// <summary>QA (--prefs-docfood): exercises the DocFood persistence round-trip the
+	/// way a user would — checks the loaded defaults, edits every panel (enable flag,
+	/// the four word lists, a macro, an expansion and the rules text), stores, re-reads
+	/// the DocFood.Config / DocFood.Enabled keys from SettingsStore (the same
+	/// GTK-compatible file the GTK UI reads) and asserts everything round-tripped,
+	/// then restores the exact previous state so the run leaves no residue.</summary>
+	public void QaDocFoodRoundTrip ()
+	{
+		if (!DfReady) {
+			MainWindow.Instance?.Output ("[prefs-docfood] qa-skipped: panel not ready");
+			return;
+		}
+		// Backup the exact stored state ("" = key absent) for the restore.
+		string origConfig = SettingsStore.GetString (DocFoodConfig.ConfigKey) ?? "";
+		string origEnabled = SettingsStore.GetString (DocFoodConfig.EnabledKey) ?? "";
+		// Capture the pre-edit contents so the round-trip can assert they survive
+		// (works for the defaults AND for a seeded profile with custom values).
+		var beforeAcronyms = docFood.WordLists.GetValueOrDefault ("acronyms")?.ToList () ?? new List<string> ();
+		var beforeMacroKeys = new HashSet<string> (docFood.Macros.Keys);
+		var beforeExpansions = new HashSet<string> (docFood.WordExpansions.Keys);
+		try {
+			// 1. Defaults sanity: the embedded DocFood.config.xml must have loaded
+			// (acronyms contains API, the rules tree contains a Switch case).
+			bool defOk = (docFood.WordLists.GetValueOrDefault ("acronyms")?.Contains ("API") == true)
+				&& docFood.RulesXml.Contains ("<Switch>")
+				&& docFood.Macros.ContainsKey ("True");
+			MainWindow.Instance?.Output ("[prefs-docfood] qa-defaults ok=" + defOk
+				+ " acronyms=" + docFood.WordLists.GetValueOrDefault ("acronyms")?.Count
+				+ " noThe=" + docFood.WordLists.GetValueOrDefault ("noThe")?.Count
+				+ " ofThe=" + docFood.WordLists.GetValueOrDefault ("ofThe")?.Count
+				+ " prefixThe=" + docFood.WordLists.GetValueOrDefault ("prefixThe")?.Count
+				+ " expansions=" + docFood.WordExpansions.Count
+				+ " macros=" + docFood.Macros.Count);
+
+			// 2. Drive the panel like a user: toggle enable, add a word to each list,
+			// a macro, an expansion, and replace the rules text.
+			DfEnabled!.IsChecked = false;
+			DfAcronymsList!.Items.Add ("QAAcron");
+			DfNoTheList!.Items.Add ("QaNoThe");
+			DfOfTheList!.Items.Add ("QaOfThe");
+			DfPrefixTheList!.Items.Add ("QaPrefix");
+			docFood.Macros ["QaTag"] = "<c>qa</c>";
+			DfLoadMacros ();
+			docFood.WordExpansions ["qa"] = "question";
+			DfLoadExpansions ();
+			const string sentinelRules =
+				"<Rules><Switch><Case type=\"class\"><Section name=\"summary\">${AllWords}.</Section></Case></Switch></Rules>";
+			DfRulesText!.Text = sentinelRules;
+			StoreDocFoodPanel ();
+
+			// 2b. F4: entries whose KEY contains the display separator ('=' / '→')
+			// must be removable by selecting the exact displayed item after a
+			// reload from the store (removal must not corrupt the key).
+			docFood.Macros ["a=b"] = "v1";
+			docFood.WordExpansions ["x=1"] = "two";
+			DfLoadMacros ();
+			DfLoadExpansions ();
+			StoreDocFoodPanel ();
+			docFood = DocFoodConfig.Load ();
+			DfLoadMacros ();
+			DfLoadExpansions ();
+			DfMacrosList!.SelectedItem = "a=b = v1";
+			OnDfMacroRemove (null, default);
+			DfExpansionsList!.SelectedItem = "x=1 → two";
+			OnDfExpansionRemove (null, default);
+			StoreDocFoodPanel ();
+
+			// 3. Re-read the exact keys from the store and assert the round-trip.
+			bool en2 = SettingsStore.GetBool (DocFoodConfig.EnabledKey, true);
+			var cfg2 = DocFoodConfig.Load ();
+			bool enOk = en2 == false;
+			bool acroOk = cfg2.WordLists.GetValueOrDefault ("acronyms")?.Contains ("QAAcron") == true;
+			bool notheOk = cfg2.WordLists.GetValueOrDefault ("noThe")?.Contains ("QaNoThe") == true;
+			bool oftheOk = cfg2.WordLists.GetValueOrDefault ("ofThe")?.Contains ("QaOfThe") == true;
+			bool prefixOk = cfg2.WordLists.GetValueOrDefault ("prefixThe")?.Contains ("QaPrefix") == true;
+			bool macroOk = cfg2.Macros.TryGetValue ("QaTag", out var mv) && mv == "<c>qa</c>";
+			bool expOk = cfg2.WordExpansions.TryGetValue ("qa", out var ev) && ev == "question";
+			bool rulesOk = cfg2.RulesXml.Contains ("QaRules") == false
+				&& cfg2.RulesXml.Contains ("class") && cfg2.RulesXml.Contains ("Switch");
+			// F4: the separator-bearing entries were removed (by exact display
+			// match), and no partial key (e.g. "a" from "a=b") leaked into the store.
+			bool f4MacroOk = !cfg2.Macros.ContainsKey ("a=b") && !cfg2.Macros.ContainsKey ("a");
+			bool f4ExpOk = !cfg2.WordExpansions.ContainsKey ("x=1") && !cfg2.WordExpansions.ContainsKey ("x");
+			// The pre-edit contents must survive alongside the edits (single document).
+			bool keepOk = beforeAcronyms.All (w => cfg2.WordLists.GetValueOrDefault ("acronyms")?.Contains (w) == true)
+				&& beforeMacroKeys.All (k => cfg2.Macros.ContainsKey (k))
+				&& beforeExpansions.All (k => cfg2.WordExpansions.ContainsKey (k));
+			MainWindow.Instance?.Output ("[prefs-docfood] qa-roundtrip enabled=" + en2
+				+ " acronyms=" + cfg2.WordLists.GetValueOrDefault ("acronyms")?.Count
+				+ " noThe=" + cfg2.WordLists.GetValueOrDefault ("noThe")?.Count
+				+ " ofThe=" + cfg2.WordLists.GetValueOrDefault ("ofThe")?.Count
+				+ " prefixThe=" + cfg2.WordLists.GetValueOrDefault ("prefixThe")?.Count
+				+ " expansions=" + cfg2.WordExpansions.Count
+				+ " macros=" + cfg2.Macros.Count
+				+ " rulesLen=" + cfg2.RulesXml.Length);
+			MainWindow.Instance?.Output ("[prefs-docfood] roundtrip-ok="
+				+ (enOk && acroOk && notheOk && oftheOk && prefixOk && macroOk && expOk && rulesOk && keepOk && f4MacroOk && f4ExpOk)
+				+ " (enabled=" + enOk + " acronyms=" + acroOk + " noThe=" + notheOk
+				+ " ofThe=" + oftheOk + " prefix=" + prefixOk + " macro=" + macroOk
+				+ " expansion=" + expOk + " rules=" + rulesOk + " defaultsKept=" + keepOk
+				+ " f4macro=" + f4MacroOk + " f4exp=" + f4ExpOk + ")");
+		} finally {
+			// Restore the EXACT previous state: an absent key is removed again
+			// (SetString null → UserPreferences removes the Property) so the QA
+			// leaves no test residue behind.
+			SettingsStore.SetString (DocFoodConfig.ConfigKey, origConfig == "" ? null : origConfig);
+			SettingsStore.SetString (DocFoodConfig.EnabledKey, origEnabled == "" ? null : origEnabled);
+			// Re-read the model from the (restored) store BEFORE re-populating the
+			// panel, otherwise the UI would be refilled from docFood which the QA
+			// block mutated in memory (F2: stale in-memory state after restore).
+			docFood = DocFoodConfig.Load ();
+			LoadDocFoodPanel ();
+			MainWindow.Instance?.Output ("[prefs-docfood] restored previous values");
+		}
 	}
 
 	void OnCancel (object? sender, RoutedEventArgs e) => Close ();

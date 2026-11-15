@@ -5499,3 +5499,66 @@ Round 2 **VERDE 0 hallazgos** en el primer pase: el subagente ejecutó los 5 or�
 ### Cierre
 
 QA §18.5: **VERDE 0 hallazgos** (1 pase). Builds Avalonia + GTK **0 errores** (§18.4). Commit por nombre del archivo de código + docs ×3. Push a `origin/agents/sub-agent-senior-dev-role-report`. **Sin submódulos.** Artefactos: `~/opencode/padbugs_repro/` (brief `qa_brief_round2.md`, drivers, logs `validate_bug{1,2}.log`, capturas `qa_r2_o1_*`/`qa_r2_o2_*` + zooms, logs de build `qa_r2_build_*`), `~/opencode/errors_pad_qa/`, `~/opencode/package_console_qa/`.
+
+## 2026-11-15 (53) — Port del panel de opciones DocFood (Preferences > Other > DocFood, 6 sub-paneles) a la shell Avalonia, con lógica real de persistencia — CERRADO (QA VERDE)
+
+**Estado: CERRADO.** El operador pidió portar el panel de opciones DocFood (`Preferences > Other > DocFood`). El legado era un **grupo de 6 sub-paneles** (Options, Expansions, Acronyms, "No the" Words, "Of the" Reordering, Rules) — y **los 6 eran stubs inerciales**: layout de UI (checkbox "Enable automatic documentation", treeviews de Macros/Expansions/Acronyms con Add/Remove) pero **sin ningún handler, sin binding a `DocConfig` y `ApplyChanges` vacío**; el registro en `DocFood.addin.xml` estaba incluso comentado. El operador eligió el alcance **"grupo completo + lógica real"**: portar los 6 paneles **y** cablear la persistencia que el legado dejó vacía.
+
+### Qué se hizo
+
+- **6 paneles en `PreferencesDialog.axaml`** (`PanelDocFoodOptions/Expansions/Acronyms/NoThe/OfThe/Rules`), insertados antes de `PanelPlaceholder`. Replica el layout legado pero con las **etiquetas corregidas** (el legado tenía un bug de copy-paste: el texto de ayuda "Acronyms" y la label `_Acronyms:` se repetían en varios paneles).
+- **Modelo + persistencia nueva** en `Services/DocFoodConfig.cs`: `DocFoodConfig` (WordLists / WordExpansions / Macros / RulesXml) que serializa **XML en el mismo esquema** que el legado `DocFood.config.xml` (`DocFood>WordLists>List@name>Word`, `WordExpansion>Word@from,@to`, `Macros>Macro@tag,@value`, `Rules`). Se guarda en `SettingsStore` como **string** (precedente `UserPreferences.FontProperties`: un documento XML completo como string en una clave) bajo `DocFood.Config`, más el bool `DocFood.Enabled` (nuevo; el legado no lo tenía).
+- **Defaults embebidos**: `DocFood.config.xml` (21 KB, copia del addin — single source of truth) como `EmbeddedResource` `MonoDevelop.AvaloniaShell.DocFood.config.xml`. `DocFoodConfig.Defaults()` lo lee; `Load()` cae a defaults si no hay clave.
+- **Cableado en `PreferencesDialog.axaml.cs`**: nodo grupo `PrefsNode("docfood","DocFood",…)` con 6 hijos en el skeleton `Cat("Other")` (el heading del grupo sin panel propio cae al placeholder, precedentes "SDK Locations"/"build"); entrada `LegacySectionMap["/Other"]["DocFood"]="docfood"` (dedup contra el nodo del manifiesto `DocFood.avaloniaaddon.json`); 6 ids en `functionalPanels`; visibilidad en `ShowPanel`; `LoadDocFoodPanel()` en el constructor; `StoreDocFoodPanel()` en `OnOk`; handlers Add/Remove para las 4 listas de palabras (entry+botón, patrón legado), macros/expansiones (prompt modal `InputDialog`, aplicar in-place) y `OnDfRulesHelp` (reporta al Output pad — Avalonia 12 **elimina** `MessageBox`, y la shell no trae monodoc).
+- **Oráculo QA** `--prefs-docfood` → `QaDocFoodRoundTrip()`: edita todos los paneles como un usuario (enable flag, una palabra en cada lista, una macro, una expansión, reescribe Rules), almacena, relee las claves desde el store y asiente el round-trip, y **restaura el estado previo byte a byte** (sin residuo).
+
+### Por qué (decisiones clave)
+
+- **Patrón F#: UI + lógica solo en la shell core.** La shell **no puede** referenciar `DocConfig` del addin (es `internal`, vive en otro ALC, y el addin `MonoDevelop.Avalonia.DocFood` **no se compila** — es solo-manifiesto, sin `entryPoint`/`assembly`). El mecanismo cross-boundary ya validado en el repo es el **string en `SettingsStore`** (mismo fichero `MonoDevelopProperties.xml` por ambos lados, y `SettingsStore`/`UserPreferences` están in-proceso en la shell por glob `MonoDevelop.Ide\Services\**`).
+- **Mismo esquema XML, no el modelo:** el panel escribe el **mismo XML** que el lector legacy `DocConfig.Read` entiende (`DocFood>WordLists>List@name>Word`, `WordExpansion>Word@from,@to`, `Macros>Macro@tag,@value`, `Rules`), en el store compartido `MonoDevelopProperties.xml`. Es decir, el config del usuario ahora **persiste de verdad** (el legado era inercial) y queda en formato compatible con el addin (nada se pierde si se consume). Nota de estado: el generador GTK hoy lee `DocConfig.Instance` (su default **embebido**), no el store — y el legado tampoco persistía —, así que el consumo por el generador es el siguiente paso natural, no parte de este puerto. El punto de esta tarea es que el **panel** lee/escribe de verdad.
+- **Rules como XML crudo (string):** el panel Rules legado es un área de texto XML; se edita como tal (`RulesXml`) sin el árbol `Node` del addin.
+- **⚠️ Nota de integración (causa del F1, lección para futuros puertos):** el lector legacy `XmlReadHelper.ReadList` (que usa `DocConfig.Read`) es **whitespace-sensitive**: su bucle `ReadElementString()` + `reader.Read()` inicial se desincroniza cuando entre hermanos no hay un nodo de texto-whitespace, y **pierde datos en silencio** (mitad de cada lista + se vacían las secciones siguientes, sin excepción). Cualquier XML que se escriba a un store que el legado pueda leer debe ser **indentado** (`SaveOptions.None`), nunca compacto (`DisableFormatting`). Verificado A/B/C con el DLL legacy real.
+- **Add de listas vía entry+botón (no prompt):** las 4 listas de palabras usan el layout del legado (entry + botón Add), que no necesita diálogo modal; macros/expansiones sí usan `InputDialog` (dos campos: tag/value, from/to).
+
+### Validación (valores medidos)
+
+- **Builds 0 errores**: shell Avalonia (`net10.0`) y proyecto GTK `MonoDevelop.Startup` (ambas interfaces, §18.4). Todos los archivos tocados son solo-Avalonia.
+- **Round-trip perfil virgen** (`--prefs-docfood`): `loaded: enabled=True acronyms=65 expansions=57 macros=3 rules=present` → `roundtrip-ok=True (… rules=True defaultsKept=True f4macro=True f4exp=True)` → `restored previous values`, y la última `loaded:` muestra los valores **restaurados** (F2); el perfil queda **sin** claves `DocFood.*` (0).
+- **Cross-boundary con el DLL legacy real** (probe `abtest/`): la salida de `ToXml` parsea limpia con `DocConfig.Read` — `{ofThe:12,prefixThe:26,noThe:27,acronyms:65} Expansions(57) Macros(3) RulesNodes(211) warnings=0`, idéntico al config original (F1); y un doc con reglas inválidas (F3) también: `warnings=0`, WordLists/Expansions/Macros intactos.
+- **Round-trip perfil sembrado** (custom values, prueba de carga desde store): carga los valores sembrados (acronyms=66 incl. `SEEDACRO`, macros=4 incl. `SeedTag`, enabled=False), edita, y tras restaurar el `DocFood.Config` es **semánticamente igual al seed** y `Enabled=False` (el diff byte a byte es solo BOM + formato XML).
+- **Árbol** (`--prefs-tree`): `Other → DocFood (docfood)` con los 6 hijos (`docfoodoptions/expansions/acronyms/nothe/ofthereordering/rules`); **1 sola** entrada `DocFood` (dedup correcta contra el nodo del manifiesto del addin).
+- **Render de los 6 paneles** (capturas `shots/docfood{options,expansions,acronyms,nothe,ofthereordering,rules}.png`): todos con `placeholder=False`, datos correctos (checkbox + Macros, Expansions `from → to`, listas de palabras con Remove + entry/Add, Of the con sus 2 listas, Rules XML editable), etiquetas corregidas.
+- **Regresión**: 8 paneles no-DocFood (`style/author/fonts/keybindings/fsharp/general/xml/buildmessages`) siguen `placeholder=False`.
+
+### QA §18.5 (Tester QA Senior, recursivo)
+
+**Round 1 — 5 hallazgos** (reporte `~/opencode/docfood_qa/qa_report.md`). Builds ×2, round-trips y regresión: VERDE. Revisión adversarial + verificación cross-boundary con el **DLL legacy real**: 5 hallazgos, todos corregidos en el mismo pase:
+
+- **F1 (ALTO, bloqueante)**: `ToXml` escribía XML **compacto** (`SaveOptions.DisableFormatting`). El lector legacy `XmlReadHelper.ReadList` (el camino real de `DocConfig.Read`) es **whitespace-sensitive**: su bucle `ReadElementString()` + `reader.Read()` se desincroniza cuando no hay texto-whitespace entre hermanos y **pierde silenciosamente** la mitad de palabras de cada lista y vacía Expansions/Macros/Rules (525 warnings sin excepción; verificado A/B/C con el DLL legacy real: compacto corrupto, indentado limpio — la causa era 100% el whitespace). **Fix**: `ToXml` escribe **indentado** (`SaveOptions.None`), como el `DocFood.config.xml` original.
+- **F2 (MEDIO)**: el `finally` del oráculo restauraba el store pero repueblaba la UI desde el campo `docFood` ya mutado por el QA (estado en memoria rancio). **Fix**: `docFood = DocFoodConfig.Load ()` desde el store restaurado antes de `LoadDocFoodPanel ()`.
+- **F3 (MEDIO)**: reglas XML inválidas se **descartaban en silencio** al guardar. **Fix**: se embeben como `XComment` (el doc sigue siempre parseable por `DocConfig.Read`), `FromXml` las lee de vuelta (comentario, o un hijo desconocido parseable) y `StoreDocFoodPanel` emite warning al Output pad (`[prefs-docfood] WARNING: the Rules XML is not well-formed…`).
+- **F4 (BAJO)**: el Remove de Macros/Expansions re-derivaba la clave con `Split('=',2)`/`Split('→',2)` → una etiqueta que contiene el separador borraba la entrada equivocada. **Fix**: items = strings de display y Remove por **exact-match** contra la cadena construida. (El intento `KeyValuePair`+`DataTemplate` falló con AVLN2000 — Avalonia no infiere el tipo del item — y se revirtió al patrón de strings que usa el resto del archivo.)
+- **F5 (BAJO/info)**: `DocFood.Enabled` no tiene consumidor hoy (el generador GTK lee `DocConfig.Instance` embebido). **Aceptado y documentado** como pendiente: el toggle persiste; su consumo por el generador es el paso siguiente.
+
+**Round 2 — revalidación de los fixes + suite completa**: **VERDE, 0 hallazgos abiertos** (reporte `~/opencode/docfood_qa/qa_report_round2.md`). Los 5 fixes se revalidaron con su repro (todos VERDE) y la suite completa (13 runs, sin FATAL/Unhandled) no detectó regresión: builds Avalonia + GTK **0 errores**; round-trip virgen (0 claves residuales) y sembrado (carga seed + restauración semánticamente igual, `SEMANTIC-RESULT: PASS`); árbol (1 solo `DocFood` + 6 hijos, dedup intacta); 6 paneles DocFood + regresión de otros paneles `placeholder=False`; diff acotado a shell Avalonia + `docs/` (el addin GTK no se tocó). Verificación F3 reforzada: el probe del QA que en round 1 decía `LOST` ahora dice `PRESERVED` (texto íntegro de vuelta), `RulesAreValid` correcta en 8 casos (tabla de verdad), y el warning al Output se emite antes del `Save`.
+
+Dos notas **informativas no bloqueantes** (backlog, no requieren acción para cerrar):
+
+- **R2-1 (INFO)**: reglas inválidas que contienen `--` se guardan normalizadas a `- -` (sanitización del propio `XComment` de .NET 10 al serializar; el `value` en memoria es íntegro y el warning sí se dispara). Solo afectaría la fidelidad del texto de reglas que ya eran inválidas. Repro: `~/opencode/docfood_qa/edge3`, `~/opencode/docfood_qa/xc`.
+- **R2-2 (INFO)**: la cadena de display `tag = value` no es inyectiva si una etiqueta contiene ` = ` (dos macros distintas → misma fila; el exact-match borraría la primera del diccionario). Caso patológico fuera del alcance del fix F4 (el patrón de strings fue la elección documentada tras el AVLN2000 de `KeyValuePair`). Backlog.
+
+### Archivos (2 A + 5 M, +418/−2, sin submódulos)
+
+- `main/src/core/MonoDevelop.Startup.Avalonia/Services/DocFoodConfig.cs` (NUEVO) — modelo + (de)serialización XML + `Load`/`Save`.
+- `main/src/core/MonoDevelop.Startup.Avalonia/DocFood.config.xml` (NUEVO) — defaults embebidos (copia del addin).
+- `MonoDevelop.Startup.Avalonia.csproj` — `EmbeddedResource` del config.
+- `Views/PreferencesDialog.axaml` — 6 paneles `PanelDocFood*`.
+- `Views/PreferencesDialog.axaml.cs` — nodo grupo, `functionalPanels`, `ShowPanel`, `Load`/`Store`, handlers, `QaDocFoodRoundTrip`, oráculos.
+- `Views/MainWindow.axaml.cs` — rama `--prefs-docfood`.
+- `Program.cs` — flag en `QaDialogArg`.
+
++ docs ×3 (este §53, § M31-n en `interfaz-plan.md`, nota en `migration-status-report.md`).
+
+### Cierre
+
+QA §18.5: **VERDE 0 hallazgos abiertos** (round 1: 5 hallazgos F1–F5 corregidos en el mismo pase; round 2: revalidación VERDE de los 5 fixes + suite completa sin regresión; 2 notas INFO de backlog no bloqueantes). Builds Avalonia + GTK **0 errores** (§18.4). Commit por nombre (7 archivos de código + docs ×3). Push a `origin/agents/sub-agent-senior-dev-role-report`. **Sin submódulos.** Artefactos: `~/opencode/docfood_qa/` (brief `qa_brief.md`, driver `run.sh`, `mk_seed.py`, logs, capturas `shots/docfood*`, perfil sembrado `seed/`, probes `abtest/` (DLL legacy real), `f3probe/`, `shellrob/`, `edge3/`, `xc/`, reportes `qa_report.md` + `qa_report_round2.md`).

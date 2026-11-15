@@ -282,6 +282,11 @@
 		<EmbeddedResource Include="..\MonoDevelop.Ide\MonoDevelop.Ide.Editor.Highlighting\Resources\cpp.json" LogicalName="MonoDevelop.AvaloniaShell.Highlighting.Resources.cpp.json" />
 		<EmbeddedResource Include="..\MonoDevelop.Ide\MonoDevelop.Ide.Editor.Highlighting\Resources\xml.json" LogicalName="MonoDevelop.AvaloniaShell.Highlighting.Resources.xml.json" />
 		<EmbeddedResource Include="..\MonoDevelop.Ide\MonoDevelop.Ide.Editor.Highlighting\Resources\json.plist" LogicalName="MonoDevelop.AvaloniaShell.Highlighting.Resources.json.plist" />
+		<!-- DocFood factory defaults: the legacy DocFood.config.xml (WordLists /
+		     WordExpansions / Macros / Rules) embedded as the shell's defaults, so the
+		     Preferences > Other > DocFood panels start from the same config the
+		     generator ships. Single source of truth copied from the add-in. -->
+		<EmbeddedResource Include="DocFood.config.xml" LogicalName="MonoDevelop.AvaloniaShell.DocFood.config.xml" />
 	</ItemGroup>
 	<!-- Legacy command catalogs: the *.addin.xml sources (MonoDevelop.Ide core +
 	     every add-in) are staged next to the binaries under addinxml/ and loaded
