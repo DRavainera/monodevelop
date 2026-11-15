@@ -13187,7 +13187,15 @@ public partial class MainWindow : Window
 		if (!SolutionHasPackageReferences (path))
 			return;
 		Output ("[restore-on-open] restoring packages for " + Path.GetFileName (path));
-		restoreOnOpenTask = RunPackageOperation ("restore", "dotnet", $"restore \"{path}\"");
+		// A failed restore is a build cycle for the Errors pad: start a fresh cycle
+		// (like RunBuildAsync) so the restore's diagnostics (NU1101 ...) become rows
+		// in the table, not only in the Package Console. Opening a broken solution
+		// should surface its errors in the Errors pad (the legacy build feeds the
+		// TaskList with exactly these restore diagnostics).
+		buildErrors.Clear ();
+		errorRowSigs.Clear ();
+		errorsPad?.BeginBuild ();
+		restoreOnOpenTask = RunPackageOperation ("restore", "dotnet", $"restore \"{path}\"", feedErrorsPad: true);
 	}
 
 	// Legacy PackageManagementOptions stores the NuGet flags as nested <Property>
@@ -13232,8 +13240,14 @@ public partial class MainWindow : Window
 	/// with the legacy color scheme, and on exit reports the last error/warning/
 	/// success line to the status line (legacy EndProgress → StatusBar.ShowMessage).
 	/// The pad's Stop button cancels THIS operation (legacy monitor.Cancel).
+	/// With feedErrorsPad (restore-on-open) the operation behaves as a build
+	/// cycle: every streamed line also feeds ParseBuildMessage so the restore's
+	/// diagnostics (NU1101 ...) become rows of the Errors pad, and the Code
+	/// Issues mirror is refreshed on exit. Menu/dialog callers keep the default
+	/// (false): an explicit package operation feeds only the console (parity
+	/// with the legacy NuGet runner, which does not touch the TaskList).
 	/// </summary>
-	async System.Threading.Tasks.Task RunPackageOperation (string op, string exe, string args)
+	async System.Threading.Tasks.Task RunPackageOperation (string op, string exe, string args, bool feedErrorsPad = false)
 	{
 		var pad = packageConsolePad;
 		if (pad is null) {
@@ -13289,6 +13303,10 @@ public partial class MainWindow : Window
 							pad.AppendDebug (line);
 						else
 							pad.AppendLine (line);
+						// Build-cycle mode: the Errors pad is filled live, exactly
+						// like RunProcessAsync's OnLine (same post, same call).
+						if (feedErrorsPad)
+							ParseBuildMessage (line);
 					});
 				}
 				proc.OutputDataReceived += (_, e) => { if (e.Data is not null) EmitLine (e.Data); };
@@ -13318,6 +13336,12 @@ public partial class MainWindow : Window
 			lastStatus = pad.EndOperation ();
 			if (lastStatus.Length > 0)
 				StatusText!.Text = lastStatus;
+			// Build-cycle mode: refresh the Code Issues mirror (the --build flow
+			// does it in the caller's exit handler; here the operation owns the
+			// whole cycle). Runs on the UI thread — the method's continuations
+			// resume on the Avalonia dispatcher.
+			if (feedErrorsPad)
+				RefreshCodeIssuesPad ();
 		}
 	}
 

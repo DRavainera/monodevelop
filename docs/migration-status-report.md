@@ -3439,3 +3439,15 @@ Fixes: (1) `Parse` añade un `projectMessageRegex` para el formato de nivel proy
 **Archivos** (2 M, +133/−40, sin submódulos): `MonoDevelop.Ide/Services/CodeIssueService.cs` (+20/−6), `MonoDevelop.Startup.Avalonia/Views/MainWindow.axaml.cs` (+113/−34; incluye la migración del operador `TestProj`→`opencode/TestProj` en ~32 rutas de probes, §18.6, que se commitea junto por §18.2).
 
 **Cierre**: commit por nombre de los 2 archivos de código + docs ×3 (`session_summary.md` §51, `interfaz-plan.md` M31-l, esta nota). Push a `origin/agents/sub-agent-senior-dev-role-report`. **Sin submódulos.** Artefactos: `~/opencode/padbugs_repro/` (drivers `validate_bug{1,2}.sh`, fixture `deps_copy/`, logs, capturas + zooms, logs de build), `~/opencode/errors_pad_qa/regression_errorspad.sh`.
+
+### UI Avalonia: round 2 — el pad Errors se puebla en el flujo real (abrir la solution sin buildar) (2026-11-15)
+
+**Estado: CERRADO (QA APROBADO, 0 hallazgos abiertos §18.5, 1 pase VERDE).** El operador reportó que el bug 1 persistía: la validación del round 1 había usado el probe `--build`, pero su flujo real es **abrir** `DepsOrder.sln` sin buildar. Ahí el restore-on-open corre vía `RunPackageOperation`, que solo hacía streaming al Package Console y nunca llamaba a `ParseBuildMessage` → pad Errors vacío.
+
+**Fix**: el restore-on-open se trata como un **ciclo de build** para el pad Errors — `RestorePackagesOnOpen` limpia `buildErrors`/`errorRowSigs`, hace `BeginBuild()` y lanza la operación con el nuevo parámetro `feedErrorsPad: true` de `RunPackageOperation` (default `false`): cada línea pasa por `ParseBuildMessage` en el mismo post UI (patrón del build) y al terminar se refresca el mirror Code Issues. Los llamadores de menú/diálogo (Manage NuGet Packages, restore explícito) conservan `false` → comportamiento idéntico al de antes y paridad con el legado (el restore legado no alimenta el TaskList; el restore *de un build* sí — la expectativa del operador es la del build).
+
+**Validación**: builds shell Avalonia + GTK **0 errores** (§18.4). Flujo ABRIR → 3×NU1101 + 2×NETSDK1086 + `[codeissues] 3 error(s), 2 warning(s)`; visual: tab Errors con toolbar "3 Errors / 2 Warnings", 3 filas en rojo (Line vacía, `DepsA.csproj`, `NU1101`) + 2 warnings (capturas). Regresiones intactas: `--build` `rows=5 visible=5`, `--errorspad` `rows=3` + 0 restore-on-open, `--packageconsole` `starts hidden=True` + restore real `succeeded` + 0 `[build]`/`[codeissues]`. **QA §18.5 recursivo**: primer pase **VERDE 0 hallazgos** (5 oráculos, builds propios, renderizado con capturas y zooms).
+
+**Archivos** (1 M, +26/−2, sin submódulos): `MonoDevelop.Startup.Avalonia/Views/MainWindow.axaml.cs` (restore-on-open como ciclo de build + `feedErrorsPad`).
+
+**Cierre**: commit por nombre del archivo de código + docs ×3 (`session_summary.md` §52, `interfaz-plan.md` M31-m, esta nota). Push a `origin/agents/sub-agent-senior-dev-role-report`. **Sin submódulos.** Artefactos: `~/opencode/padbugs_repro/` (brief `qa_brief_round2.md`, drivers, logs, capturas `qa_r2_o1_*`/`qa_r2_o2_*` + zooms, logs de build `qa_r2_build_*`).

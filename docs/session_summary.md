@@ -5462,3 +5462,40 @@ Round 1 **VERDE 0 hallazgos** en el primer pase: el subagente hizo build propio 
 ### Cierre
 
 QA §18.5: **VERDE 0 hallazgos** (1 pase). Builds Avalonia + GTK **0 errores** (ambas interfaces siguen compilando, §18.4). Commit por nombre de los 2 archivos de código + docs ×3. Push a `origin/agents/sub-agent-senior-dev-role-report`. **Sin submódulos.** Artefactos: `~/opencode/padbugs_repro/` (drivers `validate_bug1.sh`/`validate_bug2.sh`, fixture `deps_copy/`, logs, capturas `qa_bug1_visual*.png`/`qa_bug2_visual.png` + zooms, logs de build), `~/opencode/errors_pad_qa/regression_errorspad.sh`, `~/opencode/package_console_qa/` (regresión).
+
+## 2026-11-15 (52) — Round 2: el pad Errors sigue vacío en el flujo real (abrir la solution sin buildar) — CERRADO (QA VERDE, 0 hallazgos)
+
+**Estado: CERRADO (QA APROBADO, 0 hallazgos §18.5, 1 pase VERDE).** El operador reportó tras el cierre del round 1 (§51): "el bug 2 se solucionó, el bug 1 aún continúa (la tabla del pad Errors sigue vacía)". El diagnóstico del round 1 era **necesario pero insuficiente**: su validación usó el probe `--build` (que alimenta el pad Errors por el camino `RunBuildAsync`→`RunProcessAsync`→`ParseBuildMessage`), pero el **flujo real del operador es abrir `DepsOrder.sln` sin buildar**. En ese flujo el restore-on-open (bug 2, ya funcionando) se ejecuta vía `RunPackageOperation`, y esa primitiva **solo hacía streaming al Package Console** — nunca llamaba a `ParseBuildMessage`, así que los diagnostics del restore fallido (3×NU1101 + 2×NETSDK1086) nunca llegaban al pad Errors. Reproducción confirmada: abrir sin buildar → Package Console poblado, pad Errors con 0 diagnostics.
+
+### Qué se hizo
+
+- **El restore-on-open ahora es un ciclo de build para el pad Errors:** `RestorePackagesOnOpen(path)` limpia el estado del ciclo (`buildErrors.Clear()`, `errorRowSigs.Clear()`) y abre un ciclo (`errorsPad?.BeginBuild()`), como hace `RunBuildAsync`, antes de lanzar la operación con `feedErrorsPad: true`.
+- **Parámetro `feedErrorsPad` en `RunPackageOperation` (default `false`):** con `true`, el closure `EmitLine` pasa cada línea por `ParseBuildMessage(line)` **en el mismo `Dispatcher.UIThread.Post`** donde se pinta la consola (mismo patrón que `OnLine` de `RunProcessAsync`), y en el `finally` llama `RefreshCodeIssuesPad()` (el mirror Code Issues; en el flujo `--build` lo hace el exit handler del caller, aquí la operación es dueña del ciclo completo). Con `false` (default — todos los llamadores de menú/diálogo: Manage NuGet Packages, restore explícito) el comportamiento es **identico al de antes**: solo Package Console. Paridad verificada con el legado: el restore legado (NuGet/`BackgroundPackageActionRunner`) **no** alimenta el TaskList (grep vacío), mientras el restore **de un build** sí (los NU1101) — la expectativa del operador coincide con la del build, no con la del restore legado.
+
+### Por qué (decisiones clave)
+
+- **El flag en la primitiva, no un segundo camino:** `RunPackageOperation` ya era la vía única de ejecución de operaciones de paquetes (§18.4, reutilización); añadir `feedErrorsPad` deja un solo ejecutor con dos modos. El modo build-ciclo solo lo pide el restore-on-open, que es el flujo donde el operador espera ver los errores de una solution rota al abrirla.
+- **ParseBuildMessage dentro del mismo post UI:** las líneas de stdout/stderr llegan de hilos de pool; marshalar en un único `Post` (pintar consola + parsear) conserva el orden y evita tocar controles fuera de UI thread (mismo patrón del build).
+- **Los 3 gates del round 1 no cambian** (QA flag, opción anidada, `PackageReference` presente): el round 2 solo cambia a *dónde* van las líneas del restore-on-open, no cuándo se dispara.
+
+### Validación (valores medidos)
+
+- **Builds 0 errores**: shell Avalonia (`net10.0`) y proyecto GTK `MonoDevelop.Startup` (ambas interfaces, §18.4).
+- **Flujo ABRIR (el que estaba roto):** `validate_bug2.sh` (abrir `DepsOrder.sln` sin flag QA, perfil Dark del operador) → `[restore-on-open] restoring packages for DepsOrder.sln`, `[pkconsole] restore exited 1` (restore real fallido), 3×`[build] error NU1101 DepsA.csproj(0,0)` (zeta/Alpha/mid), 2×`[build] warning NETSDK1086`, `[codeissues] 3 error(s), 2 warning(s)` — total 5 diagnostics. **Visual:** tab Errors con toolbar "3 Errors / 2 Warnings", 3 filas en rojo (icono ✕, **Line vacía**, File `DepsA.csproj`, Project `DepsA`, Category `NU1101`) + 2 filas de warning (⚠, Line 94, NETSDK1086), sub-pane Build Output con el log crudo (capturas `qa_r2_o1_*`).
+- **Regresión `--build`:** `errors=3 warnings=2 messages=0 rows=5 visible=5` (intacto, `qa_r2_o2_errors_build.png`).
+- **Regresión `--errorspad`:** `errors=2 warnings=1 messages=0 rows=3 visible=3` + `0` líneas `restoring packages`/`[pkconsole]` (restore-on-open no se dispara en runs QA).
+- **Regresión `--packageconsole`:** `starts hidden=True`, `real-restore ... succeeded (exit code 0)`, `0` líneas `[build]`/`[codeissues]` (el restore explícito no toca el pad Errors — paridad legacy, `feedErrorsPad=false`).
+
+### QA §18.5 (Tester QA Senior, recursivo — 1 pase)
+
+Round 2 **VERDE 0 hallazgos** en el primer pase: el subagente ejecutó los 5 oráculos (flujo ABRIR texto+visual con capturas y zooms, regresiones ×3, builds ×2 desde el working tree) y verificó el renderizado de las 5 filas. Nota informativa: el patrón literal del brief `grep -cE '\[build\] issue |'` trae una rama vacía (coincidía con todo); el QA verificó la intención (5 diagnostics) directamente sobre el log.
+
+### Archivos (1 M, +26/−2, sin submódulos)
+
+- `main/src/core/MonoDevelop.Startup.Avalonia/Views/MainWindow.axaml.cs` — `RestorePackagesOnOpen` (ciclo de build + `feedErrorsPad: true`), `RunPackageOperation` (firma con `feedErrorsPad = false`, `ParseBuildMessage` en `EmitLine` solo con el flag, `RefreshCodeIssuesPad` en el `finally` solo con el flag).
+
++ docs ×3 (este §52, § M31-m en `interfaz-plan.md`, nota en `migration-status-report.md`).
+
+### Cierre
+
+QA §18.5: **VERDE 0 hallazgos** (1 pase). Builds Avalonia + GTK **0 errores** (§18.4). Commit por nombre del archivo de código + docs ×3. Push a `origin/agents/sub-agent-senior-dev-role-report`. **Sin submódulos.** Artefactos: `~/opencode/padbugs_repro/` (brief `qa_brief_round2.md`, drivers, logs `validate_bug{1,2}.log`, capturas `qa_r2_o1_*`/`qa_r2_o2_*` + zooms, logs de build `qa_r2_build_*`), `~/opencode/errors_pad_qa/`, `~/opencode/package_console_qa/`.
