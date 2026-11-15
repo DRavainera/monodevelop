@@ -4,7 +4,7 @@ using System.Linq;
 using System.Xml.Linq;
 using MonoDevelop.Ide.Services;
 
-namespace MonoDevelop.AvaloniaShell.Services;
+namespace MonoDevelop.Ide.Services;
 
 /// <summary>
 /// Avalonia model of the DocFood options (Preferences > Other > DocFood). Holds the

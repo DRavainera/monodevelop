@@ -285,8 +285,11 @@
 		<!-- DocFood factory defaults: the legacy DocFood.config.xml (WordLists /
 		     WordExpansions / Macros / Rules) embedded as the shell's defaults, so the
 		     Preferences > Other > DocFood panels start from the same config the
-		     generator ships. Single source of truth copied from the add-in. -->
-		<EmbeddedResource Include="DocFood.config.xml" LogicalName="MonoDevelop.AvaloniaShell.DocFood.config.xml" />
+		     generator ships. Single source of truth copied from the add-in.
+		     Lives in MonoDevelop.Ide\Services next to DocFoodConfig.cs (the service
+		     that reads it); still embedded in the Avalonia shell assembly because
+		     DocFoodConfig compiles into that assembly via the Services glob. -->
+		<EmbeddedResource Include="..\MonoDevelop.Ide\Services\DocFood.config.xml" LogicalName="MonoDevelop.AvaloniaShell.DocFood.config.xml" />
 	</ItemGroup>
 	<!-- Legacy command catalogs: the *.addin.xml sources (MonoDevelop.Ide core +
 	     every add-in) are staged next to the binaries under addinxml/ and loaded
