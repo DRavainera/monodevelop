@@ -305,7 +305,7 @@ type Test() =
 	public NewFileDialog (List<string>? projectPaths, string? activeProjectPath, string? fixedDirectory, string? fixedProjectName)
 	{
 		InitializeComponent ();
-		MonoDevelop.AvaloniaShell.Controls.DialogWindow.Apply (this);
+		MonoDevelop.Ide.Controls.DialogWindow.Apply (this);
 
 		this.fixedDirectory = fixedDirectory;
 		this.fixedProjectName = fixedProjectName;

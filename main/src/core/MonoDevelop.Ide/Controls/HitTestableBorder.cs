@@ -2,7 +2,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Rendering;
 
-namespace MonoDevelop.AvaloniaShell.Controls;
+namespace MonoDevelop.Ide.Controls;
 
 /// <summary>
 /// Border whose ENTIRE bounds participate in hit-testing, independent of the

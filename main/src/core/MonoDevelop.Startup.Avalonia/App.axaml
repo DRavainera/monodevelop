@@ -1,6 +1,6 @@
 <Application xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:controls="using:MonoDevelop.AvaloniaShell.Controls"
+             xmlns:controls="using:MonoDevelop.Ide.Controls"
              x:Class="MonoDevelop.AvaloniaShell.App"
              RequestedThemeVariant="Dark">
   <Application.Styles>

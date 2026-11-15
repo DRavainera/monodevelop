@@ -19,7 +19,6 @@ using Avalonia.VisualTree;
 using MonoDevelop.Ide.Controls;
 using MonoDevelop.Ide.Services;
 using MonoDevelop.AvaloniaShell.Views;
-using MonoDevelop.AvaloniaShell.Services;
 
 namespace MonoDevelop.AvaloniaShell.Views;
 

@@ -16,7 +16,7 @@ using Microsoft.FSharp.Core;
 using Microsoft.FSharp.Control;
 using FRange = FSharp.Compiler.Text.Range;
 
-namespace MonoDevelop.AvaloniaShell.Services;
+namespace MonoDevelop.Ide.Services;
 
 /// <summary>
 /// In-process F# language service on top of FCS 43.12 (the same FSharpChecker

@@ -125,8 +125,8 @@ public class SkTextEditor : Control
 	// The in-process F# language service (shell-side; the GTK legacy UI has no
 	// F# completions wired this way). Null-safe: a C# document, or a build
 	// without the F# service, simply skips the F# branch.
-	MonoDevelop.AvaloniaShell.Services.FSharpLanguageService? FSharpService
-		=> MonoDevelop.AvaloniaShell.Services.FSharpLanguageService.Instance;
+	MonoDevelop.Ide.Services.FSharpLanguageService? FSharpService
+		=> MonoDevelop.Ide.Services.FSharpLanguageService.Instance;
 
 	// True when the file is an F# source file (the same gate the FSI pad uses
 	// for its "active F# document" check): .fs/.fsi/.fsx/.fsscript.

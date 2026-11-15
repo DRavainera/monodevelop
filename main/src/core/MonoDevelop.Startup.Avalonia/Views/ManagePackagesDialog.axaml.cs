@@ -7,7 +7,7 @@ using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Layout;
 using Avalonia.Media;
-using MonoDevelop.AvaloniaShell.Controls;
+using MonoDevelop.Ide.Controls;
 using MonoDevelop.Ide.Services;
 
 namespace MonoDevelop.AvaloniaShell.Views;

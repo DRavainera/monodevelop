@@ -93,7 +93,7 @@ public partial class NewSolutionDialog : Window
 	public NewSolutionDialog (string? preselectTemplate, string? forcedLocation)
 	{
 		InitializeComponent ();
-		MonoDevelop.AvaloniaShell.Controls.DialogWindow.Apply (this);
+		MonoDevelop.Ide.Controls.DialogWindow.Apply (this);
 		// The template list is per category: seed the one holding the
 		// preselected template (QA hook --newproject=fs* / --newsolution=fs*),
 		// defaulting to C# like the GTK dialog does.

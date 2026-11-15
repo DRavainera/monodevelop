@@ -14,7 +14,6 @@ using Avalonia.Media.Imaging;
 using Avalonia.Platform.Storage;
 using Avalonia.Styling;
 using MonoDevelop.Ide.Services;
-using MonoDevelop.AvaloniaShell.Services;
 using MonoDevelop.Components.Commands;
 using MonoDevelop.AvaloniaAddons.Manifests;
 using NuGet.Configuration;
@@ -100,7 +99,7 @@ public partial class PreferencesDialog : Window
 	public PreferencesDialog ()
 	{
 		InitializeComponent ();
-		MonoDevelop.AvaloniaShell.Controls.DialogWindow.Apply (this);
+		MonoDevelop.Ide.Controls.DialogWindow.Apply (this);
 		ThemeDarkRadio!.IsCheckedChanged += OnThemeRadioChecked;
 		ThemeLightRadio!.IsCheckedChanged += OnThemeRadioChecked;
 		ThemeSystemRadio!.IsCheckedChanged += OnThemeRadioChecked;

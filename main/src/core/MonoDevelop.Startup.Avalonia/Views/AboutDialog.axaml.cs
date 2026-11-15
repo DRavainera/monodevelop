@@ -19,7 +19,7 @@ public partial class AboutDialog : Window
 	public AboutDialog ()
 	{
 		InitializeComponent ();
-		MonoDevelop.AvaloniaShell.Controls.DialogWindow.Apply (this);
+		MonoDevelop.Ide.Controls.DialogWindow.Apply (this);
 		PopulateProductPage ();
 		PopulateDetailsPage ();
 	}

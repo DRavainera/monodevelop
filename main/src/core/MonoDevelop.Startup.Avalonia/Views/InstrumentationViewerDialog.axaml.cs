@@ -34,7 +34,7 @@ public partial class InstrumentationViewerDialog : Window
 	public InstrumentationViewerDialog ()
 	{
 		InitializeComponent ();
-		MonoDevelop.AvaloniaShell.Controls.DialogWindow.Apply (this);
+		MonoDevelop.Ide.Controls.DialogWindow.Apply (this);
 		// FuncDataTemplate (codebase pattern): a XAML DataTemplate cannot infer
 		// the row type when the ItemsSource is set from code.
 		CountersList.ItemTemplate = new Avalonia.Controls.Templates.FuncDataTemplate<CounterRow> ((row, _) => {

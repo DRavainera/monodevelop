@@ -92,7 +92,7 @@ public partial class AddinManagerDialog : Window
 	public AddinManagerDialog ()
 	{
 		InitializeComponent ();
-		MonoDevelop.AvaloniaShell.Controls.DialogWindow.Apply (this);
+		MonoDevelop.Ide.Controls.DialogWindow.Apply (this);
 		host = MonoDevelop.AvaloniaShell.App.Addins;
 		// Row name color follows the theme (legacy markup cell uses the default
 		// foreground; a hardcoded white was invisible on the light theme).
