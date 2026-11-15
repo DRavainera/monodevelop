@@ -22,16 +22,30 @@ public static class CodeIssueService
 		@"^(.+?)\((\d+),(\d+)\): (error|warning|info|hidden) ([A-Za-z0-9]+): (.*)$",
 		RegexOptions.Compiled);
 
+	// Project-level (position-less) MSBuild diagnostics, e.g. the NuGet restore
+	// errors: "path/to/project.csproj : error NU1101: Unable to find package ...".
+	// The legacy TaskListEntry(BuildError) carries these with no file position;
+	// here File = the project file and Line/Col = 0.
+	static readonly Regex projectMessageRegex = new (
+		@"^(.+?)\s*:\s*(error|warning|info|hidden) ([A-Za-z0-9]+): (.*)$",
+		RegexOptions.Compiled);
+
 	/// <summary>Parses one MSBuild diagnostic line; null when the line is not a
-	/// diagnostic (build progress, banners, plain output).</summary>
+	/// diagnostic (build progress, banners, plain output). Matches both the
+	/// file-level "file(line,col): severity CODE: message" and the project-level
+	/// "file : severity CODE: message" (no position) forms the SDK emits.</summary>
 	public static CodeIssue? Parse (string line)
 	{
 		var m = buildMessageRegex.Match (line);
-		if (!m.Success)
-			return null;
-		return new CodeIssue (m.Groups [1].Value, int.Parse (m.Groups [2].Value),
-			int.Parse (m.Groups [3].Value), m.Groups [4].Value,
-			m.Groups [5].Value, m.Groups [6].Value);
+		if (m.Success)
+			return new CodeIssue (m.Groups [1].Value, int.Parse (m.Groups [2].Value),
+				int.Parse (m.Groups [3].Value), m.Groups [4].Value,
+				m.Groups [5].Value, m.Groups [6].Value);
+		var p = projectMessageRegex.Match (line);
+		if (p.Success)
+			return new CodeIssue (p.Groups [1].Value, 0, 0,
+				p.Groups [2].Value, p.Groups [3].Value, p.Groups [4].Value);
+		return null;
 	}
 
 	/// <summary>Groups issues by severity in <see cref="SeverityOrder"/>, dropping

@@ -750,7 +750,7 @@ public partial class MainWindow : Window
 				// QA: tab strip overflow — open enough documents for the ‹ › buttons
 				// to appear, step through the tabs, then close until they fit again
 				// and the buttons disappear.
-				var file = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile), "TestProj", "TestProj", "Program.cs");
+				var file = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile), "opencode", "TestProj", "Program.cs");
 				if (!File.Exists (file)) {
 					Output ("[tabscroll] no test file");
 				} else {
@@ -1593,7 +1593,7 @@ public partial class MainWindow : Window
 			} else if (qa == "--bmkpad") {
 				// QA: Bookmarks pad — toggle two bookmarks, open the pad, list rows,
 				// navigate Next and verify the pad refresh.
-				var file = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile), "TestProj", "TestProj", "Program.cs");
+				var file = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile), "opencode", "TestProj", "Program.cs");
 				if (!File.Exists (file)) {
 					Output ("[bmkpad] no test file");
 				} else {
@@ -1616,7 +1616,7 @@ public partial class MainWindow : Window
 			} else if (qa == "--bkpad") {
 				// QA: Breakpoints pad — toggle breakpoints, pad rows, enable/disable,
 				// persistence into .userprefs, gutter navigation and cleanup.
-				var file = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile), "TestProj", "TestProj", "Program.cs");
+				var file = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile), "opencode", "TestProj", "Program.cs");
 				if (!File.Exists (file) || loadedSolutionPath is null) {
 					Output ("[bkpad] no test file/solution");
 				} else {
@@ -1672,7 +1672,7 @@ public partial class MainWindow : Window
 					Output ("[locals] no solution loaded");
 				} else {
 					// Ensure the breakpoint store has exactly the Program.cs:13 entry.
-					var file = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile), "TestProj", "TestProj", "Program.cs");
+					var file = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile), "opencode", "TestProj", "Program.cs");
 					OpenFileDocument (file);
 					var name = DocKey (file);
 					if (docs.TryGetValue (name, out var ed)) {
@@ -1741,7 +1741,7 @@ public partial class MainWindow : Window
 			} else if (qa == "--watch") {
 				// QA: Watch pad — add watch expressions (legacy Watch pad add/remove),
 				// debug to a stop, verify evaluate in the frame context, cleanup.
-				var file = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile), "TestProj", "TestProj", "Program.cs");
+				var file = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile), "opencode", "TestProj", "Program.cs");
 				OpenFileDocument (file);
 				var name = DocKey (file);
 				watchExpressions.Clear ();
@@ -1784,7 +1784,7 @@ public partial class MainWindow : Window
 				// `answer` reads 0; the in-place edit renames the row to
 				// "answer + 1" (= 1) and ONE step over makes it 43 WITHOUT any
 				// manual refresh — proving the pad re-evaluates after every step.
-				var file = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile), "TestProj", "TestProj", "Program.cs");
+				var file = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile), "opencode", "TestProj", "Program.cs");
 				OpenFileDocument (file);
 				var name = DocKey (file);
 				watchExpressions.Clear ();
@@ -1850,7 +1850,7 @@ public partial class MainWindow : Window
 				// QA: pinned watches — pin the words at the caret as editor bubbles,
 				// verify the legacy file/line serialization in <sln>.userprefs, the
 				// live evaluation on a debug stop and the load path (document open).
-				var file = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile), "TestProj", "TestProj", "Program.cs");
+				var file = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile), "opencode", "TestProj", "Program.cs");
 				OpenFileDocument (file);
 				var name = DocKey (file);
 				if (docs.TryGetValue (name, out var ed)) {
@@ -1994,7 +1994,7 @@ public partial class MainWindow : Window
 				// QA: conditional + hit-count breakpoints — attributes set on the
 				// editor store, persisted to .userprefs with condition/hitcount,
 				// pushed to the DAP adapter (session starts OK and stops on the bp).
-				var file = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile), "TestProj", "TestProj", "Program.cs");
+				var file = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile), "opencode", "TestProj", "Program.cs");
 				OpenFileDocument (file);
 				var name = DocKey (file);
 				if (docs.TryGetValue (name, out var ed)) {
@@ -2026,7 +2026,7 @@ public partial class MainWindow : Window
 				// QA: stepping — debug to the bp at line 10, Step Over twice (lines
 				// 11/12 across Console.WriteLine calls), verify the highlight moves
 				// and the pads refresh; then Continue to exit.
-				var file = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile), "TestProj", "TestProj", "Program.cs");
+				var file = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile), "opencode", "TestProj", "Program.cs");
 				OpenFileDocument (file);
 				var name = DocKey (file);
 				if (docs.TryGetValue (name, out var ed)) {
@@ -2062,7 +2062,7 @@ public partial class MainWindow : Window
 			} else if (qa == "--tree") {
 				// QA: expandable variable trees — debug to the bp, fill Locals, verify
 				// the tree roots and that a child expansion returns real rows.
-				var file = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile), "TestProj", "TestProj", "Program.cs");
+				var file = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile), "opencode", "TestProj", "Program.cs");
 				OpenFileDocument (file);
 				var name = DocKey (file);
 				if (docs.TryGetValue (name, out var ed)) {
@@ -2098,7 +2098,7 @@ public partial class MainWindow : Window
 				// QA: Immediate pad — debug to the bp, run "answer + 1" and "greeting"
 				// through RunImmediate, verify the Output rows; also the no-session path.
 				RunImmediate (); // no session yet → honest error row
-				var file = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile), "TestProj", "TestProj", "Program.cs");
+				var file = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile), "opencode", "TestProj", "Program.cs");
 				OpenFileDocument (file);
 				var name = DocKey (file);
 				if (docs.TryGetValue (name, out var ed)) {
@@ -2130,7 +2130,7 @@ public partial class MainWindow : Window
 					// QA: gutter breakpoint toggle + inline data tip — the same code path
 					// a click on the icon strip runs (ToggleBreakpointAtGutter), then a
 					// debug stop shows the green value bubble on the paused line.
-					var file = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile), "TestProj", "TestProj", "Program.cs");
+					var file = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile), "opencode", "TestProj", "Program.cs");
 					OpenFileDocument (file);
 					var name = DocKey (file);
 					if (docs.TryGetValue (name, out var ed)) {
@@ -2177,7 +2177,7 @@ public partial class MainWindow : Window
 					// QA: Call Stack frame switching — a bp inside TestProj's Double (int)
 					// stops with Main on the stack (2 managed frames); selecting the 2nd
 					// frame reloads the Locals tree from ITS scopes (GetLocalsForFrameAsync).
-					var file = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile), "TestProj", "TestProj", "Program.cs");
+					var file = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile), "opencode", "TestProj", "Program.cs");
 					OpenFileDocument (file);
 					var name = DocKey (file);
 					if (docs.TryGetValue (name, out var ed)) {
@@ -2214,7 +2214,7 @@ public partial class MainWindow : Window
 				} else if (qa == "--immcompl") {
 					// QA: Immediate member completion — type "list.", the popup fills from
 					// the DAP children of the evaluated prefix, Tab commits list.Count.
-					var file = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile), "TestProj", "TestProj", "Program.cs");
+					var file = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile), "opencode", "TestProj", "Program.cs");
 					OpenFileDocument (file);
 					var name = DocKey (file);
 					if (docs.TryGetValue (name, out var ed)) {
@@ -2256,7 +2256,7 @@ public partial class MainWindow : Window
 					if (loadedSolutionPath is null) {
 						Output ("[persist] no solution loaded");
 					} else {
-						var file = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile), "TestProj", "TestProj", "Program.cs");
+						var file = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile), "opencode", "TestProj", "Program.cs");
 						OpenFileDocument (file);
 						var name = DocKey (file);
 						var edP = docs [name];
@@ -2309,7 +2309,7 @@ public partial class MainWindow : Window
 					Output ("[attachreal] could not start sleeper");
 				} else {
 					await Task.Delay (300);
-					var bpFile = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile), "TestProj", "TestProj", "Program.cs");
+					var bpFile = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile), "opencode", "TestProj", "Program.cs");
 					debugSession?.Dispose ();
 					var session = new MonoDevelop.Debugger.Services.DebugSessionService ();
 					debugSession = session;
@@ -2424,7 +2424,13 @@ public partial class MainWindow : Window
 				var fd = new FindInFilesDialog { SearchTextOverride = "Hello" };
 				_ = fd.ShowDialog (this);
 			} else if (qa == "--build") {
-				_ = RunBuildAsync ();
+				// QA: build the loaded solution and dump the resulting diagnostics,
+				// so a failed build (restore errors, compile errors) is verifiable
+				// from the model, not just the log lines ParseBuildMessage prints.
+				await RunBuildAsync ();
+				Output ("[build] pad → " + (errorsPad?.DumpStatus () ?? "(pad missing)"));
+				foreach (var (file, line, col, level, code, message) in buildErrors)
+					Output ($"[build] issue {level} {code} {Path.GetFileName (file)}({line},{col}): {message}");
 			} else if (qa == "--buildone") {
 				// QA: single-project build (ProjectCommands.Build) via the command dispatch.
 				OnMenuCommand ("MonoDevelop.Ide.Commands.ProjectCommands.Build");
@@ -2432,7 +2438,7 @@ public partial class MainWindow : Window
 			} else if (qa == "--mcaret") {
 				// QA: multi-caret — add carets on every match, insert at all, undo.
 				var file = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile),
-					"TestProj", "TestProj", "Program.cs");
+					"opencode", "TestProj", "Program.cs");
 				if (File.Exists (file)) {
 					OpenFileDocument (file);
 					var name = DocKey (file);
@@ -2583,7 +2589,7 @@ public partial class MainWindow : Window
 				// The editor-tab probes need a real document tab; the first QA flag wins
 				// the dispatch, so open one here instead of relying on --bubbles.
 				var probeFile = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile),
-					"TestProj", "TestProj", "Program.cs");
+					"opencode", "TestProj", "Program.cs");
 				if (File.Exists (probeFile))
 					OpenFileDocument (probeFile);
 				var hitTimer = new Avalonia.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds (300) };
@@ -3264,7 +3270,7 @@ public partial class MainWindow : Window
 				// QA: MessageBubbleCommands — set a bubble on line 6 of Program.cs,
 				// cycle the three modes, hide.
 				var file = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile),
-					"TestProj", "TestProj", "Program.cs");
+					"opencode", "TestProj", "Program.cs");
 				if (File.Exists (file)) {
 					OpenFileDocument (file);
 					var name = DocKey (file);
@@ -3356,7 +3362,7 @@ public partial class MainWindow : Window
 			} else if (qa == "--compl") {
 				// QA: Complete Word (unique + cycling), parameter info, template expansion.
 				var file = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile),
-					"TestProj", "TestProj", "Program.cs");
+					"opencode", "TestProj", "Program.cs");
 				if (File.Exists (file)) {
 					OpenFileDocument (file);
 					var name = DocKey (file);
@@ -3412,7 +3418,7 @@ public partial class MainWindow : Window
 				// QA: SkTextEditor core regressions — backspace deletion, hover info
 				// and the completion popup. Runs without synthetic input.
 				var file = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile),
-					"TestProj", "TestProj", "Program.cs");
+					"opencode", "TestProj", "Program.cs");
 				if (File.Exists (file)) {
 					var original = File.ReadAllText (file); // QA restores this at the end
 					OpenFileDocument (file);
@@ -3458,7 +3464,7 @@ public partial class MainWindow : Window
 				// modified documents. Two paths: the direct dialog (grouping +
 				// cascade + result mapping) and the CloseWorkspace gate end-to-end.
 				var file = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile),
-					"TestProj", "TestProj", "Program.cs");
+					"opencode", "TestProj", "Program.cs");
 				if (File.Exists (file) && !docs.Values.Any (d => d.IsDirty)) {
 					OpenFileDocument (file);
 					var name = DocKey (file);
@@ -3544,7 +3550,7 @@ public partial class MainWindow : Window
 				// QA: code folding — ToggleFolding at the outermost brace, hidden-line
 				// semantics, ToggleAllFoldings and EnableDisableFolding round-trip.
 				var file = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile),
-					"TestProj", "TestProj", "Program.cs");
+					"opencode", "TestProj", "Program.cs");
 				if (File.Exists (file)) {
 					OpenFileDocument (file);
 					var name = DocKey (file);
@@ -3570,7 +3576,7 @@ public partial class MainWindow : Window
 			} else if (qa == "--fmt") {
 				// QA: FormatBuffer — make the file ugly, format, verify reindent + undo.
 				var file = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile),
-					"TestProj", "TestProj", "Program.cs");
+					"opencode", "TestProj", "Program.cs");
 				if (File.Exists (file)) {
 					OpenFileDocument (file);
 					var name = DocKey (file);
@@ -3971,7 +3977,7 @@ public partial class MainWindow : Window
 			} else if (qa == "--bookmarks") {
 				// QA: exercise bookmark toggle/next/prev/clear with pixel-visible marks.
 				var file = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile),
-					"TestProj", "TestProj", "Program.cs");
+					"opencode", "TestProj", "Program.cs");
 				if (File.Exists (file)) {
 					OpenFileDocument (file);
 					if (docs.TryGetValue (DocKey (file), out var ed)) {
@@ -3989,7 +3995,7 @@ public partial class MainWindow : Window
 			} else if (qa == "--navhist") {
 				// QA: exercise the navigation history service.
 				var file = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile),
-					"TestProj", "TestProj", "Program.cs");
+					"opencode", "TestProj", "Program.cs");
 				if (File.Exists (file)) {
 					OpenFileDocument (file);
 					PushNavigationPoint ();
@@ -4006,7 +4012,7 @@ public partial class MainWindow : Window
 			} else if (qa == "--windocs") {
 				// QA: exercise document cycling / Nth selection.
 				var file = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile),
-					"TestProj", "TestProj", "Program.cs");
+					"opencode", "TestProj", "Program.cs");
 				if (File.Exists (file)) {
 					OpenFileDocument (file);
 					CreateUnsavedDocument ("new1.cs", "");
@@ -4023,7 +4029,7 @@ public partial class MainWindow : Window
 			} else if (qa == "--editops") {
 				// QA: exercise the line operations on a real document.
 				var file = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile),
-					"TestProj", "TestProj", "Program.cs");
+					"opencode", "TestProj", "Program.cs");
 				if (File.Exists (file)) {
 					OpenFileDocument (file);
 					if (docs.TryGetValue (DocKey (file), out var ed)) {
@@ -4049,7 +4055,7 @@ public partial class MainWindow : Window
 				// QA: open Program.cs and show the GotoLineNumber overlay widget.
 				// With "=N[:C]" it performs the jump directly (deterministic QA path).
 				var file = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile),
-					"TestProj", "TestProj", "Program.cs");
+					"opencode", "TestProj", "Program.cs");
 				if (File.Exists (file)) {
 					OpenFileDocument (file);
 					if (docs.TryGetValue (DocKey (file), out var ed)) {
@@ -4071,7 +4077,7 @@ public partial class MainWindow : Window
 			} else if (qa == "--brace") {
 				// QA: GotoMatchingBrace + file-scoped rename + git status dispatch.
 				var file = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile),
-					"TestProj", "TestProj", "Program.cs");
+					"opencode", "TestProj", "Program.cs");
 				if (File.Exists (file)) {
 					OpenFileDocument (file);
 					var name = DocKey (file);
@@ -4096,7 +4102,7 @@ public partial class MainWindow : Window
 				var file = qa.StartsWith ("--outline=", StringComparison.Ordinal)
 					? qa ["--outline=".Length..]
 					: Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile),
-						"TestProj", "TestProj", "Program.cs");
+						"opencode", "TestProj", "Program.cs");
 				if (File.Exists (file)) {
 					OpenFileDocument (file);
 					SelectDocument (DocKey (file));
@@ -4243,7 +4249,7 @@ public partial class MainWindow : Window
 
 				var outlineFile = qa.StartsWith ("--dblclick=", StringComparison.Ordinal)
 					? qa ["--dblclick=".Length..]
-					: Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile), "TestProj", "TestProj", "Program.cs");
+					: Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile), "opencode", "TestProj", "Program.cs");
 				if (File.Exists (outlineFile)) {
 					OpenFileDocument (outlineFile);
 					SelectDocument (DocKey (outlineFile));
@@ -7028,6 +7034,14 @@ public partial class MainWindow : Window
 			RefreshClassesPad ();
 			RefreshUnitTestsPad ();
 			Output ("Loaded " + Path.GetFileName (path));
+
+			// Legacy PackageManagementStartupHandler: on solution load, restore the
+			// NuGet packages through the Package Console (AutomaticPackageRestore-
+			// OnOpeningSolution, default true). The shell mirrors it with a real
+			// `dotnet restore` streamed through the console pad. Posted to the
+			// dispatcher so it runs after the ctor finishes (the pad is created
+			// later in the ctor than this solution open).
+			Avalonia.Threading.Dispatcher.UIThread.Post (() => RestorePackagesOnOpen (path));
 		} catch (Exception ex) {
 			Output ("Error loading solution: " + ex.Message);
 		}
@@ -13148,6 +13162,67 @@ public partial class MainWindow : Window
 		}
 	}
 
+	// Legacy PackageManagementStartupHandler: on solution load the NuGet add-in
+	// restores the solution's packages when the AutomaticPackageRestoreOnOpening-
+	// Solution option is on (default true), streaming the log through the Package
+	// Console. The shell has no such hook, so opening a solution left the console
+	// pad empty (the operator's bug). The in-flight restore-on-open task, kept so a
+	// future probe can await it deterministically instead of racing the pad.
+	Task? restoreOnOpenTask;
+
+	void RestorePackagesOnOpen (string path)
+	{
+		// QA runs must not trigger a background restore: their oracles assert a
+		// deterministic (empty) console at the start of each flow.
+		if (Program.QaDialogArg != "")
+			return;
+		// Legacy PackageManagementOptions.AutomaticPackageRestoreOnOpeningSolution
+		// (default true), stored nested under "PackageManagementSettings" — read with
+		// the same key the Preferences NuGet panel writes, so a user toggle is honored.
+		if (!ReadNestedBool ("PackageManagementSettings", "AutomaticPackageRestoreOnOpeningSolution", true))
+			return;
+		// Only restore when the solution actually references NuGet packages (the
+		// shell's proxy for the legacy RestoreAndCheckForUpdatesAction.HasMissing-
+		// Packages gate) — a package-less solution would just run a no-op restore.
+		if (!SolutionHasPackageReferences (path))
+			return;
+		Output ("[restore-on-open] restoring packages for " + Path.GetFileName (path));
+		restoreOnOpenTask = RunPackageOperation ("restore", "dotnet", $"restore \"{path}\"");
+	}
+
+	// Legacy PackageManagementOptions stores the NuGet flags as nested <Property>
+	// entries under "PackageManagementSettings" in MonoDevelopProperties.xml (the
+	// same file the Preferences dialog reads/writes). Returns the stored bool, or
+	// def when the entry is absent (the legacy default applies).
+	static bool ReadNestedBool (string parent, string key, bool def)
+	{
+		try {
+			var propsFile = Path.Combine (
+				Environment.GetFolderPath (Environment.SpecialFolder.UserProfile),
+				".config", "MonoDevelop", "MonoDevelopProperties.xml");
+			if (!File.Exists (propsFile))
+				return def;
+			var el = System.Xml.Linq.XDocument.Load (propsFile).Root?
+				.Elements ("Property").FirstOrDefault (e => (string?)e.Attribute ("key") == parent)?
+				.Elements ("Property").FirstOrDefault (e => (string?)e.Attribute ("key") == key);
+			return bool.TryParse ((string?)el?.Attribute ("value"), out var b) ? b : def;
+		} catch { return def; }
+	}
+
+	// True when any project of the solution references NuGet packages — the gate
+	// that keeps restore-on-open from running a pointless restore for solutions
+	// that have no PackageReference at all.
+	bool SolutionHasPackageReferences (string sln)
+	{
+		foreach (var proj in SolutionProjects (sln)) {
+			try {
+				if (File.ReadAllText (proj).Contains ("PackageReference", StringComparison.Ordinal))
+					return true;
+			} catch { }
+		}
+		return false;
+	}
+
 	/// <summary>
 	/// Runs a NuGet package operation (e.g. restore) through the Package Console pad —
 	/// the Avalonia equivalent of the legacy ProgressMonitor feeding the
@@ -13331,8 +13406,12 @@ public partial class MainWindow : Window
 		// One row per unique problem (legacy: the structured MSBuild log gave each
 		// diagnostic a unique id, so the store never held two of the same). The raw
 		// text lines this parses from can repeat a diagnostic, so skip the repeat.
+		// The message is part of the signature: distinct problems that share
+		// file/line/col/level/code — e.g. the three NU1101 "Unable to find package
+		// X" lines of a failed restore — each keep their own row (the legacy store
+		// held one row per diagnostic, not one per location).
 		if (!errorRowSigs.Add (issue.File + "|" + issue.Line + "|" + issue.Col + "|"
-			+ issue.Severity + "|" + issue.Code))
+			+ issue.Severity + "|" + issue.Code + "|" + issue.Message))
 			return;
 		buildErrors.Add ((issue.File, issue.Line, issue.Col, issue.Severity, issue.Code, issue.Message));
 		// Legacy TaskAdded: one row per diagnostic in the table. The Project/Path
