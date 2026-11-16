@@ -3493,3 +3493,22 @@ Fixes: (1) `Parse` añade un `projectMessageRegex` para el formato de nivel proy
 **Archivos** (3 M, solo shell, sin submódulos): `Views/AboutDialog.axaml`, `Views/AboutDialog.axaml.cs`, `Views/MainWindow.axaml.cs` (branch `--about` → oráculo `QaAbout()`).
 
 **Cierre**: commit por nombre del archivo de código + docs ×3 (`session_summary.md` §54, `interfaz-plan.md` M31-o, esta nota). Push a `origin/agents/sub-agent-senior-dev-role-report`. **Sin submódulos.** Artefactos: `~/opencode/docfood_qa/` (brief `qa_brief_about_r1.md`, logs `about`/`about2`/`aboutqa`/`aboutreg`, capturas `shots/about*.png`, probe `uuid_probe.sh` + perfil `uuidpersist`, `builds_about_r1_{avalonia,gtk}.log`, reporte `qa_report_about_r1.md`).
+
+### UI Avalonia: enriquecer la sección "Operating System" del About (distro, escritorio, servidor gráfico, arquitectura, empaquetado) (2026-11-15)
+
+**Estado: CERRADO (QA APROBADO, 0 hallazgos abiertos §18.5, 1 pase VERDE).** Follow-up del port del About (M31-o/§54): el operador pidió que la sección **Operating System** de la página de detalles muestre más info **en los 3 SO**: distribución (nombre + versión), escritorio (nombre + versión), servidor gráfico (Wayland/X11), arquitectura (X64, ARM64, ...) y tipo de empaquetado de la instalación (deb, rpm, flatpak, snap, AppImage, directo).
+
+**Qué se hizo**: nuevo módulo **solo-shell** `Views/OperatingSystemInfo.cs` (clase estática; no toca `MonoDevelop.Core` ni el motor Mono.Addins → sin impacto GTK) y `AboutDialog.PopulateDetailsPage()` pasa a usar `OperatingSystemInfo.GetDescription()` (antes `SystemInformation.GetOperatingSystemDescription()`, que en Linux solo imprimía `uname -mrsv`).
+- **Linux**: `Distribution:` desde `PRETTY_NAME` de `/etc/os-release` (fallbacks `/usr/lib/os-release`, `NAME`+`VERSION_ID`); `Desktop:` `XDG_CURRENT_DESKTOP` + versión por probe por escritorio (GNOME→`gnome-session --version`, KDE, XFCE, Cinnamon, MATE, LXDE, LXQt, Budgie, Enlightenment; sin env → `unknown`); `Graphical server:` Wayland (`WAYLAND_DISPLAY`) / X11 (`DISPLAY`) / `XDG_SESSION_TYPE`; `Kernel:` `uname -sr`.
+- **macOS**: `System: macOS <sw_vers -productVersion>`; `Desktop: macOS (Cocoa)`; `Graphical server: WindowServer`; kernel.
+- **Windows**: `Distribution: Windows <CurrentBuildLabel|ReleaseId (registro, #if WINDOWS)> <major.minor> (build <n>)`; `Desktop: Windows Desktop`; `Graphical server: Windows DWM`.
+- **Todos**: `Architecture: X64/x86/Arm/Arm64 (bit)` y `Installation type:`: envs de sandbox (flatpak/snap/AppImage/nix/homebrew), si no `dpkg -S`/`rpm -qf` sobre el binario y el entry assembly → deb/rpm, si nada → `direct`. Comandos por argv, timeout 2 s, `Kill(entireProcessTree)` — ningún probe cuelga el diálogo.
+- Oráculo QA ampliado: `QaAbout()` emite una línea por campo de la sección OS (`[about] os0=... osN=...`).
+
+**Validación**: builds Avalonia + GTK **0 errores** (§18.4). Oráculo en vivo (env limpio de run.sh): `Distribution: Fedora Linux 44 (Workstation Edition)`, `Desktop: unknown` (correcto, `env -i`), `Graphical server: X11`, `Kernel: Linux 7.3.3-200.fc44.x86_64`, `Architecture: X64 (64-bit)`, `Installation type: direct` (correcto, la build no está owned), 0 FATAL. Run extra con entorno de sesión: `Desktop: GNOME 50.1` + `Graphical server: Wayland`. Ramos de empaquetado por env: `FLATPAK_ID`→flatpak, `SNAP`→snap, `APPIMAGE`→AppImage. `copyLen` crece, `copyFirstLine==== MonoDevelop ===` intacto. `OperatingSystemInfo` no existe fuera de la shell. Regresión `--prefs=fsharp` → `placeholder=False`, 0 FATAL.
+
+**QA §18.5**: round 1 → **VERDE, 0 hallazgos abiertos** (reporte `~/opencode/docfood_qa/qa_report_aboutos_r1.md`).
+
+**Archivos** (1 nuevo + 1 M, solo shell, sin submódulos): `Views/OperatingSystemInfo.cs` (nuevo), `Views/AboutDialog.axaml.cs` (sección OS + oráculo `os<idx>`).
+
+**Cierre**: commit por nombre (código + docs ×3: `session_summary.md` §55, `interfaz-plan.md` M31-p, esta nota). Push a `origin/agents/sub-agent-senior-dev-role-report`. **Sin submódulos.** Artefactos: `~/opencode/docfood_qa/` (brief `qa_brief_aboutos_r1.md`, driver `run_env.sh` + runs `aboutos_r1`/`aboutos_env*`, capturas `shots/aboutos*.png`, reporte `qa_report_aboutos_r1.md`).

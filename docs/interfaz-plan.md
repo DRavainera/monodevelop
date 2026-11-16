@@ -6262,3 +6262,25 @@ El operador reportó dos bugs de la shell Avalonia: el pad **Errors** no mostrab
 **Archivos** (3 M, solo shell, sin submódulos): `Views/AboutDialog.axaml`, `Views/AboutDialog.axaml.cs`, `Views/MainWindow.axaml.cs` (branch `--about` → oráculo `QaAbout()`).
 
 + docs ×3 (este § M31-o, `session_summary.md` §54, nota en `migration-status-report.md`). Artefactos: `~/opencode/docfood_qa/` (brief `qa_brief_about_r1.md`, logs `about`/`about2`/`aboutqa`/`aboutreg`, capturas `shots/about*.png`, probe `uuid_probe.sh` + perfil `uuidpersist`, `builds_about_r1_{avalonia,gtk}.log`, reporte `qa_report_about_r1.md`).
+
+## 2026-11-15 — M31-p Enrichir la sección "Operating System" del About (distro, escritorio, servidor gráfico, arquitectura, empaquetado — Linux/macOS/Windows) — CERRADO (QA VERDE, 0 hallazgos)
+
+**Estado: CERRADO (QA APROBADO, 0 hallazgos abiertos §18.5).** Follow-up de M31-o (port del diálogo About). El operador pidió que la sección **Operating System** de la página de detalles muestre más info en **los 3 SO**: distribución (nombre + versión), entorno de escritorio (nombre + versión), servidor gráfico (Wayland/X11), arquitectura (X64, ARM64, ...) y tipo de empaquetado con que se instaló la shell (deb, rpm, flatpak, snap, AppImage, directo).
+
+**Qué se hizo**: nuevo módulo **solo-shell** `Views/OperatingSystemInfo.cs` (clase estática, no toca `MonoDevelop.Core` ni el motor Mono.Addins → sin impacto GTK, §18.4). `AboutDialog.PopulateDetailsPage()` pasa a usar `OperatingSystemInfo.GetDescription()` (antes `SystemInformation.GetOperatingSystemDescription()`, que en Linux solo imprimía una línea `uname -mrsv`).
+
+- **Linux**: `Distribution: <PRETTY_NAME de /etc/os-release (fallback /usr/lib/os-release, fallback NAME+VERSION_ID)>`; `Desktop: <XDG_CURRENT_DESKTOP (1ª entrada) + versión>` (GNOME→`gnome-session --version`, KDE→plasma-discover/kded5/kded4, XFCE, Cinnamon, MATE, LXDE, LXQt, Budgie, Enlightenment; sin env → `unknown`); `Graphical server: Wayland` (si `WAYLAND_DISPLAY`) / `X11` (si `DISPLAY`) / `XDG_SESSION_TYPE` con el tipo entre paréntesis si difiere; `Kernel: <uname -sr>`.
+- **macOS**: `System: macOS <sw_vers -productVersion>`; `Desktop: macOS (Cocoa)`; `Graphical server: WindowServer`; kernel.
+- **Windows**: `Distribution: Windows <CurrentBuildLabel|ReleaseId (registro HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion, bajo #if WINDOWS)> <major.minor> (build <n>)`; `Desktop: Windows Desktop`; `Graphical server: Windows DWM`.
+- **Todos los SO**: `Architecture: X64 (64-bit) / x86 (32-bit) / Arm (32-bit) / Arm64 (64-bit)` (de `RuntimeInformation.OSArchitecture`) y `Installation type: <kind>`: env `FLATPAK_ID`/`FLATPAK_RUN`→`flatpak`, `SNAP`/`SNAP_REVISION`→`snap`, `APPIMAGE`→`AppImage`, `NIX_STORE_PATH`→`nix`, `PKG_EXECUTABLE`→`homebrew`; si no, `dpkg -S` / `rpm -qf` sobre el binario del proceso **y** el entry assembly (al lanzar `dotnet app.dll` el `ProcessPath` es el host dotnet, no la app) → `deb`/`rpm`; si nada, `direct`.
+- Robustez: todo comando externo va por argv (sin shell), con timeout 2 s y `Kill(entireProcessTree)`; ningún probe puede colgar el diálogo.
+
+**Oráculo QA ampliado**: `QaAbout()` emite además una línea por campo de la sección (`[about] os0=... os1=...`), para que el contenido se valide campo a campo sin navegación de UI.
+
+**Validación**: builds Avalonia + GTK **0 errores** (§18.4). Oráculo en vivo `--about` (env limpio de run.sh): `os0=Distribution: Fedora Linux 44 (Workstation Edition)`, `os1=Desktop: unknown` (correcto: `env -i`), `os2=Graphical server: X11`, `os3=Kernel: Linux 7.3.3-200.fc44.x86_64`, `os4=Architecture: X64 (64-bit)`, `os5=Installation type: direct` (correcto: la build no está owned por ningún paquete), 0 FATAL. Run extra con entorno de sesión (`XDG_CURRENT_DESKTOP=GNOME XDG_SESSION_TYPE=wayland WAYLAND_DISPLAY=wayland-0`): `Desktop: GNOME 50.1` + `Graphical server: Wayland`. Ramos de empaquetado por env: `FLATPAK_ID`→`flatpak`, `SNAP`→`snap`, `APPIMAGE`→`AppImage`. `copyLen` crece y `copyFirstLine==== MonoDevelop ===` intacto. Sin impacto GTK: `OperatingSystemInfo` no existe fuera de la shell. Regresión `--prefs=fsharp` → `placeholder=False`, 0 FATAL.
+
+**QA §18.5 (Tester QA Senior, recursivo)**: round 1 → **VERDE, 0 hallazgos abiertos** (reporte `~/opencode/docfood_qa/qa_report_aboutos_r1.md`).
+
+**Archivos** (1 nuevo + 1 M, solo shell, sin submódulos): `Views/OperatingSystemInfo.cs` (nuevo), `Views/AboutDialog.axaml.cs` (sección OS + oráculo `os<idx>`).
+
++ docs ×3 (este § M31-p, `session_summary.md` §55, nota en `migration-status-report.md`). Artefactos: `~/opencode/docfood_qa/` (brief `qa_brief_aboutos_r1.md`, driver `run_env.sh` + runs `aboutos_r1`/`aboutos_env*`, logs, capturas `shots/aboutos*.png`, reporte `qa_report_aboutos_r1.md`).
