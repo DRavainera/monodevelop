@@ -9,37 +9,50 @@
         ExtendClientAreaToDecorationsHint="True"
         Background="{DynamicResource IdeWindowBgBrush}">
 
+  <Window.Styles>
+    <!-- Product-page license links (legacy AboutMonoDevelopTabPage LinkLabel:
+         underlined text that opens the default browser). -->
+    <Style Selector="TextBlock.aboutlink">
+      <Setter Property="Foreground" Value="#5C2D91" />
+      <Setter Property="TextDecorations" Value="Underline" />
+      <Setter Property="Cursor" Value="Hand" />
+    </Style>
+  </Window.Styles>
+
   <Grid RowDefinitions="Auto,*,Auto">
     <!-- Custom chrome row: dialog title + close -->
     <Border x:Name="ChromeRow" Grid.Row="0" Classes="dialogchrome" Background="{DynamicResource IdeChromeBgBrush}"
             BorderBrush="{DynamicResource IdeBorderBrush}" BorderThickness="0,0,0,1">
       <Grid ColumnDefinitions="*,Auto">
-        <TextBlock Text="About MonoDevelop" Margin="12,6" FontWeight="SemiBold"
+        <TextBlock x:Name="ChromeTitle" Text="About MonoDevelop" Margin="12,6" FontWeight="SemiBold"
                    Foreground="{DynamicResource IdeFgBrush}" />
         <Button Grid.Column="1" Classes="caption captionclose" Content="&#x2715;" Click="OnClose" />
       </Grid>
     </Border>
 
-    <!-- Pages -->
+    <!-- Pages (legacy CommonAboutDialog: tabless Notebook with product page +
+         version-information page, switched by the Show/Hide Details button) -->
     <Panel Grid.Row="1">
-      <!-- Page 0: product page -->
+      <!-- Page 0: product page (legacy AboutMonoDevelopTabPage) -->
       <ScrollViewer x:Name="ProductPage">
         <StackPanel Margin="16">
           <Image x:Name="AboutImage" Height="140" Stretch="Uniform" HorizontalAlignment="Center" />
           <StackPanel Margin="0,12,0,0">
-            <TextBlock Text="Version" FontWeight="Bold" Foreground="{DynamicResource IdeFgBrush}" />
+            <TextBlock x:Name="VersionLabel" FontWeight="Bold" Foreground="{DynamicResource IdeFgBrush}" />
             <TextBlock x:Name="VersionText" Margin="12,2,0,0" Foreground="{DynamicResource IdeFgBrush}" />
 
-            <StackPanel x:Name="LicenseSection">
-              <TextBlock Text="License" FontWeight="Bold" Margin="0,10,0,0"
+            <!-- Shown only when the branding provides a license-terms URL
+                 (legacy: if (BrandingService.LicenseTermsUrl != null)) -->
+            <StackPanel x:Name="LicenseSection" IsVisible="False">
+              <TextBlock x:Name="LicenseLabel" FontWeight="Bold" Margin="0,10,0,0"
                          Foreground="{DynamicResource IdeFgBrush}" />
-              <TextBlock Classes="link" Text="License Terms" Margin="12,2,0,0"
-                         Foreground="#5C2D91" Cursor="Hand" />
-              <TextBlock Classes="link" x:Name="PrivacyLink" Text="Privacy Statement" Margin="12,2,0,0"
-                         Foreground="#5C2D91" Cursor="Hand" />
+              <TextBlock x:Name="LicenseTermsLink" Classes="aboutlink"
+                         HorizontalAlignment="Left" Margin="12,2,0,0" />
+              <TextBlock x:Name="PrivacyLink" Classes="aboutlink"
+                         HorizontalAlignment="Left" Margin="12,2,0,0" />
             </StackPanel>
 
-            <TextBlock Text="Copyright" FontWeight="Bold" Margin="0,10,0,0"
+            <TextBlock x:Name="CopyrightLabel" FontWeight="Bold" Margin="0,10,0,0"
                        Foreground="{DynamicResource IdeFgBrush}" />
             <TextBlock x:Name="Copyright1" Margin="12,2,0,0" Foreground="{DynamicResource IdeFgBrush}" />
             <TextBlock x:Name="Copyright2" Margin="12,2,0,0" Foreground="{DynamicResource IdeFgBrush}" />
@@ -49,20 +62,22 @@
         </StackPanel>
       </ScrollViewer>
 
-      <!-- Page 1: version information details -->
+      <!-- Page 1: version information details (legacy VersionInformationTabPage) -->
       <ScrollViewer x:Name="DetailsPage" IsVisible="False">
         <StackPanel Margin="16">
-          <TextBlock x:Name="SystemInfoText" TextWrapping="Wrap" FontSize="12"
-                     Foreground="{DynamicResource IdeFgBrush}" />
-          <Separator Margin="0,8" />
-          <TextBlock Text="Loaded Assemblies" FontWeight="Bold" Foreground="{DynamicResource IdeFgBrush}" />
-          <TextBlock x:Name="AssembliesText" FontSize="11"
-                     TextWrapping="Wrap" Margin="0,4,0,0" Foreground="{DynamicResource IdeFgBrush}" />
+          <!-- Sections are built in code-behind (legacy: one bold title + a
+               selectable description block per ISystemInformationProvider) -->
+          <StackPanel x:Name="SectionsPanel" Margin="6,0,6,0" />
+          <Button x:Name="ShowAsmButton" Content="Show loaded assemblies" HorizontalAlignment="Left"
+                  Margin="6,8,6,0" Click="OnShowAssemblies" />
+          <!-- Expanded by the button above (legacy CreateAssembliesTable) -->
+          <StackPanel x:Name="AsmPanel" IsVisible="False" Margin="6,8,6,0" />
         </StackPanel>
       </ScrollViewer>
     </Panel>
 
-    <!-- Action buttons -->
+    <!-- Action buttons (legacy ActionArea: Copy Information [hidden until details]
+         + Show/Hide Details) -->
     <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="12,10">
       <Button x:Name="CopyButton" Content="Copy Information" Click="OnCopy" IsVisible="False"
               Margin="0,0,8,0" />

@@ -532,7 +532,9 @@ public partial class MainWindow : Window
 				else
 					dlg.SelectPanel (arg);
 			} else if (qa == "--about") {
-				new AboutDialog { WindowStartupLocation = WindowStartupLocation.CenterOwner }.ShowDialog (this);
+				var dlg = new AboutDialog { WindowStartupLocation = WindowStartupLocation.CenterOwner };
+				dlg.QaAbout ();
+				dlg.ShowDialog (this);
 			} else if (qa == "--addins") {
 				new AddinManagerDialog { WindowStartupLocation = WindowStartupLocation.CenterOwner }.ShowDialog (this);
 			} else if (qa == "--menudump") {
