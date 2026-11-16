@@ -691,6 +691,15 @@
                         Content="Show function type signatures in the editor" />
             </StackPanel>
 
+            <!-- ===== UI Designer (legacy MonoDevelop.GtkCore GtkDesignerOptionPanel:
+                 a single checkbox bound to GuiBuilderService.AutoSwitchGuiLayout,
+                 stored in the shared MonoDevelopProperties.xml under the legacy key
+                 MonoDevelop.GtkCore.AutoSwitchGuiLayout, default false) ===== -->
+            <StackPanel x:Name="PanelUiDesigner" Margin="16" Spacing="8" IsVisible="False">
+              <CheckBox x:Name="UidAutoSwitchLayout"
+                        Content="Automatically switch to the &quot;GUI Builder&quot; layout when opening the designer" />
+            </StackPanel>
+
             <!-- ===== DocFood (legacy DocFood options group: the GTK panels were inert
                  stubs; this port wires the real persistence — WordLists / WordExpansions /
                  Macros / Rules — as a DocFood.config.xml schema string in SettingsStore,

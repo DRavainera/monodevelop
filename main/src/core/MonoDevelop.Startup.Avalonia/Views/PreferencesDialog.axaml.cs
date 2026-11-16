@@ -83,6 +83,9 @@ public partial class PreferencesDialog : Window
 		// inert stubs; this port wires real persistence (WordLists/WordExpansions/Macros/Rules).
 		"docfoodoptions", "docfoodexpansions", "docfoodacronyms",
 		"docfoodnothe", "docfoodofthereordering", "docfoodrules",
+		// UI Designer (legacy MonoDevelop.GtkCore GtkDesignerOptionPanel, key
+		// MonoDevelop.GtkCore.AutoSwitchGuiLayout).
+		"uidesigner",
 	};
 
 	string? pendingLanguage;
@@ -139,6 +142,7 @@ public partial class PreferencesDialog : Window
 		LoadXmlSchemasPanel ();
 		LoadCompletionAppearancePanel ();
 		LoadFSharpPanel ();
+		LoadUiDesignerPanel ();
 		FsCompilerBrowse!.Click += OnFsCompilerBrowse;
 		FsCompilerUseDefault!.IsCheckedChanged += (_, _) => UpdateFsCompilerDisplay (FsCompilerUseDefault!.IsChecked == true);
 		SetupCmEditors ();
@@ -2533,6 +2537,7 @@ public partial class PreferencesDialog : Window
 		PanelCompletionAppearance!.IsVisible = id == "intellisense-appearance";
 		PanelChangeLog!.IsVisible = id == "changelog";
 		PanelFSharp!.IsVisible = id == "fsharp";
+		PanelUiDesigner!.IsVisible = id == "uidesigner";
 		// DocFood group: the 6 leaves each have a real panel; selecting the group
 		// heading (no panel) falls through to the placeholder (like "SDK Locations").
 		PanelDocFoodOptions!.IsVisible = id == "docfoodoptions";
@@ -2615,6 +2620,7 @@ public partial class PreferencesDialog : Window
 		StoreXmlSchemasPanel ();
 		StoreCompletionAppearancePanel ();
 		StoreFSharpPanel ();
+		StoreUiDesignerPanel ();
 		StoreDocFoodPanel ();
 		StoreThemePanel ();
 		Close ();
@@ -2699,6 +2705,51 @@ public partial class PreferencesDialog : Window
 			+ " mutables=" + (FsHighlightMutables!.IsChecked == true)
 			+ " typesigs=" + (FsTypeSignatures!.IsChecked == true)
 			+ " fsc=" + (FsCompilerUseDefault!.IsChecked == true ? "(default)" : FsCompilerPath!.Text));
+	}
+
+	// ---------- UI Designer (legacy MonoDevelop.GtkCore GtkDesignerOptionPanel) ----------
+	//
+	// The legacy panel is a single checkbox bound to
+	// GuiBuilderService.AutoSwitchGuiLayout, which persists the bool under the key
+	// "MonoDevelop.GtkCore.AutoSwitchGuiLayout" (default false) in the shared
+	// MonoDevelopProperties.xml. SettingsStore reads/writes that same file with the
+	// same key, so the GTK IDE and this shell agree on the value.
+
+	void LoadUiDesignerPanel ()
+	{
+		UidAutoSwitchLayout!.IsChecked = SettingsStore.GetBool ("MonoDevelop.GtkCore.AutoSwitchGuiLayout", false);
+		MainWindow.Instance?.Output ("[prefs-uidesigner] loaded: autoSwitchLayout=" + (UidAutoSwitchLayout!.IsChecked == true));
+	}
+
+	void StoreUiDesignerPanel ()
+	{
+		SettingsStore.SetBool ("MonoDevelop.GtkCore.AutoSwitchGuiLayout", UidAutoSwitchLayout!.IsChecked == true);
+		MainWindow.Instance?.Output ("[prefs-uidesigner] stored: autoSwitchLayout=" + (UidAutoSwitchLayout!.IsChecked == true));
+	}
+
+	/// <summary>QA: round-trips the UI Designer persistence (the legacy key
+	/// MonoDevelop.GtkCore.AutoSwitchGuiLayout in the GTK-compatible store) — backs up
+	/// the stored value, drives the checkbox to known values, stores, re-reads from
+	/// SettingsStore, asserts the round-trip, then restores the previous value.</summary>
+	public void QaUiDesignerRoundTrip ()
+	{
+		string prev = SettingsStore.GetString ("MonoDevelop.GtkCore.AutoSwitchGuiLayout") ?? "";
+		try {
+			UidAutoSwitchLayout!.IsChecked = true;
+			StoreUiDesignerPanel ();
+			bool got = SettingsStore.GetBool ("MonoDevelop.GtkCore.AutoSwitchGuiLayout", false);
+			MainWindow.Instance?.Output ("[prefs-uidesigner] roundtrip: stored=" + got + " ok=" + (got == true));
+
+			UidAutoSwitchLayout!.IsChecked = false;
+			StoreUiDesignerPanel ();
+			bool got2 = SettingsStore.GetBool ("MonoDevelop.GtkCore.AutoSwitchGuiLayout", false);
+			MainWindow.Instance?.Output ("[prefs-uidesigner] roundtrip: unchecked=" + got2 + " ok=" + (got2 == false));
+		} finally {
+			// Restore the exact previous state (a previously-absent key is removed so
+			// the QA leaves no residue behind).
+			SettingsStore.SetString ("MonoDevelop.GtkCore.AutoSwitchGuiLayout", prev == "" ? null : prev);
+			MainWindow.Instance?.Output ("[prefs-uidesigner] restored previous value");
+		}
 	}
 
 	// ---------- DocFood options (legacy group of 6 panels, all of them inert stubs) ----------
