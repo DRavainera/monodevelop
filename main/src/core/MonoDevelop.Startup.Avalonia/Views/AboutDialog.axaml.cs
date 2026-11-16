@@ -31,8 +31,10 @@ namespace MonoDevelop.AvaloniaShell.Views;
 //     through the Mono.Addins engine, which the shell never starts
 //     (CoreGettextShim exists precisely to keep the legacy Runtime out of the
 //     shell). The detail sections are therefore rebuilt here from the pure,
-//     engine-free static helpers (GetBuildInformation /
-//     GetOperatingSystemDescription) plus the shell's own add-in host.
+//     engine-free static helpers (GetBuildInformation) plus the shell's own
+//     add-in host. The Operating System section is enriched beyond the legacy
+//     single "uname" line via OperatingSystemInfo (distribution, desktop,
+//     graphical server, architecture and packaging kind, per OS).
 //   * BrandingService reads through the real GettextCatalog in MonoDevelop.Core,
 //     whose static ctor drags in Runtime.Preferences, so the branding values
 //     are read straight from the branding directory in the same XML shape.
@@ -41,6 +43,7 @@ public partial class AboutDialog : Window
 	bool showingDetails;
 	bool assembliesLoaded;
 	string productVersion;
+	string[] osBodyLines = Array.Empty<string> ();
 
 	public AboutDialog ()
 	{
@@ -154,10 +157,16 @@ public partial class AboutDialog : Window
 		var buildInfo = SystemInformation.GetBuildInformation ().Trim ();
 		if (buildInfo.Length == 0)
 			buildInfo = "Build information unavailable";
+		// Operating System: enriched report (distribution, desktop, graphical
+		// server, architecture, packaging kind) per OS — see
+		// OperatingSystemInfo. The legacy SystemInformation body was just a
+		// "uname -mrsv" line / Environment.OSVersion.
+		var osDescription = OperatingSystemInfo.GetDescription ();
+		osBodyLines = osDescription.Split ('\n');
 		var sections = new List<(string Title, string Body)> {
 			(AppName, BuildProductSection ()),
 			(GettextCatalog.GetString ("Build Information"), buildInfo),
-			(GettextCatalog.GetString ("Operating System"), SystemInformation.GetOperatingSystemDescription ()),
+			(GettextCatalog.GetString ("Operating System"), osDescription),
 		};
 
 		var userAddins = BuildUserAddinsSection ();
@@ -324,6 +333,15 @@ public partial class AboutDialog : Window
 				&& inl[0] is Run { Text: { } title })
 				MainWindow.Instance?.Output ($"[about] section{i}={title}");
 			i++;
+		}
+
+		// Enriched Operating System section, one oracle line per body line so
+		// the QA can validate distribution / desktop / graphical server /
+		// architecture / packaging kind field by field.
+		var j = 0;
+		foreach (var line in osBodyLines) {
+			MainWindow.Instance?.Output ($"[about] os{j}={line.TrimStart ('\t')}");
+			j++;
 		}
 
 		// Force the assemblies table so the count is stable for the oracle.
