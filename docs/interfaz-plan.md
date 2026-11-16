@@ -6284,3 +6284,22 @@ El operador reportó dos bugs de la shell Avalonia: el pad **Errors** no mostrab
 **Archivos** (1 nuevo + 1 M, solo shell, sin submódulos): `Views/OperatingSystemInfo.cs` (nuevo), `Views/AboutDialog.axaml.cs` (sección OS + oráculo `os<idx>`).
 
 + docs ×3 (este § M31-p, `session_summary.md` §55, nota en `migration-status-report.md`). Artefactos: `~/opencode/docfood_qa/` (brief `qa_brief_aboutos_r1.md`, driver `run_env.sh` + runs `aboutos_r1`/`aboutos_env*`, logs, capturas `shots/aboutos*.png`, reporte `qa_report_aboutos_r1.md`).
+
+## 2026-11-16 — M31-q Port del panel Preferences > Projects > UI Designer (legacy MonoDevelop.GtkCore GtkDesignerOptionPanel) — CERRADO (QA VERDE, 0 hallazgos)
+
+**Estado: CERRADO (QA APROBADO, 0 hallazgos abiertos §18.5, 1 pase VERDE).** El operador pidió portar el panel **UI Designer** de `Preferences > Projects` a la shell Avalonia.
+
+**Qué se hizo**: port fiel del panel legacy (el nodo `uidesigner` ya existía en el árbol como placeholder; ahora tiene un panel funcional). El legacy es `MonoDevelop.GtkCore` → `GtkDesignerOptionPanel` + `GtkDesignerOptionsPanelWidget` (un único `Gtk.CheckButton` `checkSwitchLayout` con la etiqueta *"Automatically switch to the "GUI Builder" layout when opening the designer"*) que lee/escribe `GuiBuilderService.AutoSwitchGuiLayout`, persistida con `PropertyService` bajo la clave **`MonoDevelop.GtkCore.AutoSwitchGuiLayout`** (default `false`) en `~/.config/MonoDevelop/MonoDevelopProperties.xml`.
+
+- `Views/PreferencesDialog.axaml`: nuevo `PanelUiDesigner` con un `CheckBox x:Name="UidAutoSwitchLayout"` con la **etiqueta exacta del legacy** (byte a byte).
+- `Views/PreferencesDialog.axaml.cs`: `"uidesigner"` añadido a `functionalPanels` (deja de ser placeholder); `ShowPanel` muestra el panel; `LoadUiDesignerPanel()` (ctor) carga `SettingsStore.GetBool("MonoDevelop.GtkCore.AutoSwitchGuiLayout", false)`; `StoreUiDesignerPanel()` (desde `OnOk`) guarda con `SettingsStore.SetBool`. **Misma clave, mismo store que el legacy** → GTK y Avalonia comparten el valor (§18.4).
+- `QaUiDesignerRoundTrip()` (nuevo, hook `--prefs-uidesigner`): backup → marca → store → relee (`stored=True ok=True`) → desmarca → store → relee (`unchecked=False ok=False`) → **restaura** el valor previo (sin residuo).
+- `Views/MainWindow.axaml.cs` + `Program.cs`: hook QA `--prefs-uidesigner` (patrón idéntico a `--prefs-fsharp`/`--prefs-docfood`).
+
+**Validación**: builds Avalonia + GTK **0 errores** (§18.4; nada en `MonoDevelop.GtkCore`/`MonoDevelop.Core`). Carga store virgen → `autoSwitchLayout=False` + `placeholder=False`, 0 FATAL, shot con checkbox desmarcado. Clave sembrada `True` → `autoSwitchLayout=True` (store compartido, shot con checkbox marcado). Round-trip → `stored=True ok=True` / `unchecked=False ok=True` / restore sin residuo, 0 FATAL. Fidelidad legacy byte a byte (etiqueta, clave, default `false`, store). Regresión `--prefs=fsharp` → `placeholder=False`, 0 FATAL.
+
+**QA §18.5 (Tester QA Senior, recursivo)**: round 1 → **VERDE, 0 hallazgos abiertos** (reporte `~/opencode/docfood_qa/qa_report_uid_r1.md`).
+
+**Archivos** (4 M, solo shell, sin submódulos): `Views/PreferencesDialog.axaml`, `Views/PreferencesDialog.axaml.cs`, `Views/MainWindow.axaml.cs`, `Program.cs`.
+
++ docs ×3 (este § M31-q, `session_summary.md` §56, nota en `migration-status-report.md`). Artefactos: `~/opencode/docfood_qa/` (brief `qa_brief_uid_r1.md`, driver `run_uidseed.sh`, logs `uid`/`uid2`/`uidrt`/`uid_r1`/`uidseed_r1`/`uidrt_r1`/`uidreg`, capturas `shots/uid*.png`, `builds_uid_r1_{avalonia,gtk}.log`, reporte `qa_report_uid_r1.md`).
