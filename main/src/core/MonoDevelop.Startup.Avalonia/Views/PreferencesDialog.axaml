@@ -1,5 +1,6 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="using:MonoDevelop.Ide.Controls"
         x:Class="MonoDevelop.AvaloniaShell.Views.PreferencesDialog"
         Title="Preferences"
         Width="900" Height="620"
@@ -495,6 +496,101 @@
               <TextBlock Opacity="0.7" FontSize="11" TextWrapping="Wrap"
                          Text="Stored with the legacy keys MonoDevelop.AnalysisCore.AnalysisEnabled_V2 and Testing.EnableUnitTestEditorIntegration. 'Whole solution' depends on a Roslyn per-language option key and stays disabled until the Roslyn reference is wired." />
             </StackPanel>
+
+            <!-- ===== Text Editor → Source Analysis → C# → Code Rules (legacy
+                 MonoDevelop.CodeIssues.CodeRulePanel: a plain text editor over the
+                 global ruleset file ~/.config/MonoDevelop/RuleSet.global, the same
+                 file MonoDevelopRuleSetManager.GlobalRulesetFileName points to) ===== -->
+            <Grid x:Name="PanelCodeRules" Margin="16" IsVisible="False">
+              <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+              </Grid.RowDefinitions>
+              <TextBlock Grid.Row="0" FontSize="11" Opacity="0.7" TextWrapping="Wrap"
+                         Text="Edits the global ruleset file directly (same file the GTK Code Rules tab edits). Rule lines: &lt;Rule Id=&quot;CA0001&quot; Action=&quot;Warning|Error|Info|None|Hidden|Default&quot;/&gt;." />
+              <ScrollViewer Grid.Row="1" Height="300" Margin="0,8,0,0"
+                            VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                <controls:SkTextEditor x:Name="CrEditor" />
+              </ScrollViewer>
+              <TextBlock x:Name="CrPath" Grid.Row="2" Margin="0,6,0,0" FontSize="10" Opacity="0.5" />
+            </Grid>
+
+            <!-- ===== Text Editor → Source Analysis → C# → Code Style (legacy
+                 MonoDevelop.CSharp.OptionProvider.CodeStylePage: a GridOptionPreviewControl
+                 over the 34 C# CodeStyle options). TreeView of group nodes + item rows
+                 [Description | Property combo | Severity combo], plus the read-only
+                 live preview below. Wires the same Roslyn.<Name>(.C#) keys the GTK
+                 writes through MonoDevelopGlobalOptionPersister. ===== -->
+            <Grid x:Name="PanelCodeStyle" Margin="16" RowDefinitions="Auto,*,Auto" IsVisible="False">
+              <TextBlock Grid.Row="0" FontSize="11" Opacity="0.7" TextWrapping="Wrap"
+                         Text="C# code style options (stored with the same Roslyn keys the GTK UI writes; the live preview shows the selected style)." />
+              <!-- Bounded like RuntimesList: the dialog panels live in a ScrollViewer
+                   (unbounded height), so the * row would give the TreeView its full
+                   ~530px desired height and push the preview off-screen; the legacy
+                   PackStart/PackEnd 50/50 keeps both visible at once. -->
+              <TreeView x:Name="CsStyleTree" Grid.Row="1" Margin="0,8,0,0" MinHeight="160" MaxHeight="280" />
+              <Border Grid.Row="2" Margin="0,8,0,0" BorderBrush="{DynamicResource IdeBorderBrush}" BorderThickness="1" CornerRadius="3">
+                <TextBox x:Name="CsStylePreview" IsReadOnly="True" AcceptsReturn="True" TextWrapping="NoWrap"
+                         FontFamily="monospace" FontSize="12" Height="150"
+                         Background="Transparent" />
+              </Border>
+            </Grid>
+
+            <!-- ===== Text Editor → Source Analysis → C# → Code Actions (legacy
+                 MonoDevelop.CodeActions.CodeActionPanel: a TreeView [toggle | name]
+                 over the C# refactorings with a search filter on top). The list is
+                 rebuilt per filter change (legacy FillTreeStore), ordered by Name
+                 (Ordinal), with the legacy IndexOf > 0 filter quirk; the Pango
+                 markup match-highlight has no Avalonia equivalent (plain rows).
+                 Toggles persist to CodeActions.C#.<TypeFullName> (default true). ===== -->
+            <Grid x:Name="PanelCodeActions" Margin="16" RowDefinitions="Auto,Auto,*" IsVisible="False">
+              <TextBlock Grid.Row="0" FontSize="11" Opacity="0.7" TextWrapping="Wrap"
+                         Text="C# code actions (refactorings). Uncheck an action to disable it (same CodeActions.C#.* keys the GTK UI writes; enabled by default)." />
+              <TextBox x:Name="CaFilter" Grid.Row="1" Margin="0,8,0,0" Watermark="Filter" TextChanged="OnCaFilterChanged" />
+              <ListBox x:Name="CaList" Grid.Row="2" Margin="0,8,0,0" MinHeight="200" MaxHeight="400" />
+            </Grid>
+
+            <!-- ===== Text Editor → Source Analysis → C# → Code Generation (legacy
+                 MonoDevelop.CSharp.Project.CodeGenerationPanel / CodeGenerationPanelWidget:
+                 9 controls in 2 sections that edit the C# compiler parameters of the
+                 active project's active configuration, persisted in the .csproj
+                 <PropertyGroup Condition="...Cfg|Plat...">). The body is disabled when
+                 there is no active project (legacy: the panel needs a configuration). ===== -->
+            <Grid x:Name="PanelCodeGeneration" Margin="16" RowDefinitions="Auto,*" IsVisible="False">
+              <TextBlock x:Name="CgProjectHeader" Grid.Row="0" FontSize="11" Opacity="0.7" TextWrapping="Wrap" />
+              <StackPanel x:Name="CgBody" Grid.Row="1" Spacing="6" Margin="0,8,0,0">
+                <TextBlock Text="General Options" FontWeight="Bold" Margin="0,0,0,4" />
+                <CheckBox x:Name="CgOverflowChecks" Content="Generate overflow checks" />
+                <CheckBox x:Name="CgOptimize" Content="Enable optimizations" />
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                  <CheckBox x:Name="CgXmlDocs" Content="Generate XML documentation:" VerticalAlignment="Center" />
+                  <TextBox x:Name="CgXmlFile" MinWidth="240" />
+                </StackPanel>
+                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8" Margin="0,2,0,0">
+                  <TextBlock Grid.Column="0" Text="Debug information:" VerticalAlignment="Center" />
+                  <ComboBox x:Name="CgDebug" Grid.Column="1" MinWidth="240" HorizontalAlignment="Left" />
+                </Grid>
+                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8" Margin="0,2,0,0">
+                  <TextBlock Grid.Column="0" Text="Define Symbols:" VerticalAlignment="Center" />
+                  <TextBox x:Name="CgSymbols" Grid.Column="1" />
+                </Grid>
+                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8" Margin="0,2,0,0">
+                  <TextBlock Grid.Column="0" Text="Platform target:" VerticalAlignment="Center" />
+                  <ComboBox x:Name="CgPlatform" Grid.Column="1" MinWidth="240" HorizontalAlignment="Left" />
+                </Grid>
+                <TextBlock Text="Warnings" FontWeight="Bold" Margin="0,10,0,4" />
+                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
+                  <TextBlock Grid.Column="0" Text="Warning Level:" VerticalAlignment="Center" />
+                  <NumericUpDown x:Name="CgWarningLevel" Grid.Column="1" Minimum="0" Maximum="4" Value="4" Width="110" HorizontalAlignment="Left" />
+                </Grid>
+                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8" Margin="0,2,0,0">
+                  <TextBlock Grid.Column="0" Text="Ignore warnings:" VerticalAlignment="Center" />
+                  <TextBox x:Name="CgIgnoreWarnings" Grid.Column="1" />
+                </Grid>
+                <CheckBox x:Name="CgTreatAsErrors" Content="Treat warnings as errors" Margin="0,2,0,0" />
+              </StackPanel>
+            </Grid>
 
             <!-- ===== Text Editor → Behavior → C# (legacy OnTheFlyFormattingPanel) ===== -->
             <StackPanel x:Name="PanelCSharpFormat" Margin="16" Spacing="6" IsVisible="False">

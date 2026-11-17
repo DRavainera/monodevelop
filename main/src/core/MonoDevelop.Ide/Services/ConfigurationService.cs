@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Xml.Linq;
 using MonoDevelop.Projects.MSBuild;
 
 namespace MonoDevelop.Ide.Services;
@@ -1132,4 +1134,208 @@ public static class ConfigurationService
 	/// <summary>Per-project configuration (name + platform) resolved from a
 	/// solution configuration (see <see cref="GetProjectConfigurationFor"/>).</summary>
 	public sealed record ProjectConfigurationMapping (string Configuration, string Platform);
+
+	// ---------- Code Generation panel (F5): the C# compiler fields of ONE
+	// configuration of a project, exactly as the legacy full model
+	// (ProjectConfiguration.Write + CSharpCompilerParameters.Write, i.e. the GTK
+	// Code Generation panel) reads and writes them in
+	// <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Cfg|Plat' ">.
+	// The shell has no full DotNetProject model, so this pair of methods is the
+	// surgical equivalent: it touches only the elements the panel edits and
+	// leaves the rest of the file (and the group) untouched, with the same
+	// per-field default suppression the legacy serializer applies.
+
+	/// <summary>The C# code generation fields of one configuration, with the
+	/// legacy defaults for absent elements (Optimize/overflow/TreatWarningsAs
+	/// Errors false, PlatformTarget "anycpu", empty strings, WarningLevel 4;
+	/// GenerateXmlDocumentation is the legacy
+	/// !IsNullOrEmpty(DocumentationFile) view). Returns null when the project
+	/// file does not exist or cannot be parsed; a group-less file reads as all
+	/// defaults (like the legacy configuration with no PropertyGroup).</summary>
+	public sealed record CSharpCodeGenerationFields (
+		bool Optimize, bool GenerateOverflowChecks, string PlatformTarget,
+		bool DebugSymbols, string DebugType,
+		bool GenerateXmlDocumentation, string DocumentationFile,
+		string DefineSymbols, int WarningLevel, string NoWarnings, bool TreatWarningsAsErrors);
+
+	static string ProjectConfigurationCondition (string configuration, string platform)
+		=> " '$(Configuration)|$(Platform)' == '" + configuration + "|" + (platform == AnyCpuSolution ? AnyCpuProject : platform) + "' ";
+
+	static XElement? FindConfigurationGroup (XElement? root, string configuration, string platform)
+	{
+		if (root is null)
+			return null;
+		var cond = ProjectConfigurationCondition (configuration, platform);
+		return root.Elements ().FirstOrDefault (e => e.Name.LocalName == "PropertyGroup" && (string?)e.Attribute ("Condition") == cond);
+	}
+
+	public static CSharpCodeGenerationFields? ReadCodeGenerationFields (string csprojPath, string configuration, string platform)
+	{
+		if (!File.Exists (csprojPath))
+			return null;
+		XDocument doc;
+		try {
+			doc = XDocument.Load (csprojPath);
+		} catch {
+			return null;
+		}
+		var pg = FindConfigurationGroup (doc.Root, configuration, platform);
+		string S (string name) => pg?.Elements ().FirstOrDefault (e => e.Name.LocalName == name) is { } el ? el.Value : "";
+		bool B (string name) => S (name).Trim ().Equals ("true", StringComparison.OrdinalIgnoreCase);
+		int I (string name) => int.TryParse (S (name).Trim (), out var v) ? v : 4;
+		// Legacy getter normalization (ProjectConfiguration.Read): an absent or empty
+		// <DebugType> reads back as "none", which the panel's combo Load relies on.
+		var debugType = S ("DebugType");
+		if (debugType.Length == 0)
+			debugType = "none";
+		return new CSharpCodeGenerationFields (
+			B ("Optimize"), B ("CheckForOverflowUnderflow"), S ("PlatformTarget"),
+			B ("DebugSymbols"), debugType,
+			S ("DocumentationFile").Length > 0, S ("DocumentationFile"),
+			S ("DefineConstants"), I ("WarningLevel"), S ("NoWarn"), B ("TreatWarningsAsErrors"));
+	}
+
+	/// <summary>Writes the panel's fields into the configuration's PropertyGroup
+	/// with the legacy write semantics, element by element:
+	///   Optimize               - always written (legacy 2-arg SetValue, no default);
+	///   WarningLevel           - "sticky": written iff the element was already
+	///                            present OR the value != 4 (the legacy nullable
+	///                            warninglevel never becomes 4 while absent);
+	///   CheckForOverflowUnderflow/PlatformTarget/DefineConstants/NoWarn/
+	///   TreatWarningsAsErrors/DocumentationFile - written iff different from the
+	///                            ItemProperty default, removed when back to it
+	///                            (legacy 3-arg SetValue default suppression);
+	///   DebugSymbols/DebugType - the base ProjectConfiguration.Write state
+	///                            machine: full/pdbonly/portable/embedded writes
+	///                            DebugSymbols=true + the DebugType; "None"
+	///                            removes DebugSymbols only when it is "true"
+	///                            (a "false" element is left, like the legacy
+	///                            "already the default" no-churn rule) and clears
+	///                            DebugType only when it was not "none".
+	/// New elements are appended to the group (MSBuild does not care about
+	/// element order inside a PropertyGroup; the legacy SetPropertyOrder only
+	/// affects the full model's own churn, not the values). The group is created
+	/// before </Project> when absent, like AddProjectConfiguration. Bool elements
+	/// use lowercase true/false, the format of the repo's .csproj files
+	/// (MSBuildProperty default). The file is saved preserving its detected BOM /
+	/// XML declaration / newline format (the SaveProjectReferences policy).
+	/// Returns false without touching the file when it cannot be loaded or saved.</summary>
+	public static bool SaveCodeGenerationFields (string csprojPath, string configuration, string platform, CSharpCodeGenerationFields f)
+	{
+		if (!File.Exists (csprojPath))
+			return false;
+		XDocument doc;
+		try {
+			doc = XDocument.Load (csprojPath);
+		} catch {
+			return false;
+		}
+		var root = doc.Root;
+		if (root is null)
+			return false;
+		var ns = root.Name.Namespace;
+		var pg = FindConfigurationGroup (root, configuration, platform);
+		if (pg is null) {
+			pg = new XElement (ns + "PropertyGroup", new XAttribute ("Condition", ProjectConfigurationCondition (configuration, platform)));
+			root.Add (pg);
+		}
+		XElement? Find (string name) => pg.Elements ().FirstOrDefault (e => e.Name.LocalName == name);
+		void Set (string name, string value)
+		{
+			var el = Find (name);
+			if (el is null)
+				pg.Add (new XElement (ns + name, value));
+			else
+				el.SetValue (value);
+		}
+		void Suppressed (string name, string value, string def)
+		{
+			if (value == def) {
+				var el = Find (name);
+				if (el is not null)
+					el.Remove ();
+				return;
+			}
+			Set (name, value);
+		}
+
+		Set ("Optimize", f.Optimize ? "true" : "false");
+		if (Find ("WarningLevel") is not null || f.WarningLevel != 4)
+			Set ("WarningLevel", f.WarningLevel.ToString (CultureInfo.InvariantCulture));
+		Suppressed ("CheckForOverflowUnderflow", f.GenerateOverflowChecks ? "true" : "false", "false");
+		Suppressed ("PlatformTarget", f.PlatformTarget, "anycpu");
+		Suppressed ("DefineConstants", f.DefineSymbols, "");
+		Suppressed ("NoWarn", f.NoWarnings, "");
+		Suppressed ("TreatWarningsAsErrors", f.TreatWarningsAsErrors ? "true" : "false", "false");
+		Suppressed ("DocumentationFile", f.GenerateXmlDocumentation ? f.DocumentationFile : "", "");
+
+		// Replicate the legacy ProjectConfiguration.Read/Write effective state,
+		// which normalizes an absent or empty <DebugType> to "none" and keeps the
+		// two read flags (debugTypeWasNone / debugTypeReadAsEmpty) that gate the
+		// "avoid churn" rules. Without the normalization the writers would diverge
+		// on a group-less file (GTK reads it as none; a raw read would not).
+		var rawDebugType = Find ("DebugType")?.Value?.Trim () ?? "";
+		var effectiveDebugType = rawDebugType.Length == 0 || rawDebugType.Equals ("none", StringComparison.OrdinalIgnoreCase) ? "none" : rawDebugType;
+		var debugTypeWasNone = effectiveDebugType == "none";
+		var debugTypeReadAsEmpty = rawDebugType.Length == 0;
+		if (f.DebugSymbols) {
+			Set ("DebugSymbols", "true");
+			Set ("DebugType", f.DebugType);
+		} else {
+			// Combo "None". The legacy in-memory debugType after Store() is "none"
+			// when the file already read as "none", else "" (the panel blanks it).
+			// The two write gates (ProjectConfiguration.Write L135-136 / L147-148)
+			// use that value plus the read flags; both must be replicated - not just
+			// the SetValue call behind each gate - or a file holding the legacy's
+			// own Full->None residue (DebugSymbols=true + DebugType=none explicit)
+			// would churn where the legacy leaves it untouched.
+			var dbg = effectiveDebugType == "none" ? "none" : "";
+			if (dbg != "none" || !debugTypeWasNone) {
+				// Legacy SetValue("DebugSymbols", false, false): default suppression -
+				// remove only a non-default ("true") element; a "false"/absent stays.
+				var ds = Find ("DebugSymbols");
+				if (ds is not null && ds.Value.Trim ().Equals ("true", StringComparison.OrdinalIgnoreCase))
+					ds.Remove ();
+			}
+			if (dbg != "none" || !debugTypeReadAsEmpty) {
+				if (dbg == "none") {
+					// Legacy SetValue("DebugType","none",""): "none" is not the ""
+					// default, so the explicit element is kept (already "none" when
+					// the gate is true, i.e. readAsEmpty=false -> no change).
+				} else {
+					// Legacy SetValue("DebugType","",""): default suppression - remove
+					// the (non-empty) element.
+					var dt = Find ("DebugType");
+					if (dt is not null && dt.Value.Trim ().Length > 0)
+						dt.Remove ();
+				}
+			}
+		}
+
+		// Save with the file's detected format (BOM / XML declaration /
+		// newlines), not the XmlWriter defaults (SaveProjectReferences policy).
+		byte[] orig;
+		try {
+			orig = File.ReadAllBytes (csprojPath);
+		} catch {
+			return false;
+		}
+		bool bom = orig.Length >= 3 && orig [0] == 0xEF && orig [1] == 0xBB && orig [2] == 0xBF;
+		var head = System.Text.Encoding.UTF8.GetString (orig, bom ? 3 : 0, Math.Min (orig.Length - (bom ? 3 : 0), 200));
+		bool decl = head.StartsWith ("<?xml", StringComparison.Ordinal);
+		string newlines = Array.IndexOf (orig, (byte)'\r') >= 0 ? "\r\n" : "\n";
+		try {
+			using (var stream = new FileStream (csprojPath, FileMode.Create, FileAccess.Write))
+			using (var writer = System.Xml.XmlWriter.Create (stream, new System.Xml.XmlWriterSettings {
+				Encoding = new System.Text.UTF8Encoding (bom),
+				OmitXmlDeclaration = !decl,
+				Indent = false,
+				NewLineChars = newlines
+			}))
+				doc.Save (writer);
+		} catch {
+			return false;
+		}
+		return true;
+	}
 }

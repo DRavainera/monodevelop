@@ -135,12 +135,66 @@
       <HintPath>$(NuGetPackageRoot)microsoft.codeanalysis.workspaces.common/$(NuGetVersionRoslyn)/lib/netstandard2.0/Microsoft.CodeAnalysis.Workspaces.dll</HintPath>
       <Private>true</Private>
     </Reference>
+    <!-- C# core + workspaces: the F2 preview builds its Roslyn HostServices from the
+         four core assemblies (Common, CSharp, Workspaces, CSharp.Workspaces), where the
+         C# formatter lives. Referencing them here (not just relying on the Workspaces
+         closure) makes them first-class deps so Assembly.Load resolves them from the
+         shell closure at runtime. -->
+    <Reference Include="Microsoft.CodeAnalysis.CSharp">
+      <HintPath>$(NuGetPackageRoot)microsoft.codeanalysis.csharp/$(NuGetVersionRoslyn)/lib/netstandard2.0/Microsoft.CodeAnalysis.CSharp.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="Microsoft.CodeAnalysis.CSharp.Workspaces">
+      <HintPath>$(NuGetPackageRoot)microsoft.codeanalysis.csharp.workspaces/$(NuGetVersionRoslyn)/lib/netstandard2.0/Microsoft.CodeAnalysis.CSharp.Workspaces.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <!-- Microsoft.Bcl.AsyncInterfaces: Roslyn 5.9.0 (Workspaces) types reference this at
+         10.0.0.1, and MefHostServices.Create enumerates those types (GetDefinedTypes) at
+         workspace creation, so the exact 10.0.0.1 identity must be loadable. main/build
+         carried a stale 5.0.0.0 (2020) that the core type enumeration cannot resolve on
+         .NET (no version roll-forward), so stage the coherent 10.0.1 here. On net10.0 every
+         type in this shim (IAsyncDisposable, IValueTaskSource, ...) is shadowed by the BCL,
+         so it is behaviorally inert for the GTK old-gui path that shares main/build. -->
+     <PackageReference Include="Microsoft.Bcl.AsyncInterfaces" Version="10.0.1" />
     <!-- Core Roslyn (Microsoft.CodeAnalysis.dll): the legacy document contract
          recompiled for the shell (DocumentLocation <-> LinePosition, ITextDocument
          ApplyTextChanges <-> TextChange) needs the core types that
          Microsoft.CodeAnalysis.Workspaces does not expose on its own. -->
     <Reference Include="Microsoft.CodeAnalysis">
       <HintPath>$(NuGetPackageRoot)microsoft.codeanalysis.common/$(NuGetVersionRoslyn)/lib/netstandard2.0/Microsoft.CodeAnalysis.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <!-- System.Composition.TypedParts: AdhocWorkspace (the Code Style preview host)
+         builds a MefHostServices through MefConfigurator/CompositionHost, which needs
+         the typed-parts generator that the other four System.Composition assemblies in
+         main/build do not pull in. Staged here (Private) so the shell runtime finds it
+         next to the rest of the closure. -->
+    <Reference Include="System.Composition.TypedParts">
+      <HintPath>$(NuGetPackageRoot)system.composition.typedparts/10.0.1/lib/netstandard2.0/System.Composition.TypedParts.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <!-- The four base System.Composition assemblies: main/build carried stale 7.0.0.0
+         copies (the GTK never loads System.Composition at runtime — it builds its Roslyn
+         HostServices from the MonoDevelop MEF container with an empty Composition context —
+         so they were inert), but Roslyn 5.9.0's MefHostServices.Create (used by the F2
+         AdhocWorkspace preview) references the 10.0.0.1 surface, the same version every
+         csproj declares. Staging the coherent 10.0.1 set (base 4 + TypedParts) here makes
+         the shell's app-local closure self-consistent; a GTK build stages the identical
+         10.0.1, so both UIs converge on the same set. -->
+    <Reference Include="System.Composition.AttributedModel">
+      <HintPath>$(NuGetPackageRoot)system.composition.attributedmodel/10.0.1/lib/netstandard2.0/System.Composition.AttributedModel.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="System.Composition.Convention">
+      <HintPath>$(NuGetPackageRoot)system.composition.convention/10.0.1/lib/netstandard2.0/System.Composition.Convention.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="System.Composition.Hosting">
+      <HintPath>$(NuGetPackageRoot)system.composition.hosting/10.0.1/lib/netstandard2.0/System.Composition.Hosting.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="System.Composition.Runtime">
+      <HintPath>$(NuGetPackageRoot)system.composition.runtime/10.0.1/lib/netstandard2.0/System.Composition.Runtime.dll</HintPath>
       <Private>true</Private>
     </Reference>
     <!-- The Xwt Avalonia backend: dialogs/pads built on the Xwt frontend

@@ -529,6 +529,50 @@ public partial class MainWindow : Window
 				var dlg = new PreferencesDialog { WindowStartupLocation = WindowStartupLocation.CenterOwner };
 				dlg.QaUiDesignerRoundTrip ();
 				dlg.Close ();
+			} else if (qa == "--prefs-coderules") {
+				// QA (Code Rules port): exercise the global ruleset file round-trip
+				// (RuleSet.global), then restore the previous content.
+				var dlg = new PreferencesDialog { WindowStartupLocation = WindowStartupLocation.CenterOwner };
+				dlg.QaCodeRulesRoundTrip ();
+				dlg.Close ();
+			} else if (qa == "--prefs-csharpformat") {
+				// QA (per-language Roslyn key fix, retroactive to the csharpformat
+				// panel): exercise the Roslyn.<Name>.C# / Roslyn.<Name> store
+				// round-trip, assert the junk "C#." key is not created, then restore.
+				var dlg = new PreferencesDialog { WindowStartupLocation = WindowStartupLocation.CenterOwner };
+				dlg.QaCSharpFormatRoundTrip ();
+				dlg.Close ();
+			} else if (qa == "--prefs-roslynpreview") {
+				// QA (F2 Roslyn preview infra): drive RoslynPreviewService in the real
+				// app to confirm AdhocWorkspace + Formatter normalize a snippet and the
+				// preview markers are stripped (no System.Composition/Roslyn collision).
+				var dlg = new PreferencesDialog { WindowStartupLocation = WindowStartupLocation.CenterOwner };
+				dlg.QaRoslynPreviewOracle ();
+				dlg.Close ();
+			} else if (qa == "--prefs-codestylepanel") {
+				// QA (F3 Code Style port): exercise the 34 C# CodeStyle option
+				// persistence (Roslyn.<Name>.C# / Roslyn.<Name> keys, CodeStyleOption<T>
+				// XML), the round-trip, the legacy default-delete, then restore.
+				var dlg = new PreferencesDialog { WindowStartupLocation = WindowStartupLocation.CenterOwner };
+				dlg.QaCodeStyleOracle ();
+				dlg.Close ();
+			} else if (qa == "--prefs-codeactions") {
+				// QA (F4 Code Actions port): enumerate the C# refactoring providers
+				// (scan of [ExportCodeRefactoringProvider] over the build closure),
+				// check the default-enabled load, the legacy IndexOf > 0 filter quirk,
+				// the CodeActions.C#.<TypeFullName> round-trip, then restore.
+				var dlg = new PreferencesDialog { WindowStartupLocation = WindowStartupLocation.CenterOwner };
+				dlg.QaCodeActionsOracle ();
+				dlg.Close ();
+			} else if (qa == "--prefs-codegeneration") {
+				// QA (F5 Code Generation port): the active project's per-configuration
+				// compiler fields round-trip through the .csproj PropertyGroup (create
+				// the group, write a non-default set, the default-suppression removals,
+				// the sticky WarningLevel, the Debug state machine, the symbol dedupe),
+				// then restore the fixture file.
+				var dlg = new PreferencesDialog { WindowStartupLocation = WindowStartupLocation.CenterOwner };
+				dlg.QaCodeGenerationOracle ();
+				dlg.Close ();
 			} else if (qa.StartsWith ("--prefs=", StringComparison.Ordinal)) {
 				var arg = qa.Substring ("--prefs=".Length);
 				var dlg = new PreferencesDialog { WindowStartupLocation = WindowStartupLocation.CenterOwner };
@@ -6782,6 +6826,14 @@ public partial class MainWindow : Window
 	TreeView? solutionTreeView;
 	TextBox? solutionSearchBox;
 	string? loadedSolutionPath;
+
+	// F5 Code Generation: the panel edits the ACTIVE project's per-configuration
+	// compiler fields (the legacy panel is a project item-options panel). The
+	// Preferences dialog is a separate window, so it asks the main window for the
+	// loaded solution and the active project (ResolveActiveProject == the legacy
+	// IdeApp.Workbench.ActiveProject: first project file of the solution).
+	public string? SolutionPath => loadedSolutionPath;
+	public string? ActiveProject => loadedSolutionPath is null ? null : ResolveActiveProject ();
 	// Node path of the last context-menu invocation (legacy NodeCommandHandler dataItem).
 	string? contextNodePath;
 	// QA: when set, the next NewFolderDialog auto-fills this name and confirms

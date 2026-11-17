@@ -77,6 +77,11 @@ public partial class PreferencesDialog : Window
 		"naming", "standardheader", "codeformatting",
 		"vcgeneral", "vccommit", "git", "changelog",
 		"nugetgeneral", "packagesources", "debugger", "netcore", "runtimes", "perfdiag", "xml", "intellisense-appearance", "intellisense-behavior", "analysis", "csharpformat", "xmlschemas",
+		// Source Analysis > C# tabs (legacy Refactoring/CSharpBinding add-in panels).
+		"coderules",
+		"codestylepanel",
+		"codeactions",
+		"codegeneration",
 		// F# port phase 6: the legacy FSharpSettingsPanel (global options, FSharpBinding.* keys).
 		"fsharp",
 		// DocFood options group (Preferences > Other > DocFood): the legacy GTK panels were
@@ -140,6 +145,11 @@ public partial class PreferencesDialog : Window
 		LoadAnalysisPanel ();
 		LoadCSharpFormatPanel ();
 		LoadXmlSchemasPanel ();
+		LoadCodeRulesPanel ();
+		LoadCodeStylePanel ();
+		LoadCodeActionsPanel ();
+		LoadCodeGenerationPanel ();
+		CrEditor!.PopupOwner = this;
 		LoadCompletionAppearancePanel ();
 		LoadFSharpPanel ();
 		LoadUiDesignerPanel ();
@@ -184,6 +194,7 @@ public partial class PreferencesDialog : Window
 			["CodeActions"] = "codeactions",
 			["CodeGeneration"] = "codegeneration",
 			["CodeRules"] = "coderules",
+			["CodeStylePanel"] = "codestylepanel",
 			["C#"] = "analysis-csharp",
 		},
 		["/MonoDevelop/Ide/GlobalOptionsDialog/Projects/SdkLocations"] = new (StringComparer.Ordinal) {
@@ -2272,78 +2283,167 @@ public partial class PreferencesDialog : Window
 		SettingsStore.SetBool ("Testing.EnableUnitTestEditorIntegration", AnUnitTest!.IsChecked == true);
 	}
 
+	// ---------- Source Analysis → C# → Code Rules (legacy MonoDevelop.CodeIssues.CodeRulePanel) ----------
+	//
+	// The legacy panel is a plain text editor over the global ruleset file
+	// (IdeApp.TypeSystemService.RuleSetManager.GlobalRulesetFileName =
+	// UserProfile.Current.ConfigDir/RuleSet.global, created with the default
+	// template on first use). The editor here is the shared SkTextEditor; OK
+	// writes the buffer back to the file (legacy ApplyChanges). UTF-8 without BOM,
+	// the encoding TextFileUtility uses by default.
+
+	static string GlobalRulesetFile {
+		get {
+			var xdg = Environment.GetEnvironmentVariable ("XDG_CONFIG_HOME");
+			var baseDir = string.IsNullOrEmpty (xdg)
+				? Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile), ".config")
+				: xdg;
+			return Path.Combine (baseDir, "MonoDevelop", "RuleSet.global");
+		}
+	}
+
+	static readonly UTF8Encoding RulesetEncoding = new (false);
+
+	// Legacy CodeRulePanel tracks a `loadingError` flag: when the ruleset could not
+	// be loaded the buffer does not reflect the file, so ApplyChanges refuses to
+	// overwrite it.
+	bool crLoadFailed;
+
+	void LoadCodeRulesPanel ()
+	{
+		crLoadFailed = false;
+		try {
+			if (!File.Exists (GlobalRulesetFile)) {
+				// Legacy MonoDevelopRuleSetManager.EnsureGlobalRulesetExists: create
+				// the file with the default template on first use. Replicated byte
+				// for byte from WriteRulesetToFile, including its "<Rules ...>>"
+				// quirk (a legacy defect, kept for fidelity).
+				Directory.CreateDirectory (Path.GetDirectoryName (GlobalRulesetFile)!);
+				File.WriteAllText (GlobalRulesetFile,
+					"<RuleSet Name=\"Global Rules\" ToolsVersion=\"12.0\">\n" +
+					"    <Rules AnalyzerId=\"Roslyn\" RuleNamespace=\"Roslyn\">>\n" +
+					"    </Rules>\n" +
+					"</RuleSet>\n", RulesetEncoding);
+			}
+			CrEditor!.FilePath = GlobalRulesetFile;
+			CrEditor!.Text = File.ReadAllText (GlobalRulesetFile, RulesetEncoding);
+			CrPath!.Text = GlobalRulesetFile;
+			MainWindow.Instance?.Output ("[prefs-coderules] loaded: file=" + GlobalRulesetFile + " chars=" + CrEditor!.Text.Length);
+		} catch (Exception ex) {
+			crLoadFailed = true;
+			MainWindow.Instance?.Output ("[prefs-coderules] load failed: " + ex.Message);
+		}
+	}
+
+	void StoreCodeRulesPanel ()
+	{
+		// Legacy CodeRulePanel.ApplyChanges guard: a failed load means the buffer
+		// does not reflect the file, so OK must not overwrite it.
+		if (crLoadFailed) {
+			MainWindow.Instance?.Output ("[prefs-coderules] stored: skipped (load failed)");
+			return;
+		}
+		try {
+			File.WriteAllText (GlobalRulesetFile, CrEditor!.Text, RulesetEncoding);
+			CrEditor!.IsDirty = false;
+			MainWindow.Instance?.Output ("[prefs-coderules] stored: file=" + GlobalRulesetFile + " chars=" + CrEditor!.Text.Length);
+		} catch (Exception ex) {
+			MainWindow.Instance?.Output ("[prefs-coderules] store failed: " + ex.Message);
+		}
+	}
+
+	/// <summary>QA: round-trips the Code Rules persistence (the global ruleset
+	/// file) — backs up the file, adds a rule line through the editor + store,
+	/// re-reads the file from disk and asserts the rule is there, then exercises
+	/// the legacy load-failure guard (OK must not overwrite a file the panel
+	/// could not load), and finally restores the previous file content (no
+	/// residue behind).</summary>
+	public void QaCodeRulesRoundTrip ()
+	{
+		string backup = File.Exists (GlobalRulesetFile) ? File.ReadAllText (GlobalRulesetFile, RulesetEncoding) : null!;
+		try {
+			string marker = "QA0001";
+			// Drive the editor like a user would: append a rule line before the closing </Rules>.
+			var text = CrEditor!.Text;
+			int close = text.IndexOf ("</Rules>", StringComparison.Ordinal);
+			if (close >= 0)
+				text = text.Insert (close, $"        <Rule Id=\"{marker}\" Action=\"Warning\"/>\n");
+			else
+				text += $"        <Rule Id=\"{marker}\" Action=\"Warning\"/>\n";
+			CrEditor!.Text = text;
+			StoreCodeRulesPanel ();
+			string onDisk = File.ReadAllText (GlobalRulesetFile, RulesetEncoding);
+			bool ok = onDisk.Contains ($"Id=\"{marker}\"") && onDisk.Contains ("Action=\"Warning\"");
+			MainWindow.Instance?.Output ("[prefs-coderules] roundtrip: rule stored on disk ok=" + ok);
+
+			// Legacy guard (CodeRulePanel.ApplyChanges: `if (loadingError) return`):
+			// when the load failed, the buffer does not reflect the file and OK must
+			// not overwrite it. Simulate a failed load with a directory in place of
+			// the file (File.Exists is false but any I/O throws). Delete the file
+			// first — it still holds the marker from the round-trip above.
+			if (File.Exists (GlobalRulesetFile))
+				File.Delete (GlobalRulesetFile);
+			Directory.CreateDirectory (GlobalRulesetFile);
+			crLoadFailed = false;
+			LoadCodeRulesPanel ();
+			MainWindow.Instance?.Output ("[prefs-coderules] guard: loadFailed=" + crLoadFailed + " ok=" + (crLoadFailed == true));
+			StoreCodeRulesPanel (); // expected: "stored: skipped (load failed)"
+			Directory.Delete (GlobalRulesetFile);
+		} finally {
+			try {
+				if (Directory.Exists (GlobalRulesetFile))
+					Directory.Delete (GlobalRulesetFile);
+			} catch { }
+			if (backup is null) {
+				if (File.Exists (GlobalRulesetFile))
+					File.Delete (GlobalRulesetFile);
+			} else {
+				File.WriteAllText (GlobalRulesetFile, backup, RulesetEncoding);
+			}
+			MainWindow.Instance?.Output ("[prefs-coderules] restored previous ruleset file");
+		}
+	}
+
 	// ---------- Behavior → C# (Roslyn per-language keys, same as the add-in's RoslynPreferences) ----------
 	// The add-in persists via RoslynPreferences.Wrap(RoslynKey(option, "C#")); the stored name is
 	// OptionKey.GetPropertyName(). The shell recomputes the SAME name from the same Roslyn options.
 
-	// OptionKey.GetPropertyName() is internal Roslyn API (visible to MonoDevelop.Ide only), so
-	// the shell invokes it by reflection to guarantee the SAME persisted key as the GTK UI.
-	static System.Reflection.MethodInfo? getPropNameMethod;
+	// ---------- Roslyn per-language option keys (same mechanism as the GTK UI) ----------
+	//
+	// The GTK UI persists these through RoslynPreferences.Wrap, whose storage name is
+	// OptionsExtensions.GetPropertyName (OptionKey). GetPropertyName is the repo's own
+	// extension (MonoDevelop.Ide.RoslynServices.Options.OptionsExtensions), not a Roslyn
+	// API, and that file is not compiled into this shell — so the algorithm is replicated
+	// here verbatim against the SAME assemblies both UIs load (Roslyn 5.9.0 from
+	// main/build + the MonoRoslynCompat shim):
+	//   - OptionKey: in this Roslyn the only ctor is (IOption, string language); a
+	//     language name is rejected (ArgumentException) for options that are no longer
+	//     per-language, hence the same fallback as the add-in's RoslynKey.
+	//   - Options without storage locations resolve to the synthesized
+	//     "Roslyn.<Name>(.<Language>)" key (every option of this panel falls here).
 
-	static System.Reflection.MethodInfo GetPropNameMethod ()
+	static Microsoft.CodeAnalysis.Options.OptionKey RoslynKey (Microsoft.CodeAnalysis.Options.IOption option, string language)
 	{
-		if (getPropNameMethod is not null)
-			return getPropNameMethod;
-		var t = typeof (Microsoft.CodeAnalysis.Options.OptionKey);
-		Type?[] types;
 		try {
-			types = t.Assembly.GetTypes ();
-		} catch (System.Reflection.ReflectionTypeLoadException ex) {
-			// Some Roslyn dependencies may be absent at runtime; use what loaded.
-			types = ex.Types ?? Array.Empty<Type?> ();
-		}
-		getPropNameMethod = types.Where (x => x is not null)!.Select (x => x!)
-			.SelectMany (x => x.GetMethods (System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static))
-			.FirstOrDefault (m => m.Name == "GetPropertyName" && m.GetParameters ().Length == 1 && m.GetParameters () [0].ParameterType == t);
-		return getPropNameMethod!;
-	}
-
-	// OptionKey's constructors are not public; pick the best match by reflection.
-	static object NewOptionKey (Microsoft.CodeAnalysis.Options.IOption option, bool withLanguage)
-	{
-		var t = typeof (Microsoft.CodeAnalysis.Options.OptionKey);
-		var flags = System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance;
-		var ctors = t.GetConstructors (flags)
-			.Where (c => c.GetParameters ().Length == (withLanguage ? 2 : 1)
-				&& c.GetParameters () [0].ParameterType.IsInstanceOfType (option))
-			.OrderByDescending (c => c.GetParameters ().Length)
-			.ToList ();
-		if (ctors.Count == 0)
-			throw new InvalidOperationException ("OptionKey ctor not found");
-		try {
-			return ctors [0].Invoke (withLanguage ? new object? [] { option, "C#" } : new object? [] { option });
-		} catch (System.Reflection.TargetInvocationException ex) when (ex.InnerException is ArgumentException) {
-			// Same fallback as the add-in's RoslynKey: Roslyn rejects the language name for
-			// options that are no longer per-language.
-			var c1 = t.GetConstructors (flags)
-				.Where (c => c.GetParameters ().Length == 1 && c.GetParameters () [0].ParameterType.IsInstanceOfType (option))
-				.FirstOrDefault ();
-			if (c1 is null)
-				throw;
-			return c1.Invoke (new object? [] { option });
+			return new Microsoft.CodeAnalysis.Options.OptionKey (option, language);
+		} catch (ArgumentException) {
+			return new Microsoft.CodeAnalysis.Options.OptionKey (option);
 		}
 	}
 
-	static string RoslynPropName (Microsoft.CodeAnalysis.Options.IOption option)
+	// MonoDevelop.Ide.RoslynServices.Options.OptionsExtensions.GetPropertyNames (verbatim).
+	static string RoslynPropName (Microsoft.CodeAnalysis.Options.IOption option, string language = "C#")
 	{
-		// Preferred: the exact key the GTK UI persists (Roslyn's internal
-		// OptionKey.GetPropertyName). If the internal extension is not loadable in this
-		// host, fall back to the legacy MonoDevelop property name the add-in migrates
-		// from ("C#.<OptionId suffix>") so the panel still round-trips its own values.
-		try {
-			// In this Roslyn (4.8) every option here REJECTS the language name, so the add-in's
-			// RoslynKey fallback (language-agnostic OptionKey) is what the GTK UI ends up using.
-			object key = NewOptionKey (option, withLanguage: false);
-			var m = GetPropNameMethod ();
-			if (m is not null)
-				return (string) m.Invoke (null, new [] { key })!;
-		} catch (Exception ex) {
-			var inner = ex is System.Reflection.TargetInvocationException tie ? tie.InnerException : ex;
-			MainWindow.Instance?.Output ("[prefs-csharp] Roslyn key unavailable (" + inner?.GetType ().Name + ": " + inner?.Message + "), using legacy name");
+		var key = RoslynKey (option, language);
+		if (key.Option.StorageLocations.IsDefaultOrEmpty)
+			return "Roslyn." + key.Option.Name + (string.IsNullOrEmpty (key.Language) ? "" : "." + key.Language);
+		foreach (var storageLocation in key.Option.StorageLocations) {
+			if (storageLocation is Microsoft.CodeAnalysis.Options.RoamingProfileStorageLocation roaming)
+				return roaming.GetKeyNameForLanguage (key.Language);
+			if (storageLocation is Microsoft.CodeAnalysis.Options.LocalUserProfileStorageLocation local)
+				return local.KeyName;
 		}
-		var id = option.GetType ().GetProperty ("Id")?.GetValue (option) as string ?? "";
-		var suffix = id.Contains ('#') ? id [(id.IndexOf ('#') + 1)..] : id;
-		return "C#." + suffix;
+		return "Roslyn." + key.Option.Name + (string.IsNullOrEmpty (key.Language) ? "" : "." + key.Language);
 	}
 
 	static bool CsOpt (Microsoft.CodeAnalysis.Options.IOption o, bool def)
@@ -2534,6 +2634,12 @@ public partial class PreferencesDialog : Window
 		PanelAnalysis!.IsVisible = id == "analysis";
 		PanelCSharpFormat!.IsVisible = id == "csharpformat";
 		PanelXmlSchemas!.IsVisible = id == "xmlschemas";
+		PanelCodeRules!.IsVisible = id == "coderules";
+		PanelCodeStyle!.IsVisible = id == "codestylepanel";
+		PanelCodeActions!.IsVisible = id == "codeactions";
+		PanelCodeGeneration!.IsVisible = id == "codegeneration";
+		if (id == "codestylepanel" && CsStyleTree.SelectedItem is not TreeViewItem && csStyleRows.Count > 0)
+			CsStyleTree.SelectedItem = csStyleRows[0].RowItem; // keep the first row selected when the panel materializes
 		PanelCompletionAppearance!.IsVisible = id == "intellisense-appearance";
 		PanelChangeLog!.IsVisible = id == "changelog";
 		PanelFSharp!.IsVisible = id == "fsharp";
@@ -2618,6 +2724,10 @@ public partial class PreferencesDialog : Window
 		StoreAnalysisPanel ();
 		StoreCSharpFormatPanel ();
 		StoreXmlSchemasPanel ();
+		StoreCodeRulesPanel ();
+		StoreCodeStylePanel ();
+		StoreCodeActionsPanel ();
+		StoreCodeGenerationPanel ();
 		StoreCompletionAppearancePanel ();
 		StoreFSharpPanel ();
 		StoreUiDesignerPanel ();
@@ -2750,6 +2860,77 @@ public partial class PreferencesDialog : Window
 			SettingsStore.SetString ("MonoDevelop.GtkCore.AutoSwitchGuiLayout", prev == "" ? null : prev);
 			MainWindow.Instance?.Output ("[prefs-uidesigner] restored previous value");
 		}
+	}
+
+	// QA oracle for the per-language Roslyn key fix (retroactive to the existing
+	// csharpformat panel). Toggles one per-language option (key "Roslyn.<Name>.C#")
+	// and one non-per-language option (key "Roslyn.<Name>", no language suffix),
+	// stores, reads the values back from disk, asserts the junk "C#." key the broken
+	// fallback used to write is NOT created, then restores the previous state so the
+	// QA leaves no residue behind.
+	public void QaCSharpFormatRoundTrip ()
+	{
+		// The 7 options the panel stores, in StoreCSharpFormatPanel order.
+		var options = new (Microsoft.CodeAnalysis.Options.IOption, CheckBox)[] {
+			(Microsoft.CodeAnalysis.Options.FeatureOnOffOptions.AutoFormattingOnTyping, CsFormatOnType!),
+			(Microsoft.CodeAnalysis.Options.FeatureOnOffOptions.AutoFormattingOnSemicolon, CsFormatOnSemicolon!),
+			(Microsoft.CodeAnalysis.Options.FeatureOnOffOptions.AutoFormattingOnCloseBrace, CsFormatOnCloseBrace!),
+			(new Microsoft.CodeAnalysis.Options.Option<bool> ("FormattingOptions", "AutoFormattingOnReturn", false), CsFormatOnReturn!),
+			(Microsoft.CodeAnalysis.Options.FeatureOnOffOptions.FormatOnPaste, CsFormatOnPaste!),
+			(Microsoft.CodeAnalysis.Options.CompletionOptions.ShowCompletionItemFilters, CsShowFilterButtons!),
+			(Microsoft.CodeAnalysis.Options.CompletionOptions.TriggerOnDeletion, CsTriggerOnDeletion!),
+		};
+		// Previous state of the 7 keys ("" == absent) so the QA can restore it.
+		var prev = options.Select (o => SettingsStore.GetString (RoslynPropName (o.Item1)) ?? "").ToArray ();
+
+		try {
+			// Start from the real on-disk state, then toggle one per-language and one
+			// non-per-language option on.
+			LoadCSharpFormatPanel ();
+			CsFormatOnType!.IsChecked = true;     // per-language      -> Roslyn.AutoFormattingOnTyping.C#
+			CsFormatOnReturn!.IsChecked = true;  // NOT per-language  -> Roslyn.AutoFormattingOnReturn
+			StoreCSharpFormatPanel ();
+
+			string onType = SettingsStore.GetString ("Roslyn.AutoFormattingOnTyping.C#") ?? "";
+			string onReturn = SettingsStore.GetString ("Roslyn.AutoFormattingOnReturn") ?? "";
+			string junk = SettingsStore.GetString ("C#.") ?? "";
+			MainWindow.Instance?.Output ("[prefs-csharp] roundtrip: onType.C#=" + onType
+				+ " onReturn(no-lang)=" + onReturn
+				+ " junkCsharpDot=" + (string.IsNullOrEmpty (junk) ? "(absent)" : junk)
+				+ " ok=" + (onType == "True" && onReturn == "True" && junk == ""));
+		} finally {
+			for (int i = 0; i < options.Length; i++)
+				SettingsStore.SetString (RoslynPropName (options[i].Item1), prev[i] == "" ? null : prev[i]);
+			MainWindow.Instance?.Output ("[prefs-csharp] restored previous csharpformat keys");
+		}
+	}
+
+	// QA oracle for the F2 Roslyn preview infra: drives RoslynPreviewService inside the
+	// real app (so any System.Composition/Roslyn collision against the main/build closure
+	// surfaces here, not only in an isolated probe) and checks that a snippet is
+	// normalized by Formatter and that the legacy //[ ... //] marker lines are stripped.
+	public void QaRoslynPreviewOracle ()
+	{
+		// Legacy marker format: the //[ and //] markers sit on their own lines inside the
+		// region that changes with the option (see StyleViewModel snippets); the formatter
+		// reindents them as comment lines and StripPreviewMarkers drops whole marker lines.
+		string snippet = "class C{\n  public int M(  ) {\n//[\n    return    1;\n//]\n  }\n}";
+		string outText = null;
+		try {
+			using var svc = new RoslynPreviewService ();
+			outText = svc.Format (snippet, null, System.Threading.CancellationToken.None);
+		} catch (Exception ex) {
+			MainWindow.Instance?.Output ("[prefs-roslynpreview] EXC " + ex);
+			return;
+		}
+		// Formatter collapses the 2-space indent to 4 spaces and removes the extra space
+		// inside "M(  )"; the marker lines are dropped. All of these must hold:
+		// the method opens with a 4-space brace, the return body sits at 8 spaces.
+		bool formatted = outText.Contains ("public int M()") && outText.Contains ("\n    {")
+			&& outText.Contains ("\n        return 1;");
+		bool markersStripped = !outText.Contains ("//[" ) && !outText.Contains ("//]");
+		MainWindow.Instance?.Output ("[prefs-roslynpreview] formatted=" + formatted
+			+ " markersStripped=" + markersStripped + " ok=" + (formatted && markersStripped));
 	}
 
 	// ---------- DocFood options (legacy group of 6 panels, all of them inert stubs) ----------
