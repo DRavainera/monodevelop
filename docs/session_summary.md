@@ -5747,3 +5747,66 @@ Segunda fase del port decidido en §58 (P0, capa de datos). P1 entrega la **supe
 
 ### Cierre
 Commit de código por nombre (5) + commit `Docs:` por nombre (docs ×3: `session_summary.md` §59, `interfaz-plan.md` M31-t, `migration-status-report.md` nota 8.x). Push a `origin/agents/sub-agent-senior-dev-role-report`. **Sin submódulos, sin PRs (§18.7).** Artefactos: `~/opencode/aspnet_vbnet_port/` (plan `plan_p1.md`, brief `qa_p1_brief.md`, fixture `qa_p1/`, reportes `qa_p1_report*.md`, logs de build `p1_build_*`), `~/opencode/docfood_qa/` (logs `p1vbopt3` / `p1vbopt3_vbdata`).
+
+## 2026-11-17 (60) — Port ASP.NET / ASP.NET Core / VB(.NET): P2 panel XSP (tab Run) + P3 tab Run Configurations ASP.NET Core — CERRADO (QA VERDE, 0 hallazgos)
+
+Tercera fase del port decidido en §58 (P0 datos, P1 diálogo+paneles VB, §59). P2+P3 cierran los **Tiers A+B** del alcance: la última superficie de opciones por-proyecto portada antes de Tier C (wizards) y D (ProjectPad), que quedan para sesiones siguientes.
+
+### Qué se hizo (P2 — panel XSP)
+
+- **`XspPanel`** (clase anidada en `Views/ProjectOptionsDialog.axaml.cs`, L457; el único fichero de código tocado): port del nodo legacy `ItemOptionPanels/Run` `MonoDevelop.AspNet.Execution.XspOptionsPanel` (condición `FlavorType=MonoDevelop.AspNet.Projects.AspNetAppProjectFlavor` → proyectos .csproj clásicos con el GUID `{349C5851-65DF-11DA-9384-00065B846F21}`, `IsAspNetApp=true`). **NO es per-configuración** (el legacy es `ItemOptionsPanel`, Load/Store sin `OnConfigChanged`): el selector Configuration de la cabecera no lo afecta.
+- 3 secciones en orden/labels **1:1 del widget legacy** (`XspOptionsPanelWidget.cs`): General Options (IP address + hint "(blank = localhost)", Port + hint "(0 = random)", Verbose console output), Security (SSL mode, SSL protocol), SSL Key (Key type, Key file + Browse `*.p12`, Certificate file + Browse `*.cer`, Password = combo + entry).
+- **Bug crítico detectado antes de compilar y corregido**: el legacy persiste el **token del enum** (`(XspSslMode) index`, `XspParameters` serializa el valor), no el label del combo. Los 4 combos usan arrays paralelos label/token: SslMode "None/Enabled/Accept Client Certificates/Require Client Certificates" ↔ "None/Enable/ClientAccept/ClientRequire"; SslProtocol "Default/TLS" ↔ "Default/Tls"; KeyType "None/Pkcs12/PVK" ↔ igual; PasswordOptions "None/Ask/Store (insecure)" ↔ "None/Ask/Store". El `Load` busca el índice por **token** (clamp 0..n-1) y el `Store` escribe el token por índice.
+- **Sensibilidad legacy** (`UpdateSensitivity`, `XspOptionsPanelWidget.cs:184-200`): SSL rows si SslMode≠None; key rows si además KeyType>0; CertFile solo PVK (idx 2); Password solo Store (idx 2) — **y el legacy BORRA el texto de la password cuando el campo queda insensible** (replicado: `if (!Password.IsEnabled) Password.Text = ""`).
+- Port del SpinButton legacy (0..65535): `int.TryParse` + rango, fallback 8080; `PasswordChar='●'` (verificado en Avalonia 12.1.2 por reflection).
+- `ReadXspFields` devuelve **null** sin la sección `<MonoDevelop><Properties><XspParameters>` → `Load` early-returns (widgets vacíos, sin NPE); `SaveXspFields` (P0) escribe siempre los 10 elementos.
+
+### Qué se hizo (P3 — tab Run Configurations ASP.NET Core)
+
+- **`AspNetCoreRunConfigPanel`** (L673): el legacy es un **`RunConfigurationEditor`** (point `Ide/RunConfigurationEditors`, abierto desde el diálogo de run parameters), **no** un `ItemOptionPanel`. **Divergencia documentada**: el port lo expone como **tab "Run Configurations" del diálogo** para proyectos con `kind.IsAspNetCore == true`, solo si el registro del addin contiene el nodo `AspNetCoreRunConfigurationEditor` (verificado en `GetExtensionNodes("/MonoDevelop/Ide/RunConfigurationEditors")` — evita generar la tab si el addin no está).
+- Controles (fiel al `AspNetCoreRunConfigurationEditorWidget`): combo **Profile** (lista de perfiles de `Properties/launchSettings.json`; **se edita el PRIMERO** — divergencia documentada, el legacy liga el perfil por nombre de run-config), **App URL** + warning "Invalid URL" (`IsValidUrl`: lista `;` de URLs absolutas; réplica del widget legacy L142-156), checkbox **"Open URL in web browser when app starts:"**, entry **URL** sensible solo con el check ON (y no se guarda si está off — `SaveCore` legacy).
+- Persistencia vía P0 `Read/SaveAspNetCoreRunProfile`: `launchBrowser` siempre escrito; `launchUrl`/`applicationUrl` escritos si no vacíos y **eliminados si vacíos** (serialización legacy). `Store` es **no-op sin perfiles** (no crea el fichero ni el perfil).
+- El warning se actualiza vía **`GetObservable(TextBox.TextProperty)`**: en Avalonia 12 `TextChanged` NO dispara ante sets programáticos (verificado en un harness: 0 disparos vs 2 del observable) — el oráculo y la UI cambian el texto por código, así que `TextChanged` dejaría el warning obsoleto.
+
+### Refactor y helpers del diálogo
+
+- `BuildTabs` refactorizado con el helper `AddPanel(panel, label)` (L203/L236): añade el factory `XspPanel` al switch por `className` y el caso especial P3 tras el bucle.
+- `PortedPanelClasses` (L51) +`"MonoDevelop.AspNet.Execution.XspOptionsPanel"`.
+- **`PanelBase`** (L1234): helpers de color theme-aware `DarkTheme`/`DimTextBrush()`/`WarningBrush()` (L1259) con el patrón del diff viewer (`Application.Current.ActualThemeVariant` + `Color.Parse`); **no existen recursos** `IdeFgDimBrush`/`WarningBrush` en la shell (los primeros borradores los usaban mal — corregido antes de compilar).
+- Los `TextBox` de los paneles nuevos arrancan con `Text = ""`: **en Avalonia 12 el default de `TextBox.Text` es `null`** (verificado en harness; el entry GTK defaultaba a "") — los checks del oráculo y el `Store` se romperían con NPE.
+
+### Oráculo headless `QaWebOptionsOracle` (L1051)
+
+~34 checks, **auto-fijtures en `Path.GetTempPath()`** (sin `--sln`; el dispatch `--qa-vboptions` de `MainWindow.axaml.cs` L3077 lo llama tras `QaVbOptionsOracle()` y comparten la tag `[qa-vboptions]`):
+- **P2**: kind AspNetApp; tabs=1 XSP (label "XSP Web Server" del manifest); sin tab run-config; defaults vacíos sin sección; round-trip con **tokens exactos** (Port 8180, SslMode "Enable", SslProtocol "Tls", KeyType "Pkcs12", PasswordOptions "Store", password "s3cret", Verbose false); **reload por token** (diálogo nuevo → mismos índices); cadena de sensibilidad (None → todo OFF + password borrada; Enabled+Pkcs12 → cert OFF; Enabled+PVK → cert ON; PasswordOption None → password OFF+borrada); sección `<XspParameters>` en el .csproj con los tokens.
+- **P3**: kind AspNetCore; tabs=1 Run Configurations; sin tab XSP; 2 perfiles listados (CoreApp, IIS Express); load completo; warning off con multi-URL válida / on con URL inválida; round-trip (browser on, launchUrl "api/values", applicationUrl multi); **otro perfil intacto**; browser off → launchUrl eliminado del JSON; applicationUrl vacía → eliminada del JSON; proyecto **sin launchSettings.json** → combo vacío, `SelectedIndex=-1`, Store no-op.
+
+### Bugs de Avalonia 12 encontrados y corregidos (verificados en harness throwaway en `~/opencode/aspnet_vbnet_port/avalonia_check/`)
+
+1. `TextBox.Text` defaulta a **null** (no "") → NPE en el oráculo; fix: `Text=""` en todos los boxes de los paneles.
+2. `TextChanged` **no dispara** ante sets programáticos (solo entrada de usuario) → warning de URL obsoleto; fix: suscripción a `GetObservable(TextBox.TextProperty)` con un `IObserver<string?>` anidado.
+3. `CheckBox` no tiene `Checked`/`Unchecked` (son WPF) → `IsCheckedChanged` (patrón ya usado en la shell).
+4. `IsChecked` es `bool?` (default `false`, no null — verificado) → comparaciones a prueba de null en el oráculo.
+5. **Bug del oráculo (pre-compilación)**: `string.Format` con el literal del .sln (llaves del GUID → `FormatException`); fix: helper `Sln(name, guid)` por concatenación.
+6. **Bug del oráculo (pre-compilación)**: cadena de sensibilidad mal encadenada tras reactivar SslMode (PasswordOption seguía en Store → password sensible); fix: secuencia explícita + check `password off for None` con borrado.
+
+### Divergencias documentadas (verificadas por QA, no son hallazgos)
+
+1. **P3 como tab del diálogo**: el legacy abre el editor en el diálogo de run parameters (superficie que no existe en la shell — port separada).
+2. **P3 edita el PRIMER perfil** de launchSettings.json (el legacy liga el perfil por nombre de run-config; el combo permite ver todos los perfiles).
+3. **Port del SpinButton** XSP (0..65535): fallback 8080 ante valor no numérico o fuera de rango; la validación de la dirección IP del setter legacy no se replica (el .csproj puede llevar cualquier texto de Address — el legacy la validaba en el modelo).
+4. (P1, siguen vigentes) tabs vs árbol, CodePage lista estática + combo editable, orden Imports, manifest ILAsm sin condition, SolutionOptions → proyecto activo.
+
+### Validación (QA §18.5, Tester QA Senior, recursivo)
+
+- **Builds** Avalonia + GTK **0 errores** (`p2p3_build_avalonia.log` / `p2p3_build_gtk.log`).
+- **Oráculo `--qa-vboptions`**: regresión P1 **47/47** + **`total web ok=34 fail=0`** (P2+P3) — log `p2p3_vbopt4`.
+- **Regresión P0**: oráculo `--qa-vbdata` **38/38** (log `p2p3_vbdata`).
+- **QA** (brief `qa_p2p3_brief.md` → subagente Tester QA Senior → `qa_p2p3_report.md`): 0 hallazgos.
+
+### Archivos (2 M, solo shell, sin submódulos)
+
+`MonoDevelop.Startup.Avalonia/Views/ProjectOptionsDialog.axaml.cs` (1694 líneas; los 2 paneles + oráculo + helpers), `MonoDevelop.Startup.Avalonia/Views/MainWindow.axaml.cs` (dispatch del oráculo web). Nota: esta fase NO toca `ConfigurationService.cs` (la API P0 ya existía) ni el árbol GTK → el build GTK se valida igualmente por protocolo (§18.4, 0 errores).
+
+### Cierre
+Commit de código por nombre (2) + commit `Docs:` por nombre (docs ×3: `session_summary.md` §60, `interfaz-plan.md` M31-u, `migration-status-report.md` nota). Push a `origin/agents/sub-agent-senior-dev-role-report`. **Sin submódulos, sin PRs (§18.7).** Artefactos: `~/opencode/aspnet_vbnet_port/` (brief `qa_p2p3_brief.md`, report `qa_p2p3_report.md`, harness `avalonia_check/`, builds `p2p3_build_*`), `~/opencode/docfood_qa/` (logs `p2p3_vbopt4` / `p2p3_vbdata`).

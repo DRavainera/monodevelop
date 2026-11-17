@@ -6375,3 +6375,35 @@ El operador reportó dos bugs de la shell Avalonia: el pad **Errors** no mostrab
 **Siguiente (P2–P3, esta sesión):** P2 tab **Run** con panel **XSP** (condición `FlavorType=MonoDevelop.AspNet.Projects.AspNetAppProjectFlavor`, persistencia `XspFields` de P0 en `MonoDevelop/Properties/XspParameters`). P3 editor de **run-config AspNetCore** (App URL/LaunchBrowser/LaunchUrl sobre `launchSettings.json`, `AspNetCoreRunProfileFields` de P0). Tier C (wizards) y D (ProjectPad) en sesiones siguientes.
 
 **Cierre**: commit de código por nombre (5) + commit `Docs:` por nombre (docs ×3). Push a `origin/agents/sub-agent-senior-dev-role-report`. **Sin submódulos, sin PRs.** Artefactos: `~/opencode/aspnet_vbnet_port/` (plan `plan_p1.md`, brief `qa_p1_brief.md`, fixture `qa_p1/`, reportes `qa_p1_report*.md`, builds `p1_build_*`), `~/opencode/docfood_qa/` (logs `p1vbopt3` / `p1vbopt3_vbdata`).
+
+## 2026-11-17 — M31-u Port ASP.NET / ASP.NET Core / VB(.NET) — P2 panel XSP (tab Run) + P3 tab Run Configurations ASP.NET Core — CERRADO (QA VERDE, 0 hallazgos)
+
+**Estado: CERRADO (QA APROBADO, 0 hallazgos abiertos §18.5).** Fases **P2+P3** (UI) del port sobre la capa de datos de M31-s/P0 y el diálogo de M31-t/P1. Cierran los **Tiers A+B** del alcance decidido por el operador; Tier C (wizards) y D (ProjectPad) quedan para sesiones siguientes.
+
+**Qué se hizo (P2 — panel XSP):**
+- **`XspPanel`** (clase anidada en `Views/ProjectOptionsDialog.axaml.cs` L457): port del nodo legacy `ItemOptionPanels/Run` `XspOptionsPanel` (condición `FlavorType=...AspNetAppProjectFlavor` → .csproj clásico con GUID `{349C5851-65DF-11DA-9384-00065B846F21}`, `IsAspNetApp=true`). **NO es per-config** (`ItemOptionsPanel` legacy, Load/Store sin `OnConfigChanged`). 3 secciones 1:1 del widget legacy (General Options: IP+hint/Port+hint/Verbose; Security: SSL mode/protocol; SSL Key: Key type/Key file+Browse/Certificate file+Browse/Password combo+entry).
+- **Tokens, no labels**: el legacy persiste el **token del enum** (`(XspSslMode) index`) — arrays paralelos label/token (SslMode "Enable"/"ClientAccept"/"ClientRequire"; SslProtocol "Tls"; PasswordOptions "Store"), `Load` por token, `Store` index→token.
+- **Sensibilidad legacy** (`UpdateSensitivity`): SSL rows si SslMode≠None; key rows si KeyType>0; CertFile solo PVK; Password solo Store **y borrado del texto cuando el campo queda insensible** (replicado). Port del SpinButton 0..65535: fallback 8080. `PasswordChar='●'`.
+
+**Qué se hizo (P3 — tab Run Configurations):**
+- **`AspNetCoreRunConfigPanel`** (L673): el legacy es un **`RunConfigurationEditor`** (point `Ide/RunConfigurationEditors`), **no** un `ItemOptionPanel` → **divergencia documentada**: el port lo expone como **tab "Run Configurations"** del diálogo para `kind.IsAspNetCore == true` (y solo si el registro tiene el nodo `AspNetCoreRunConfigurationEditor`). Controles fieles al widget legacy: combo Profile (perfiles de `Properties/launchSettings.json`; **edita el PRIMER perfil** — divergencia, el legacy liga por nombre de run-config), App URL + warning "Invalid URL" (`IsValidUrl`: lista `;` de URLs absolutas), checkbox "Open URL in web browser when app starts:", entry URL sensible solo con el check ON (no se guarda si está off). Persistencia P0: `launchBrowser` siempre; `launchUrl`/`applicationUrl` escritos si no vacíos, **eliminados si vacíos**; `Store` no-op sin perfiles.
+- **Warning vía observable**: en Avalonia 12 `TextChanged` NO dispara ante sets programáticos (verificado en harness) → suscripción a `GetObservable(TextBox.TextProperty)`.
+
+**Refactor/helpers del diálogo:**
+- `BuildTabs` con helper `AddPanel` (L203/L236) + factory XSP + caso P3 tras el bucle; `PortedPanelClasses` (L51) +`XspOptionsPanel`.
+- **`PanelBase`** (L1234): `DarkTheme`/`DimTextBrush()`/`WarningBrush()` (L1259) — patrón del diff viewer (`ActualThemeVariant` + `Color.Parse`); **no existen recursos** `IdeFgDimBrush`/`WarningBrush` en la shell (corregido antes de compilar).
+- `TextBox` de los paneles nuevos arrancan con `Text=""` (**en Avalonia 12 el default de `TextBox.Text` es null** — verificado; el entry GTK defaultaba a "").
+
+**Bugs de Avalonia 12 corregidos** (verificados en harness `~/opencode/aspnet_vbnet_port/avalonia_check/`): (1) `TextBox.Text` null → NPE en oráculo; (2) `TextChanged` sin disparo programático → observable; (3) `CheckBox` sin `Checked`/`Unchecked` (WPF) → `IsCheckedChanged`; (4) `IsChecked` `bool?` → comparaciones a prueba de null; (5) oráculo: `string.Format` con literal .sln (llaves del GUID → `FormatException`) → helper `Sln(name, guid)`; (6) oráculo: cadena de sensibilidad mal encadenada → secuencia explícita + check de borrado.
+
+**Oráculo `QaWebOptionsOracle`** (L1051, ~34 checks, auto-fijtures en `Path.GetTempPath()` sin `--sln`; dispatch `--qa-vboptions` de `MainWindow.axaml.cs` L3077 lo llama tras el oráculo P1, misma tag `[qa-vboptions]`): P2 kind AspNetApp, tabs=1 XSP, sin run-config, defaults vacíos, round-trip **tokens exactos** + reload por token, cadena de sensibilidad + borrado de password, sección `<XspParameters>` en el .csproj; P3 kind AspNetCore, tabs=1 Run Configurations, sin XSP, perfiles listados, load, warning on/off, round-trip, otro perfil intacto, launchUrl/applicationUrl eliminados al vaciarse, sin launchSettings.json → no-op.
+
+**Divergencias documentadas (verificadas por QA):** (1) P3 como tab del diálogo (el legacy lo abre en el diálogo de run parameters, superficie separada); (2) P3 edita el PRIMER perfil (el legacy liga por nombre de run-config); (3) port del SpinButton XSP (fallback 8080; la validación de IP del setter legacy no se replica); (4) siguen vigentes las de P1 (tabs vs árbol, CodePage, orden Imports, ILAsm, SolutionOptions).
+
+**Validación**: builds Avalonia + GTK **0 errores**; oráculo P1 **47/47** (regresión) + **web 34/34**; oráculo P0 **38/38** (regresión); QA Tester QA Senior (brief `qa_p2p3_brief.md` → `qa_p2p3_report.md`) **0 hallazgos**.
+
+**Archivos** (2 M, solo shell, sin submódulos): `Views/ProjectOptionsDialog.axaml.cs` (1694 líneas), `Views/MainWindow.axaml.cs`. Esta fase NO toca `ConfigurationService.cs` (API P0 ya existente) ni el árbol GTK → el build GTK se valida igualmente por protocolo (§18.4, 0 errores).
+
+**Siguiente (Tier C/D, sesiones siguientes):** C = wizards (ProjectTemplates/FileTemplates del addin ASP.NET); D = ProjectPad (node builders de los 3 addins). Tier A+B cerrado con esta fase.
+
+**Cierre**: commit de código por nombre (2) + commit `Docs:` por nombre (docs ×3). Push a `origin/agents/sub-agent-senior-dev-role-report`. **Sin submódulos, sin PRs.** Artefactos: `~/opencode/aspnet_vbnet_port/` (brief `qa_p2p3_brief.md`, report `qa_p2p3_report.md`, harness `avalonia_check/`, builds `p2p3_build_*`), `~/opencode/docfood_qa/` (logs `p2p3_vbopt4` / `p2p3_vbdata`).
