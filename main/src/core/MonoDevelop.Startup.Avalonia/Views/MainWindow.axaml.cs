@@ -3071,6 +3071,10 @@ public partial class MainWindow : Window
 					}
 					var dlg = new ProjectOptionsDialog (proj, loadedSolutionPath);
 					dlg.QaVbOptionsOracle ();
+					// P2+P3: the web oracle builds its own fixtures in temp (no
+					// --sln needed), so it runs after the VB one and shares the
+					// [qa-vboptions] tag (totals: "total ok=" and "total web ok=").
+					dlg.QaWebOptionsOracle ();
 					dlg.Close ();
 					Close ();
 				});
