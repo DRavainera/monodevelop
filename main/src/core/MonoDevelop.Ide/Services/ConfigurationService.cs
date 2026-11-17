@@ -4,6 +4,7 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Text.Json.Nodes;
 using System.Xml.Linq;
 using MonoDevelop.Projects.MSBuild;
 
@@ -1333,6 +1334,571 @@ public static class ConfigurationService
 				NewLineChars = newlines
 			}))
 				doc.Save (writer);
+		} catch {
+			return false;
+		}
+		return true;
+	}
+
+	// ---------- ASP.NET / ASP.NET Core / VB(.NET) options panels (port) ----------
+	// The legacy item options panels persist through the full MonoDevelop.Projects
+	// model (VBProject/VBCompilerParameters/AspNetAppProjectFlavor/LaunchProfileData).
+	// The shell has no such model, so this block is the surgical equivalent: it reads
+	// and writes the exact elements/sections the legacy serializers emit, so both UIs
+	// produce value-compatible files. The legacy write model maps, per project:
+	//   - VB project options      -> the top-level (unconditional) PropertyGroup of the
+	//                                .vbproj (ItemProperty on VBProject);
+	//   - VB Imports              -> <Import Include="..."/> items in a top-level
+	//                                ItemGroup (VBProject.OnGetDefaultImports adds
+	//                                "$(MSBuildBinPath)\Microsoft.VisualBasic.targets");
+	//   - VB compiler options     -> the per-configuration
+	//                                <PropertyGroup Condition=" '$(Configuration)' == 'X' ">
+	//                                group (ItemProperty on VBCompilerParameters);
+	//   - AspNet XSP options      -> a <MonoDevelop><Properties><XspParameters> section
+	//                                appended to the .csproj (ItemProperty
+	//                                XspParameters IsExternal=true);
+	//   - AspNetCore run-config   -> the launchSettings.json profile
+	//                                (LaunchProfileData: launchBrowser/launchUrl and
+	//                                applicationUrl under otherSettings).
+
+	// Project type / flavor detection, mirroring the legacy conditions:
+	//   ProjectTypeId=VBNet         -> the VBNet type GUID in ProjectTypeGuids (or a .vbproj).
+	//   FlavorType=AspNetAppProjectFlavor -> the AspNetApp flavor GUID in ProjectTypeGuids.
+	//   AspNetCore                   -> an SDK-style .csproj on Microsoft.NET.Sdk.Web.
+	// The GUIDs are the ones the legacy add-ins register (MSBuildItemTypes / ProjectModelExtensions).
+	const string VbProjectTypeGuid = "{F184B08F-C81C-45F6-A57F-5ABD9991F28F}";
+	const string AspNetAppFlavorGuid = "{349C5851-65DF-11DA-9384-00065B846F21}";
+
+	/// <summary>What kind of project a project file is, by the same signals the legacy
+	/// model uses: the file extension, the ProjectTypeGuids GUIDs, and (for web) the
+	/// SDK. Drives the options dialog's ProjectTypeId/FlavorType condition evaluation.
+	/// Returns null when the file cannot be read or is not a recognizable project.</summary>
+	public static ProjectKindInfo? GetProjectKind (string projPath)
+	{
+		if (string.IsNullOrEmpty (projPath) || !File.Exists (projPath))
+			return null;
+		XDocument doc;
+		try {
+			doc = XDocument.Load (projPath);
+		} catch {
+			return null;
+		}
+		var root = doc.Root;
+		if (root is null)
+			return null;
+
+		var isVbFile = projPath.EndsWith (".vbproj", StringComparison.OrdinalIgnoreCase);
+		var isWebFile = projPath.EndsWith (".csproj", StringComparison.OrdinalIgnoreCase);
+
+		// ProjectTypeGuids: a semicolon list of GUIDs in any PropertyGroup.
+		var typeGuids = new List<string> ();
+		foreach (var el in root.Descendants ()
+			.Where (e => e.Name.LocalName == "ProjectTypeGuids"))
+			foreach (var g in (el.Value ?? "")
+				.Split (new[] { ';' }, StringSplitOptions.RemoveEmptyEntries))
+				if (g.Trim ().Length > 0)
+					typeGuids.Add (g.Trim ());
+
+		// The SDK is declared as the Project's Sdk attribute (SDK-style:
+		// <Project Sdk="Microsoft.NET.Sdk.Web">) or as <Sdk> elements.
+		var sdkAttr = root.Attribute ("Sdk")?.Value ?? "";
+		var sdks = new[] { sdkAttr }.Concat (root.Descendants ()
+			.Where (e => e.Name.LocalName == "Sdk")
+			.Select (e => (string?)e ?? "")).Where (s => s.Length > 0);
+		var isSdkStyle = sdks.Any ();
+		var isWeb = isWebFile && isSdkStyle && sdks.Any (s =>
+			s.Contains (".Sdk.Web", StringComparison.OrdinalIgnoreCase));
+
+		bool Has (string guid) => typeGuids.Any (g => SameGuid (g, guid));
+
+		return new ProjectKindInfo (
+			projPath,
+			isVbFile || Has (VbProjectTypeGuid),
+			Has (AspNetAppFlavorGuid),
+			isWeb);
+	}
+
+	/// <summary>Project classification used to evaluate the item options panels'
+	/// ProjectTypeId/FlavorType conditions.</summary>
+	public sealed record ProjectKindInfo (
+		string Path, bool IsVBNet, bool IsAspNetApp, bool IsAspNetCore);
+
+	// Shared format-preserving save (the SaveProjectReferences policy): keep the file's
+	// detected BOM / XML declaration / newline format. Returns false without touching the
+	// file when it cannot be saved.
+	static bool SavePreservingFormat (XDocument doc, string path)
+	{
+		byte[] orig;
+		try {
+			orig = File.ReadAllBytes (path);
+		} catch {
+			return false;
+		}
+		bool bom = orig.Length >= 3 && orig [0] == 0xEF && orig [1] == 0xBB && orig [2] == 0xBF;
+		var head = System.Text.Encoding.UTF8.GetString (orig, bom ? 3 : 0, Math.Min (orig.Length - (bom ? 3 : 0), 200));
+		bool decl = head.StartsWith ("<?xml", StringComparison.Ordinal);
+		string newlines = Array.IndexOf (orig, (byte)'\r') >= 0 ? "\r\n" : "\n";
+		try {
+			using (var stream = new FileStream (path, FileMode.Create, FileAccess.Write))
+			using (var writer = System.Xml.XmlWriter.Create (stream, new System.Xml.XmlWriterSettings {
+				Encoding = new System.Text.UTF8Encoding (bom),
+				OmitXmlDeclaration = !decl,
+				Indent = false,
+				NewLineChars = newlines
+			}))
+				doc.Save (writer);
+		} catch {
+			return false;
+		}
+		return true;
+	}
+
+	static XDocument? LoadDoc (string path)
+	{
+		if (!File.Exists (path))
+			return null;
+		try {
+			var doc = XDocument.Load (path);
+			return doc.Root is null ? null : doc;
+		} catch {
+			return null;
+		}
+	}
+
+	// The unconditional (top-level) PropertyGroup(s) of a classic .vbproj: the legacy
+	// ItemProperty-on-VBProject fields land here, not in a per-configuration group.
+	static XElement? FindGlobalGroup (XElement root, XNamespace ns)
+		=> root.Elements (ns + "PropertyGroup").FirstOrDefault (pg =>
+			pg.Attribute ("Condition") is null);
+
+	// ---------- VB project options (top-level .vbproj) ----------
+
+	/// <summary>The VB project-level options of a .vbproj, with the legacy defaults for
+	/// absent elements (OptionExplicit On, OptionCompare Binary, others Off/empty,
+	/// CompileTarget Library). Returns null when the file cannot be read.</summary>
+	public static VBProjectFields? ReadVbProjectFields (string vbprojPath)
+	{
+		var doc = LoadDoc (vbprojPath);
+		if (doc is null)
+			return null;
+		var ns = doc.Root!.Name.Namespace;
+		var pg = FindGlobalGroup (doc.Root!, ns) ?? doc.Root!;
+		string S (string name) => pg.Elements ().FirstOrDefault (e => e.Name.LocalName == name)?.Value ?? "";
+		// Absent elements read as their legacy ItemProperty default (OptionInfer
+		// Off, OptionExplicit On, OptionCompare Binary, OptionStrict Off), so the
+		// panel shows the same value the legacy model would.
+		string OnOff (string name, string def)
+		{
+			var v = S (name).Trim ();
+			return v.Length == 0 ? def : (v.Equals ("On", StringComparison.OrdinalIgnoreCase) ? "On" : "Off");
+		}
+		string compare = S ("OptionCompare").Trim ();
+		if (compare.Length == 0)
+			compare = "Binary";
+		string outputType = S ("OutputType");
+		// Legacy VBProject: CompileTarget read from OutputType (Exe/WinExe/Library);
+		// Module has no OutputType and reads as the enum's Module only if present.
+		string compileTarget = outputType;
+		return new VBProjectFields (
+			OnOff ("OptionInfer", "Off"), OnOff ("OptionExplicit", "On"),
+			compare, OnOff ("OptionStrict", "Off"),
+			S ("MyType"), S ("StartupObject"), S ("ApplicationIcon"),
+			S ("CodePage"), string.IsNullOrEmpty (compileTarget) ? "Library" : compileTarget);
+	}
+
+	/// <summary>One configuration of a .vbproj's VB project-level options. Values are
+	/// the raw legacy token strings ("On"/"Off", "Binary"/"Text", OutputType) so the
+	/// panel's combos map directly; absent elements resolve to the legacy
+	/// ItemProperty defaults (OptionExplicit On, OptionCompare Binary, the rest
+	/// Off/empty).</summary>
+	public sealed record VBProjectFields (
+		string OptionInfer, string OptionExplicit, string OptionCompare, string OptionStrict,
+		string MyType, string StartupObject, string ApplicationIcon, string CodePage, string CompileTarget);
+
+	/// <summary>Writes the VB project-level options into the .vbproj's top-level
+	/// PropertyGroup (creating one if absent), mirroring the legacy ItemProperty write:
+	/// the Option* and Compare fields are written when different from their default
+	/// (OptionExplicit On, OptionCompare Binary, others Off/empty) and removed when back
+	/// to it; CompileTarget writes OutputType (Library is the default and is removed).
+	/// Returns false without touching the file when it cannot be saved.</summary>
+	public static bool SaveVbProjectFields (string vbprojPath, VBProjectFields f)
+	{
+		var doc = LoadDoc (vbprojPath);
+		if (doc is null)
+			return false;
+		var root = doc.Root!;
+		var ns = root.Name.Namespace;
+		var pg = FindGlobalGroup (root, ns);
+		if (pg is null) {
+			pg = new XElement (ns + "PropertyGroup");
+			root.Add (pg);
+		}
+		XElement? Find (string name) => pg.Elements ().FirstOrDefault (e => e.Name.LocalName == name);
+		void Suppressed (string name, string value, string def)
+		{
+			if (value == def) {
+				var ex = Find (name);
+				if (ex is not null)
+					ex.Remove ();
+				return;
+			}
+			var el = Find (name);
+			if (el is null)
+				pg.Add (new XElement (ns + name, value));
+			else
+				el.SetValue (value);
+		}
+		// The legacy ItemProperty defaults: OptionInfer "Off", OptionExplicit "On",
+		// OptionCompare "Binary", OptionStrict "Off".
+		Suppressed ("OptionInfer", f.OptionInfer, "Off");
+		Suppressed ("OptionExplicit", f.OptionExplicit, "On");
+		Suppressed ("OptionCompare", f.OptionCompare, "Binary");
+		Suppressed ("OptionStrict", f.OptionStrict, "Off");
+		Suppressed ("MyType", f.MyType, "");
+		Suppressed ("StartupObject", f.StartupObject, "");
+		Suppressed ("ApplicationIcon", f.ApplicationIcon, "");
+		Suppressed ("CodePage", f.CodePage, "");
+		Suppressed ("OutputType", f.CompileTarget, "Library");
+		return SavePreservingFormat (doc, vbprojPath);
+	}
+
+	// ---------- VB Imports (top-level ItemGroup) ----------
+
+	/// <summary>The VB Imports of a .vbproj: the <c>&lt;Import Include="..."/&gt;</c> items
+	/// in document order (the legacy OnGetDefaultImports adds
+	/// "$(MSBuildBinPath)\Microsoft.VisualBasic.targets"). Returns an empty list when the
+	/// file cannot be read (the legacy reads an empty import set on a missing file).</summary>
+	public static IReadOnlyList<string> ReadVbImports (string vbprojPath)
+	{
+		var doc = LoadDoc (vbprojPath);
+		if (doc is null)
+			return Array.Empty<string> ();
+		var ns = doc.Root!.Name.Namespace;
+		var list = new List<string> ();
+		foreach (var ig in doc.Root!.Elements (ns + "ItemGroup"))
+			foreach (var el in ig.Elements (ns + "Import"))
+				if (el.Attribute ("Include") is { Value: { Length: > 0 } v })
+					list.Add (v);
+		return list;
+	}
+
+	/// <summary>Replaces the .vbproj's <c>&lt;Import Include="..."/&gt;</c> items with the
+	/// given set, in order: every existing Import item is removed (its ItemGroup dropped
+	/// only when it becomes empty) and, when the set is non-empty, one ItemGroup with the
+	/// new imports is appended to the root (the legacy rewrite semantics). Returns false
+	/// without touching the file when it cannot be saved.</summary>
+	public static bool SaveVbImports (string vbprojPath, IReadOnlyList<string> imports)
+	{
+		var doc = LoadDoc (vbprojPath);
+		if (doc is null)
+			return false;
+		var root = doc.Root!;
+		var ns = root.Name.Namespace;
+		// Remove the Import items that carry an Include attribute (the namespace
+		// imports the panel edits), dropping a now-empty ItemGroup. Imports that
+		// reference a targets file (<Import Project=.../>) are left untouched, so the
+		// writer stays coherent with the reader (which only sees Include items) in
+		// every layout.
+		foreach (var ig in root.Elements (ns + "ItemGroup").ToList ())
+			foreach (var el in ig.Elements (ns + "Import")
+				.Where (e => e.Attribute ("Include") is not null).ToList ()) {
+				el.Remove ();
+			}
+		foreach (var ig in root.Elements (ns + "ItemGroup").Where (g => g.HasElements == false).ToList ())
+			ig.Remove ();
+		if (imports.Count > 0) {
+			var ig = new XElement (ns + "ItemGroup");
+			foreach (var inc in imports)
+				ig.Add (new XElement (ns + "Import", new XAttribute ("Include", inc)));
+			root.Add (ig);
+		}
+		return SavePreservingFormat (doc, vbprojPath);
+	}
+
+	// ---------- VB compiler options (per-configuration PropertyGroup) ----------
+
+	/// <summary>The VB compiler options of ONE configuration of a .vbproj, with the
+	/// legacy VBCompilerParameters defaults for absent elements (Optimize false,
+	/// DebugType full, WarningLevel 1, RemoveIntegerChecks false, WarningsDisabled
+	/// false, empty strings). Returns null when the file cannot be read; a
+	/// group-less file reads as all defaults (like the legacy configuration with no
+	/// per-configuration PropertyGroup).</summary>
+	public static VBCompilerFields? ReadVbCompilerFields (string vbprojPath, string configuration)
+	{
+		var doc = LoadDoc (vbprojPath);
+		if (doc is null)
+			return null;
+		var ns = doc.Root!.Name.Namespace;
+		// Classic .vbproj per-configuration group: Condition=" '$(Configuration)' == 'X' ".
+		var cond = " '$(Configuration)' == '" + configuration + "' ";
+		var pg = doc.Root!.Elements (ns + "PropertyGroup")
+			.FirstOrDefault (g => (string?)g.Attribute ("Condition") == cond);
+		string S (string name) => pg?.Elements ().FirstOrDefault (e => e.Name.LocalName == name)?.Value ?? "";
+		bool B (string name) => S (name).Trim ().Equals ("true", StringComparison.OrdinalIgnoreCase);
+		int warnLevel = int.TryParse (S ("WarningLevel").Trim (), out var wl) ? wl : 1;
+		string debugType = S ("DebugType");
+		if (debugType.Length == 0)
+			debugType = "full";
+		return new VBCompilerFields (
+			B ("Optimize"), B ("DefineDebug"), B ("DefineTrace"),
+			debugType, S ("DocumentationFile"), S ("NoWarn"), S ("WarningsAsErrors"),
+			B ("TreatWarningsAsErrors"), warnLevel, S ("DefineConstants"),
+			B ("RemoveIntegerChecks"), S ("RootNamespace"), S ("AdditionalParameters"));
+	}
+
+	/// <summary>One configuration of a .vbproj's VB compiler options. DebugType is the
+	/// normalized token ("none"/"pdbonly"/"full"); WarningsDisabled is the legacy
+	/// WarningLevel==0 view.</summary>
+	public sealed record VBCompilerFields (
+		bool Optimize, bool DefineDebug, bool DefineTrace, string DebugType,
+		string DocumentationFile, string NoWarn, string WarningsAsErrors,
+		bool TreatWarningsAsErrors, int WarningLevel, string DefineConstants,
+		bool RemoveIntegerChecks, string RootNamespace, string AdditionalParameters);
+
+	/// <summary>Writes the VB compiler options into the configuration's
+	/// <c>&lt;PropertyGroup Condition=" '$(Configuration)' == 'X' "&gt;</c> group (created
+	/// before </Project> when absent) with the legacy VBCompilerParameters write
+	/// semantics: each ItemProperty field is written when different from its default and
+	/// removed when back to it (Optimize/RemoveIntegerChecks default false, DebugType
+	/// "full", WarningLevel 1, the strings empty). Bool elements use lowercase true/false.
+	/// Returns false without touching the file when it cannot be saved.</summary>
+	public static bool SaveVbCompilerFields (string vbprojPath, string configuration, VBCompilerFields f)
+	{
+		var doc = LoadDoc (vbprojPath);
+		if (doc is null)
+			return false;
+		var root = doc.Root!;
+		var ns = root.Name.Namespace;
+		var cond = " '$(Configuration)' == '" + configuration + "' ";
+		var pg = root.Elements (ns + "PropertyGroup").FirstOrDefault (g => (string?)g.Attribute ("Condition") == cond);
+		if (pg is null) {
+			pg = new XElement (ns + "PropertyGroup", new XAttribute ("Condition", cond));
+			root.Add (pg);
+		}
+		XElement? Find (string name) => pg.Elements ().FirstOrDefault (e => e.Name.LocalName == name);
+		void Set (string name, string value)
+		{
+			var el = Find (name);
+			if (el is null)
+				pg.Add (new XElement (ns + name, value));
+			else
+				el.SetValue (value);
+		}
+		void Suppressed (string name, string value, string def)
+		{
+			if (value == def) {
+				var el = Find (name);
+				if (el is not null)
+					el.Remove ();
+				return;
+			}
+			Set (name, value);
+		}
+		Suppressed ("Optimize", f.Optimize ? "true" : "false", "false");
+		Suppressed ("DefineDebug", f.DefineDebug ? "true" : "false", "false");
+		Suppressed ("DefineTrace", f.DefineTrace ? "true" : "false", "false");
+		Suppressed ("DebugType", f.DebugType, "full");
+		Suppressed ("DocumentationFile", f.DocumentationFile, "");
+		Suppressed ("NoWarn", f.NoWarn, "");
+		Suppressed ("WarningsAsErrors", f.WarningsAsErrors, "");
+		Suppressed ("TreatWarningsAsErrors", f.TreatWarningsAsErrors ? "true" : "false", "false");
+		// WarningLevel: the legacy VBCompilerParameters has no default suppression for it
+		// (DefaultValue=1 but it is written whenever the group exists), so write it always.
+		Set ("WarningLevel", f.WarningLevel.ToString (CultureInfo.InvariantCulture));
+		Suppressed ("DefineConstants", f.DefineConstants, "");
+		Suppressed ("RemoveIntegerChecks", f.RemoveIntegerChecks ? "true" : "false", "false");
+		Suppressed ("RootNamespace", f.RootNamespace, "");
+		Suppressed ("AdditionalParameters", f.AdditionalParameters, "");
+		return SavePreservingFormat (doc, vbprojPath);
+	}
+
+	// ---------- ASP.NET XSP options (MonoDevelop/Properties/XspParameters in .csproj) ----------
+
+	/// <summary>The ASP.NET XSP options of a .csproj, read from the
+	/// <c>&lt;MonoDevelop&gt;&lt;Properties&gt;&lt;XspParameters&gt;</c> section (the legacy
+	/// ItemProperty XspParameters IsExternal=true). Element names are the XspParameters
+	/// ItemProperty names. Returns null when the section is absent (the legacy reads a
+	/// fresh XspParameters) or the file cannot be read.</summary>
+	public static XspFields? ReadXspFields (string csprojPath)
+	{
+		var doc = LoadDoc (csprojPath);
+		if (doc is null)
+			return null;
+		var md = doc.Root!.Elements ().FirstOrDefault (e => e.Name.LocalName == "MonoDevelop");
+		var props = md?.Elements ().FirstOrDefault (e => e.Name.LocalName == "Properties");
+		var sec = props?.Elements ().FirstOrDefault (e => e.Name.LocalName == "XspParameters");
+		if (sec is null)
+			return null;
+		string S (string name) => sec.Elements ().FirstOrDefault (e => e.Name.LocalName == name)?.Value ?? "";
+		return new XspFields (
+			int.TryParse (S ("Port"), out var p) ? p : 8080,
+			S ("Address"), S ("SslMode"), S ("SslProtocol"), S ("KeyType"),
+			S ("CertFile"), S ("KeyFile"), S ("PasswordOptions"), S ("Password"),
+			S ("Verbose").Trim () != "false");
+	}
+
+	/// <summary>The ASP.NET XSP options of a .csproj. SslMode/KeyType/SslProtocol/
+	/// PasswordOptions are the legacy enum token strings; Verbose defaults to true and
+	/// the address/port to the XspParameters defaults when the section is absent.</summary>
+	public sealed record XspFields (
+		int Port, string Address, string SslMode, string SslProtocol, string KeyType,
+		string CertificateFile, string KeyFile, string PasswordOptions, string Password, bool Verbose);
+
+	/// <summary>Writes the ASP.NET XSP options into the .csproj's
+	/// <c>&lt;MonoDevelop&gt;&lt;Properties&gt;&lt;XspParameters&gt;</c> section (created when
+	/// absent), element by element with the XspParameters ItemProperty names. Returns
+	/// false without touching the file when it cannot be saved.</summary>
+	public static bool SaveXspFields (string csprojPath, XspFields f)
+	{
+		var doc = LoadDoc (csprojPath);
+		if (doc is null)
+			return false;
+		var root = doc.Root!;
+		var ns = root.Name.Namespace;
+		var md = root.Elements ().FirstOrDefault (e => e.Name.LocalName == "MonoDevelop");
+		if (md is null) {
+			md = new XElement (ns + "MonoDevelop");
+			root.Add (md);
+		}
+		var props = md.Elements ().FirstOrDefault (e => e.Name.LocalName == "Properties");
+		if (props is null) {
+			props = new XElement (ns + "Properties");
+			md.Add (props);
+		}
+		var sec = props.Elements ().FirstOrDefault (e => e.Name.LocalName == "XspParameters");
+		if (sec is null) {
+			sec = new XElement (ns + "XspParameters");
+			props.Add (sec);
+		}
+		void Set (string name, string value)
+		{
+			var el = sec.Elements ().FirstOrDefault (e => e.Name.LocalName == name);
+			if (el is null)
+				sec.Add (new XElement (ns + name, value));
+			else
+				el.SetValue (value);
+		}
+		Set ("Port", f.Port.ToString (CultureInfo.InvariantCulture));
+		Set ("Address", f.Address);
+		Set ("SslMode", f.SslMode);
+		Set ("SslProtocol", f.SslProtocol);
+		Set ("KeyType", f.KeyType);
+		Set ("CertFile", f.CertificateFile);
+		Set ("KeyFile", f.KeyFile);
+		Set ("PasswordOptions", f.PasswordOptions);
+		Set ("Password", f.Password);
+		Set ("Verbose", f.Verbose ? "true" : "false");
+		return SavePreservingFormat (doc, csprojPath);
+	}
+
+	// ---------- ASP.NET Core run configuration (launchSettings.json) ----------
+	// The legacy AspNetCoreRunConfiguration edits a launchSettings.json profile
+	// (LaunchProfileProvider / LaunchProfileData): the profile's launchBrowser,
+	// launchUrl and applicationUrl (the latter stored flat under the profile, the
+	// legacy OtherSettings serialization). The file lives at
+	// <projectDir>/Properties/launchSettings.json. Unlike the .csproj/.sln/.vbproj
+	// writers above, this one re-serializes the JSON (the legacy provider does not
+	// preserve byte-for-byte format either); indentation matches the VS-generated
+	// file (2 spaces).
+
+	/// <summary>The path of an ASP.NET Core project's launchSettings.json
+	/// (<c>Properties/launchSettings.json</c> next to the project file).</summary>
+	public static string GetAspNetCoreLaunchSettingsPath (string csprojPath)
+		=> Path.Combine (Path.GetDirectoryName (csprojPath)!, "Properties", "launchSettings.json");
+
+	/// <summary>The profile names of an ASP.NET Core project's launchSettings.json, in
+	/// document order. Empty when the file is absent or has no profiles (the legacy
+	/// provider treats a missing file as no profiles).</summary>
+	public static IReadOnlyList<string> GetAspNetCoreRunProfiles (string csprojPath)
+	{
+		var path = GetAspNetCoreLaunchSettingsPath (csprojPath);
+		if (!File.Exists (path))
+			return Array.Empty<string> ();
+		try {
+			var root = JsonNode.Parse (File.ReadAllText (path));
+			var profiles = root?["profiles"] as JsonObject;
+			if (profiles is null)
+				return Array.Empty<string> ();
+			return profiles.Select (kv => kv.Key).ToList ();
+		} catch {
+			return Array.Empty<string> ();
+		}
+	}
+
+	/// <summary>One ASP.NET Core run profile's editor-relevant fields.
+	/// ApplicationUrl is the profile's flat "applicationUrl" (the legacy
+	/// LaunchProfileData.OtherSettings["applicationUrl"]); LaunchBrowser defaults to
+	/// the legacy true; LaunchUrl to empty. Returns null when the profile does not
+	/// exist.</summary>
+	public sealed record AspNetCoreRunProfileFields (
+		string Name, bool LaunchBrowser, string LaunchUrl, string ApplicationUrl);
+
+	/// <summary>Reads one ASP.NET Core run profile's fields from launchSettings.json.
+	/// Returns null when the file, the profiles object, or the named profile is absent.</summary>
+	public static AspNetCoreRunProfileFields? ReadAspNetCoreRunProfile (string csprojPath, string profileName)
+	{
+		var path = GetAspNetCoreLaunchSettingsPath (csprojPath);
+		if (!File.Exists (path))
+			return null;
+		JsonNode? root;
+		try {
+			root = JsonNode.Parse (File.ReadAllText (path));
+		} catch {
+			return null;
+		}
+		var profile = root?["profiles"] is JsonObject profiles && profiles[profileName] is JsonObject po ? po : null;
+		if (profile is null)
+			return null;
+		return new AspNetCoreRunProfileFields (
+			profileName,
+			profile["launchBrowser"]?.GetValue<bool> () ?? true,
+			profile["launchUrl"]?.GetValue<string> () ?? "",
+			profile["applicationUrl"]?.GetValue<string> () ?? "");
+	}
+
+	/// <summary>Writes one ASP.NET Core run profile's fields into launchSettings.json,
+	/// creating the file / profiles object / profile object when absent (the legacy
+	/// provider creates them on first save). launchBrowser is always written; launchUrl
+	/// and applicationUrl are written when non-empty and removed when empty (the legacy
+	/// LaunchProfileData serialization omits null/empty values). Returns false without
+	/// touching the file when the profile cannot be located or the file cannot be saved.</summary>
+	public static bool SaveAspNetCoreRunProfile (string csprojPath, string profileName, AspNetCoreRunProfileFields f)
+	{
+		var path = GetAspNetCoreLaunchSettingsPath (csprojPath);
+		JsonNode? root;
+		if (File.Exists (path)) {
+			try {
+				root = JsonNode.Parse (File.ReadAllText (path));
+			} catch {
+				return false;
+			}
+			if (root is null)
+				return false;
+		} else {
+			root = new JsonObject ();
+		}
+		if (root["profiles"] is not JsonObject profiles) {
+			profiles = new JsonObject ();
+			root["profiles"] = profiles;
+		}
+		if (profiles[profileName] is not JsonObject profile) {
+			profile = new JsonObject { ["commandName"] = "Project" };
+			profiles[profileName] = profile;
+		}
+		profile["launchBrowser"] = f.LaunchBrowser;
+		if (f.LaunchUrl.Length > 0)
+			profile["launchUrl"] = f.LaunchUrl;
+		else
+			profile.Remove ("launchUrl");
+		if (f.ApplicationUrl.Length > 0)
+			profile["applicationUrl"] = f.ApplicationUrl;
+		else
+			profile.Remove ("applicationUrl");
+		try {
+			Directory.CreateDirectory (Path.GetDirectoryName (path)!);
+			File.WriteAllText (path, root.ToJsonString (new System.Text.Json.JsonSerializerOptions {
+				WriteIndented = true
+			}));
 		} catch {
 			return false;
 		}

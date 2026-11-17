@@ -2896,6 +2896,157 @@ public partial class MainWindow : Window
 					Output ("[slnmodel] total ok=" + ok + " fail=" + fail);
 					Close ();
 				});
+			} else if (qa == "--qa-vbdata") {
+				// QA (ASP.NET/VB port, P0 data foundation): the new ConfigurationService
+				// methods round-trip against self-generated fixtures in a throwaway
+				// directory (no --sln needed): VB project-level fields (top-level
+				// PropertyGroup of a .vbproj), VB Imports (top-level ItemGroup), VB
+				// compiler fields (per-configuration PropertyGroup), the ASP.NET XSP
+				// section (MonoDevelop/Properties/XspParameters in a .csproj), the
+				// ASP.NET Core launchSettings.json profile, and project-kind detection
+				// (ProjectTypeId/FlavorType signals). Each write is re-read and asserted,
+				// then the legacy default-suppression rules are exercised.
+				Avalonia.Threading.Dispatcher.UIThread.Post (() => {
+					int ok = 0, fail = 0;
+					void Check (string what, bool cond) {
+						Output ("[qa-vbdata] " + (cond ? "ok" : "FAIL") + " " + what);
+						if (cond) ok++; else fail++;
+					}
+					var tmp = Path.Combine (Path.GetTempPath (), "qa_vbdata_" + Guid.NewGuid ().ToString ("N"));
+					Directory.CreateDirectory (tmp);
+					string T (string n) => Path.Combine (tmp, n);
+					try {
+
+						// --- 1) VB project-level fields (.vbproj top-level PropertyGroup) ---
+						var vb = T ("VBApp.vbproj");
+						File.WriteAllText (vb, "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
+							+ "<Project DefaultTargets=\"Build\" ToolsVersion=\"4.0\" xmlns=\"http://schemas.microsoft.com/developer/msbuild/2003\">\n"
+							+ "  <PropertyGroup>\n"
+							+ "    <Configuration Condition=\" '$(Configuration)' == '' \">Debug</Configuration>\n"
+							+ "    <OutputType>Exe</OutputType>\n"
+							+ "  </PropertyGroup>\n"
+							+ "  <Import Project=\"$(MSBuildBinPath)\\Microsoft.VisualBasic.targets\" />\n"
+							+ "</Project>\n");
+						var k0 = MonoDevelop.Ide.Services.ConfigurationService.GetProjectKind (vb);
+						Check ("vb kind", k0 is { IsVBNet: true, IsAspNetApp: false, IsAspNetCore: false });
+						var p0 = MonoDevelop.Ide.Services.ConfigurationService.ReadVbProjectFields (vb);
+						Output ("[qa-vbdata] vbproj read: infer='" + p0?.OptionInfer + "' explicit='" + p0?.OptionExplicit + "' compare='" + p0?.OptionCompare + "' strict='" + p0?.OptionStrict + "' mytype='" + p0?.MyType + "' start='" + p0?.StartupObject + "' icon='" + p0?.ApplicationIcon + "' codepage='" + p0?.CodePage + "' compile='" + p0?.CompileTarget + "'");
+						Check ("vbproj read defaults", p0 is { OptionInfer: "Off", OptionExplicit: "On", OptionCompare: "Binary", OptionStrict: "Off", MyType: "", StartupObject: "", ApplicationIcon: "", CodePage: "", CompileTarget: "Exe" });
+						// Write a non-default set.
+						Check ("vbproj save", MonoDevelop.Ide.Services.ConfigurationService.SaveVbProjectFields (vb, new MonoDevelop.Ide.Services.ConfigurationService.VBProjectFields ("On", "Off", "Text", "On", "WindowsForms", "MyApp.Module", "app.ico", "1252", "WinExe")));
+						var p1 = MonoDevelop.Ide.Services.ConfigurationService.ReadVbProjectFields (vb)!;
+						Output ("[qa-vbdata] vbproj roundtrip: infer='" + p1.OptionInfer + "' explicit='" + p1.OptionExplicit + "' compare='" + p1.OptionCompare + "' strict='" + p1.OptionStrict + "' mytype='" + p1.MyType + "' start='" + p1.StartupObject + "' icon='" + p1.ApplicationIcon + "' codepage='" + p1.CodePage + "' compile='" + p1.CompileTarget + "'");
+						Check ("vbproj roundtrip", p1 is { OptionInfer: "On", OptionExplicit: "Off", OptionCompare: "Text", OptionStrict: "On", MyType: "WindowsForms", StartupObject: "MyApp.Module", ApplicationIcon: "app.ico", CodePage: "1252", CompileTarget: "WinExe" });
+						// Back to defaults: the default-suppressed elements must be removed
+						// (OptionExplicit On / OptionCompare Binary stay absent; the others drop).
+						Check ("vbproj save defaults", MonoDevelop.Ide.Services.ConfigurationService.SaveVbProjectFields (vb, new MonoDevelop.Ide.Services.ConfigurationService.VBProjectFields ("Off", "On", "Binary", "Off", "", "", "", "", "Exe")));
+						var p2 = MonoDevelop.Ide.Services.ConfigurationService.ReadVbProjectFields (vb)!;
+						Output ("[qa-vbdata] vbproj after-defaults: infer='" + p2.OptionInfer + "' explicit='" + p2.OptionExplicit + "' compare='" + p2.OptionCompare + "' mytype='" + p2.MyType + "' compile='" + p2.CompileTarget + "'");
+						var vbRaw = File.ReadAllText (vb);
+						Check ("vbproj suppress", !vbRaw.Contains ("<OptionInfer>", StringComparison.Ordinal) && !vbRaw.Contains ("<OptionStrict>", StringComparison.Ordinal) && !vbRaw.Contains ("<MyType>", StringComparison.Ordinal) && !vbRaw.Contains ("<OptionCompare>", StringComparison.Ordinal));
+						Check ("vbproj back to default", p2 is { OptionInfer: "Off", OptionExplicit: "On", OptionCompare: "Binary", OptionStrict: "Off", MyType: "", CompileTarget: "Exe" });
+
+						// --- 2) VB Imports (top-level ItemGroup) ---
+						// The legacy Imports panel edits the <Import Include="..."/>
+						// items of a top-level ItemGroup (the namespace imports); the
+						// fixture's build-time targets import is the root-level
+						// <Import Project="..."/> element, which the panel does not
+						// touch. A fresh .vbproj therefore reads as an empty list.
+						var imp0 = MonoDevelop.Ide.Services.ConfigurationService.ReadVbImports (vb);
+						Output ("[qa-vbdata] imports read: [" + string.Join (",", imp0) + "]");
+						Check ("imports read (only Import items)", imp0.Count == 0);
+						Check ("imports save", MonoDevelop.Ide.Services.ConfigurationService.SaveVbImports (vb, new [] { "System", "System.IO" }));
+						var imp1 = MonoDevelop.Ide.Services.ConfigurationService.ReadVbImports (vb);
+						Output ("[qa-vbdata] imports roundtrip: [" + string.Join (",", imp1) + "]");
+						Check ("imports roundtrip", imp1.SequenceEqual (new [] { "System", "System.IO" }));
+						Check ("imports save empty", MonoDevelop.Ide.Services.ConfigurationService.SaveVbImports (vb, Array.Empty<string> ()));
+						Check ("imports empty", MonoDevelop.Ide.Services.ConfigurationService.ReadVbImports (vb).Count == 0);
+						// The root-level targets import must survive every rewrite.
+						Check ("targets import untouched", File.ReadAllText (vb).Contains ("<Import Project=\"$(MSBuildBinPath)\\Microsoft.VisualBasic.targets\" />", StringComparison.Ordinal) || File.ReadAllText (vb).Contains ("<Import Project=\"$(MSBuildBinPath)\\Microsoft.VisualBasic.targets\"/>", StringComparison.Ordinal));
+						// H1 (QA P0): a targets import placed INSIDE a top-level
+						// ItemGroup alongside the namespace imports must survive a
+						// save of the import list — the writer only removes Import
+						// items that carry an Include attribute, so it stays
+						// coherent with the reader in every layout.
+						var vb2 = T ("VBApp2.vbproj");
+						File.WriteAllText (vb2, "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
+							+ "<Project DefaultTargets=\"Build\" ToolsVersion=\"4.0\" xmlns=\"http://schemas.microsoft.com/developer/msbuild/2003\">\n"
+							+ "  <ItemGroup>\n"
+							+ "    <Import Include=\"System\" />\n"
+							+ "    <Import Project=\"MyCustom.targets\" />\n"
+							+ "  </ItemGroup>\n"
+							+ "</Project>\n");
+						Check ("h1 imports read (Include only)", MonoDevelop.Ide.Services.ConfigurationService.ReadVbImports (vb2).SequenceEqual (new [] { "System" }));
+						Check ("h1 imports save", MonoDevelop.Ide.Services.ConfigurationService.SaveVbImports (vb2, new [] { "System", "Net" }));
+						var imp2 = MonoDevelop.Ide.Services.ConfigurationService.ReadVbImports (vb2);
+						Output ("[qa-vbdata] h1 imports roundtrip: [" + string.Join (",", imp2) + "]");
+						Check ("h1 imports roundtrip", imp2.SequenceEqual (new [] { "System", "Net" }));
+						Check ("h1 targets import in group untouched", File.ReadAllText (vb2).Contains ("<Import Project=\"MyCustom.targets\" />", StringComparison.Ordinal) || File.ReadAllText (vb2).Contains ("<Import Project=\"MyCustom.targets\"/>", StringComparison.Ordinal));
+
+						// --- 3) VB compiler fields (per-configuration PropertyGroup) ---
+						// The fixture has no Debug|Release groups yet: reads as all defaults.
+						var c0 = MonoDevelop.Ide.Services.ConfigurationService.ReadVbCompilerFields (vb, "Debug");
+						Output ("[qa-vbdata] vbcompiler read (group-less): opt=" + c0?.Optimize + " dbg=" + c0?.DefineDebug + " trace=" + c0?.DefineTrace + " dbgtype='" + c0?.DebugType + "' warnlevel=" + c0?.WarningLevel + " remint=" + c0?.RemoveIntegerChecks + " rootns='" + c0?.RootNamespace + "'");
+						Check ("vbcompiler defaults", c0 is { Optimize: false, DefineDebug: false, DefineTrace: false, DebugType: "full", DocumentationFile: "", NoWarn: "", WarningsAsErrors: "", TreatWarningsAsErrors: false, WarningLevel: 1, DefineConstants: "", RemoveIntegerChecks: false, RootNamespace: "", AdditionalParameters: "" });
+						Check ("vbcompiler save", MonoDevelop.Ide.Services.ConfigurationService.SaveVbCompilerFields (vb, "Debug", new MonoDevelop.Ide.Services.ConfigurationService.VBCompilerFields (true, true, true, "pdbonly", "doc.xml", "1591", "1002", true, 4, "DEBUG;TRACE", true, "MyRoot", "/platform:x64")));
+						var c1 = MonoDevelop.Ide.Services.ConfigurationService.ReadVbCompilerFields (vb, "Debug")!;
+						Output ("[qa-vbdata] vbcompiler roundtrip: opt=" + c1.Optimize + " dbg=" + c1.DefineDebug + " trace=" + c1.DefineTrace + " dbgtype='" + c1.DebugType + "' xml='" + c1.DocumentationFile + "' noWarn='" + c1.NoWarn + "' wae='" + c1.WarningsAsErrors + "' tWae=" + c1.TreatWarningsAsErrors + " warnlevel=" + c1.WarningLevel + " consts='" + c1.DefineConstants + "' remint=" + c1.RemoveIntegerChecks + " rootns='" + c1.RootNamespace + "' addl='" + c1.AdditionalParameters + "'");
+						Check ("vbcompiler roundtrip", c1 is { Optimize: true, DefineDebug: true, DefineTrace: true, DebugType: "pdbonly", DocumentationFile: "doc.xml", NoWarn: "1591", WarningsAsErrors: "1002", TreatWarningsAsErrors: true, WarningLevel: 4, DefineConstants: "DEBUG;TRACE", RemoveIntegerChecks: true, RootNamespace: "MyRoot", AdditionalParameters: "/platform:x64" });
+						// Back to defaults: default-suppressed elements removed; the group
+						// itself stays (it now holds the always-written WarningLevel).
+						Check ("vbcompiler save defaults", MonoDevelop.Ide.Services.ConfigurationService.SaveVbCompilerFields (vb, "Debug", new MonoDevelop.Ide.Services.ConfigurationService.VBCompilerFields (false, false, false, "full", "", "", "", false, 1, "", false, "", "")));
+						var c2 = MonoDevelop.Ide.Services.ConfigurationService.ReadVbCompilerFields (vb, "Debug")!;
+						Output ("[qa-vbdata] vbcompiler after-defaults: opt=" + c2.Optimize + " dbgtype='" + c2.DebugType + "' warnlevel=" + c2.WarningLevel + " rootns='" + c2.RootNamespace + "'");
+						var vbRaw2 = File.ReadAllText (vb);
+						Check ("vbcompiler suppress", !vbRaw2.Contains ("<Optimize>", StringComparison.Ordinal) && !vbRaw2.Contains ("<DefineDebug>", StringComparison.Ordinal) && !vbRaw2.Contains ("<DocumentationFile>", StringComparison.Ordinal) && !vbRaw2.Contains ("<RootNamespace>", StringComparison.Ordinal));
+						Check ("vbcompiler back to default", c2 is { Optimize: false, DebugType: "full", WarningLevel: 1, RootNamespace: "" });
+
+						// --- 4) ASP.NET XSP (.csproj MonoDevelop/Properties/XspParameters) ---
+						var aspx = T ("WebApp.csproj");
+						File.WriteAllText (aspx, "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
+							+ "<Project ToolsVersion=\"4.0\" DefaultTargets=\"Build\" xmlns=\"http://schemas.microsoft.com/developer/msbuild/2003\">\n"
+							+ "  <PropertyGroup>\n"
+							+ "    <ProjectTypeGuids>{349C5851-65DF-11DA-9384-00065B846F21};{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}</ProjectTypeGuids>\n"
+							+ "  </PropertyGroup>\n"
+							+ "</Project>\n");
+						var kx = MonoDevelop.Ide.Services.ConfigurationService.GetProjectKind (aspx);
+						Check ("xsp kind", kx is { IsVBNet: false, IsAspNetApp: true, IsAspNetCore: false });
+						Check ("xsp absent reads null", MonoDevelop.Ide.Services.ConfigurationService.ReadXspFields (aspx) is null);
+						Check ("xsp save", MonoDevelop.Ide.Services.ConfigurationService.SaveXspFields (aspx, new MonoDevelop.Ide.Services.ConfigurationService.XspFields (8080, "127.0.0.1", "None", "Default", "None", "", "", "None", "", true)));
+						var x1 = MonoDevelop.Ide.Services.ConfigurationService.ReadXspFields (aspx)!;
+						Output ("[qa-vbdata] xsp roundtrip: port=" + x1.Port + " addr='" + x1.Address + "' ssl='" + x1.SslMode + "' proto='" + x1.SslProtocol + "' keytype='" + x1.KeyType + "' verbose=" + x1.Verbose + "'");
+						Check ("xsp roundtrip", x1 is { Port: 8080, Address: "127.0.0.1", SslMode: "None", SslProtocol: "Default", KeyType: "None", CertificateFile: "", KeyFile: "", PasswordOptions: "None", Password: "", Verbose: true });
+						Check ("xsp save2", MonoDevelop.Ide.Services.ConfigurationService.SaveXspFields (aspx, new MonoDevelop.Ide.Services.ConfigurationService.XspFields (5000, "127.0.0.1", "Enable", "Default", "Pkcs12", "", "cert.p12", "None", "", false)));
+						var x2 = MonoDevelop.Ide.Services.ConfigurationService.ReadXspFields (aspx)!;
+						Output ("[qa-vbdata] xsp roundtrip2: port=" + x2.Port + " ssl='" + x2.SslMode + "' keytype='" + x2.KeyType + "' keyfile='" + x2.KeyFile + "' verbose=" + x2.Verbose + "'");
+						Check ("xsp roundtrip2", x2 is { Port: 5000, SslMode: "Enable", KeyType: "Pkcs12", KeyFile: "cert.p12", Verbose: false });
+
+						// --- 5) ASP.NET Core run profile (Properties/launchSettings.json) ---
+						var core = T ("CoreApp.csproj");
+						File.WriteAllText (core, "<Project Sdk=\"Microsoft.NET.Sdk.Web\">\n  <PropertyGroup>\n    <TargetFramework>net10.0</TargetFramework>\n  </PropertyGroup>\n</Project>\n");
+						var kc = MonoDevelop.Ide.Services.ConfigurationService.GetProjectKind (core);
+						Check ("core kind", kc is { IsVBNet: false, IsAspNetApp: false, IsAspNetCore: true });
+						Check ("core no profiles (absent)", MonoDevelop.Ide.Services.ConfigurationService.GetAspNetCoreRunProfiles (core).Count == 0);
+						Check ("core profile absent reads null", MonoDevelop.Ide.Services.ConfigurationService.ReadAspNetCoreRunProfile (core, "CoreApp") is null);
+						Check ("core profile save", MonoDevelop.Ide.Services.ConfigurationService.SaveAspNetCoreRunProfile (core, "CoreApp", new MonoDevelop.Ide.Services.ConfigurationService.AspNetCoreRunProfileFields ("CoreApp", true, "weatherforecast/", "http://localhost:5080;https://localhost:7080")));
+						var pr1 = MonoDevelop.Ide.Services.ConfigurationService.ReadAspNetCoreRunProfile (core, "CoreApp")!;
+						Output ("[qa-vbdata] core profile roundtrip: browser=" + pr1.LaunchBrowser + " url='" + pr1.LaunchUrl + "' appurl='" + pr1.ApplicationUrl + "'");
+						Check ("core profile roundtrip", pr1 is { Name: "CoreApp", LaunchBrowser: true, LaunchUrl: "weatherforecast/", ApplicationUrl: "http://localhost:5080;https://localhost:7080" });
+						Check ("core profile list", MonoDevelop.Ide.Services.ConfigurationService.GetAspNetCoreRunProfiles (core).SequenceEqual (new [] { "CoreApp" }));
+						// Back to empty url/appurl: both are removed from the profile.
+						Check ("core profile save empty", MonoDevelop.Ide.Services.ConfigurationService.SaveAspNetCoreRunProfile (core, "CoreApp", new MonoDevelop.Ide.Services.ConfigurationService.AspNetCoreRunProfileFields ("CoreApp", false, "", "")));
+						var pr2 = MonoDevelop.Ide.Services.ConfigurationService.ReadAspNetCoreRunProfile (core, "CoreApp")!;
+						var lsRaw = File.ReadAllText (MonoDevelop.Ide.Services.ConfigurationService.GetAspNetCoreLaunchSettingsPath (core));
+						Output ("[qa-vbdata] core profile after-empty: browser=" + pr2.LaunchBrowser + " url='" + pr2.LaunchUrl + "' appurl='" + pr2.ApplicationUrl + "'");
+						Check ("core profile empty", pr2 is { LaunchBrowser: false, LaunchUrl: "", ApplicationUrl: "" });
+						Check ("core profile empty removed", !lsRaw.Contains ("\"launchUrl\"", StringComparison.Ordinal) && !lsRaw.Contains ("\"applicationUrl\"", StringComparison.Ordinal));
+					} catch (Exception ex) {
+						fail++;
+						Output ("[qa-vbdata] FAIL exception: " + ex.Message);
+					}
+					Output ("[qa-vbdata] total ok=" + ok + " fail=" + fail);
+					Close ();
+				});
 			} else if (qa == "--projmodel") {
 				// QA (Oleada 4 slice 2): project model + full solution tree.
 				//   model: LoadProjectModel over every referenced project — TFM,
@@ -12076,8 +12227,12 @@ public partial class MainWindow : Window
 		var dir = Path.GetDirectoryName (sln)!;
 		try {
 			// F# projects (.fsproj) resolve like C# ones (F# port, phase 3).
+			// VB.NET projects (.vbproj) resolve the same way (ASP.NET/VB port):
+			// the options dialog and the per-project panels key off this, so a VB
+			// solution must expose its .vbproj as the active project.
 			return Directory.GetFiles (dir, "*.csproj", SearchOption.AllDirectories)
 				.Concat (Directory.GetFiles (dir, "*.fsproj", SearchOption.AllDirectories))
+				.Concat (Directory.GetFiles (dir, "*.vbproj", SearchOption.AllDirectories))
 				.FirstOrDefault (p => !p.Contains ("obj") && !p.Contains ("bin"));
 		} catch {
 			return null;

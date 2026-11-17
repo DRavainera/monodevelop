@@ -115,12 +115,126 @@ namespace MonoDevelop.AvaloniaAddons.Manifests
 	}
 
 	public sealed class AddonExtensionNode
-	{ 
+	{
 		[JsonPropertyName ("id")] public string Id { get; set; } = "";
 		[JsonPropertyName ("label")] public string Label { get; set; } = "";
 		[JsonPropertyName ("icon")] public string Icon { get; set; } = "";
 		[JsonPropertyName ("className")] public string ClassName { get; set; }
 		[JsonPropertyName ("childId")] public string ChildId { get; set; }
+
+		// The node's enable condition, mirroring the legacy add-in <Condition>
+		// attribute. It is a boolean expression the shell's extension consumers
+		// (e.g. the per-project options dialog) evaluate against a project context.
+		// Before this field existed the value was silently dropped, so every
+		// conditional node looked unconditional.
+		//
+		// Grammar observed in the real *.avaloniaaddon.json manifests (a subset of
+		// MSBuild conditions, NOT the full MSBuild condition grammar):
+		//   - a clause is "Key=Value" or a bare "Key" (true when the key holds);
+		//   - a value may carry "|"-separated alternatives (OR) and a "!" prefix
+		//     (negation), e.g. "ItemType=Solution|Project", "Platform=!windows";
+		//   - a clause may be negated with the word "NOT" in front of it,
+		//     e.g. "... AND NOT ItemType=MonoDevelop.Packaging.PackagingProject";
+		//   - clauses are conjoined with "," or the word "AND";
+		//   - a clause group may be wrapped in parentheses,
+		//     e.g. "(ItemType=DotNetProject|Packaging) AND ProjectHasNuGetMetadata".
+		// Values never contain a top-level "," (verified across the tree), which is
+		// what makes the clause split below unambiguous. The full MSBuild condition
+		// grammar (relational ops, functions, $() property refs) is intentionally NOT
+		// supported here: P1 should evaluate a condition with
+		// MonoDevelop.Projects.MSBuild.Conditions.ConditionParser.ParseAndEvaluate
+		// against a project context rather than re-deriving it from these parts.
+		[JsonPropertyName ("condition")] public string Condition { get; set; } = "";
+
+		/// <summary>Decomposes <see cref="Condition"/> into its conjoined clauses,
+		/// each as an ordered (Key, Value) pair, honoring the grammar above: the
+		/// top-level "," / "AND" split keeps parenthesized groups intact, a bare key
+		/// (no "=") yields a null Value, and a Value keeps any "|"/"!" tokens verbatim
+		/// for the consumer to interpret. Returns an empty list when there is no
+		/// condition. This is a structural decomposition only — it does NOT evaluate
+		/// the expression.</summary>
+		public List<(string Key, string? Value)> GetConditionParts ()
+		{
+			var parts = new List<(string, string?)> ();
+			if (string.IsNullOrWhiteSpace (Condition))
+				return parts;
+			foreach (var raw in SplitConjunction (Condition)) {
+				var p = StripOuterParens (raw);
+				if (p.Length == 0)
+					continue;
+				var i = p.IndexOf ('=');
+				if (i < 0)
+					parts.Add ((p, null));
+				else
+					parts.Add ((p.Substring (0, i).Trim (), p.Substring (i + 1).Trim ()));
+			}
+			return parts;
+		}
+
+		// Splits a condition on its top-level "," and " AND " separators, keeping
+		// parenthesized groups together (their inner separators are not top-level).
+		static IEnumerable<string> SplitConjunction (string cond)
+		{
+			var depth = 0;
+			var start = 0;
+			for (var i = 0; i < cond.Length; i++) {
+				var c = cond [i];
+				if (c == '(') {
+					depth++;
+					continue;
+				}
+				if (c == ')') {
+					if (depth > 0)
+						depth--;
+					continue;
+				}
+				if (depth != 0)
+					continue;
+				if (c == ',') {
+					yield return cond.Substring (start, i - start);
+					start = i + 1;
+					continue;
+				}
+				// The " AND " word conjunction: split at the space before the word
+				// (the value and the following clause are space-separated, so "AND"
+				// inside an identifier cannot trigger it).
+				if (c == 'A' && i > 0 && cond [i - 1] == ' ' &&
+					i + 3 < cond.Length && cond.Substring (i, 3) == "AND" &&
+					cond [i + 3] == ' ') {
+					yield return cond.Substring (start, i - 1 - start);
+					i += 4; // skip "AND "
+					start = i;
+					continue;
+				}
+			}
+			yield return cond.Substring (start);
+		}
+
+		// Strips balanced parentheses that wrap the whole string, one layer at a
+		// time (e.g. "(A=1|B=2)" -> "A=1|B=2"); inner parens are left alone.
+		static string StripOuterParens (string s)
+		{
+			s = s.Trim ();
+			while (s.Length >= 2 && s [0] == '(' && s [s.Length - 1] == ')') {
+				var depth = 0;
+				var closeAt = -1;
+				for (var j = 0; j < s.Length; j++) {
+					if (s [j] == '(')
+						depth++;
+					else if (s [j] == ')') {
+						depth--;
+						if (depth == 0) {
+							closeAt = j;
+							break;
+						}
+					}
+				}
+				if (closeAt != s.Length - 1)
+					break;
+				s = s.Substring (1, s.Length - 2).Trim ();
+			}
+			return s;
+		}
 
 		// /MonoDevelop/Core/MimeTypes nodes (legacy MimeTypeNode shape): the mime
 		// type's base type, whether it is a text format and the file patterns it
