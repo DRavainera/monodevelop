@@ -9,6 +9,12 @@ namespace MonoDevelop.AvaloniaAddons
 	public interface IAddonExtensionRegistry
 	{
 		IReadOnlyList<AddonExtensionNode> GetExtensionNodes (string path);
+		/// <summary>Nodes of every extension point under a path prefix (e.g.
+		/// "/MonoDevelop/ProjectModel/Gui/ItemOptionPanels" matches the
+		/// "/Build/General", "/Build/Compiler" and "/Run" sub-points), in
+		/// declaration order. The legacy add-in system resolved a section tree
+		/// the same way from a single root path.</summary>
+		IReadOnlyList<AddonExtensionNode> GetExtensionNodesUnder (string pathPrefix);
 		bool HasExtensionPoint (string path);
 		IReadOnlyList<string> ExtensionPoints { get; }
 
@@ -65,6 +71,24 @@ namespace MonoDevelop.AvaloniaAddons
 
 		public IReadOnlyList<AddonExtensionNode> GetExtensionNodes (string path)
 			=> path is not null && nodes.TryGetValue (path, out var list) ? list : Array.Empty<AddonExtensionNode> ();
+
+		public IReadOnlyList<AddonExtensionNode> GetExtensionNodesUnder (string pathPrefix)
+		{
+			if (pathPrefix is null || !pathPrefix.StartsWith ("/", StringComparison.Ordinal))
+				return Array.Empty<AddonExtensionNode> ();
+			// The root point's own nodes come first, then every deeper point in
+			// declaration order — the legacy section-tree resolution shape.
+			var all = new List<AddonExtensionNode> ();
+			if (nodes.TryGetValue (pathPrefix, out var exact))
+				all.AddRange (exact);
+			foreach (var p in order) {
+				if (p == pathPrefix || !p.StartsWith (pathPrefix + "/", StringComparison.Ordinal))
+					continue;
+				if (nodes.TryGetValue (p, out var list))
+					all.AddRange (list);
+			}
+			return all;
+		}
 
 		public bool HasExtensionPoint (string path) => path is not null && points.Contains (path);
 	}

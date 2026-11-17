@@ -3047,6 +3047,33 @@ public partial class MainWindow : Window
 					Output ("[qa-vbdata] total ok=" + ok + " fail=" + fail);
 					Close ();
 				});
+			} else if (qa == "--qa-vboptions") {
+				// QA (ASP.NET/VB port, P1 project options dialog): with --sln=<fixture.sln>
+				// holding a .vbproj (Debug|Any CPU / Release|Any CPU solution
+				// configurations) it opens the ProjectOptionsDialog over the active
+				// project and asserts the port end to end: the project kind (IsVBNet),
+				// the tab set (General Options / Imports / Compiler Options from the
+				// ItemOptionPanels manifests, condition ProjectTypeId=VBNet), the
+				// configuration selector (Debug/Release -> AnyCPU platform mapping),
+				// and the read -> edit -> write -> re-read round-trip of the three VB
+				// panels — General over the top-level PropertyGroup (with the legacy
+				// default suppression), Imports over the top-level ItemGroup
+				// (add/dedupe/remove), Compiler over the CANONICAL combined per-config
+				// condition ' $(Configuration)|$(Platform) ' == 'Cfg|AnyCPU' ' for
+				// both configurations — plus the empty state for a non-VB project.
+				// The fixture file is restored afterwards.
+				Avalonia.Threading.Dispatcher.UIThread.Post (() => {
+					var proj = ResolveActiveProject ();
+					if (proj is null) {
+						Output ("[qa-vboptions] FAIL no active project (pass --sln=<fixture.sln> with a .vbproj)");
+						Close ();
+						return;
+					}
+					var dlg = new ProjectOptionsDialog (proj, loadedSolutionPath);
+					dlg.QaVbOptionsOracle ();
+					dlg.Close ();
+					Close ();
+				});
 			} else if (qa == "--projmodel") {
 				// QA (Oleada 4 slice 2): project model + full solution tree.
 				//   model: LoadProjectModel over every referenced project — TFM,
@@ -9293,7 +9320,23 @@ public partial class MainWindow : Window
 		}
 		case "MonoDevelop.Ide.Commands.ProjectCommands.ProjectOptions":
 		case "MonoDevelop.Ide.Commands.ProjectCommands.SolutionOptions":
-			Output ($"[options] {Path.GetFileName (loadedSolutionPath ?? "(no solution")}" + " — options panel opens in Preferences");
+			// Legacy ProjectOptionsHandler -> ProjectOperations.ShowOptions ->
+			// ProjectOptionsDialog (the per-project ItemOptionPanels, 960x680): tabs
+			// per ported panel that matches the active project's conditions, the
+			// Configuration selector for the per-config panels, OK applies the panels
+			// (the .vbproj edits land through the P0/P1 ConfigurationService API).
+			// SolutionOptions shares the handler: the legacy ProjectOptionsDialog opens
+			// on the selected project item either way (no solution-level panel exists
+			// in the ported set), so both commands open the active project's dialog.
+			{
+				var proj = ResolveActiveProject ();
+				if (proj is not null)
+					_ = new ProjectOptionsDialog (proj, loadedSolutionPath) {
+						WindowStartupLocation = WindowStartupLocation.CenterOwner,
+					}.ShowDialog (this);
+				else
+					Output ("[projopts] no active project (open a solution with a project first)");
+			}
 			return;
 
 		// ----- HelpCommands (legacy HelpHandler/OpenLogDirectoryHandler/MarkLog) -----

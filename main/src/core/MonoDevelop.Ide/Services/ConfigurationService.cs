@@ -1368,6 +1368,10 @@ public static class ConfigurationService
 	// The GUIDs are the ones the legacy add-ins register (MSBuildItemTypes / ProjectModelExtensions).
 	const string VbProjectTypeGuid = "{F184B08F-C81C-45F6-A57F-5ABD9991F28F}";
 	const string AspNetAppFlavorGuid = "{349C5851-65DF-11DA-9384-00065B846F21}";
+	// The IL assembly project type GUID (legacy ILAsmBinding MSBuildItemTypes):
+	// the per-project options dialog evaluates ProjectTypeId=ILAsmProject against
+	// it, like it does the VBNet/C#/F# type aliases.
+	const string IlAsmProjectTypeGuid = "{B4EC64DC-6D44-11DD-AAB0-C9A155D89593}";
 
 	/// <summary>What kind of project a project file is, by the same signals the legacy
 	/// model uses: the file extension, the ProjectTypeGuids GUIDs, and (for web) the
@@ -1389,6 +1393,7 @@ public static class ConfigurationService
 
 		var isVbFile = projPath.EndsWith (".vbproj", StringComparison.OrdinalIgnoreCase);
 		var isWebFile = projPath.EndsWith (".csproj", StringComparison.OrdinalIgnoreCase);
+		var isIlFile = projPath.EndsWith (".ilproj", StringComparison.OrdinalIgnoreCase);
 
 		// ProjectTypeGuids: a semicolon list of GUIDs in any PropertyGroup.
 		var typeGuids = new List<string> ();
@@ -1411,17 +1416,41 @@ public static class ConfigurationService
 
 		bool Has (string guid) => typeGuids.Any (g => SameGuid (g, guid));
 
+		// The type alias of a classic .csproj is ambiguous between C# (the common
+		// case, the FAE04EC0 GUID) and the web flavors; the extension + GUID split
+		// below resolves it the way the legacy model does. An .ilproj is the IL
+		// assembly project (the B4EC64DC type GUID).
+		var isCSharp = (isWebFile && !isWeb) || Has (CSharpProjectTypeGuid);
+		var isFSharp = projPath.EndsWith (".fsproj", StringComparison.OrdinalIgnoreCase) || Has (FSharpProjectTypeGuid);
+		var isIlAsm = isIlFile || Has (IlAsmProjectTypeGuid);
+
 		return new ProjectKindInfo (
 			projPath,
 			isVbFile || Has (VbProjectTypeGuid),
 			Has (AspNetAppFlavorGuid),
-			isWeb);
+			isWeb,
+			isCSharp,
+			isIlAsm,
+			isFSharp);
 	}
 
 	/// <summary>Project classification used to evaluate the item options panels'
-	/// ProjectTypeId/FlavorType conditions.</summary>
+	/// ProjectTypeId/FlavorType conditions. The boolean fields mirror the legacy
+	/// condition keys: <see cref="IsVBNet"/> (ProjectTypeId=VBNet, the .vbproj or its
+	/// type GUID), <see cref="IsAspNetApp"/> (FlavorType=
+	/// MonoDevelop.AspNet.Projects.AspNetAppProjectFlavor), <see cref="IsAspNetCore"/>
+	/// (an SDK-style web .csproj), <see cref="IsCSharp"/>/.<see cref="IsFSharp"/>/
+	/// <see cref="IsILAsm"/> (the ProjectTypeId aliases C# / F# / ILAsmProject, by
+	/// extension — the .csproj/.fsproj/.ilproj signals the legacy model reads) and
+	/// <see cref="IsDotNetProject"/> (the ItemType=DotNetProject tag: every classic
+	/// .csproj/.fsproj/.vbproj/.ilproj, excluding the SDK-style web flavor which the
+	/// legacy model classifies separately).</summary>
 	public sealed record ProjectKindInfo (
-		string Path, bool IsVBNet, bool IsAspNetApp, bool IsAspNetCore);
+		string Path, bool IsVBNet, bool IsAspNetApp, bool IsAspNetCore,
+		bool IsCSharp, bool IsILAsm, bool IsFSharp)
+	{
+		public bool IsDotNetProject => IsVBNet || IsCSharp || IsFSharp || IsILAsm;
+	}
 
 	// Shared format-preserving save (the SaveProjectReferences policy): keep the file's
 	// detected BOM / XML declaration / newline format. Returns false without touching the
@@ -1617,22 +1646,48 @@ public static class ConfigurationService
 
 	// ---------- VB compiler options (per-configuration PropertyGroup) ----------
 
+	/// <summary>The per-configuration PropertyGroup condition the legacy writer emits
+	/// (Project.BuildConfigCondition): the COMBINED form
+	/// <c> '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' </c>, with an empty
+	/// platform normalized to AnyCPU — exactly what real .vbproj/.csproj files carry.
+	/// (P0 of this port used the simple <c> '$(Configuration)' == 'X' </c> form; P1
+	/// aligned it to the combined one so both UIs produce value-compatible files.)</summary>
+	static string VbConfigCondition (string configuration, string? platform)
+	{
+		var plat = string.IsNullOrEmpty (platform) ? "AnyCPU" : (platform == "Any CPU" ? "AnyCPU" : platform);
+		return " '$(Configuration)|$(Platform)' == '" + configuration + "|" + plat + "' ";
+	}
+
+	/// <summary>Locates the per-configuration PropertyGroup by the combined legacy
+	/// condition; as a fallback for files written in the simple
+	/// <c> '$(Configuration)' == 'X' </c> form it matches that one (P0 wrote it).</summary>
+	static XElement? FindVbConfigGroup (XElement root, XNamespace ns, string configuration, string? platform)
+	{
+		var combined = VbConfigCondition (configuration, platform);
+		var pg = root.Elements (ns + "PropertyGroup")
+			.FirstOrDefault (g => (string?)g.Attribute ("Condition") == combined);
+		if (pg is not null)
+			return pg;
+		var simple = " '$(Configuration)' == '" + configuration + "' ";
+		return root.Elements (ns + "PropertyGroup")
+			.FirstOrDefault (g => (string?)g.Attribute ("Condition") == simple);
+	}
+
 	/// <summary>The VB compiler options of ONE configuration of a .vbproj, with the
 	/// legacy VBCompilerParameters defaults for absent elements (Optimize false,
 	/// DebugType full, WarningLevel 1, RemoveIntegerChecks false, WarningsDisabled
-	/// false, empty strings). Returns null when the file cannot be read; a
-	/// group-less file reads as all defaults (like the legacy configuration with no
-	/// per-configuration PropertyGroup).</summary>
-	public static VBCompilerFields? ReadVbCompilerFields (string vbprojPath, string configuration)
+	/// false, empty strings). The per-configuration group is located by the combined
+	/// legacy condition (see <see cref="VbConfigCondition"/>), falling back to the
+	/// simple form for files written by other tools. Returns null when the file cannot
+	/// be read; a group-less file reads as all defaults (like the legacy configuration
+	/// with no per-configuration PropertyGroup).</summary>
+	public static VBCompilerFields? ReadVbCompilerFields (string vbprojPath, string configuration, string? platform = null)
 	{
 		var doc = LoadDoc (vbprojPath);
 		if (doc is null)
 			return null;
 		var ns = doc.Root!.Name.Namespace;
-		// Classic .vbproj per-configuration group: Condition=" '$(Configuration)' == 'X' ".
-		var cond = " '$(Configuration)' == '" + configuration + "' ";
-		var pg = doc.Root!.Elements (ns + "PropertyGroup")
-			.FirstOrDefault (g => (string?)g.Attribute ("Condition") == cond);
+		var pg = FindVbConfigGroup (doc.Root!, ns, configuration, platform);
 		string S (string name) => pg?.Elements ().FirstOrDefault (e => e.Name.LocalName == name)?.Value ?? "";
 		bool B (string name) => S (name).Trim ().Equals ("true", StringComparison.OrdinalIgnoreCase);
 		int warnLevel = int.TryParse (S ("WarningLevel").Trim (), out var wl) ? wl : 1;
@@ -1655,25 +1710,34 @@ public static class ConfigurationService
 		bool TreatWarningsAsErrors, int WarningLevel, string DefineConstants,
 		bool RemoveIntegerChecks, string RootNamespace, string AdditionalParameters);
 
-	/// <summary>Writes the VB compiler options into the configuration's
-	/// <c>&lt;PropertyGroup Condition=" '$(Configuration)' == 'X' "&gt;</c> group (created
-	/// before </Project> when absent) with the legacy VBCompilerParameters write
-	/// semantics: each ItemProperty field is written when different from its default and
-	/// removed when back to it (Optimize/RemoveIntegerChecks default false, DebugType
-	/// "full", WarningLevel 1, the strings empty). Bool elements use lowercase true/false.
-	/// Returns false without touching the file when it cannot be saved.</summary>
-	public static bool SaveVbCompilerFields (string vbprojPath, string configuration, VBCompilerFields f)
+	/// <summary>Writes the VB compiler options into the configuration's per-configuration
+	/// PropertyGroup (see <see cref="FindVbConfigGroup"/>: the combined legacy condition
+	/// <c> '$(Configuration)|$(Platform)' == 'X|AnyCPU' </c>, a simple-form group from an
+	/// older writer is adopted and rewritten in the combined form, and a missing group is
+	/// created before </Project> in the combined form) with the legacy
+	/// VBCompilerParameters write semantics: each ItemProperty field is written when
+	/// different from its default and removed when back to it (Optimize/RemoveIntegerChecks
+	/// default false, DebugType "full", WarningLevel 1, the strings empty). Bool elements
+	/// use lowercase true/false. Returns false without touching the file when it cannot be
+	/// saved.</summary>
+	public static bool SaveVbCompilerFields (string vbprojPath, string configuration, VBCompilerFields f, string? platform = null)
 	{
 		var doc = LoadDoc (vbprojPath);
 		if (doc is null)
 			return false;
 		var root = doc.Root!;
 		var ns = root.Name.Namespace;
-		var cond = " '$(Configuration)' == '" + configuration + "' ";
-		var pg = root.Elements (ns + "PropertyGroup").FirstOrDefault (g => (string?)g.Attribute ("Condition") == cond);
+		// The canonical combined condition: this is what the legacy writer
+		// (Project.BuildConfigCondition) and every real .vbproj/.csproj carry.
+		var cond = VbConfigCondition (configuration, platform);
+		var pg = FindVbConfigGroup (root, ns, configuration, platform);
 		if (pg is null) {
 			pg = new XElement (ns + "PropertyGroup", new XAttribute ("Condition", cond));
 			root.Add (pg);
+		} else if ((string?)pg.Attribute ("Condition") != cond) {
+			// Adopt a group written in the simple form (P0, or a hand edit): rewrite its
+			// Condition so the file ends up in the canonical shape, one group per config.
+			pg.SetAttributeValue ("Condition", cond);
 		}
 		XElement? Find (string name) => pg.Elements ().FirstOrDefault (e => e.Name.LocalName == name);
 		void Set (string name, string value)
