@@ -1588,6 +1588,7 @@ public partial class MainWindow : Window
 					var tmpDir = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile), "opencode", "QAProj", Guid.NewGuid ().ToString ("N"));
 					var dlg = new NewSolutionDialog (newProjTemplate, tmpDir) { AddToOpenSolution = true, AutoCreateForQa = true };
 					dlg.SolutionName!.Text = "QAAdded";
+					Output ("[newproject] PRESELECT req=" + newProjTemplate + " cat-idx=" + dlg.CategoryList.SelectedIndex + " selected=" + dlg.SelectedTemplateId + " tmpl-items=" + dlg.TemplateList.Items.Count);
 					await dlg.ShowDialog (this);
 					var projPath = dlg.CreatedProjectPath;
 					if (projPath is not null)
@@ -1603,6 +1604,27 @@ public partial class MainWindow : Window
 					}
 					var slnText = File.ReadAllText (loadedSolutionPath);
 					Output ("[newproject] template=" + newProjTemplate + " created=" + (projPath is not null) + " path=" + projPath + " sln-entry=" + slnText.Contains ("QAAdded") + " mappings=" + slnText.Contains (".Debug|AnyCPU.Build.0"));
+					// Tier C: per-template checks — the created project file's
+					// extension, the .sln Project() type GUID (VB F184B08F... vs C#
+					// FAE04EC0...), and the GetProjectKind classification (VB /
+					// AspNet classic / AspNetCore SDK-web / C#).
+					var ext = Path.GetExtension (projPath ?? "");
+					var qaLine = slnText.Split ('\n').FirstOrDefault (l => l.Contains ("= \"QAAdded\"", StringComparison.Ordinal));
+					var qaGuid = "";
+					if (qaLine is not null) {
+						var ga = qaLine.IndexOf ('{');
+						var gb = ga >= 0 ? qaLine.IndexOf ('}', ga) : -1;
+						if (gb > ga)
+							qaGuid = qaLine.Substring (ga + 1, gb - ga - 1);
+					}
+					var expGuid = newProjTemplate.StartsWith ("vb-", StringComparison.Ordinal)
+						? "F184B08F-C81C-45F6-A57F-5ABD9991F28F"
+						: newProjTemplate.StartsWith ("fsharp-", StringComparison.Ordinal)
+						? "F2A71F9B-5D33-465A-A702-920D77279786"
+						: "FAE04EC0-301F-11D3-BF4B-00C04F79EFBC";
+					var kind = projPath is not null ? MonoDevelop.Ide.Services.ConfigurationService.GetProjectKind (projPath) : null;
+					var kindFlags = kind is null ? "none" : "vb=" + kind.IsVBNet + " aspnet=" + kind.IsAspNetApp + " core=" + kind.IsAspNetCore + " cs=" + kind.IsCSharp;
+					Output ("[newproject] ext=" + (ext.Length > 0 ? ext [1..] : "") + " sln-guid-match=" + (qaGuid == expGuid) + " (" + qaGuid + ") kind={" + kindFlags + "}");
 					OpenSolutionInWindow (loadedSolutionPath, forceRefresh: true);
 					// Oleada 3 (cleanup, item 3): the force refresh re-populated
 					// the pad tree with the new project (a plain open would have

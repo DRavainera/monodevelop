@@ -29,9 +29,11 @@
               BorderBrush="{DynamicResource IdeBorderBrush}" BorderThickness="1">
         <ListBox x:Name="CategoryList" Background="Transparent"
                  Foreground="{DynamicResource IdeFgBrush}" SelectionChanged="OnCategorySelected">
-          <ListBoxItem Content="C#" IsSelected="True" />
+          <ListBoxItem Content="C#" />
           <ListBoxItem Content="F#" />
-          <ListBoxItem Content="Other" IsEnabled="False" />
+          <ListBoxItem Content="VB" />
+          <ListBoxItem Content="ASP.NET" />
+          <ListBoxItem Content="ASP.NET Core" />
         </ListBox>
       </Border>
       <GridSplitter Grid.Row="0" Grid.Column="1" Width="3" HorizontalAlignment="Stretch"

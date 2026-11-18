@@ -43,6 +43,8 @@ public static class ConfigurationService
 	static string ProjectTypeGuidFor (string projPath)
 		=> projPath.EndsWith (".fsproj", StringComparison.OrdinalIgnoreCase)
 			? FSharpProjectTypeGuid
+			: projPath.EndsWith (".vbproj", StringComparison.OrdinalIgnoreCase)
+			? VbProjectTypeGuid
 			: CSharpProjectTypeGuid;
 
 	static SlnFile ReadSln (string slnPath)
