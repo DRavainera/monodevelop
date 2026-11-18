@@ -6407,3 +6407,29 @@ El operador reportó dos bugs de la shell Avalonia: el pad **Errors** no mostrab
 **Siguiente (Tier C/D, sesiones siguientes):** C = wizards (ProjectTemplates/FileTemplates del addin ASP.NET); D = ProjectPad (node builders de los 3 addins). Tier A+B cerrado con esta fase.
 
 **Cierre**: commit de código por nombre (2) + commit `Docs:` por nombre (docs ×3). Push a `origin/agents/sub-agent-senior-dev-role-report`. **Sin submódulos, sin PRs.** Artefactos: `~/opencode/aspnet_vbnet_port/` (brief `qa_p2p3_brief.md`, report `qa_p2p3_report.md`, harness `avalonia_check/`, builds `p2p3_build_*`), `~/opencode/docfood_qa/` (logs `p2p3_vbopt4` / `p2p3_vbdata`).
+
+## 2026-11-17 — M31-v Port ASP.NET / ASP.NET Core / VB(.NET) — Tier C wizards de creación de proyecto (VB / ASP.NET clásico / ASP.NET Core) — CERRADO (QA VERDE, 0 hallazgos)
+
+**Estado: CERRADO (QA APROBADO, 0 hallazgos abiertos §18.5).** Fase **Tier C** (creación de proyectos) del port sobre la capa de datos de M31-s/P0, el diálogo de opciones de M31-t/P1 y el panel XSP de M31-u/P2. **Decisión del operador**: (1) **extender `NewSolutionDialog`** en vez de construir el framework xpt/WizardDialog legacy (la shell no lo tiene; el port F# ya extendió este diálogo — es el precedente); (2) **incluir ASP.NET clásico** (WebForms/MVC/Empty, .NET Framework 4.x) aunque no compila en .NET 10/Linux (valor: generar ficheros + panel XSP de P2 sobre proyecto real).
+
+**Qué se hizo:**
+- **5 categorías** en "New Solution" (antes C#/F#): C#, F#, VB, ASP.NET, ASP.NET Core. `CurrentTemplates`/`SetCategory` generalizados (antes index-based) con `FindCategoryFor(tag)` para la preselección del constructor.
+- **Templates** (títulos/descripciones = legacy `_Name`/`_Description`):
+  - **VB** (el binding legacy no tiene wizard — 0 páginas): `vb-console` "Console Project" → `dotnet new console -lang VB` (`.vbproj` SDK); `vb-empty` "Empty Project" → **scaffolding manual** `.vbproj` clásico (forma del fixture P1: condición combinada `'$(Configuration)|$(Platform)' == 'Debug|AnyCPU' `, Imports ItemGroup), Library 0-ficheros.
+  - **ASP.NET clásico** (scaffolding manual fiel a los xpt `main/src/addins/AspNet/Templates/Projects/*.xpt.xml`): `aspnet-empty`/`aspnet-mvc`/`aspnet-webforms` → `.csproj` clásico `ProjectTypeGuids {349C5851-...};{FAE04EC0-...}`, `v4.5`, refs System.Web, `Global.asax` `<%@ Application Inherits="Name.Global" %>` + `Web.config`; MVC añade Controllers/HomeController.cs + Views, WebForms añade Default.aspx + code-behind + designer.
+  - **ASP.NET Core** (SDK local, sin `-lang`): `core-web`→`web`, `core-mvc`→`mvc`, `core-api`→`webapi` (`.csproj` SDK `.Sdk.Web` + `launchSettings.json`).
+- **`OnCreate`**: mapeo `vb-*`/`aspnet-*`/`core-*`; `vb-console` pasa `-lang VB`; detección `.vbproj` en `createdProj`; **GUID VB `F184B08F`** en el fallback .sln.
+- **Fix compartido (GTK)**: `ConfigurationService.ProjectTypeGuidFor` +`.vbproj`→`VbProjectTypeGuid` (constante ya existía; el writer `SlnFile` emite `Project("{TypeGuid}")` con llaves — verificado contra `dotnet sln add`).
+- **Fix de preselección (Avalonia)**: quitado `IsSelected="True"` del item C# en el XAML — al realizarse la ventana el `ListBox` re-aplicaba la selección de XAML y **reseteaba a C#** cuando `ShowDialog` se invocaba, pisando la preselección por código. El code-behind siembra siempre la categoría inicial → el default de XAML era redundante y dañino. **Arregla también la preselección F#** (latente: `--newproject=fsharp-console` ahora crea el `.fsproj` F# GUID `F2A71F9B`, no un `.csproj` C#).
+
+**Oráculo extendido** (`MainWindow` `--newproject=`): +`PRESELECT req=<tpl> cat-idx=<n> selected=<tag> tmpl-items=<n>` y +`ext=<ext> sln-guid-match=<bool> (<guid>) kind={vb=.. aspnet=.. core=.. cs=..}` (extensión, GUID `Project()` en el .sln por familia, clasificación `GetProjectKind`).
+
+**Divergencias documentadas (verificadas por QA):** (1) wizard multi-página xpt vs diálogo por categorías (precedente F#); (2) AspNetCore sin página TFM/auth (SDK local, defaults del CLI); (3) AspNet clásico: wizard 1-página → 3 templates planos, sin proyecto `.Tests`; (4) AspNet clásico no compila en .NET 10/Linux (valor: generar ficheros + panel XSP P2).
+
+**Validación**: builds Avalonia + GTK **0 errores**; 7 templates nuevos OK (ext + GUID + `GetProjectKind`: vb→`vb=True` F184B08F, aspnet-*→`aspnet=True core=False` FAE04EC0, core-*→`core=True`); regresiones `--newproject=console` (C#), `fsharp-console` (`.fsproj` F2A71F9B — valida el fix de preselección F#), `--qa-vboptions` **47 + 34/0**, `--qa-vbdata` **38/0**; QA Tester QA Senior (brief `qa_tierc_brief.md` → `qa_tierc_report.md`) **0 hallazgos**.
+
+**Archivos** (4 M, sin submódulos): `Views/NewSolutionDialog.axaml`, `Views/NewSolutionDialog.axaml.cs`, `ConfigurationService.cs`, `Views/MainWindow.axaml.cs`.
+
+**Siguiente (Tier D, sesión siguiente):** ProjectPad — reconocer `.vbproj`/AspNet en `IsProjectFile`+`SelectedNodeType`, items de menú (AddController/AddView clásico; Scaffold/Publish AspNetCore vía `dotnet aspnet-codegenerator`/`dotnet publish` por CLI; los items Publish ya declarados en `MenuService` sin handler).
+
+**Cierre**: commit de código por nombre (4) + commit `Docs:` por nombre (docs ×3: `session_summary.md` §61, este § M31-v, `migration-status-report.md` nota). Push a `origin/agents/sub-agent-senior-dev-role-report`. **Sin submódulos, sin PRs.** Artefactos: `~/opencode/aspnet_vbnet_port/` (brief `qa_tierc_brief.md`, report `qa_tierc_report.md`, plan `plan_tier_c.md`, fixture `qa_tierc/`), `~/opencode/docfood_qa/` (logs `tierc_*`).

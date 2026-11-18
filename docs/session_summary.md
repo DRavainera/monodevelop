@@ -5810,3 +5810,43 @@ Tercera fase del port decidido en §58 (P0 datos, P1 diálogo+paneles VB, §59).
 
 ### Cierre
 Commit de código por nombre (2) + commit `Docs:` por nombre (docs ×3: `session_summary.md` §60, `interfaz-plan.md` M31-u, `migration-status-report.md` nota). Push a `origin/agents/sub-agent-senior-dev-role-report`. **Sin submódulos, sin PRs (§18.7).** Artefactos: `~/opencode/aspnet_vbnet_port/` (brief `qa_p2p3_brief.md`, report `qa_p2p3_report.md`, harness `avalonia_check/`, builds `p2p3_build_*`), `~/opencode/docfood_qa/` (logs `p2p3_vbopt4` / `p2p3_vbdata`).
+
+## 2026-11-17 (61) — Port ASP.NET / ASP.NET Core / VB(.NET): Tier C — wizards de creación de proyecto (VB / ASP.NET clásico / ASP.NET Core) — CERRADO (QA VERDE, 0 hallazgos)
+
+Cuarta fase del port decidido en §58. Cierra el **Tier C** (creación de proyectos): la última superficie de creación antes de Tier D (ProjectPad). **Decisión del operador**: (1) **extender `NewSolutionDialog`** en vez de construir el framework xpt/WizardDialog legacy (la shell no lo tiene; depende del modelo `MonoDevelop.Projects` que no usa — el port F# ya extendió este diálogo con una categoría, es el precedente); (2) **incluir los templates ASP.NET clásico** (WebForms/MVC/Empty, .NET Framework 4.x) aunque no compilan en .NET 10/Linux (su valor: generar los ficheros + poder usar el panel XSP de P2 sobre un proyecto real).
+
+### Qué se hizo
+
+- **5 categorías** en el diálogo "New Solution" (antes C#/F#): **C#, F#, VB, ASP.NET, ASP.NET Core** (`NewSolutionDialog.axaml` + arrays `VbTemplates`/`AspNetTemplates`/`AspNetCoreTemplates`). `CurrentTemplates`/`SetCategory` generalizados (antes index-based C#/F#) con `FindCategoryFor(tag)` para la preselección.
+- **Templates** (títulos/descripciones = legacy `_Name`/`_Description`):
+  - **VB**: `vb-console` "Console Project" → `dotnet new console -lang VB` (`.vbproj` SDK-style); `vb-empty` "Empty Project" → **scaffolding manual** `.vbproj` clásico (forma del fixture P1: PropertyGroups por config con la **condición combinada** `'$(Configuration)|$(Platform)' == 'Debug|AnyCPU' `, Imports ItemGroup), tipo Library 0-ficheros (el xpt legacy `EmptyVBProject` es 0-ficheros). El binding VB legacy **no tiene wizard** (0 páginas) → directo a la página final.
+  - **ASP.NET clásico**: `aspnet-empty`/`aspnet-mvc`/`aspnet-webforms` → **scaffolding manual** `.csproj` clásico fiel a los xpt (`ProjectTypeGuids {349C5851-...};{FAE04EC0-...}`, `TargetFrameworkVersion v4.5`, refs System.Web, `Global.asax` `<%@ Application Inherits="Name.Global" %>` + `Web.config`; MVC añade Controllers/HomeController.cs + Views; WebForms añade Default.aspx + code-behind + designer).
+  - **ASP.NET Core**: `core-web`→`web`, `core-mvc`→`mvc`, `core-api`→`webapi` (SDK local, `.csproj` SDK `.Sdk.Web` con `launchSettings.json`).
+- **`OnCreate`**: mapeo tags `vb-*`/`aspnet-*`/`core-*`; `vb-console` pasa `-lang VB`; `core-*` sin `-lang`; detección de `.vbproj` en `createdProj` (antes solo .csproj/.fsproj/.shproj) + **GUID VB `F184B08F`** en el fallback .sln.
+
+### Fix compartido (GTK)
+- **`ConfigurationService.ProjectTypeGuidFor`**: +`.vbproj` → `VbProjectTypeGuid` (`{F184B08F-...}`) en vez del GUID de C# (constante ya existía en el fichero; el writer `SlnFile` emite `Project("{TypeGuid}")` con llaves — verificado contra `dotnet sln add`, que escribe `F184B08F` para .vbproj). Común a ambas interfaces (§18.4) → build GTK validado.
+
+### Fix de preselección (Avalonia, bug encontrado en la fase)
+- **Quitado `IsSelected="True"` del item C# en el XAML.** Con ese atributo, al realizarse la ventana el `ListBox` **re-aplicaba la selección de XAML y reseteaba a C#** cuando `ShowDialog` se invocaba, pisando la preselección por código del constructor. El code-behind siembra siempre la categoría inicial (constructor → `SetCategory`), así que el default de XAML era redundante y dañino. **Esto también arregla la preselección F#** (bug latente: el oráculo F# no se había corrido de punta a punta — antes `--newproject=fsharp-console` creaba un `.csproj` C#; ahora crea el `.fsproj` F# con el GUID `F2A71F9B`).
+
+### Oráculo extendido (`MainWindow`, `--newproject=`)
+- Adicional a los checks existentes, emite `PRESELECT req=<tpl> cat-idx=<n> selected=<tag> tmpl-items=<n>` (estado del diálogo) y `ext=<ext> sln-guid-match=<bool> (<guid>) kind={vb=.. aspnet=.. core=.. cs=..}`: extensión del fichero creado, si el GUID `Project()` en el .sln coincide con el esperado por familia (vb-*→F184B08F, fsharp-*→F2A71F9B, resto→FAE04EC0) y la clasificación `GetProjectKind`.
+
+### Divergencias documentadas (verificadas por QA, no son hallazgos)
+1. **Wizard multi-página (xpt) vs diálogo por categorías**: el legacy abre un `WizardDialog` multi-página; el port usa el diálogo por categorías (precedente F#; la shell no tiene el framework xpt).
+2. **AspNetCore TFM/auth**: el wizard legacy (nupkg SDK 3.1) tiene una página TFM+autenticación; el port usa el SDK local y **no** porta esa página (defaults del CLI).
+3. **AspNet clásico: wizard 1-página → 3 templates planos**: el wizard legacy tenía checkboxes (IncludeTestProject/MVC/WebForms/WebApi); el port los colapsa en 3 templates y **no expone el proyecto `.Tests`**.
+4. **AspNet clásico no compila en .NET 10/Linux** (necesita mono System.Web + XSP): su valor es generar los ficheros + usar el panel XSP (P2) sobre un proyecto real.
+
+### Validación (QA §18.5, Tester QA Senior, recursivo)
+- **Builds** Avalonia + GTK **0 errores** (Avalonia 1616 warns preexistentes; GTK 1812).
+- **7 templates nuevos OK** (ext + GUID en .sln + `GetProjectKind`): `vb-console`/`vb-empty`→`.vbproj` F184B08F `vb=True`; `aspnet-empty/mvc/webforms`→`.csproj` FAE04EC0 `aspnet=True core=False`; `core-web/mvc/api`→`.csproj` FAE04EC0 `core=True`.
+- **Regresiones**: `--newproject=console` (C# `cs=True`), `fsharp-console` (`.fsproj` F2A71F9B — valida el fix de preselección F#), `--qa-vboptions` **47 + 34/0**, `--qa-vbdata` **38/0**.
+- **QA** (brief `qa_tierc_brief.md` → subagente Tester QA Senior → `qa_tierc_report.md`): 0 hallazgos.
+
+### Archivos (4 M, sin submódulos)
+`MonoDevelop.Startup.Avalonia/Views/NewSolutionDialog.axaml` (5 categorías), `MonoDevelop.Startup.Avalonia/Views/NewSolutionDialog.axaml.cs` (categorías + scaffolding manual + mapeo), `MonoDevelop.Ide/Services/ConfigurationService.cs` (`ProjectTypeGuidFor` +.vbproj), `MonoDevelop.Startup.Avalonia/Views/MainWindow.axaml.cs` (oráculo extendido).
+
+### Cierre
+Commit de código por nombre (4) + commit `Docs:` por nombre (docs ×3: `session_summary.md` §61, `interfaz-plan.md` M31-v, `migration-status-report.md` nota). Push a `origin/agents/sub-agent-senior-dev-role-report`. **Sin submódulos, sin PRs (§18.7).** Artefactos: `~/opencode/aspnet_vbnet_port/` (brief `qa_tierc_brief.md`, report `qa_tierc_report.md`, plan `plan_tier_c.md`, fixture `qa_tierc/`), `~/opencode/docfood_qa/` (logs `tierc_*`).
