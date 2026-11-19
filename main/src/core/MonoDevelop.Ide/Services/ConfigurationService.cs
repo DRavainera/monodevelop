@@ -85,14 +85,18 @@ public static class ConfigurationService
 	}
 
 	/// <summary>True for the project file extensions the model recognizes —
-	/// .csproj and .fsproj (the F# SDK-style project, Phase 3 of the F# port:
-	/// the project model and build/run gates see F# projects the same way as C#).</summary>
+	/// .csproj, .fsproj (the F# SDK-style project, Phase 3 of the F# port: the
+	/// project model and build/run gates see F# projects the same way as C#)
+	/// and .vbproj (the VB(.NET) port: the ProjectPad node classification, the
+	/// build-target resolution and the rename/delete guards see VB projects the
+	/// same way as C#/F#).</summary>
 	public static bool IsProjectFile (string path)
 	{
 		if (string.IsNullOrEmpty (path))
 			return false;
 		return path.EndsWith (".csproj", StringComparison.OrdinalIgnoreCase)
-			|| path.EndsWith (".fsproj", StringComparison.OrdinalIgnoreCase);
+			|| path.EndsWith (".fsproj", StringComparison.OrdinalIgnoreCase)
+			|| path.EndsWith (".vbproj", StringComparison.OrdinalIgnoreCase);
 	}
 
 	/// <summary>Absolute paths of the .csproj/.fsproj projects referenced by the .sln
@@ -1452,6 +1456,85 @@ public static class ConfigurationService
 		bool IsCSharp, bool IsILAsm, bool IsFSharp)
 	{
 		public bool IsDotNetProject => IsVBNet || IsCSharp || IsFSharp || IsILAsm;
+	}
+
+	/// <summary>Classic ASP.NET MVC project — the file-level mirror of
+	/// AspNetAppProjectFlavor.IsAspMvcProject (AspNetApp flavor + a
+	/// "System.Web.Mvc" reference). Gates the legacy ProjectPad Add section
+	/// items Controller... / View... (AspNetFolderNodeCommandHandler).</summary>
+	public static bool IsMvcClassicProject (string projPath)
+	{
+		var kind = GetProjectKind (projPath);
+		if (kind is null || !kind.IsAspNetApp)
+			return false;
+		try {
+			var root = XDocument.Load (projPath).Root;
+			return root.Descendants ().Any (e =>
+				e.Name.LocalName == "Reference" &&
+				((string?)e.Attribute ("Include") ?? "").StartsWith ("System.Web.Mvc", StringComparison.Ordinal));
+		} catch {
+			return false;
+		}
+	}
+
+	/// <summary>Whether `dotnet publish` / `dotnet pack` apply to the project —
+	/// the file-level mirror of PublishToFolderBaseCommandHandler.
+	/// ProjectSupportsFolderPublishing (only .NET Core / .NET Standard TFMs):
+	/// classic (non-SDK, .NET Framework) projects never publish — they carry no
+	/// Sdk attribute/element and no TargetFramework — and an explicit net4* TFM
+	/// on an SDK project is excluded by the same TFM check. SDK-style web
+	/// (ASP.NET Core) projects are publishable and must NOT be filtered out by
+	/// IsDotNetProject, which classifies the web flavor separately.</summary>
+	public static bool IsPublishableProject (string projPath)
+	{
+		if (!IsProjectFile (projPath) || !File.Exists (projPath))
+			return false;
+		if (GetProjectKind (projPath) is null)
+			return false;
+		try {
+			var root = XDocument.Load (projPath).Root;
+			if (root is null)
+				return false;
+			var sdk = (string?)root.Attribute ("Sdk") ?? "";
+			var sdkEls = root.Descendants ().Where (e => e.Name.LocalName == "Sdk")
+				.Select (e => (string?)e ?? "").Where (s => s.Length > 0);
+			if (sdk.Length == 0 && !sdkEls.Any ())
+				return false; // classic (non-SDK) .vbproj/.csproj — .NET Framework
+			var tfms = root.Descendants ()
+				.Where (e => e.Name.LocalName is "TargetFramework" or "TargetFrameworks")
+				.Select (e => (string?)e ?? "")
+				.SelectMany (s => (s ?? "").Split (';'))
+				.Select (s => s.Trim ())
+				.Where (s => s.Length > 0);
+			if (!tfms.Any ())
+				return true; // no explicit TFM — the SDK default (current) is a Core TFM
+			return tfms.Any (t =>
+				!t.StartsWith ("net4", StringComparison.OrdinalIgnoreCase) &&
+				(t.StartsWith ("net", StringComparison.OrdinalIgnoreCase)
+					|| t.StartsWith ("netstandard", StringComparison.OrdinalIgnoreCase)
+					|| t.StartsWith ("netcoreapp", StringComparison.OrdinalIgnoreCase)));
+		} catch {
+			return false;
+		}
+	}
+
+	/// <summary>The publish profile names (file names without extension) of
+	/// Properties/PublishProfiles/*.pubxml — the file-level mirror of
+	/// DotNetProject.GetPublishProfiles (legacy
+	/// PublishToFolderProfilesCommandHandler lists the FileSystem ones).</summary>
+	public static IReadOnlyList<string> GetPublishProfiles (string projPath)
+	{
+		var dir = Path.Combine (Path.GetDirectoryName (projPath) ?? string.Empty, "Properties", "PublishProfiles");
+		if (!Directory.Exists (dir))
+			return Array.Empty<string>();
+		try {
+			return Directory.GetFiles (dir, "*.pubxml", SearchOption.TopDirectoryOnly)
+				.Select (f => Path.GetFileNameWithoutExtension (f))
+				.OrderBy (n => n, StringComparer.OrdinalIgnoreCase)
+				.ToList ();
+		} catch {
+			return Array.Empty<string>();
+		}
 	}
 
 	// Shared format-preserving save (the SaveProjectReferences policy): keep the file's

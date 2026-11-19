@@ -4570,6 +4570,209 @@ public partial class MainWindow : Window
 				// (declaration in the other file), and diagnostics (the
 				// type-mismatch on the bad line) all resolve through the service.
 				await FslsQaAsync ();
+			} else if (qa == "--tierd") {
+				// QA (ASP.NET/VB port, Tier D): ProjectPad recognition of
+				// .vbproj/AspNet nodes + the 3 addins' context-menu items and
+				// command handlers, driven against the qa_tierd fixture (--sln):
+				//   1. recognition: every fixture project classifies as a Project
+				//      node (incl. the .vbproj) with the right GetProjectKind flags;
+				//   2. menu: BuildProjectPadMenu() labels per project kind (the
+				//      addin items appear/disappear by gate);
+				//   3. handlers: AddController/AddView (file written from the
+				//      legacy T4 "Empty" content), AddAspNetDirectory (dir +
+				//      <Compile> glob in the .csproj), and the dotnet-CLI
+				//      invocations (publish folder/profiles, pack, scaffold)
+				//      captured instead of run (qaProcessCapture).
+				//   4. dispatch: the Build menu's Publish/Pack items route
+				//      through the command catalog (CommandService.Dispatch →
+				//      CommandRouter → OnMenuCommand) — asserted on the capture.
+				Avalonia.Threading.Dispatcher.UIThread.Post (async () => {
+					int ok = 0, fail = 0;
+					void Check (string what, bool cond) {
+						Output ("[tierd] " + (cond ? "ok" : "FAIL") + " " + what);
+						if (cond) ok++; else fail++;
+					}
+					var src = loadedSolutionPath;
+					if (src is null || !File.Exists (src)) {
+						Output ("[tierd] FAIL missing --sln fixture");
+						Close ();
+						return;
+					}
+					try {
+						var entries = MonoDevelop.Ide.Services.ConfigurationService.GetSolutionEntries (src);
+						if (entries is null || entries.Count == 0) {
+							Output ("[tierd] FAIL cannot load sln entries");
+							Close ();
+							return;
+						}
+						// Fixture contract: 1 classic MVC AspNet (QaMvc), 1 classic
+						// AspNet non-MVC (QaWeb), 1 AspNetCore SDK web (QaCore).
+						string? mvcProj = entries.FirstOrDefault (e => e.Name == "QaMvc")?.ProjectPath;
+						string? webProj = entries.FirstOrDefault (e => e.Name == "QaWeb")?.ProjectPath;
+						string? coreProj = entries.FirstOrDefault (e => e.Name == "QaCore")?.ProjectPath;
+						Check ("fixture mvc found", mvcProj is not null);
+						Check ("fixture web found", webProj is not null);
+						Check ("fixture core found", coreProj is not null);
+						if (mvcProj is null || webProj is null || coreProj is null) {
+							Close ();
+							return;
+						}
+						// 1) Recognition: node classification + kind flags.
+						void CheckNode (string proj, bool expectVb, bool expectAspNet, bool expectCore) {
+							SelectXwtSolutionRow ("project:" + proj);
+							var (nodeType, nodePath) = SelectedNodeType ();
+							Check (Path.GetFileName (proj) + " node=Project", nodeType == "Project" && nodePath == proj);
+							var k = SelectedProjectKind ();
+							Check (Path.GetFileName (proj) + " kind flags (vb=" + expectVb + " aspnet=" + expectAspNet + " core=" + expectCore + ")",
+								k is not null && k.IsVBNet == expectVb && k.IsAspNetApp == expectAspNet && k.IsAspNetCore == expectCore);
+						}
+						CheckNode (mvcProj, false, true, false);
+						CheckNode (webProj, false, true, false);
+						CheckNode (coreProj, false, false, true);
+						// The VB fixture project (the Tier D recognition target).
+						var vbProj = entries.FirstOrDefault (e => e.Name == "QaVb")?.ProjectPath;
+						if (vbProj is not null)
+							CheckNode (vbProj, true, false, false);
+						// 2) Menu items per kind (labels of BuildProjectPadMenu,
+						// walked into the submenu children). Null when the row
+						// could not be selected (a menu assert would be
+						// meaningless against a stale selection).
+						List<string>? MenuLabels (string tag) {
+							if (!SelectXwtSolutionRow (tag))
+								return null;
+							var labels = new List<string> ();
+							void Walk (IEnumerable<Control> controls) {
+								foreach (var c in controls) {
+									if (c is MenuItem mi) {
+										labels.Add (mi.Header?.ToString () ?? "");
+										var sub = new List<Control> ();
+										foreach (var ch in mi.Items)
+											if (ch is Control cc)
+												sub.Add (cc);
+										if (sub.Count > 0)
+											Walk (sub);
+									}
+								}
+							}
+							Walk (BuildProjectPadMenu ());
+							return labels;
+						}
+						void CheckMenu (string proj, params string[] expected) {
+							var labels = MenuLabels ("project:" + proj)
+								?? throw new InvalidOperationException ("cannot select " + Path.GetFileName (proj));
+							foreach (var label in expected)
+								Check (Path.GetFileName (proj) + " menu has '" + label + "'", labels.Contains (label));
+						}
+						// Project nodes: the legacy HIDES Controller.../View... on
+						// the project row (the folder-cast in the updater throws →
+						// disabled + disabledVisible=false → hidden); the classic
+						// AspNet projects carry the ASP.NET Directory array instead.
+						CheckMenu (mvcProj, "ASP.NET Directory");
+						CheckMenu (webProj, "ASP.NET Directory");
+						CheckMenu (coreProj, "New Scaffolding...", "Publish to Folder...", "Publish", "Pack");
+						var mvcProjLabels = MenuLabels ("project:" + mvcProj) ?? new List<string> ();
+						Check ("mvc project menu hides 'Controller...'", !mvcProjLabels.Contains ("Controller..."));
+						Check ("mvc project menu hides 'View...'", !mvcProjLabels.Contains ("View..."));
+						// The MVC project is classic .NET Framework → NOT publishable
+						// (the legacy TFM gate), so its menu must NOT offer Publish.
+						Check ("mvc publishable=false", !MonoDevelop.Ide.Services.ConfigurationService.IsPublishableProject (mvcProj));
+						Check ("core publishable=true", MonoDevelop.Ide.Services.ConfigurationService.IsPublishableProject (coreProj));
+						// 2b) Folder nodes: the legacy AddController/AddView updaters
+						// are folder-scoped — Controller... only on the Controllers
+						// folder (or a child), View... only on Views (or a child),
+						// in a classic MVC project; no addin items on any other
+						// folder. The fixture carries no Controllers/Views/App_Data
+						// dirs yet: create them and refresh the pad so the folder
+						// nodes exist.
+						var mvcBase = Path.GetDirectoryName (mvcProj)!;
+						Directory.CreateDirectory (Path.Combine (mvcBase, "Controllers"));
+						Directory.CreateDirectory (Path.Combine (mvcBase, "Views"));
+						Directory.CreateDirectory (Path.Combine (mvcBase, "App_Data"));
+						RefreshSolutionTree ();
+						var ctrlMenu = MenuLabels ("folder:" + Path.Combine (mvcBase, "Controllers"));
+						Check ("folder Controllers selected", ctrlMenu is not null);
+						Check ("folder Controllers menu has 'Controller...'", ctrlMenu is not null && ctrlMenu.Contains ("Controller..."));
+						Check ("folder Controllers menu has 'Controller...' exactly once", ctrlMenu is not null && ctrlMenu.Count (l => l == "Controller...") == 1);
+						Check ("folder Controllers menu hides 'View...'", ctrlMenu is not null && !ctrlMenu.Contains ("View..."));
+						var viewsMenu = MenuLabels ("folder:" + Path.Combine (mvcBase, "Views"));
+						Check ("folder Views selected", viewsMenu is not null);
+						Check ("folder Views menu has 'View...'", viewsMenu is not null && viewsMenu.Contains ("View..."));
+						Check ("folder Views menu has 'View...' exactly once", viewsMenu is not null && viewsMenu.Count (l => l == "View...") == 1);
+						Check ("folder Views menu hides 'Controller...'", viewsMenu is not null && !viewsMenu.Contains ("Controller..."));
+						var otherMenu = MenuLabels ("folder:" + Path.Combine (mvcBase, "App_Data"));
+						Check ("folder App_Data selected", otherMenu is not null);
+						Check ("folder App_Data menu has no addin items", otherMenu is not null && !otherMenu.Contains ("Controller...") && !otherMenu.Contains ("View..."));
+						// 3) Handlers — the scaffolded content (no dialogs involved).
+						var mvcDir = Path.GetDirectoryName (mvcProj)!;
+						var nsCore = MonoDevelop.Ide.Services.ConfigurationService.LoadProjectModel (mvcProj)?.Name ?? "QaMvc";
+						CreateClassicMvcControllerCore (mvcProj, "QaTierD", null);
+						var ctrlFile = Path.Combine (mvcDir, "Controllers", "QaTierD.cs");
+						Check ("controller file exists", File.Exists (ctrlFile));
+						if (File.Exists (ctrlFile)) {
+							var text = File.ReadAllText (ctrlFile);
+							Check ("controller namespace", text.Contains ("namespace " + nsCore + ".Controllers"));
+							Check ("controller class", text.Contains ("public class QaTierD : Controller"));
+							Check ("controller index action", text.Contains ("public ActionResult Index()"));
+						}
+						CreateClassicMvcViewCore (mvcProj, "QaTierDView", null);
+						var viewFile = Path.Combine (mvcDir, "Views", "QaTierDView.cshtml");
+						Check ("view file exists", File.Exists (viewFile));
+						if (File.Exists (viewFile)) {
+							var text = File.ReadAllText (viewFile);
+							Check ("view razor layout-null", text.Contains ("Layout = null;"));
+							Check ("view razor title", text.Contains ("<title>QaTierDView</title>"));
+						}
+						// Add a special ASP.NET directory to the classic web project
+						// (creates the dir + a <Compile Include="Theme\**"> glob).
+						AddAspNetSpecialDirectory ("Theme", "project:" + webProj);
+						var webDir = Path.GetDirectoryName (webProj)!;
+						Check ("aspnet dir created", Directory.Exists (Path.Combine (webDir, "Theme")));
+						var webProjText = File.ReadAllText (webProj);
+						Check ("aspnet dir compile glob", webProjText.Contains ("Theme\\**"));
+						// 4) dotnet CLI capture (publish/pack/scaffold) + dispatch.
+						qaProcessCapture = new List<(string, string, string)> ();
+						SelectXwtSolutionRow ("project:" + coreProj);
+						await PublishProjectToFolderCore (coreProj, Path.Combine (webDir, "publish-out"));
+						await PackProjectCore (coreProj);
+						var withProfiles = await PublishProjectWithProfilesCore (coreProj);
+						Check ("profiles run (fixture has pubxml)", withProfiles);
+						await ScaffoldAspNetCoreAsync (coreProj);
+						var cap = qaProcessCapture!.ToList ();
+						qaProcessCapture = null;
+						Check ("cli captured 4 invocations", cap.Count == 4);
+						var cfg = MonoDevelop.Ide.Services.ConfigurationService.GetActiveConfiguration (src) ?? "Debug";
+						Check ("cli[0] publish folder args",
+							cap.Count > 0 && cap [0].Exe == "dotnet"
+							&& cap [0].Args == $"publish -c \"{cfg}\" --output \"{Path.Combine (webDir, "publish-out")}\" \"{coreProj}\""
+							&& cap [0].WorkingDir == Path.GetDirectoryName (coreProj));
+						Check ("cli[1] pack args",
+							cap.Count > 1 && cap [1].Exe == "dotnet"
+							&& cap [1].Args == $"pack -c \"{cfg}\" \"{coreProj}\""
+							&& cap [1].WorkingDir == Path.GetDirectoryName (coreProj));
+						Check ("cli[2] publish profile args",
+							cap.Count > 2 && cap [2].Args.Contains ("/p:PublishProfile=\"QaProfile\"")
+							&& cap [2].Args.Contains ($"publish -c \"{cfg}\"")
+							&& cap [2].WorkingDir == Path.GetDirectoryName (coreProj));
+						Check ("cli[3] scaffold args",
+							cap.Count > 3 && cap [3].Args == "aspnet-codegenerator"
+							&& cap [3].WorkingDir == Path.GetDirectoryName (coreProj));
+						// Dispatch: the Build menu items route through the command
+						// catalog (CommandService.Dispatch → CommandRouter →
+						// OnMenuCommand) — the same path a real menu click takes.
+						qaProcessCapture = new List<(string, string, string)> ();
+						MonoDevelop.Components.Commands.CommandService.Dispatch ("MonoDevelop.DotNetCore.Commands.Pack", null, MonoDevelop.Components.Commands.CommandSource.MainMenu);
+						var cap2 = qaProcessCapture!.ToList ();
+						qaProcessCapture = null;
+						Check ("dispatch pack via catalog", cap2.Count == 1 && cap2 [0].Args.Contains ("pack -c"));
+						Output ("[tierd] total ok=" + ok + " fail=" + fail);
+						Close ();
+					} catch (Exception ex) {
+						fail++;
+						Output ("[tierd] FAIL exception: " + ex.Message);
+						Output ("[tierd] total ok=" + ok + " fail=" + fail);
+						Close ();
+					}
+				}, Avalonia.Threading.DispatcherPriority.Background);
 			}
 		};
 
@@ -7045,6 +7248,10 @@ public partial class MainWindow : Window
 	string? dialogAutoConfirmFolder;
 	// QA: same pattern for the New File dialog (the --ctxnewfile hook).
 	(string Name, string Template)? dialogNewFileQa;
+	// QA: when set, dotnet-CLI invocations (Tier D publish/pack/scaffold) are
+	// recorded here instead of starting a process — the oracle verifies the
+	// exact args/working dir the handlers build without waiting for a build.
+	List<(string Exe, string Args, string? WorkingDir)>? qaProcessCapture;
 
 	/// <summary>Project path for build commands: the context node when the command
 	/// came from the Solution pad, else the active project.</summary>
@@ -7060,7 +7267,8 @@ public partial class MainWindow : Window
 			var dir = File.Exists (p) ? Path.GetDirectoryName (p) : p;
 			while (!string.IsNullOrEmpty (dir)) {
 				var csproj = Directory.GetFiles (dir, "*.csproj").FirstOrDefault ()
-					?? Directory.GetFiles (dir, "*.fsproj").FirstOrDefault ();
+					?? Directory.GetFiles (dir, "*.fsproj").FirstOrDefault ()
+					?? Directory.GetFiles (dir, "*.vbproj").FirstOrDefault ();
 				if (csproj is not null)
 					return csproj;
 				var parent = Directory.GetParent (dir)?.FullName;
@@ -7603,8 +7811,8 @@ public partial class MainWindow : Window
 				return System.IO.Path.GetFileName (file);
 		}
 		var ext = System.IO.Path.GetExtension (fileName).ToLowerInvariant ();			return ext switch {
-				".cs" or ".fs" => "file-source-16.png",
-				".csproj" or ".fsproj" or ".props" or ".targets" => "project-16.png",
+				".cs" or ".fs" or ".vb" => "file-source-16.png",
+				".csproj" or ".fsproj" or ".vbproj" or ".props" or ".targets" => "project-16.png",
 				".sln" => "solution-16.png",
 				_ => "file-text-16.png",
 			};
@@ -7800,6 +8008,11 @@ public partial class MainWindow : Window
 	List<Control> BuildProjectPadMenu ()
 	{
 		var (nodeType, nodePath) = SelectedNodeType ();
+		// Project classification of the selected (or containing) project —
+		// gates the addin items the legacy ProjectPad context menu contributes
+		// (classic AspNet Controller/View/Directory, AspNetCore Scaffold/Publish,
+		// DotNetCore Pack). Null for solution/folder rows without a project.
+		var kind = SelectedProjectKind ();
 		var items = new List<Control> ();
 		MenuItem Cmd (string label, string commandId, string? icon = null)
 		{
@@ -7828,13 +8041,78 @@ public partial class MainWindow : Window
 		if (nodeType == "Project") {
 			items.Add (Cmd ("Set as Startup Project", "MonoDevelop.Ide.Commands.ProjectCommands.SetStartupProjects", "md-steam"));
 		}
-		// Add section (Solution|Project|ProjectFolder)
+		// Publish section (legacy /MonoDevelop/Ide/ContextMenu/ProjectPad/Publish,
+		// ItemType=Project: the AspNetCore items, visible for any publishable
+		// project — classic .NET Framework projects are never publishable).
+		if (nodeType == "Project" && nodePath is not null && ConfigurationService.IsPublishableProject (nodePath)) {
+			items.Add (Cmd ("Publish to Folder...", "MonoDevelop.AspNetCore.Commands.PublishToFolder", "md-publish"));
+			items.Add (Cmd ("Publish", "MonoDevelop.AspNetCore.Commands.PublishToFolderProfiles", "md-publish"));
+			items.Add (Cmd ("Pack", "MonoDevelop.DotNetCore.Commands.Pack", "md-package"));
+			items.Add (new Separator ());
+		}
+		// Add section (Solution|Project|ProjectFolder) + the addin items
 		if (nodeType is "Solution" or "Project" or "ProjectFolder") {
 			var addChildren = new List<Control> ();
+			// AspNet addin (legacy AspNetFolderNodeCommandHandler): the
+			// Controller.../View... pair lives on FOLDER nodes only. The legacy
+			// updaters cast the node's DataItem to ProjectFolder — on a project
+			// row that throws, the updater's catch leaves Enabled=false, and
+			// the addinxml's disabledVisible="false" hides the items; they are
+			// enabled exactly when the folder IS Controllers (or a child) for
+			// Controller... and IS Views (or a child) for View..., in a
+			// classic MVC project (IsAspNetApp + a System.Web.Mvc reference,
+			// the legacy IsAspMvcProject). The addin anchors Controller...
+			// insertbefore AddNewFiles — before "New File..." in the port.
+			if (nodeType == "ProjectFolder" && nodePath is not null) {
+				// The folder's owning project (walk up from the folder path) —
+				// the legacy CurrentNode.GetParentDataItem(DotNetProject, true).
+				var mvcProj = ContextProjectFor (nodePath);
+				if (mvcProj is not null && ConfigurationService.IsMvcClassicProject (mvcProj)) {
+					var mvcDir = Path.GetFullPath (Path.GetDirectoryName (mvcProj)!);
+					var selDir = Path.GetFullPath (nodePath);
+					var underControllers = Path.GetFullPath (Path.Combine (mvcDir, "Controllers")).Equals (selDir, StringComparison.OrdinalIgnoreCase)
+						|| selDir.StartsWith (Path.GetFullPath (Path.Combine (mvcDir, "Controllers")) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+					if (underControllers)
+						addChildren.Add (Cmd ("Controller...", "MonoDevelop.AspNet.Commands.AspNetCommands.AddController"));
+					var underViews = Path.GetFullPath (Path.Combine (mvcDir, "Views")).Equals (selDir, StringComparison.OrdinalIgnoreCase)
+						|| selDir.StartsWith (Path.GetFullPath (Path.Combine (mvcDir, "Views")) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+					if (underViews)
+						addChildren.Add (Cmd ("View...", "MonoDevelop.AspNet.Commands.AspNetCommands.AddView"));
+					if (underControllers || underViews)
+						addChildren.Add (new Separator ());
+				}
+			}
 			if (nodeType is "Solution" or "Project" or "ProjectFolder")
 				addChildren.Add (Cmd ("New File...", "MonoDevelop.Ide.Commands.ProjectCommands.AddNewFiles", "md-add-content"));
-			if (nodeType == "Project")
+			if (nodeType == "Project" && nodePath is not null && kind is not null && kind.IsAspNetApp) {
+				// AspNet addin (legacy AspNetProjectNodeCommandHandler): the
+				// ASP.NET Directory array on the PROJECT node (the legacy
+				// CommandArray updater returns no items for non-project nodes
+				// and the ItemSet autohide hides it). The list mirrors
+				// AspNetAppProjectFlavor.GetSpecialDirectories (App_* + Theme;
+				// Views/Models/Controllers on MVC projects) — the legacy array
+				// filtered out directories already in the project; the port
+				// lists them all and creates the missing one on demand.
+				addChildren.Add (Sub ("ASP.NET Directory", new [] {
+					Cmd ("App_Browsers", "MonoDevelop.AspNet.Commands.AspNetCommands.AddAspNetDirectory|App_Browsers"),
+					Cmd ("App_Data", "MonoDevelop.AspNet.Commands.AspNetCommands.AddAspNetDirectory|App_Data"),
+					Cmd ("App_GlobalResources", "MonoDevelop.AspNet.Commands.AspNetCommands.AddAspNetDirectory|App_GlobalResources"),
+					Cmd ("App_LocalResources", "MonoDevelop.AspNet.Commands.AspNetCommands.AddAspNetDirectory|App_LocalResources"),
+					Cmd ("Theme", "MonoDevelop.AspNet.Commands.AspNetCommands.AddAspNetDirectory|Theme"),
+					Cmd ("Views", "MonoDevelop.AspNet.Commands.AspNetCommands.AddAspNetDirectory|Views"),
+					Cmd ("Models", "MonoDevelop.AspNet.Commands.AspNetCommands.AddAspNetDirectory|Models"),
+					Cmd ("Controllers", "MonoDevelop.AspNet.Commands.AspNetCommands.AddAspNetDirectory|Controllers"),
+				}));
+			}
+			if (nodeType == "Project") {
 				addChildren.Add (Cmd ("Add Reference...", "MonoDevelop.Ide.Commands.ProjectCommands.AddReference", "md-reference"));
+			}
+			// AspNetCore addin (legacy ScaffoldNodeExtension): "New
+			// Scaffolding..." — the legacy ItemSet adds no Condition (the
+			// comment in the addin shows it tried ItemType=Project and left
+			// it off), so the item is placed for every node; the handler
+			// gates the work to SDK web projects.
+			addChildren.Add (Cmd ("New Scaffolding...", "MonoDevelop.AspNetCore.Commands.AspNetCoreCommands.Scaffold"));
 			if (nodeType is "Project" or "ProjectFolder")
 				addChildren.Add (Cmd ("New Folder", "MonoDevelop.Ide.Commands.ProjectCommands.NewFolder", "md-closed-folder"));
 			if (addChildren.Count > 0)
@@ -7860,8 +8138,10 @@ public partial class MainWindow : Window
 	}
 
 	// Node classification (legacy ItemType condition values) from the Tag:
-	// solution path → Solution; project file (.csproj/.fsproj) → Project;
-	// folder: → ProjectFolder; file → ProjectFile.
+	// solution path → Solution; project file (.csproj/.fsproj/.vbproj) →
+	// Project (the "project:" tag prefix is stripped — the Tag carries it as a
+	// row-kind marker, the consumers need the bare path); folder: →
+	// ProjectFolder; file → ProjectFile.
 	(string NodeType, string? Path) SelectedNodeType ()
 	{
 		var s = SelectedXwtNode ();
@@ -7869,11 +8149,412 @@ public partial class MainWindow : Window
 			if (s.StartsWith ("reference:", StringComparison.Ordinal)) return ("ProjectReference", s);
 			if (s.StartsWith ("folder:", StringComparison.Ordinal)) return ("ProjectFolder", s ["folder:".Length..]);
 			if (s.EndsWith (".sln", StringComparison.OrdinalIgnoreCase)) return ("Solution", s);
+			if (s.StartsWith ("project:", StringComparison.Ordinal)
+				&& ConfigurationService.IsProjectFile (s ["project:".Length..]))
+				return ("Project", s ["project:".Length..]);
 			if (ConfigurationService.IsProjectFile (s)) return ("Project", s);
 			if (File.Exists (s)) return ("ProjectFile", s);
 		}
 		return ("None", null);
 	}
+
+	/// <summary>Project classification (ConfigurationService.GetProjectKind) of
+	/// the project the selection resolves to — the selected node itself when it
+	/// is a project row, else the containing project (legacy CurrentSelected
+	/// Project / DataItem bridge). Null for solutions, solution folders and the
+	/// unselectable states. Drives the ProjectPad context menu's addin-gated
+	/// items (VB / classic AspNet / AspNetCore).</summary>
+	MonoDevelop.Ide.Services.ConfigurationService.ProjectKindInfo? SelectedProjectKind ()
+	{
+		var (nodeType, nodePath) = SelectedNodeType ();
+		string? proj = nodeType == "Project" && nodePath is not null
+			? nodePath
+			: ResolveSelectedProjectPath ();
+		return proj is not null ? ConfigurationService.GetProjectKind (proj) : null;
+	}
+
+	// ----- ProjectPad context menu: the 3 addins' command handlers (port
+	// ASP.NET / AspNetCore / VB(.NET), Tier D). The legacy handlers run against
+	// the MonoDevelop.Projects model (CodeDom providers, T4 MvcTextTemplateHost,
+	// DotNetCoreRuntime, NodeCommandHandler dataItems); the shell runs the
+	// file-level equivalents: the scaffolding content is written by hand from
+	// the legacy T4 "Empty" templates (CodeTemplates/CSharp/AddController|AddView)
+	// and the SDK-style projects go through the local dotnet CLI. nodeContext
+	// carries the folder/project path (legacy CommandHandler Run(dataItem);
+	// AddController/AddView resolve their parent project the same way the
+	// legacy GetParentDataItem(typeof(DotNetProject), true) does).
+
+	// Strip the Xwt row-kind prefix ("project:"/"folder:") from a node tag or
+	// path so the bare disk path is used; null-safe (null stays null).
+	static string? StripNodeTag (string? s)
+	{
+		if (s is null)
+			return null;
+		if (s.StartsWith ("project:", StringComparison.Ordinal))
+			return s ["project:".Length..];
+		if (s.StartsWith ("folder:", StringComparison.Ordinal))
+			return s ["folder:".Length..];
+		return s;
+	}
+
+	// The project owning a context path: a project node → itself; a file or
+	// folder node → the project file in (or above) that directory. Mirrors the
+	// legacy CurrentNode.GetParentDataItem(typeof (DotNetProject), true).
+	string? ContextProjectFor (string? nodeContext)
+	{
+		var ctx = StripNodeTag (nodeContext);
+		if (ctx is not null && ConfigurationService.IsProjectFile (ctx))
+			return ctx;
+		string? dir = null;
+		if (ctx is not null) {
+			// Only a REAL directory is walked (a solution-folder node carries a
+			// bare relative NAME in its tag — treating it as a directory would
+			// resolve against the process cwd and could claim a wrong project).
+			if (File.Exists (ctx))
+				dir = Path.GetDirectoryName (ctx);
+			else if (Directory.Exists (ctx))
+				dir = ctx;
+		}
+		dir ??= ResolveSelectedProjectPath () is { } sel ? (Directory.Exists (sel) ? sel : Path.GetDirectoryName (sel)) : null;
+		while (!string.IsNullOrEmpty (dir)) {
+			var proj = Directory.GetFiles (dir, "*.csproj").FirstOrDefault ()
+				?? Directory.GetFiles (dir, "*.fsproj").FirstOrDefault ()
+				?? Directory.GetFiles (dir, "*.vbproj").FirstOrDefault ();
+			if (proj is not null)
+				return proj;
+			var parent = Directory.GetParent (dir)?.FullName;
+			if (parent == dir || parent is null)
+				break;
+			dir = parent;
+		}
+		return ResolveSelectedProjectPath ();
+	}
+
+	// The output directory the legacy handlers use: the node's own path when it
+	// is a folder (or the project row, whose BaseDirectory is the project
+	// dir), else the containing folder.
+	static string ContextOutputDir (string? nodeContext)
+	{
+		var p = StripNodeTag (nodeContext);
+		if (p is not null) {
+			if (ConfigurationService.IsProjectFile (p))
+				return Path.GetDirectoryName (p) ?? string.Empty;
+			if (Directory.Exists (p))
+				return p;
+			if (File.Exists (p))
+				return Path.GetDirectoryName (p) ?? string.Empty;
+		}
+		return string.Empty;
+	}
+
+	// Ask for a file name (legacy AddControllerDialog / AddViewDialog: a single
+	// entry, default "Controller"/"View", OK disabled until the name is a valid
+	// identifier). Returns null on cancel.
+	string? AskScaffoldName (string title, string label, string initial)
+	{
+		var dlg = new InputDialog (title, label, initial);
+		_ = dlg.ShowDialog (this);
+		if (!dlg.Confirmed)
+			return null;
+		var name = (dlg.Value ?? "").Trim ();
+		if (name.Length == 0 || !IsValidCSharpIdentifier (name)) {
+			Output ($"[scaffold] '{name}' is not a valid name; nothing created");
+			return null;
+		}
+		return name;
+	}
+
+	static bool IsValidCSharpIdentifier (string s)
+	{
+		if (s.Length == 0)
+			return false;
+		if (!char.IsLetter (s [0]) && s [0] != '_')
+			return false;
+		foreach (var c in s)
+			if (!char.IsLetterOrDigit (c) && c != '_')
+				return false;
+		return true;
+	}
+
+	// Legacy AspNetFolderNodeCommandHandler.AddController (+ AddControllerDialog):
+	// a new controller .cs in Controllers/ (the node's folder when it is under
+	// Controllers, else the project root — the legacy gate makes the item
+	// visible only inside Controllers). Content = the legacy "Empty.tt"
+	// template (AddController/Empty.tt). Divergence: the legacy dialog also
+	// offers the read/write-actions template; the port scaffolds Empty only.
+	void AddClassicMvcController (string? nodeContext)
+	{
+		var proj = ContextProjectFor (nodeContext);
+		if (proj is null || !ConfigurationService.IsMvcClassicProject (proj)) {
+			Output ("[mvc] Add Controller: not an ASP.NET MVC project");
+			return;
+		}
+		var name = AskScaffoldName ("Add Controller", "Controller name:", "Controller");
+		if (name is null)
+			return;
+		CreateClassicMvcControllerCore (proj, name, nodeContext);
+	}
+
+	// The file write, without the dialog (the QA oracle drives the name
+	// explicitly through this entry point).
+	void CreateClassicMvcControllerCore (string proj, string name, string? nodeContext)
+	{
+		var projDir = Path.GetDirectoryName (proj)!;
+		var rootNamespace = ConfigurationService.LoadProjectModel (proj)?.Name ?? Path.GetFileNameWithoutExtension (proj);
+		var outDir = ContextOutputDir (nodeContext);
+		var underControllers = outDir.Length > 0 &&
+			outDir.StartsWith (Path.Combine (projDir, "Controllers"), StringComparison.OrdinalIgnoreCase);
+		var dir = underControllers ? outDir : Path.Combine (projDir, "Controllers");
+		var file = Path.Combine (dir, name + ".cs");
+		if (File.Exists (file)) {
+			Output ($"[mvc] Add Controller: {Path.GetFileName (file)} already exists; not overwriting");
+			return;
+		}
+		Directory.CreateDirectory (dir);
+		File.WriteAllText (file,
+			"using System;\n" +
+			"using System.Collections.Generic;\n" +
+			"using System.Linq;\n" +
+			"using System.Web;\n" +
+			"using System.Web.Mvc;\n" +
+			"\n" +
+			"namespace " + rootNamespace + ".Controllers\n" +
+			"{\n" +
+			"    public class " + name + " : Controller\n" +
+			"    {\n" +
+			"        public ActionResult Index()\n" +
+			"        {\n" +
+			"            return View ();\n" +
+			"        }\n" +
+			"    }\n" +
+			"}\n");
+		Output ($"[mvc] controller '{name}' created at {file}");
+	}
+
+	// Legacy AspNetFolderNodeCommandHandler.AddView (+ AddViewDialog): a new
+	// Razor view .cshtml in Views/ (the node's folder when it is under
+	// Views). Content = the legacy "Empty.tt" Razor template in its plain-page
+	// branch (no master, no partial, no strong typing). Divergences: the
+	// legacy dialog offers view engine (Razor/ASPX), master page, partial and
+	// strong typing; the port scaffolds the Razor Empty default.
+	void AddClassicMvcView (string? nodeContext)
+	{
+		var proj = ContextProjectFor (nodeContext);
+		if (proj is null || !ConfigurationService.IsMvcClassicProject (proj)) {
+			Output ("[mvc] Add View: not an ASP.NET MVC project");
+			return;
+		}
+		var name = AskScaffoldName ("Add View", "View name:", "View");
+		if (name is null)
+			return;
+		CreateClassicMvcViewCore (proj, name, nodeContext);
+	}
+
+	// The file write, without the dialog (the QA oracle drives the name
+	// explicitly through this entry point).
+	void CreateClassicMvcViewCore (string proj, string name, string? nodeContext)
+	{
+		var projDir = Path.GetDirectoryName (proj)!;
+		var outDir = ContextOutputDir (nodeContext);
+		var underViews = outDir.Length > 0 &&
+			outDir.StartsWith (Path.Combine (projDir, "Views"), StringComparison.OrdinalIgnoreCase);
+		var dir = underViews ? outDir : Path.Combine (projDir, "Views");
+		var file = Path.Combine (dir, name + ".cshtml");
+		if (File.Exists (file)) {
+			Output ($"[mvc] Add View: {Path.GetFileName (file)} already exists; not overwriting");
+			return;
+		}
+		Directory.CreateDirectory (dir);
+		File.WriteAllText (file,
+			"@{\n" +
+			"    Layout = null;\n" +
+			"}\n" +
+			"\n" +
+			"<!DOCTYPE html>\n" +
+			"<html>\n" +
+			"<head>\n" +
+			"    <title>" + name + "</title>\n" +
+			"</head>\n" +
+			"<body>\n" +
+			"</body>\n" +
+			"</html>\n");
+		Output ($"[mvc] view '{name}' created at {file}");
+	}
+
+	// Legacy AspNetProjectNodeCommandHandler.OnAddSpecialDirectory: create the
+	// special ASP.NET directory (App_*/Theme/Views/Models/Controllers) in the
+	// project and add it to the project file. The legacy array hid the
+	// directories already present; the port creates the missing one (a
+	// no-op-ish report when it already exists).
+	void AddAspNetSpecialDirectory (string dirName, string? nodeContext)
+	{
+		var proj = ContextProjectFor (nodeContext);
+		if (proj is null || ConfigurationService.GetProjectKind (proj)?.IsAspNetApp is not true) {
+			Output ("[aspnet] Add Directory: not a classic ASP.NET project");
+			return;
+		}
+		var projDir = Path.GetDirectoryName (proj)!;
+		var dir = Path.Combine (projDir, dirName);
+		if (Directory.Exists (dir)) {
+			Output ($"[aspnet] directory '{dirName}' already exists");
+			return;
+		}
+		Directory.CreateDirectory (dir);
+		AddClassicCompileDirToProject (proj, dirName);
+		Output ($"[aspnet] directory '{dirName}' created at {dir}");
+	}
+
+	// Add a <Compile Include="dirName\**"> wildcard item to the project file so
+	// the new directory participates in the build — the file-level equivalent
+	// of the legacy ProjectOperations.AddDirectory (the classic projects the
+	// legacy model manages reference special directories by folder globs, the
+	// same way the xpt-generated projects do). Creates a top-level ItemGroup
+	// when the project carries none. Returns false without touching the file
+	// when it cannot parse.
+	static bool AddClassicCompileDirToProject (string projPath, string dirName)
+	{
+		try {
+			var doc = System.Xml.Linq.XDocument.Load (projPath);
+			if (doc.Root is null)
+				return false;
+			var root = doc.Root;
+			var ns = root.Name.Namespace;
+			var item = new System.Xml.Linq.XElement (ns + "Compile",
+				new System.Xml.Linq.XAttribute ("Include", dirName + "\\**"));
+			var firstGroup = root.Descendants (ns + "ItemGroup").FirstOrDefault ();
+			if (firstGroup is not null) {
+				firstGroup.AddFirst (item);
+			} else {
+				var group = new System.Xml.Linq.XElement (ns + "ItemGroup", item);
+				// Before the Import (targets) when present, else at the end.
+				var import = root.Descendants (ns + "Import").FirstOrDefault ();
+				if (import is not null)
+					import.AddBeforeSelf (group);
+				else
+					root.Add (group);
+			}
+			doc.Save (projPath);
+			return true;
+		} catch {
+			return false;
+		}
+	}
+
+	// Legacy ScaffoldCommandHandler (AspNetCore): the ScaffolderWizard multi-page
+	// selection is NOT ported (documented divergence — the shell has no wizard
+	// framework); the command invokes the dotnet aspnet-codegenerator CLI
+	// directly in the project directory, where the user picks the template
+	// interactively. When the local tool is not installed the CLI reports it
+	// (the QA environment does not carry it) and returns.
+	async System.Threading.Tasks.Task ScaffoldAspNetCoreAsync (string? nodeContext)
+	{
+		var proj = ContextProjectFor (nodeContext);
+		if (proj is null || ConfigurationService.GetProjectKind (proj)?.IsAspNetCore is not true) {
+			Output ("[scaffold] New Scaffolding: not an ASP.NET Core web project");
+			return;
+		}
+		Output ($"[scaffold] dotnet aspnet-codegenerator in {Path.GetDirectoryName (proj)}");
+		await RunDotnetCliAsync ("aspnet-codegenerator", proj);
+	}
+
+	// Legacy PublishToFolderCommandHandler (+ PublishToFolderDialog): asks for
+	// the output folder (the legacy dialog's PublishUrl entry) and runs
+	// `dotnet publish -c <active-config> --output <dir>` in the project dir
+	// (the legacy BuildArgs, minus the self-contained profile options the
+	// dialog does not expose — documented divergence).
+	void PublishProjectToFolder (string? nodeContext)
+	{
+		var proj = ContextProjectFor (nodeContext);
+		if (proj is null || !ConfigurationService.IsPublishableProject (proj)) {
+			Output ("[publish] not a publishable project (.NET Core / .NET Standard only)");
+			return;
+		}
+		var dlg = new InputDialog ("Publish to Folder", "Publish output folder:",
+			Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.UserProfile), "publish"));
+		_ = dlg.ShowDialog (this);
+		if (!dlg.Confirmed || string.IsNullOrWhiteSpace (dlg.Value))
+			return;
+		_ = PublishProjectToFolderCore (proj, dlg.Value.Trim ());
+	}
+
+	// The dotnet publish, without the dialog (the QA oracle passes the output
+	// folder explicitly through this entry point).
+	async System.Threading.Tasks.Task PublishProjectToFolderCore (string proj, string outDir)
+	{
+		await RunDotnetCliAsync ($"publish -c \"{GetActiveBuildConfig ()}\" --output \"{outDir}\" \"{proj}\"", proj);
+	}
+
+	// Legacy PublishToFolderProfilesCommandHandler (array command): the master
+	// runs `dotnet publish` once per Properties/PublishProfiles/*.pubxml
+	// (the legacy lists the FileSystem profiles as children; the port runs them
+	// in sequence through the same console, in profile order).
+	void PublishProjectWithProfiles (string? nodeContext)
+	{
+		var proj = ContextProjectFor (nodeContext);
+		if (proj is null || !ConfigurationService.IsPublishableProject (proj)) {
+			Output ("[publish] not a publishable project (.NET Core / .NET Standard only)");
+			return;
+		}
+		_ = PublishProjectWithProfilesCore (proj);
+	}
+
+	// The per-profile publishes, without a dialog. Returns false (reporting)
+	// when the project carries no Properties/PublishProfiles/*.pubxml.
+	async System.Threading.Tasks.Task<bool> PublishProjectWithProfilesCore (string proj)
+	{
+		var profiles = ConfigurationService.GetPublishProfiles (proj);
+		if (profiles.Count == 0) {
+			Output ($"[publish] no publish profiles in {Path.GetDirectoryName (proj)}/Properties/PublishProfiles");
+			return false;
+		}
+		Output ("[publish] profiles: " + string.Join (", ", profiles));
+		// One process per profile keeps each publish's exit code independent.
+		var cfg = GetActiveBuildConfig ();
+		foreach (var p in profiles)
+			await RunDotnetCliAsync ($"publish -c \"{cfg}\" /p:PublishProfile=\"{p}\" \"{proj}\"", proj);
+		return true;
+	}
+
+	// Legacy PackCommandHandler: build + run the "Pack" target (MSBuild) —
+	// the shell equivalent is `dotnet pack` in the project directory.
+	void PackProject (string? nodeContext)
+	{
+		var proj = ContextProjectFor (nodeContext);
+		if (proj is null || !ConfigurationService.IsPublishableProject (proj)) {
+			Output ("[pack] not a packable project (SDK-style only)");
+			return;
+		}
+		_ = PackProjectCore (proj);
+	}
+
+	// The dotnet pack, isolated for the QA oracle.
+	async System.Threading.Tasks.Task PackProjectCore (string proj)
+		=> await RunDotnetCliAsync ($"pack -c \"{GetActiveBuildConfig ()}\" \"{proj}\"", proj);
+
+	// The single dotnet-CLI launch point for the Tier D handlers (publish /
+	// pack / scaffold): RunProcessAsync with the project directory as working
+	// dir (the legacy BuildArgs ran from the project BaseDirectory). While
+	// qaProcessCapture is set (the --tierd oracle) the invocation is recorded
+	// instead of started, so the exact args/working dir are checkable without
+	// waiting for a restore/build.
+	async System.Threading.Tasks.Task RunDotnetCliAsync (string args, string proj)
+	{
+		var workingDir = Path.GetDirectoryName (proj);
+		if (qaProcessCapture is { } capture) {
+			capture.Add (("dotnet", args, workingDir));
+			Output ($"[qa-process] captured dotnet {args} (wd={workingDir})");
+			return;
+		}
+		await RunProcessAsync ("dotnet", args, workingDir);
+	}
+
+	// The active solution configuration name (the legacy
+	// GetActiveConfiguration the publish/pack handlers build their args from),
+	// defaulting to Debug like the solution selector.
+	string GetActiveBuildConfig ()
+		=> (!string.IsNullOrEmpty (loadedSolutionPath) && File.Exists (loadedSolutionPath))
+			? (ConfigurationService.GetActiveConfiguration (loadedSolutionPath) ?? "Debug")
+			: "Debug";
 
 	/// <summary>Tag of the selected node in the Xwt tree ("solution:path",
 	/// "project:path", "folder:path", "reference:name" or a file path), resolved
@@ -9642,6 +10323,33 @@ public partial class MainWindow : Window
 				Output ($"[project] startup project: {Path.GetFileNameWithoutExtension (sp)}");
 			} else
 				Output ("[project] no project loaded");
+			return;
+		// ----- ProjectPad context menu: the 3 addins' items (port ASP.NET /
+		// AspNetCore / VB(.NET), Tier D). The legacy handlers run against the
+		// MonoDevelop.Projects model; the shell runs the file-level equivalents
+		// (scaffolding written by hand from the legacy T4 "Empty" templates,
+		// dotnet CLI for the SDK-style projects). The node context carries the
+		// folder/project path (legacy CommandHandler Run(dataItem)).
+		case "MonoDevelop.AspNet.Commands.AspNetCommands.AddController":
+			AddClassicMvcController (nodeContext);
+			return;
+		case "MonoDevelop.AspNet.Commands.AspNetCommands.AddView":
+			AddClassicMvcView (nodeContext);
+			return;
+		case string id when id.StartsWith ("MonoDevelop.AspNet.Commands.AspNetCommands.AddAspNetDirectory|", StringComparison.Ordinal):
+			AddAspNetSpecialDirectory (id ["MonoDevelop.AspNet.Commands.AspNetCommands.AddAspNetDirectory|".Length..], nodeContext);
+			return;
+		case "MonoDevelop.AspNetCore.Commands.AspNetCoreCommands.Scaffold":
+			_ = ScaffoldAspNetCoreAsync (nodeContext);
+			return;
+		case "MonoDevelop.AspNetCore.Commands.PublishToFolder":
+			PublishProjectToFolder (nodeContext);
+			return;
+		case "MonoDevelop.AspNetCore.Commands.PublishToFolderProfiles":
+			PublishProjectWithProfiles (nodeContext);
+			return;
+		case "MonoDevelop.DotNetCore.Commands.Pack":
+			PackProject (nodeContext);
 			return;
 		case "MonoDevelop.Ide.Commands.ProjectCommands.BuildSolution":
 			_ = RunBuildAsync (rebuild: false);
@@ -13636,7 +14344,7 @@ public partial class MainWindow : Window
 		}
 	}
 
-	async System.Threading.Tasks.Task RunProcessAsync (string exe, string args)
+	async System.Threading.Tasks.Task RunProcessAsync (string exe, string args, string? workingDir = null)
 	{
 		try {
 			var psi = new System.Diagnostics.ProcessStartInfo (exe, args) {
@@ -13645,6 +14353,8 @@ public partial class MainWindow : Window
 				UseShellExecute = false,
 				CreateNoWindow = true,
 			};
+			if (workingDir is not null && Directory.Exists (workingDir))
+				psi.WorkingDirectory = workingDir;
 			var proc = System.Diagnostics.Process.Start (psi);
 			runningProc = proc;
 			if (proc is null) {
