@@ -5850,3 +5850,49 @@ Cuarta fase del port decidido en §58. Cierra el **Tier C** (creación de proyec
 
 ### Cierre
 Commit de código por nombre (4) + commit `Docs:` por nombre (docs ×3: `session_summary.md` §61, `interfaz-plan.md` M31-v, `migration-status-report.md` nota). Push a `origin/agents/sub-agent-senior-dev-role-report`. **Sin submódulos, sin PRs (§18.7).** Artefactos: `~/opencode/aspnet_vbnet_port/` (brief `qa_tierc_brief.md`, report `qa_tierc_report.md`, plan `plan_tier_c.md`, fixture `qa_tierc/`), `~/opencode/docfood_qa/` (logs `tierc_*`).
+
+## 2026-11-19 (62) — Port ASP.NET / ASP.NET Core / VB(.NET): Tier D — ProjectPad (reconocimiento .vbproj/AspNet + menús contextuales de los 3 addins + handlers) — CERRADO (QA VERDE, 0 hallazgos)
+
+**Quinta y última fase** del port decidido en §58: cierra el **Tier D** (ProjectPad) y, con él, el port completo de la superficie UI (A+B+C+D). **Decisión del operador (§61 del plan)**: reconocer `.vbproj`/AspNet como nodo Project + los items de menú contextual que los 3 addins contribuyen legacy (Controller/View clásico, ASP.NET Directory, New Scaffolding) + los handlers de los items Publish del menú Build (ya declarados en `MenuService` sin handler).
+
+### Qué se hizo
+
+- **`ConfigurationService` (compartido GTK)**:
+  - `IsProjectFile`: +`.vbproj` (afecta clasificación de nodo, walk-up `ResolveCommandProject`, guards rename/delete).
+  - **`IsMvcClassicProject`**: mirror de `AspNetAppProjectFlavor.IsAspMvcProject` (flavor AspNetApp + ref `System.Web.Mvc`).
+  - **`IsPublishableProject`**: mirror de `PublishToFolderBaseCommandHandler.ProjectSupportsFolderPublishing` (solo TFMs Core/Standard: SDK sin net4* o sin TFM explícito). **Bug corregido en la fase**: la primera versión gateaba `IsDotNetProject`, que excluye los SDK web (clase separada) → los ASP.NET Core quedaban fuera de publish.
+  - **`GetPublishProfiles`**: nombres de `Properties/PublishProfiles/*.pubxml`, ordenados.
+- **`MainWindow` (Avalonia)**:
+  - `FileIconResource`: +`.vb`/`.vbproj`.
+  - **`SelectedNodeType`**: quita el prefijo `"project:"` del path del nodo proyecto (el tag Xwt lo lleva como marcador de fila; los consumidores solo usaban `GetFileNameWithoutExtension`, tolerante; el código nuevo necesitaba el path limpio).
+  - **`StripNodeTag`** (nuevo): limpia `project:`/`folder:` en `ContextProjectFor`/`ContextOutputDir`. `ContextProjectFor` endurecido: solo resuelve walk-up sobre directorios reales (los nodos de solución llevan un nombre relativo, no una ruta).
+  - **`SelectedProjectKind`** (nuevo): `GetProjectKind` del proyecto de la selección.
+  - **`BuildProjectPadMenu`** (orden legacy Build → Run → Publish → Add → Tools → Edit): sección **Publish** nueva (gate `IsPublishableProject`: "Publish to Folder..."/"Publish"/"Pack"); sección **Add** con los gates FIeles a los updaters legacy (ver abajo).
+  - **Handlers** (file-level; el modelo `MonoDevelop.Projects` no existe en la shell): `AddClassicMvcController/View` (dialogo de nombre + T4 "Empty" legacy: controller `: Controller` con `Index()`, view Razor `@{ Layout = null; }`), `AddAspNetSpecialDirectory` (dir + `<Compile Include="Dir\**">` glob), `ScaffoldAspNetCoreAsync`/`PublishProjectToFolder(Core)`/`PublishProjectWithProfiles(Core)`/`PackProject(Core)` (dotnet CLI por `RunDotnetCliAsync`, working dir = dir proyecto; `qaProcessCapture` para el oráculo), `GetActiveBuildConfig` (config del .sln). `RunProcessAsync` +`workingDir` opcional.
+  - **Gates por tipo de nodo (fidelidad verificada línea a línea en la fuente legacy)** — el hallazgo H1 del QA forzó la verificación completa:
+    - `Controller...`/`View...`: **solo en nodos CARPETA** (el updater legacy hace el cast `(ProjectFolder)CurrentNode.DataItem`; en nodo proyecto lanza → catch del updater (CommandManager L1936) `Enabled=false` + `disabledVisible="false"` del addinxml → **oculto**). En carpeta: Controller... solo si ES `Controllers` (o hija); View... solo si ES `Views` (o hija); proyecto `IsMvcClassicProject`. Ancla legacy `insertbefore=AddNewFiles`.
+    - `ASP.NET Directory`: **solo nodo proyecto** (`as DotNetProject` + array; ItemSet `autohide` lo oculta en el resto).
+    - `New Scaffolding...`: en todos los nodos de la sección Add (el ItemSet legacy **no** tiene Condition — el comentario del addin lo demuestra); el handler gatea el trabajo a SDK web.
+- **`Program.cs`**: `QaDialogArg` +`--tierd`.
+- **Oráculo `--tierd`** (async, **47 checks**): reconocimiento 4 nodos (incl. `.vbproj`) con flags kind, menú por nodo proyecto (incl. items OCULTOS en el nodo proyecto) y por nodo carpeta (tras crear Controllers/Views/App_Data + refresh; gates por carpeta + **unicidad `Count==1`** — protección contra el H2), publishable gates, ficheros scaffolded, `<Compile>` glob, 4 invocaciones CLI capturadas con args exactos + working dir, y dispatch Pack vía `CommandService.Dispatch` (el camino real del click del menú Build: catálogo → `CommandRouter` → `OnMenuCommand`).
+
+### Ficheros (3, sin submódulos)
+`MonoDevelop.Ide/Services/ConfigurationService.cs`, `MonoDevelop.Startup.Avalonia/Views/MainWindow.axaml.cs`, `MonoDevelop.Startup.Avalonia/Program.cs`.
+
+### Divergencias documentadas (verificadas por QA, no son hallazgos)
+1. **Sin framework de wizards**: AddController/AddView = `InputDialog` + scaffolding manual del T4 "Empty" (precedente F#/Tier C).
+2. **Scaffold = CLI** `dotnet aspnet-codegenerator` (wizard multi-página no portado; el tool no está en el env QA → el fallo reportado NO es hallazgo).
+3. **Publish to Folder**: solo el diálogo de carpeta (el legacy expone perfiles self-contained que no se portan).
+4. **Publish profiles = secuencia** (el legacy lista los perfiles FileSystem como hijos del array).
+5. **AddAspNetDirectory**: el legacy ocultaba los dirs ya presentes; el port lista los 8 y reporta "ya existe".
+6. **`SelectedNodeType`** quita el prefijo `project:` (antes el path volvía con el prefijo; solo se usaba para el nombre).
+7. **Publish/Pack solo en proyectos publishable** (gate TFM legacy): los clásicos .NET Framework no publican.
+
+### Validación (QA §18.5, Tester QA Senior, recursivo — 3 rounds)
+- **Round 1**: builds ×2 0 errores; `--tierd` 37/37; regresiones Tier C 3/3 + VB P1 (47+34/0, 38/0); harness propio (edge estático 19/19 + edge UI). **H1 (MEDIA)**: el menú no ofrecía los items addin en nodos carpeta (el brief los describía mal; el QA tenía razón en el fondo, el gate exacto era otro).
+- **Fix H1** (round 2): gates por tipo de nodo fieles (ver arriba) + oráculo 45 checks. QA: H1 CERRADO; **H2 (MEDIA)**: bloque ProjectFolder duplicado (Controller.../View... 2 veces — bug de inserción del dev; el oráculo usaba `Contains`, el harness del QA con contadores lo detectó).
+- **Fix H2** (round 3): duplicado eliminado + checks `Count==1` (oráculo 47). QA: **0 hallazgos**.
+- Totales finales: builds Avalonia 125 warns/0 err + GTK 252/0; `--tierd` **47/47** (0 unhandled); regresión `console` verde; fixture P1 intacto; repo solo los 3 ficheros.
+
+### Cierre
+Commit de código por nombre (3) + commit `Docs:` por nombre (docs ×3: `session_summary.md` §62, `interfaz-plan.md` M31-w, `migration-status-report.md` nota). Push a `origin/agents/sub-agent-senior-dev-role-report`. **Sin submódulos, sin PRs (§18.7).** Artefactos: `~/opencode/aspnet_vbnet_port/` (brief `qa_tierd_brief.md`, report `qa_tierd_report.md`, plan `plan_tier_d.md`, fixture `qa_tierd/` con `fresh_sln.sh`), `~/opencode/docfood_qa/` (logs `tierd*`, `td_r2_*`, `regfix_*`, `regh2_*`).

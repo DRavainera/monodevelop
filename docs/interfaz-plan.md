@@ -6433,3 +6433,27 @@ El operador reportó dos bugs de la shell Avalonia: el pad **Errors** no mostrab
 **Siguiente (Tier D, sesión siguiente):** ProjectPad — reconocer `.vbproj`/AspNet en `IsProjectFile`+`SelectedNodeType`, items de menú (AddController/AddView clásico; Scaffold/Publish AspNetCore vía `dotnet aspnet-codegenerator`/`dotnet publish` por CLI; los items Publish ya declarados en `MenuService` sin handler).
 
 **Cierre**: commit de código por nombre (4) + commit `Docs:` por nombre (docs ×3: `session_summary.md` §61, este § M31-v, `migration-status-report.md` nota). Push a `origin/agents/sub-agent-senior-dev-role-report`. **Sin submódulos, sin PRs.** Artefactos: `~/opencode/aspnet_vbnet_port/` (brief `qa_tierc_brief.md`, report `qa_tierc_report.md`, plan `plan_tier_c.md`, fixture `qa_tierc/`), `~/opencode/docfood_qa/` (logs `tierc_*`).
+
+## 2026-11-19 — M31-w Port ASP.NET / ASP.NET Core / VB(.NET) — Tier D ProjectPad (reconocimiento .vbproj/AspNet + menús contextuales + handlers) — CERRADO (QA VERDE, 0 hallazgos)
+
+**Estado: CERRADO (QA APROBADO, 0 hallazgos abiertos §18.5 tras 3 rounds: H1 MEDIA → fix → H2 MEDIA → fix → verde).** Última fase (**Tier D**) del port anunciado al pie de M31-v: el ProjectPad reconoce los nodos `.vbproj`/AspNet como proyectos, muestra los items de menú contextual que los 3 addins contribuyen legacy, y sus handlers funcionan (scaffolding + dotnet CLI). Cierra el port completo A+B+C+D.
+
+**Qué se hizo:**
+- **`ConfigurationService` (compartido GTK)**: `IsProjectFile` +`.vbproj`; helpers nuevos `IsMvcClassicProject` (mirror `IsAspMvcProject`), `IsPublishableProject` (mirror del gate TFM legacy de `ProjectSupportsFolderPublishing` — bug corregido en la fase: el primer gate por `IsDotNetProject` excluye los SDK web, que son los que SÍ publican), `GetPublishProfiles` (`*.pubxml` ordenados).
+- **`MainWindow` (Avalonia)**: iconos +`.vb`/`.vbproj`; `SelectedNodeType` quita el prefijo `"project:"` del path del nodo (bug latente: los helpers nuevos hacían `File.Exists` sobre el tag crudo); `StripNodeTag`/`SelectedProjectKind` nuevos; `ContextProjectFor` endurecido (solo walk-up sobre directorios reales).
+- **`BuildProjectPadMenu`**: sección **Publish** nueva (gate `IsPublishableProject`) y sección **Add** con los **gates fieles verificados línea a línea en la fuente legacy** (el hallazgo H1 del QA forzó la verificación completa):
+  - `Controller...`/`View...` **solo en nodos carpeta** (el updater legacy hace el cast `(ProjectFolder)CurrentNode.DataItem`; en nodo proyecto lanza → catch del updater `Enabled=false` + `disabledVisible="false"` → **oculto**); en carpeta, solo si ES `Controllers` (o hija) / `Views` (o hija) de un proyecto MVC clásico. Ancla `insertbefore=AddNewFiles`.
+  - `ASP.NET Directory` **solo en nodo proyecto** (array `as DotNetProject` + ItemSet autohide).
+  - `New Scaffolding...` en toda la sección Add (el ItemSet legacy no tiene Condition; el handler gatea a SDK web).
+- **Handlers** (file-level): AddController/AddView (`InputDialog` + T4 "Empty" legacy), AddAspNetDirectory (dir + `<Compile Include="Dir\**">`), Scaffold/Publish/Pack (dotnet CLI por `RunDotnetCliAsync` con working dir = proyecto; `qaProcessCapture` para el oráculo). Dispatch de los items Publish del menú Build: catálogo (ids desde addinxml) → `CommandRouter` → `OnMenuCommand` (verificado por oráculo con `CommandService.Dispatch`).
+- **Oráculo `--tierd`** (async, **47 checks**): reconocimiento 4 nodos (incl. `.vbproj`), menú por nodo proyecto Y por nodo carpeta (gates + unicidad `Count==1`), publishable, ficheros scaffolded, 4 invocaciones CLI capturadas con args exactos, dispatch Pack vía catálogo.
+
+**Divergencias documentadas (verificadas por QA):** sin framework de wizards (diálogo + T4 manual, precedente F#/Tier C); Scaffold = CLI (tool no instalado en env QA → el fallo NO es hallazgo); Publish to Folder sin opciones self-contained; profiles en secuencia; AddAspNetDirectory lista los 8 dirs (el legacy ocultaba los presentes); `SelectedNodeType` sin prefijo `project:`; Publish/Pack solo en proyectos publishable (TFM legacy).
+
+**Validación**: builds Avalonia (125 warns/0 err) + GTK (252/0, `ConfigurationService` compartido §18.4); `--tierd` **47/47** con 0 `Unhandled Exception`; regresiones `--newproject` 3/3 (GUIDs por familia), `--qa-vboptions` **47+34/0**, `--qa-vbdata` **38/0**; fixture P1 intacto; harnesses propios del QA (edge estático + edge UI por reflexión contra el binario). **QA 3 rounds**: H1 (menú sin items addin en nodos carpeta) → fix de gates → H2 (bloque duplicado, items 2×) → fix + checks `Count==1` → **0 hallazgos**.
+
+**Archivos** (3 M, sin submódulos): `ConfigurationService.cs`, `Views/MainWindow.axaml.cs`, `Program.cs`.
+
+**Port A+B+C+D COMPLETO**: A (opciones de proyecto/paneles VB/XSP/run-config), B (misma superficie, ver M31-u), C (wizards M31-v), D (ProjectPad, este §).
+
+**Cierre**: commit de código por nombre (3) + commit `Docs:` por nombre (docs ×3: `session_summary.md` §62, este § M31-w, `migration-status-report.md` nota). Push a `origin/agents/sub-agent-senior-dev-role-report`. **Sin submódulos, sin PRs.** Artefactos: `~/opencode/aspnet_vbnet_port/` (brief `qa_tierd_brief.md`, report `qa_tierd_report.md`, plan `plan_tier_d.md`, fixture `qa_tierd/`), `~/opencode/docfood_qa/` (logs `tierd*`, `td_r2_*`, `regfix_*`, `regh2_*`).
