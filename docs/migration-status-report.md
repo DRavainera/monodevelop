@@ -3636,3 +3636,23 @@ Fixes: (1) `Parse` añade un `projectMessageRegex` para el formato de nivel proy
 **Archivos** (3 M, sin submódulos): `ConfigurationService.cs`, `Views/MainWindow.axaml.cs`, `Program.cs`.
 
 **Cierre**: commit de código por nombre (3) + commit `Docs:` por nombre (docs ×3). Push a `origin/agents/sub-agent-senior-dev-role-report`. **Sin submódulos, sin PRs.** Artefactos: `~/opencode/aspnet_vbnet_port/` (brief `qa_tierd_brief.md`, report `qa_tierd_report.md`, plan `plan_tier_d.md`, fixture `qa_tierd/`), `~/opencode/docfood_qa/` (logs `tierd*`, `td_r2_*`, `regfix_*`, `regh2_*`).
+
+### UI Avalonia: port ASP.NET / ASP.NET Core / VB(.NET) — New File: 49 templates de los 3 addins + gating por kind + multi-fichero (2026-11-19)
+
+**Estado: CERRADO (QA APROBADO, 0 hallazgos abiertos §18.5).** Fase **New File** del port (paralela al Tier D): el diálogo New File Avalonia ofrece los **49 templates de fichero de los 3 addins** (AspNet clásico 34, AspNetCore 13, VB 2) con gating por kind de proyecto y creación **multi-fichero**. **Decisiones del operador**: (1) free-mode (sin proyecto) → solo raíces de lenguaje C#/F#/VB (divergencia documentada del legacy); (2) amplitud = todos los 49 + multi-fichero (WebForm CodeBehind crea `.aspx`+`.aspx.cs`+`.aspx.designer.cs`).
+
+- **`ConfigurationService` (compartido GTK, §18.4)**: `ProjectHasReference` (refactor de `IsMvcClassicProject`), `ProjectMeetsVersion` (mirror de la condición `minVersion` de AspNetCore; TFM ausente/no parseable → true), `GetRootNamespace` (mirror de `DotNetProject.GetDefaultNamespace`; sin segmentos de subcarpeta).
+- **`NewFileDialog` (Avalonia)**: modelo `NewFileTemplate` ampliado + `NewFileTemplateFile` + `NewFileTemplateContext`; gating `IsAllowed` por kind (ProjectType/condición AspNetCore+minVersion/LanguageName VB/ParentProject); `RebuildCatalog` por kind (categorías vacías no se pintan); `OnNew` multi-fichero + `FileAllowed` (ficheros condicionales `When=IsAspMvc`/`IsAspWebApi`); BOM UTF8.
+- **`NewFileAddinTemplates.cs` (NUEVO, generado)**: 49 templates en 8 arrays por categoría única; `Root="C#"` para los sin `LanguageName`; 4 AspNet `IsFixed`. Generado por `gen_templates.py` desde los xft (no editar a mano).
+- **`Global.asax`**: ficheros condicionales `App_Start/RouteConfig.cs` (ref `System.Web.Mvc`) / `App_Start/WebApiConfig.cs` (ref `System.Web.Http.WebHost`); `Global.asax.cs` (T4File) omitido (sin motor T4).
+- **`MainWindow` (Avalonia)**: oráculo `--newfile2` (14 escenarios, `ProjectForQa`, limpieza, checks BOM+contenido por fichero); `CreateContextNewFile` pasa el path del proyecto; `GetSolutionProjectPaths` +`.vbproj`. **`Program.cs`**: flag `--newfile2`.
+
+**Divergencias documentadas (verificadas por QA):** free-mode solo raíces de lenguaje (decisión operador); `Global.asax.cs` T4 omitido; `Namespace` sin subcarpeta; `EscapedIdentifier`=`Name` (sin CodeDom); AspNet sin `LanguageName` cuelgan de la raíz C# del proyecto AspNet; el port no edita el .csproj al crear; categorías vacías no se pintan; `ProjectMeetsVersion` sin TFM → true.
+
+**Validación**: builds Avalonia + GTK **0 errores** (GTK expresamente por el `ConfigurationService.cs` compartido, §18.4); oráculo `--newfile2` **14/14** (gating freemode/mvc/web/core/vb con roots exactos y ausencias verificadas; creación 9 escenarios con BOM+contenido); regresiones **5/5** (`--newfile` bytes=3, `--newfile=FSharpAssemblyInfo` bytes=533, `--ctxnewfile`, `--newfile-unsaved`, `--tierd` 47 ok/0 FAIL). **QA** Tester QA Senior (brief `qa_newfile_brief.md` → `qa_newfile_report.md`) **0 hallazgos** (0 `Unhandled Exception`/`FATAL` en 19 logs).
+
+**Archivos** (4 M + 1 nuevo, solo shell + capa compartida, sin submódulos): `Views/NewFileDialog.axaml.cs`, `Views/NewFileAddinTemplates.cs` (nuevo), `Views/MainWindow.axaml.cs`, `Program.cs`, `Services/ConfigurationService.cs`.
+
+**Cierre**: commit de código por nombre (5) + commit `Docs:` por nombre (docs ×3: `session_summary.md` §63, `interfaz-plan.md` M31-x, esta nota). Push a `origin/agents/sub-agent-senior-dev-role-report`. **Sin submódulos, sin PRs.** Artefactos: `~/opencode/aspnet_vbnet_port/` (brief `qa_newfile_brief.md`, report `qa_newfile_report.md`, generadores `gen_templates.py`/`extract_nf.py`/`newfile_templates.json`, fixture `qa_tierd/fresh_sln.sh`), `~/opencode/docfood_qa/` (logs `nf2qa_*`).
+
+**Nota (2026-11-19) — documentación permanente (decisión del operador)**: los 3 docs (`session_summary.md`, `interfaz-plan.md` = solo shell Avalonia, `migration-status-report.md`) son el **único canal** de documentación; **no se crean ficheros de handoff sueltos**. Los 20 ficheros históricos de `docs/` (sep-oct) quedan fuera del alcance "últimos 5 días" → **no migrar, no borrar**.

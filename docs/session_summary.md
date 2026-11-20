@@ -5896,3 +5896,49 @@ Commit de código por nombre (4) + commit `Docs:` por nombre (docs ×3: `session
 
 ### Cierre
 Commit de código por nombre (3) + commit `Docs:` por nombre (docs ×3: `session_summary.md` §62, `interfaz-plan.md` M31-w, `migration-status-report.md` nota). Push a `origin/agents/sub-agent-senior-dev-role-report`. **Sin submódulos, sin PRs (§18.7).** Artefactos: `~/opencode/aspnet_vbnet_port/` (brief `qa_tierd_brief.md`, report `qa_tierd_report.md`, plan `plan_tier_d.md`, fixture `qa_tierd/` con `fresh_sln.sh`), `~/opencode/docfood_qa/` (logs `tierd*`, `td_r2_*`, `regfix_*`, `regh2_*`).
+
+## 2026-11-19 (63) — Port ASP.NET / ASP.NET Core / VB(.NET): New File (los 49 templates de los 3 addins en el diálogo Avalonia + gating por kind + multi-fichero) — CERRADO (QA VERDE, 0 hallazgos)
+
+Fase **New File** del port decidido en §58 (paralela al Tier D de §62): completa el diálogo New File (`File ▸ New File`) para las 3 superficies ASP/VB — los **49 templates de fichero de los 3 addins** (AspNet clásico 34, AspNetCore 13, VB 2) con gating por kind de proyecto y creación multi-fichero. **Decisiones del operador**: (1) **free-mode (sin proyecto / checkbox "Add to project" OFF) → solo las raíces de lenguaje C#/F#/VB** (divergencia documentada del legacy, que en free-mode muestra también los templates single-file de los addins sin gate); (2) amplitud = **todos los 49 templates + multi-fichero** (WebForm CodeBehind crea `.aspx` + `.aspx.cs` + `.aspx.designer.cs`).
+
+### Qué se hizo
+
+- **`ConfigurationService` (compartido GTK, §18.4)**:
+  - `ProjectHasReference (projPath, prefix)` — refactor de `IsMvcClassicProject`, que ahora compone `IsAspNetApp` + ref `System.Web.Mvc` (mirror file-level de `AspNetAppProjectFlavor.IsAspMvcProject`/`IsAspWebApiProject`).
+  - `ProjectMeetsVersion (projPath, minVersion)` — mirror de la condición `minVersion="X.0"` de los templates de fichero AspNetCore: parsea el TFM (`net`/`netcoreapp`/`netstandard` + major); **sin TFM declarado o no parseable → true** (mirror del legacy "show all").
+  - `GetRootNamespace (projPath)` — mirror de `DotNetProject.GetDefaultNamespace(null)`: la propiedad `RootNamespace` si existe, si no el nombre del proyecto sin extensión; sin segmentos de subcarpeta (divergencia documentada — los ficheros se crean en la raíz del proyecto).
+- **`NewFileDialog.axaml.cs`** (1195 líneas):
+  - Modelo: `NewFileTemplate` ampliado (`Root`/`ProjectType`/`Core`/`CoreMinVersion`/`ParentProjectExcludedFiles`/`RequireProject`/`Files` multi-fichero), `NewFileTemplateFile` (`Name`/`Body`/`SubPath`/`When` fichero condicional), `NewFileTemplateContext` (Name/EscapedIdentifier/Namespace/ProjectName/ProjectRelativeDirectory + estado del proyecto); `IsAllowed(kind, dir, projectName)`, `BuildTags`, `GenerateFile`/`GenerateFileName` (sustitución por fichero vía `TemplateText.Parse`).
+  - **Gating en el port** (vía `ConfigurationService.GetProjectKind`): `ProjectType=AspNetApp` → `IsAspNetApp`; condición AspNetCore → `IsAspNetCore` + `ProjectMeetsVersion(minVersion)`; `LanguageName=VBNet` → raíz VB; `ParentProject` (RequireProject + ExcludedFiles) ya portado antes (AssemblyInfo C#/F#/VB).
+  - **`RebuildCatalog`**: reconstrucción determinista de los hijos de C#/F#/VB por kind (templates propios + addins filtrados por `IsAllowed`); **categorías vacías no se pintan** (legacy `InsertCategories`).
+  - **`OnNew` multi-fichero**: `FileAllowed(file, ctx)` por fichero (los condicionales `When="IsAspMvc"`/`"IsAspWebApi"` se evalúan con `IsMvcClassicProject`/`ProjectHasReference("System.Web.Http.WebHost")`), path relativo por `SubPath` o nombre generado, **BOM UTF8 en todos los ficheros**.
+- **`NewFileAddinTemplates.cs` (NUEVO, generado, 1620 líneas)**: parcial de `NewFileDialog` con los 49 templates en 8 arrays por categoría única: `AspAspNetCatWebForms` (14), `AspAspNetCatMVC` (9), `AspAspNetCat` (3), `AspWeb` (7), `AspTextTemplating` (1), `CoreAspNetCoreCat` (13), `VbGeneral` (1), `VbMisc` (1); `Root="C#"` para los templates sin `LanguageName`; 4 templates AspNet `IsFixed` (Global.asax, Web.config×2, web.config). **Nunca editar a mano**: regenerar con `~/opencode/aspnet_vbnet_port/gen_templates.py` (extractor `extract_nf.py` → `newfile_templates.json` con los bodies de los xft).
+- **`Global.asax`**: ficheros condicionales `App_Start/RouteConfig.cs` (solo con ref `System.Web.Mvc`) / `App_Start/WebApiConfig.cs` (solo con ref `System.Web.Http.WebHost`). El **`Global.asax.cs` (T4File `Global.tt` legacy) se omite** — sin motor T4 en el port (precedente Tier D: scaffold=CLI/T4 manual).
+- **`MainWindow.axaml.cs`**: oráculo `--newfile2` (14 escenarios, `ProjectForQa` para seleccionar el proyecto en el combo, limpieza de los ficheros creados, checks de BOM + marcadores de contenido por fichero); `CreateContextNewFile` pasa el path del proyecto; `GetSolutionProjectPaths` añade `.vbproj` (call-site L6698 verificado seguro).
+- **`Program.cs`**: flag `--newfile2` (+ `StartsWith("--newfile2=")`).
+
+### Divergencias documentadas (verificadas por QA, no son hallazgos)
+1. **Free-mode solo raíces de lenguaje** (decisión operador; el legacy muestra los single-file de addins sin gate).
+2. **`Global.asax.cs` (T4 `Global.tt`) omitido** (sin motor T4).
+3. **`Namespace` sin segmentos de subcarpeta** (solo el root namespace del proyecto; los ficheros se crean en la raíz).
+4. **`EscapedIdentifier` = `Name`** (sin CodeDom).
+5. **Templates AspNet sin `LanguageName`** (Web/TextTemplating) cuelgan de la raíz C# del proyecto AspNet (el legacy los encaja en cualquier proyecto .NET vía `""` ∈ SupportedLanguages; aquí la superficie ASP.NET solo aparece en proyectos AspNet, coherente con la decisión 1).
+6. **El port no edita el .csproj** al crear ficheros (comportamiento existente del port).
+7. **Categorías vacías no se pintan**.
+8. **`ProjectMeetsVersion`: TFM ausente/no parseable → true**.
+
+### Validación (QA §18.5, Tester QA Senior)
+- **Builds** Avalonia (125 warns/0 err) + GTK (252/0 — `ConfigurationService` compartido, §18.4).
+- **Oráculo `--newfile2` 14/14** (fixture fresco `nfq/<TAG>` por corrida): gating `freemode` `roots=C#:1,F#:2,VB:2` / `mvc`+`web` `C#:6` (SIN "ASP.NET Core") / `core` `C#:2` (SIN cats AspNet clásico) / `vb` `VB:2 selTmpl=EmptyVBFile`; creación `webform` (3 ficheros), `corectrl`, `coreview`, `coresettings`, `vbfile`, `aspx`, `webconfig`, `globalasax` (+`App_Start/RouteConfig.cs`, `webApiConfig=False`), `globalasax-nomvc` (solo `Global.asax`) — todos `bom=True content=True`.
+- **Regresiones 5/5**: `--newfile` (bytes=3), `--newfile=FSharpAssemblyInfo` (bytes=533), `--ctxnewfile`, `--newfile-unsaved`, `--tierd` (47 ok / 0 FAIL).
+- **QA** (brief `qa_newfile_brief.md` → subagente → `qa_newfile_report.md`): **0 hallazgos** (builds 0+0, 14/14, 5/5, 0 `Unhandled Exception`/`FATAL` en los 19 logs; la única corrida caída — `coresettings` — por Xvfb muerto, infraestructura; repetición verde).
+
+### Ficheros (4 M + 1 nuevo, sin submódulos)
+`Services/ConfigurationService.cs`, `Views/NewFileDialog.axaml.cs`, `Views/NewFileAddinTemplates.cs` (nuevo), `Views/MainWindow.axaml.cs`, `Program.cs`.
+
+### Cierre
+Commit de código por nombre (5) + commit `Docs:` por nombre (docs ×3: `session_summary.md` §63, `interfaz-plan.md` M31-x, `migration-status-report.md` nota). Push a `origin/agents/sub-agent-senior-dev-role-report`. **Sin submódulos, sin PRs (§18.7).** Artefactos: `~/opencode/aspnet_vbnet_port/` (brief `qa_newfile_brief.md`, report `qa_newfile_report.md`, generadores `gen_templates.py`/`extract_nf.py`/`newfile_templates.json`, fixture `qa_tierd/fresh_sln.sh`), `~/opencode/docfood_qa/` (logs `nf2qa_*`).
+
+### Decisión del operador (2026-11-19) — documentación permanente
+- **Los 3 docs permanentes son el ÚNICO canal de documentación**: `docs/session_summary.md` (historial de sesión), `docs/interfaz-plan.md` (**solo cambios en la shell Avalonia**) y `docs/migration-status-report.md` (estado). **Nunca crear ficheros de handoff sueltos.**
+- `docs/` conserva 20 ficheros históricos (sep-oct: planes de migración net8, bloques "Terminación", reports de build, auditoría de seguridad, issue SkiaSharp): fuera del alcance "últimos 5 días" → **no migrar, no borrar** (decisión del operador).
