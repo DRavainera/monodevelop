@@ -1155,6 +1155,170 @@ public partial class MainWindow : Window
 						File.Delete (created);
 					RefreshSolutionTree ();
 				}
+			} else if (qa == "--newfile2" || qa.StartsWith ("--newfile2=", StringComparison.Ordinal)) {
+				// QA: the addin New File catalog (AspNet/AspNetCore/VB) end to end —
+				// gating per project kind, multi-file templates and content
+				// substitution. Scenarios (--newfile2=<scenario>, free mode):
+				//  - freemode      roots C#:General / F#:General / VB:General+Misc,
+				//                   no ASP.NET categories;
+				//  - mvc           C#:General+ASP.NET cats (QaMvc, no Core);
+				//  - web           C#:General+ASP.NET cats (QaWeb);
+				//  - core          C#:General+ASP.NET Core (QaCore);
+				//  - vb            VB:General+Misc (QaVb);
+				//  - webform / webform-nomvc / corectrl / coreview / coresettings /
+				//  - vbfile / aspx / webconfig / globalasax  (create scenarios).
+				var scenario = qa.StartsWith ("--newfile2=", StringComparison.Ordinal)
+					? qa ["--newfile2=".Length..]
+					: "freemode";
+				var proj = ResolveActiveProject ();
+				if (proj is null) {
+					Output ("[newfile2] no project");
+					return;
+				}
+				var dir = Path.GetDirectoryName (proj)!;
+				// freemode = Add to project OFF (sin proyecto: solo raíces de
+				// lenguaje, sin categorías addin); el resto selecciona el
+				// proyecto que soporta la template en el combo.
+				var freemode = scenario == "freemode";
+				var projectNameByScenario = scenario switch {
+					"web" or "webform" or "aspx" or "webconfig" or "globalasax-nomvc" => "QaWeb",
+					"core" or "corectrl" or "coreview" or "coresettings" => "QaCore",
+					"vb" or "vbfile" => "QaVb",
+					_ => "QaMvc", // mvc / globalasax
+				};
+				var qaProject = freemode ? null : GetSolutionProjectPaths ().FirstOrDefault (p =>
+					Path.GetFileNameWithoutExtension (p) == projectNameByScenario);
+				if (!freemode && qaProject is null) {
+					Output ("[newfile2] scenario project missing: " + projectNameByScenario);
+					return;
+				}
+				if (qaProject is not null)
+					dir = Path.GetDirectoryName (qaProject)!;
+				string? qaTemplate = null;
+				string qaName = "";
+				string[]? expectFiles = null;
+				// expectContent[f] = substrings that must appear in the created
+				// file (tag substitution proof); BOM is checked for all files.
+				var expectContent = new Dictionary<string, string[]> ();
+				switch (scenario) {
+					case "mvc": case "web": case "core": case "vb": case "freemode":
+						break;
+					case "webform":
+						// QaWeb (IsAspNetApp, C#): multi-fichero CodeBehind →
+						// .aspx + .aspx.cs + .aspx.designer.cs.
+						qaTemplate = "WebForm-CodeBehind"; qaName = "Wf1";
+						expectFiles = new[] { "Wf1.aspx", "Wf1.aspx.cs", "Wf1.aspx.designer.cs" };
+						expectContent["Wf1.aspx"] = new[] { "Inherits=\"QaWeb.Wf1\"" };
+						expectContent["Wf1.aspx.cs"] = new[] { "namespace QaWeb", "public partial class Wf1 : System.Web.UI.Page" };
+						expectContent["Wf1.aspx.designer.cs"] = new[] { "namespace QaWeb", "public partial class Wf1" };
+						break;
+					case "corectrl":
+						// QaCore (IsAspNetCore, net8.0): Controller Class.
+						qaTemplate = "AspNetCoreMvcController"; qaName = "QaHomeController";
+						expectFiles = new[] { "QaHomeController.cs" };
+						expectContent["QaHomeController.cs"] = new[] { "namespace QaCore", "public class QaHomeController : Controller" };
+						break;
+					case "coreview":
+						// QaCore: Razor View (src=.cshtml con BOM legacy).
+						qaTemplate = "AspNetCoreMVCViewPage"; qaName = "QaHome";
+						expectFiles = new[] { "QaHome.cshtml" };
+						expectContent["QaHome.cshtml"] = new[] { "For more information on enabling MVC", "@{" };
+						break;
+					case "coresettings":
+						// QaCore: App Settings (DefaultExtension=.json, sin
+						// nombre fijo; body src=AppSettingsFile.json).
+						qaTemplate = "AspNetCoreAppSettingsFile"; qaName = "appsettings";
+						expectFiles = new[] { "appsettings.json" };
+						expectContent["appsettings.json"] = new[] { "\"ConnectionStrings\"" };
+						break;
+					case "vbfile":
+						// QaVb (IsVBNet): Empty VB File (DefaultExtension=.vb).
+						qaTemplate = "EmptyVBFile"; qaName = "Modulo1";
+						expectFiles = new[] { "Modulo1.vb" };
+						break;
+					case "aspx":
+						// QaWeb: Web Form (single-file, ${Name}.aspx).
+						qaTemplate = "WebForm-Empty"; qaName = "Pg1";
+						expectFiles = new[] { "Pg1.aspx" };
+						expectContent["Pg1.aspx"] = new[] { "<title>Pg1</title>" };
+						break;
+					case "webconfig":
+						// QaWeb: Web.config de aplicación (IsFixed, name fijo).
+						qaTemplate = "WebConfig-Application"; qaName = "Web.config";
+						expectFiles = new[] { "Web.config" };
+						expectContent["Web.config"] = new[] { "Web.config file for QaWeb" };
+						break;
+					case "globalasax":
+						// QaMvc (ref System.Web.Mvc → UsesAspNetMvc): Global.asax
+						// + App_Start/RouteConfig.cs; NO App_Start/WebApiConfig.cs
+						// (no ref System.Web.Http.WebHost).
+						qaTemplate = "GlobalAsax"; qaName = "Global.asax";
+						expectFiles = new[] { "Global.asax", "App_Start/RouteConfig.cs" };
+						expectContent["Global.asax"] = new[] { "Inherits=\"QaMvc.Global\"" };
+						expectContent["App_Start/RouteConfig.cs"] = new[] { "namespace QaMvc", "class RouteConfig" };
+						break;
+					case "globalasax-nomvc":
+						// QaWeb (sin ref MVC/WebApi): solo Global.asax, sin
+						// App_Start (ficheros condicionales When no se cumplen).
+						qaTemplate = "GlobalAsax"; qaName = "Global.asax";
+						expectFiles = new[] { "Global.asax" };
+						expectContent["Global.asax"] = new[] { "Inherits=\"QaWeb.Global\"" };
+						break;
+					default:
+						Output ("[newfile2] unknown scenario " + scenario);
+						return;
+				}
+				var dlg = new NewFileDialog (GetSolutionProjectPaths (), qaProject ?? proj) {
+					AddToProjectForQa = !freemode,
+					ProjectForQa = qaProject,
+					TemplateForQa = qaTemplate,
+					NameForQa = qaName.Length > 0 ? qaName : null,
+					ConfirmForQa = expectFiles is not null,
+				};
+				_ = dlg.ShowDialog (this);
+				HandleNewFileDialogResult (dlg);
+				if (expectFiles is not null) {
+					var res = new List<string> ();
+					var contentOk = true;
+					foreach (var f in expectFiles) {
+						var p = Path.Combine (dir, f);
+						if (!File.Exists (p)) {
+							res.Add (f + "=False");
+							contentOk = false;
+							continue;
+						}
+						var bytes = File.ReadAllBytes (p);
+						var bom = bytes.Length >= 3 && bytes [0] == 0xEF && bytes [1] == 0xBB && bytes [2] == 0xBF;
+						res.Add (f + "=(bom=" + bom + ")");
+						if (expectContent.TryGetValue (f, out var subs)) {
+							var text = System.Text.Encoding.UTF8.GetString (bytes, bom ? 3 : 0, bytes.Length - (bom ? 3 : 0));
+							foreach (var sub in subs)
+								if (!text.Contains (sub, StringComparison.Ordinal)) {
+									Output ("[newfile2] content MISS " + f + " !=" + sub);
+									contentOk = false;
+								}
+						}
+					}
+					Output ("[newfile2] " + scenario + " created=" + string.Join (" ", res) + " content=" + contentOk);
+					// Global.asax: el fichero condicional WebApiConfig NO debe
+					// existir (QaMvc/QaWeb no refieren System.Web.Http.WebHost).
+					if (scenario is "globalasax" or "globalasax-nomvc")
+						Output ("[newfile2] " + scenario + " webApiConfig=" + File.Exists (Path.Combine (dir, "App_Start", "WebApiConfig.cs")));
+					foreach (var f in expectFiles) {
+						var p = Path.Combine (dir, f);
+						if (File.Exists (p)) {
+							File.Delete (p);
+							Output ("[newfile2] cleaned " + f);
+						}
+					}
+					// Los ficheros condicionales pueden haber creado App_Start.
+					var appStart = Path.Combine (dir, "App_Start");
+					if (Directory.Exists (appStart)) {
+						Directory.Delete (appStart, true);
+						Output ("[newfile2] cleaned App_Start");
+					}
+				}
+				RefreshSolutionTree ();
 			} else if (qa == "--newfile-visual") {
 				// QA: abre el diálogo New File (free mode) con una template
 				// preseleccionada y LO DEJA ABIERTO (ShowDialog modal bloquea) para
@@ -7381,7 +7545,7 @@ public partial class MainWindow : Window
 			return;
 		}
 		var proj = ResolveCommandProject ();
-		var dlg = new NewFileDialog (dir, proj is null ? null : Path.GetFileNameWithoutExtension (proj));
+		var dlg = new NewFileDialog (dir, proj is null ? null : Path.GetFileNameWithoutExtension (proj), proj);
 		if (dialogNewFileQa is { } qa) {
 			dlg.TemplateForQa = qa.Template;
 			dlg.NameForQa = qa.Name;
@@ -13077,6 +13241,7 @@ public partial class MainWindow : Window
 		try {
 			return Directory.GetFiles (Path.GetDirectoryName (sln)!, "*.csproj", SearchOption.AllDirectories)
 				.Concat (Directory.GetFiles (Path.GetDirectoryName (sln)!, "*.fsproj", SearchOption.AllDirectories))
+				.Concat (Directory.GetFiles (Path.GetDirectoryName (sln)!, "*.vbproj", SearchOption.AllDirectories))
 				.Where (p => !p.Contains ("obj") && !p.Contains ("bin"))
 				.OrderBy (p => p, StringComparer.OrdinalIgnoreCase)
 				.ToList ();

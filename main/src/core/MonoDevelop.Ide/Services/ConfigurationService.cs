@@ -1463,17 +1463,81 @@ public static class ConfigurationService
 	/// "System.Web.Mvc" reference). Gates the legacy ProjectPad Add section
 	/// items Controller... / View... (AspNetFolderNodeCommandHandler).</summary>
 	public static bool IsMvcClassicProject (string projPath)
+		=> GetProjectKind (projPath) is { IsAspNetApp: true } &&
+			ProjectHasReference (projPath, "System.Web.Mvc");
+
+	/// <summary>Whether the classic project references an assembly whose
+	/// Include starts with <paramref name="prefix"/> — the file-level mirror of
+	/// AspNetAppProjectFlavor.IsAspMvcProject / IsAspWebApiProject
+	/// (Project.References.Any(r => r.Reference.StartsWith(...))). Used by the
+	/// ProjectPad gates and by the Global.asax file template's UsesAspNetMvc /
+	/// UsesAspNetWebApi conditional files.</summary>
+	public static bool ProjectHasReference (string projPath, string prefix)
 	{
-		var kind = GetProjectKind (projPath);
-		if (kind is null || !kind.IsAspNetApp)
-			return false;
 		try {
 			var root = XDocument.Load (projPath).Root;
 			return root.Descendants ().Any (e =>
 				e.Name.LocalName == "Reference" &&
-				((string?)e.Attribute ("Include") ?? "").StartsWith ("System.Web.Mvc", StringComparison.Ordinal));
+				((string?)e.Attribute ("Include") ?? "").StartsWith (prefix, StringComparison.Ordinal));
 		} catch {
 			return false;
+		}
+	}
+
+	/// <summary>Whether the project's TargetFramework(s) satisfy the minimum
+	/// version — the file-level mirror of the AspNetCore file template
+	/// condition (AspNetCoreFileTemplateCondition, minVersion="X.0"). The TFM
+	/// is parsed as "net" / "netcoreapp" / "netstandard" + major version; when
+	/// no TFM is declared or it cannot be parsed the check passes (the legacy
+	/// condition only rejects versions strictly below the minimum).</summary>
+	public static bool ProjectMeetsVersion (string projPath, System.Version minVersion)
+	{
+		try {
+			var root = XDocument.Load (projPath).Root;
+			if (root is null)
+				return true;
+			var tfms = root.Descendants ()
+				.Where (e => e.Name.LocalName is "TargetFramework" or "TargetFrameworks")
+				.Select (e => (string?)e ?? "")
+				.SelectMany (s => (s ?? "").Split (';'))
+				.Select (s => s.Trim ())
+				.Where (s => s.Length > 0);
+			if (!tfms.Any ())
+				return true; // no explicit TFM — the SDK default (current) meets any minimum
+			return tfms.Any (tfm => {
+				string rest = tfm;
+				foreach (var alias in new[] { "netcoreapp", "netstandard", "net" }) {
+					if (rest.StartsWith (alias, StringComparison.OrdinalIgnoreCase)) {
+						rest = rest[alias.Length..];
+						break;
+					}
+				}
+				var major = rest.Split ('.', '-', 'a', 'b', 'r').FirstOrDefault ();
+				return int.TryParse (major, out var v) && v >= minVersion.Major;
+			});
+		} catch {
+			return true; // unreadable project: show the template (legacy "show all")
+		}
+	}
+
+	/// <summary>The project's root namespace — the file-level mirror of
+	/// DotNetProject.GetDefaultNamespace(null): the RootNamespace property when
+	/// declared, otherwise the project file name without extension. Simplified
+	/// relative to the legacy: no subfolder name-segment concatenation (new
+	/// files of the New File dialog are created in the project root).</summary>
+	public static string GetRootNamespace (string projPath)
+	{
+		try {
+			var root = XDocument.Load (projPath).Root;
+			var ns = root.Descendants ()
+				.FirstOrDefault (e => e.Name.LocalName == "RootNamespace")?.Value?.Trim ();
+			if (ns is { Length: > 0 })
+				return ns;
+			var name = Path.GetFileNameWithoutExtension (projPath);
+			return string.IsNullOrEmpty (name) ? "Application" : name;
+		} catch {
+			var name = Path.GetFileNameWithoutExtension (projPath);
+			return string.IsNullOrEmpty (name) ? "Application" : name;
 		}
 	}
 
