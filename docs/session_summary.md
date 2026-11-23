@@ -5976,6 +5976,10 @@ Hallazgo del operador tras revisar el diseño: al hacer clic en All/Packages/Pro
 
 Commit de bugfix + `Docs:` ×3 (este §, `interfaz-plan.md`, `migration-status-report.md`), push a `origin/agents/sub-agent-senior-dev-role-report`.
 
+### Bugfix (2026-11-23) — el Build Output del pad Errors mostraba la salida de la Package Console
+
+Hallazgo del operador: al abrir la solución (restore-on-open) el panel **Build Output** del pad de Errores mostraba el chatter crudo de `dotnet restore` (el texto de la Package Console). **Causa**: `RunPackageOperation` con `feedErrorsPad: true` (solo restore-on-open) pasaba cada línea cruda por `ParseBuildMessage`, y allí las líneas no-diagnóstico se añadían al log Build Output (`AppendLogLine`) — diseño correcto para un build (`dotnet build` vía `RunProcessAsync`), incorrecto para una operación de paquetes cuyo output ya vive en el pad Package Console. **Fix** (2 puntos, `Views/MainWindow.axaml.cs`): `ParseBuildMessage` gana `feedLog` (default `true`); el path de `feedErrorsPad` lo llama con `feedLog: false` → los DIAGNÓSTICOS del restore (NU1101…) siguen siendo filas del pad, pero el texto crudo ya no toca el log Build Output. **Verificación**: build 0 errores; oráculo `--packageconsole` (actualizado) con restore REAL + `feedErrorsPad: true` → console `lines=24` y `logLines=0` (antes el chatter llenaba el log); `--errorspad` sin regresión (`logLines=1` — el log del build sigue alimentándose). Sin cambios GTK (solo shell Avalonia).
+
 ### Ficheros (4 M, sin submódulos)
 `Services/ConfigurationService.cs`, `Views/AddReferenceDialog.axaml.cs`, `Views/MainWindow.axaml.cs`, `Program.cs` (+ `AddReferenceDialog.axaml` eliminado).
 
