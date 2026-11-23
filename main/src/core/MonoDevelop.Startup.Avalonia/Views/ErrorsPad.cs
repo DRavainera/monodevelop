@@ -222,6 +222,14 @@ public class ErrorsPad
 
 	public int VisibleRowCount () => allRows.Count (Matches);
 
+	/// <summary>QA: the last n lines of the Build Output log ("" when empty) —
+	/// lets an oracle assert the log holds the build stream, not just its size.</summary>
+	public string QaLogTail (int n = 20)
+	{
+		var lines = logText.Text.Split ('\n');
+		return string.Join ("\n", lines.Skip (Math.Max (0, lines.Length - n)));
+	}
+
 	public string DumpStatus ()
 	{
 		return $"errors={errorCount} warnings={warningCount} messages={messageCount} " +

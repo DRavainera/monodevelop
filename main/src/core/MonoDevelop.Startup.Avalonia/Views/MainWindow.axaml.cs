@@ -2676,6 +2676,17 @@ public partial class MainWindow : Window
 				Output ("[build] pad → " + (errorsPad?.DumpStatus () ?? "(pad missing)"));
 				foreach (var (file, line, col, level, code, message) in buildErrors)
 					Output ($"[build] issue {level} {code} {Path.GetFileName (file)}({line},{col}): {message}");
+				// The Build Output log (legacy LogView) holds the RAW build stream —
+				// every line, diagnostics included. Assert the failing build's
+				// diagnostic codes actually reached the log, not only the plain
+				// message lines (bugfix 2026-11-23: diagnostics were row-only).
+				var logTail = errorsPad?.QaLogTail (500) ?? "";
+				int logDiagnostics = 0;
+				foreach (var (file, line, col, level, code, message) in buildErrors) {
+					if (logTail.Contains (code + ":", StringComparison.Ordinal))
+						logDiagnostics++;
+				}
+				Output ($"[build] log diagnostics={logDiagnostics} (must equal buildErrors count {buildErrors.Count} when buildErrors > 0)");
 			} else if (qa == "--buildone") {
 				// QA: single-project build (ProjectCommands.Build) via the command dispatch.
 				OnMenuCommand ("MonoDevelop.Ide.Commands.ProjectCommands.Build");
@@ -14664,19 +14675,24 @@ public partial class MainWindow : Window
 	// here: a second line for the same file/line/col/level/code is not a new row.
 	readonly HashSet<string> errorRowSigs = new ();
 
-	/// <summary>Parses one build line into the Errors pad. With feedLog (default) a
-	/// line that is NOT a diagnostic still feeds the "Build Output" text log (legacy
-	/// LogView shows the whole build output). feedLog: false — the package-operation
-	/// path (restore-on-open) — only turns DIAGNOSTICS into rows; the raw console
-	/// text stays in the Package Console pad, it must not pollute the Errors pad's
-	/// Build Output log.</summary>
+	/// <summary>Parses one build line into the Errors pad. With feedLog (default) the
+	/// line ALSO feeds the "Build Output" text log for BOTH diagnostics and plain
+	/// messages — the legacy LogView is a raw log of the whole build stream (the
+	/// build monitor writes every line, error/warning included, with tags). The
+	/// log keeps duplicate diagnostic lines (compiler pass + final summary) the
+	/// way a raw log does; the row store dedupes separately. feedLog: false — the
+	/// package-operation path (restore-on-open) — only turns DIAGNOSTICS into rows;
+	/// the raw console text stays in the Package Console pad and must not pollute
+	/// the Errors pad's Build Output log.</summary>
 	void ParseBuildMessage (string line, bool feedLog = true)
 	{
 		if (MonoDevelop.Ide.Services.CodeIssueService.Parse (line) is not { } issue) {
-			if (feedLog) // see above: the raw line feeds the Build Output log
+			if (feedLog) // plain message line: raw build output (legacy LogView)
 				errorsPad?.AppendLogLine (line);
 			return;
 		}
+		if (feedLog) // diagnostic line: the legacy LogView shows the whole stream
+			errorsPad?.AppendLogLine (line);
 		// One row per unique problem (legacy: the structured MSBuild log gave each
 		// diagnostic a unique id, so the store never held two of the same). The raw
 		// text lines this parses from can repeat a diagnostic, so skip the repeat.
