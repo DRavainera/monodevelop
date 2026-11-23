@@ -2687,6 +2687,14 @@ public partial class MainWindow : Window
 						logDiagnostics++;
 				}
 				Output ($"[build] log diagnostics={logDiagnostics} (must equal buildErrors count {buildErrors.Count} when buildErrors > 0)");
+				// The Build Output log dedupes diagnostic lines by location signature
+				// (legacy structured MSBuild log = one line per diagnostic id): the
+				// fixture's per-project MSB3245 warning and the LibA CS0103 error must
+				// appear ONCE in the log, not once per build pass / per language. If a
+				// code appears twice the dedup is broken (the overwrapped duplicate is
+				// the "A(b)" artifact at the end of the log).
+				int CountTail (string token) => logTail.Split (token + ":").Length - 1;
+				Output ($"[build] log dedup MSB3245={CountTail ("warning MSB3245")} CS0103={CountTail ("error CS0103")} (each must be 1 when present)");
 			} else if (qa == "--buildone") {
 				// QA: single-project build (ProjectCommands.Build) via the command dispatch.
 				OnMenuCommand ("MonoDevelop.Ide.Commands.ProjectCommands.Build");
@@ -4474,6 +4482,7 @@ public partial class MainWindow : Window
 					var shownBefore = IsPadVisible ("packageconsole");
 					buildErrors.Clear ();
 					errorRowSigs.Clear ();
+					buildLogDiagSigs.Clear ();
 					errorsPad?.BeginBuild ();
 					await RunPackageOperation ("restore", "dotnet", $"restore \"{loadedSolutionPath}\"", feedErrorsPad: true);
 					await System.Threading.Tasks.Task.Delay (200); // let the final status post
@@ -4697,6 +4706,7 @@ public partial class MainWindow : Window
 				buildErrors.Clear ();
 				errorRows.Clear ();
 				errorRowSigs.Clear ();
+				buildLogDiagSigs.Clear ();
 				errorsPad?.BeginBuild ();
 				SetPadVisible ("errors", true);
 				string probeFile = Path.Combine (Path.GetDirectoryName (Program.SolutionArg) ?? ".", "Program.cs");
@@ -9426,6 +9436,7 @@ public partial class MainWindow : Window
 			FillSymbolTree (classesTree, "No solution loaded");
 		buildErrors.Clear ();
 		errorRowSigs.Clear ();
+		buildLogDiagSigs.Clear ();
 		errorsPad?.BeginBuild ();
 		RefreshCodeIssuesPad ();
 		ShowWelcomePage ();
@@ -13517,9 +13528,10 @@ public partial class MainWindow : Window
 		Output ($"[build] {target} {Path.GetFileName (projectFilter ?? sln)} …");
 		// Legacy BuildCycle: the ErrorListPad starts each build empty and keeps the
 		// diagnostics of the finished build on screen.
-		buildErrors.Clear ();
-		errorRowSigs.Clear ();
-		errorsPad?.BeginBuild ();
+				buildErrors.Clear ();
+			errorRowSigs.Clear ();
+			buildLogDiagSigs.Clear ();
+			errorsPad?.BeginBuild ();
 		// Build each project directly: `dotnet build <sln>` only restores the solution
 		// shell without compiling the projects in this SDK setup.
 		var projs = SolutionProjects (sln);
@@ -14443,9 +14455,10 @@ public partial class MainWindow : Window
 		// in the table, not only in the Package Console. Opening a broken solution
 		// should surface its errors in the Errors pad (the legacy build feeds the
 		// TaskList with exactly these restore diagnostics).
-		buildErrors.Clear ();
-		errorRowSigs.Clear ();
-		errorsPad?.BeginBuild ();
+				buildErrors.Clear ();
+			errorRowSigs.Clear ();
+			buildLogDiagSigs.Clear ();
+			errorsPad?.BeginBuild ();
 		restoreOnOpenTask = RunPackageOperation ("restore", "dotnet", $"restore \"{path}\"", feedErrorsPad: true);
 	}
 
@@ -14623,12 +14636,23 @@ public partial class MainWindow : Window
 			NotifyCommandStateChanged ();
 			// Process events arrive on thread-pool threads: marshal to the UI thread
 			// before touching controls (same model as the legacy Gtk.Application.Invoke).
+			// Terminal-style CR handling: MSBuild rewrites in-progress lines with
+			// \r (restore progress, % counters) and no \n. Dumping the raw CR into
+			// the log TextBox makes the renderer overpaint the line and leave a
+			// garbled tail at the end of the log (the stray "A(b)" artifact the
+			// operator saw — GTK's LogView never received the raw stream, so it
+			// never showed it). Split on CR so each in-progress segment becomes
+			// its own line; empty segments (CR at the segment end) are dropped.
 			void OnLine (string line)
 			{
-				Avalonia.Threading.Dispatcher.UIThread.Post (() => {
-					Output (line);
-					ParseBuildMessage (line);
-				});
+				foreach (var seg in line.Split ('\r')) {
+					if (seg.Length == 0)
+						continue;
+					Avalonia.Threading.Dispatcher.UIThread.Post (() => {
+						Output (seg);
+						ParseBuildMessage (seg);
+					});
+				}
 			}
 			proc.OutputDataReceived += (_, e) => { if (e.Data is not null) OnLine (e.Data); };
 			proc.ErrorDataReceived += (_, e) => { if (e.Data is not null) OnLine (e.Data); };
@@ -14674,16 +14698,26 @@ public partial class MainWindow : Window
 	// legacy "one row per problem" rule (TaskService deduped by signature) is kept
 	// here: a second line for the same file/line/col/level/code is not a new row.
 	readonly HashSet<string> errorRowSigs = new ();
+	// The Build Output log's diagnostic dedup (per build cycle). The row sig
+	// above carries the message, so the SAME diagnostic emitted twice in
+	// different languages (MSBuild re-prints a diagnostic once in the
+	// process's UI culture on the compiler pass and once in the SDK's
+	// invariant English on the summary pass — e.g. MSB3245 "No se pudo…" +
+	// "Could not resolve…") lands twice in the log and the overwrapped English
+	// tail renders as a garbled "A(b)" at the end. The legacy LogView fed from
+	// the structured MSBuild log saw ONE line per diagnostic id, so the log
+	// dedupes by location signature (no message) instead.
+	readonly HashSet<string> buildLogDiagSigs = new ();
 
 	/// <summary>Parses one build line into the Errors pad. With feedLog (default) the
 	/// line ALSO feeds the "Build Output" text log for BOTH diagnostics and plain
 	/// messages — the legacy LogView is a raw log of the whole build stream (the
-	/// build monitor writes every line, error/warning included, with tags). The
-	/// log keeps duplicate diagnostic lines (compiler pass + final summary) the
-	/// way a raw log does; the row store dedupes separately. feedLog: false — the
-	/// package-operation path (restore-on-open) — only turns DIAGNOSTICS into rows;
-	/// the raw console text stays in the Package Console pad and must not pollute
-	/// the Errors pad's Build Output log.</summary>
+	/// build monitor writes every line, error/warning included, with tags). Diagnostic
+	/// lines are deduplicated per build cycle in the log by location signature (the
+	/// legacy structured MSBuild log had one line per diagnostic id); plain message
+	/// lines pass through. feedLog: false — the package-operation path (restore-on-open)
+	/// — only turns DIAGNOSTICS into rows; the raw console text stays in the Package
+	/// Console pad and must not pollute the Errors pad's Build Output log.</summary>
 	void ParseBuildMessage (string line, bool feedLog = true)
 	{
 		if (MonoDevelop.Ide.Services.CodeIssueService.Parse (line) is not { } issue) {
@@ -14691,7 +14725,8 @@ public partial class MainWindow : Window
 				errorsPad?.AppendLogLine (line);
 			return;
 		}
-		if (feedLog) // diagnostic line: the legacy LogView shows the whole stream
+		if (feedLog && buildLogDiagSigs.Add (issue.File + "|" + issue.Line + "|" + issue.Col + "|"
+			+ issue.Severity + "|" + issue.Code))
 			errorsPad?.AppendLogLine (line);
 		// One row per unique problem (legacy: the structured MSBuild log gave each
 		// diagnostic a unique id, so the store never held two of the same). The raw
