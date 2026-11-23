@@ -5970,6 +5970,12 @@ Fase del port GTK→Avalonia: el diálogo **Add Reference** (`SelectReferenceDia
 - **QA** Tester QA Senior (brief `oleada5_addref_port_qa_brief.md`): **QA APROBADO 0 P1–P4** (builds 0+0, oráculo verde, e2e ALL_PASS, 0 `assert FAIL`/`FATAL`/`Unhandled Exception` en los logs, captura generada y verificada).
 - **Defecto de infraestructura corregido en la fase**: la primera corrida `--addref2` mutaba el fixture real en sitio (add→remove sin restaurar) y rompió la baseline `App→LibA` del e2e → fixture restaurado + oráculo hecho no-mutante (pre-clean + restore + verificación `baselineIntact`).
 
+### Bugfix (2026-11-23) — las pestañas del diálogo no cambiaban el panel visible
+
+Hallazgo del operador tras revisar el diseño: al hacer clic en All/Packages/Projects/.Net Assembly la lista no cambiaba. **Causa**: el clic en la pestaña solo llamaba a `RefreshAll()` (que re-renderiza los 4 ListBoxes) y `SwitchPanel()` —el que intercambia el ListBox visible en `panelHost.Child`— solo se ejecutaba en `Opened`. **Fix**: añadir `SwitchPanel()` al handler de clic de la pestaña (1 línea, `Views/AddReferenceDialog.axaml.cs`). **Verificación**: build 0 errores; oráculo `--addref2` verde (mismo output, `baselineIntact=True`, fixture intacto); evidencia visual con **clics reales** (xdotool sobre Xvfb :99, `~/opencode/docfood_qa/tabfix/0_all.png`…`3_assembly.png`): cada pestaña muestra su panel (Packages = ref pack, Projects = App+LibB cíclica, .Net Assembly = lista vacía + Browse... + filtro insensitive). La superficie slice F no la tocó el fix, así que no se re-ejecutó el e2e (regresión de ese path no afectada).
+
+Commit de bugfix + `Docs:` ×3 (este §, `interfaz-plan.md`, `migration-status-report.md`), push a `origin/agents/sub-agent-senior-dev-role-report`.
+
 ### Ficheros (4 M, sin submódulos)
 `Services/ConfigurationService.cs`, `Views/AddReferenceDialog.axaml.cs`, `Views/MainWindow.axaml.cs`, `Program.cs` (+ `AddReferenceDialog.axaml` eliminado).
 
