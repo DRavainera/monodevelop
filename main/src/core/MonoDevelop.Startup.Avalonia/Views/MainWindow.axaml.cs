@@ -4452,14 +4452,24 @@ public partial class MainWindow : Window
 
 				// REAL operation: with a solution loaded, run `dotnet restore` through
 				// the console (the operation the pad exists for) and verify the pad is
-				// shown, has lines, and reports a status.
+				// shown, has lines, and reports a status. feedErrorsPad: true — the
+				// restore-on-open path — additionally verifies bugfix 2026-11-23:
+				// the operation's DIAGNOSTICS feed the Errors pad as rows, but the raw
+				// console text must NOT fill the Errors pad's Build Output log (it
+				// stays in the Package Console). Before the fix the restore chatter
+				// leaked into that log; now logLines must stay 0 on a clean restore
+				// while the console keeps its own lines.
 				if (!string.IsNullOrEmpty (loadedSolutionPath)) {
 					var shownBefore = IsPadVisible ("packageconsole");
-					await RunPackageOperation ("restore", "dotnet", $"restore \"{loadedSolutionPath}\"");
+					buildErrors.Clear ();
+					errorRowSigs.Clear ();
+					errorsPad?.BeginBuild ();
+					await RunPackageOperation ("restore", "dotnet", $"restore \"{loadedSolutionPath}\"", feedErrorsPad: true);
 					await System.Threading.Tasks.Task.Delay (200); // let the final status post
 					Output ("[pkgconsole] real-restore shown=" + IsPadVisible ("packageconsole")
 						+ " (was " + shownBefore + ") lines=" + pc.LineCount ()
 						+ " laststatus='" + pc.LastStatusMessage () + "'");
+					Output ("[pkgconsole] real-restore feedErrorsPad → " + (errorsPad?.DumpStatus () ?? "(pad missing)"));
 					Output ("[pkgconsole] real-restore dump → " + pc.DumpStatus ());
 				} else {
 					Output ("[pkgconsole] real-restore skipped (no solution loaded)");
@@ -14471,11 +14481,13 @@ public partial class MainWindow : Window
 	/// success line to the status line (legacy EndProgress → StatusBar.ShowMessage).
 	/// The pad's Stop button cancels THIS operation (legacy monitor.Cancel).
 	/// With feedErrorsPad (restore-on-open) the operation behaves as a build
-	/// cycle: every streamed line also feeds ParseBuildMessage so the restore's
-	/// diagnostics (NU1101 ...) become rows of the Errors pad, and the Code
-	/// Issues mirror is refreshed on exit. Menu/dialog callers keep the default
-	/// (false): an explicit package operation feeds only the console (parity
-	/// with the legacy NuGet runner, which does not touch the TaskList).
+	/// cycle: the streamed lines feed ParseBuildMessage (feedLog: false) so the
+	/// restore's DIAGNOSTICS (NU1101 ...) become rows of the Errors pad, and the
+	/// Code Issues mirror is refreshed on exit — while the raw console text stays
+	/// in the Package Console pad (it must not pollute the Errors pad's Build
+	/// Output log). Menu/dialog callers keep the default (false): an explicit
+	/// package operation feeds only the console (parity with the legacy NuGet
+	/// runner, which does not touch the TaskList).
 	/// </summary>
 	async System.Threading.Tasks.Task RunPackageOperation (string op, string exe, string args, bool feedErrorsPad = false)
 	{
@@ -14533,10 +14545,12 @@ public partial class MainWindow : Window
 							pad.AppendDebug (line);
 						else
 							pad.AppendLine (line);
-						// Build-cycle mode: the Errors pad is filled live, exactly
-						// like RunProcessAsync's OnLine (same post, same call).
+						// Build-cycle mode: the Errors pad gets the DIAGNOSTICS as
+						// rows live (like RunProcessAsync's OnLine), but NOT the raw
+						// console text in its Build Output log — the operation's output
+						// already lives in the Package Console pad.
 						if (feedErrorsPad)
-							ParseBuildMessage (line);
+							ParseBuildMessage (line, feedLog: false);
 					});
 				}
 				proc.OutputDataReceived += (_, e) => { if (e.Data is not null) EmitLine (e.Data); };
@@ -14650,13 +14664,17 @@ public partial class MainWindow : Window
 	// here: a second line for the same file/line/col/level/code is not a new row.
 	readonly HashSet<string> errorRowSigs = new ();
 
-	void ParseBuildMessage (string line)
+	/// <summary>Parses one build line into the Errors pad. With feedLog (default) a
+	/// line that is NOT a diagnostic still feeds the "Build Output" text log (legacy
+	/// LogView shows the whole build output). feedLog: false — the package-operation
+	/// path (restore-on-open) — only turns DIAGNOSTICS into rows; the raw console
+	/// text stays in the Package Console pad, it must not pollute the Errors pad's
+	/// Build Output log.</summary>
+	void ParseBuildMessage (string line, bool feedLog = true)
 	{
 		if (MonoDevelop.Ide.Services.CodeIssueService.Parse (line) is not { } issue) {
-			// The raw line still feeds the "Build Output" text log of the pad
-			// (legacy LogView shows the whole build output, not just the
-			// diagnostics).
-			errorsPad?.AppendLogLine (line);
+			if (feedLog) // see above: the raw line feeds the Build Output log
+				errorsPad?.AppendLogLine (line);
 			return;
 		}
 		// One row per unique problem (legacy: the structured MSBuild log gave each
