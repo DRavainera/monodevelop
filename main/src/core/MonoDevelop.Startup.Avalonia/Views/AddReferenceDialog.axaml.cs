@@ -262,6 +262,7 @@ public class AddReferenceDialog : DialogWindow
 					t.IsChecked = t.Tag as int? == idx;
 				// legacy: filterEntry.Sensitive = PageNum != 3
 				filterBox.IsEnabled = idx != 3;
+				SwitchPanel (); // swap the visible ListBox (RefreshAll only re-renders)
 				RefreshAll ();
 			};
 			tabs.Children.Add (btn);
