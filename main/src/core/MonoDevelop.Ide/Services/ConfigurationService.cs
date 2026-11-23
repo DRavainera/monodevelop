@@ -527,7 +527,8 @@ public static class ConfigurationService
 	/// the RAW value declared in the file (a ProjectReference keeps its
 	/// relative include, never resolved); <see cref="Version"/> only applies
 	/// to PackageReference; <see cref="HintPath"/> only to Reference
-	/// (display — the save does not write it, like the legacy rewrite).</summary>
+	/// (the save round-trips it as the <HintPath> element, like the legacy
+	/// ProjectReference.Write metadata).</summary>
 	public sealed record ReferenceItem (string Kind, string Include, string? Version = null, string? HintPath = null);
 
 	/// <summary>Ronda 6 (BUG 3): one legacy <c>CustomCommand</c> of
@@ -583,7 +584,14 @@ public static class ConfigurationService
 				var attrs = new List<System.Xml.Linq.XAttribute> { new ("Include", r.Include) };
 				if (r.Version is not null)
 					attrs.Add (new ("Version", r.Version));
-				itemGroup.Add (new System.Xml.Linq.XElement (ns + r.Kind, attrs.ToArray ()));
+				var el = new System.Xml.Linq.XElement (ns + r.Kind, attrs.ToArray ());
+				// Assembly references keep their <HintPath> element (legacy
+				// ProjectReference.Write metadata: HintPath is only written when
+				// the item was read with one or changed; here the dialog is the
+				// only writer, so a non-empty HintPath always round-trips).
+				if (r.Kind == "Reference" && !string.IsNullOrWhiteSpace (r.HintPath))
+					el.Add (new System.Xml.Linq.XElement (ns + "HintPath", r.HintPath));
+				itemGroup.Add (el);
 			}
 			root.Add (itemGroup);
 		}

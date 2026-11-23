@@ -4175,6 +4175,72 @@ public partial class MainWindow : Window
 					}
 				} else
 					Output ("[addref-qa] no project");
+			} else if (qa == "--addref2") {
+				// QA (Oleada 5, Add Reference 100% port): exercise the REBUILT
+				// dialog headless — ref-pack resolution, panel population,
+				// tab switching, filter (rank + Assembly-tab exemption), recents
+				// round-trip, and the add/remove cycle with the legacy
+				// backslash ProjectReference include.
+				var proj2 = loadedSolutionPath.Length > 0
+					? ConfigurationService.GetSolutionProjects (loadedSolutionPath).FirstOrDefault ()
+					: null;
+				if (string.IsNullOrEmpty (proj2))
+					proj2 = ResolveActiveProject ();
+				if (proj2 is null) {
+					Output ("[addref2] no project");
+				} else {
+					var dlg2 = new AddReferenceDialog (proj2, loadedSolutionPath);
+					Output ($"[addref2] refPack='{dlg2.QaRefPackDir}' exists={Directory.Exists (dlg2.QaRefPackDir)}");
+					Output ($"[addref2] packages={dlg2.QaPackages} projects={dlg2.QaProjects} assemblies={dlg2.QaAssemblies} refs={dlg2.QaRefs} cyclic={dlg2.QaCyclicCount} tfmIncompat={dlg2.QaTfmIncompatCount}");
+					Output ($"[addref2] tab0(All)={dlg2.QaSwitchTab (0)} tab1(Packages)={dlg2.QaSwitchTab (1)} tab2(Projects)={dlg2.QaSwitchTab (2)} tab3(Assembly)={dlg2.QaSwitchTab (3)}");
+					// Filter on Packages: a prefix must keep only matches (rank desc).
+					dlg2.QaSwitchTab (1);
+					Output ($"[addref2] filter(Newton)={dlg2.QaFilterHits ("Newton")} filter(System)={dlg2.QaFilterHits ("System")} cleared={dlg2.QaFilterHits ("")}");
+					// Legacy: the filter is insensitive on the .Net Assembly tab.
+					dlg2.QaSwitchTab (3);
+					Output ($"[addref2] filter(Newton) onAssemblyTab rows={dlg2.QaFilterHits ("Newton")} (must equal assemblies={dlg2.QaAssemblies})");
+					// Recents round-trip: register a ref-pack dll (legacy
+				// RecentAssemblies2.txt, validated with AssemblyName on read).
+					var probeDll = Directory.Exists (dlg2.QaRefPackDir)
+						? Directory.EnumerateFiles (dlg2.QaRefPackDir, "System.Memory.dll").FirstOrDefault ()
+						: null;
+					if (probeDll is null) {
+						Output ("[addref2] recents: no probe dll (ref pack missing?)");
+					} else {
+						var an2 = System.Reflection.AssemblyName.GetAssemblyName (probeDll);
+						var asmAfter = dlg2.QaSaveRecent (an2.Name, probeDll, an2.Version.ToString ());
+						Output ($"[addref2] recents: saveRecent({an2.Name}) assemblies={asmAfter}");
+					}
+					// Add/remove cycle through the dialog's public API: the
+					// ProjectReference include must carry the legacy backslashes.
+					// The add/remove cycle MUST NOT mutate the real fixture: the
+					// baseline is App→LibA (the e2e relies on it). Capture the
+					// original text, pre-clean LibA (deterministic add), run the
+					// cycle, then restore LibA and verify the baseline survived.
+					var proj2Before = File.Exists (proj2) ? File.ReadAllText (proj2) : null;
+					var libA = Path.Combine (Path.GetDirectoryName (loadedSolutionPath) ?? "", "LibA", "LibA.csproj");
+					if (File.Exists (libA)) {
+						if (proj2Before is not null && proj2Before.Contains ("..\\LibA\\LibA.csproj")) {
+							bool pre = dlg2.TryRemoveReference ("LibA");
+							Output ($"[addref2] pre-clean(LibA) → {pre} (baseline starts with the reference)");
+							ConfigurationService.ClearProjectModelCache ();
+						}
+						bool okA = dlg2.TryAddProjectReference (libA);
+						var textA = File.ReadAllText (proj2);
+						Output ($"[addref2] TryAddProjectReference(LibA) → {okA} backslashInclude={textA.Contains ("..\\LibA\\LibA.csproj")} refs={dlg2.QaRefs}");
+						bool rmA = dlg2.TryRemoveReference ("LibA");
+						Output ($"[addref2] TryRemoveReference(LibA) → {rmA} refs={dlg2.QaRefs}");
+						ConfigurationService.ClearProjectModelCache ();
+						// Restore the fixture to its baseline state: re-apply LibA.
+						bool reA = dlg2.TryAddProjectReference (libA);
+						var textR = File.ReadAllText (proj2);
+						Output ($"[addref2] restore(LibA) → {reA} baselineIntact={proj2Before is not null && textR.Contains ("..\\LibA\\LibA.csproj")}");
+						ConfigurationService.ClearProjectModelCache ();
+					} else {
+						Output ("[addref2] no LibA sibling");
+					}
+					Output ("ADDREF2_DONE");
+				}
 			} else if (qa == "--addrefdlg") {
 				// QA: show the rebuilt Add Reference dialog for visual inspection.
 				var proj = ResolveActiveProject ();
