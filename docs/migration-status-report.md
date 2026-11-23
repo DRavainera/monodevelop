@@ -3656,3 +3656,23 @@ Fixes: (1) `Parse` añade un `projectMessageRegex` para el formato de nivel proy
 **Cierre**: commit de código por nombre (5) + commit `Docs:` por nombre (docs ×3: `session_summary.md` §63, `interfaz-plan.md` M31-x, esta nota). Push a `origin/agents/sub-agent-senior-dev-role-report`. **Sin submódulos, sin PRs.** Artefactos: `~/opencode/aspnet_vbnet_port/` (brief `qa_newfile_brief.md`, report `qa_newfile_report.md`, generadores `gen_templates.py`/`extract_nf.py`/`newfile_templates.json`, fixture `qa_tierd/fresh_sln.sh`), `~/opencode/docfood_qa/` (logs `nf2qa_*`).
 
 **Nota (2026-11-19) — documentación permanente (decisión del operador)**: los 3 docs (`session_summary.md`, `interfaz-plan.md` = solo shell Avalonia, `migration-status-report.md`) son el **único canal** de documentación; **no se crean ficheros de handoff sueltos**. Los 20 ficheros históricos de `docs/` (sep-oct) quedan fuera del alcance "últimos 5 días" → **no migrar, no borrar**.
+
+### UI Avalonia: port 100% fiel del diálogo Add Reference (GTK legacy → shell Avalonia) (2026-11-21)
+
+**Estado: CERRADO (QA APROBADO, 0 hallazgos abiertos §18.5).** El diálogo **Add Reference** (legacy `SelectReferenceDialog` + `.glade`, MonoDevelop.Ide.Projects) está reconstruido 100% fiel (apariencia + funcionalidad, decisión del operador) en `Views/AddReferenceDialog.axaml.cs` (REESCRITO completo, ~1190 l, código sin .axaml; el `.axaml` huérfano corrupto con HPaned fue eliminado).
+
+- **Layout**: título `"References"`, 889×551, patrón HPaned (Avalonia 12.1.2 sin HPaned → Grid 3 col `*,Auto,*` + GridSplitter, patrón ErrorsPad, posición 590 en SizeChanged).
+- **Tabs + filtro**: All/Packages/Projects/.Net Assembly; filtro 180px a la derecha de las tabs (legacy action-widget End) con Ctrl+F y **insensitive en tab .Net Assembly**.
+- **Filtro**: `LaneStringMatcher` real (subsecuencia, NO prefijo; Newton=1, System=167, MongoDB=1) + resaltado por carácter `HslColor.GenerateHighlightColors(bg,fg,3)[2]`.
+- **Paneles**: checkbox + icono 16 + 2 líneas (nombre + metadata). Packages = ref pack TFM (167) + KnownPackages (16) = 183 (net10.0). Projects = cíclicas por DFS (dimgrey + "(Cyclic dependencies not allowed)" + icono alpha 0.5 + ocultas con filtro). .Net Assembly = recents `RecentAssemblies2.txt` (global + `# <sln>`, máx 75, validación AssemblyName) + Browse... multi-select.
+- **Right pane**: `"Selected references:"` + botón plano remove-16 tooltip `"Remove"`; Delete quita; doble-click → OK. **OK** → `SaveProjectReferences` semántica legacy (PackageReference / ProjectReference include relativo **CON BACKSLASHES** / Reference con `<HintPath>` fuera del ref pack). Sort legacy: matchRank desc → nombre InvariantCultureIgnoreCase → versión.
+- **`MainWindow` (Avalonia)**: oráculo headless `--addref2` **no-mutante** (pre-clean + restore + `baselineIntact=True`; el fixture real `App→LibA` queda intacto). **`Program.cs`**: flag `--addref2`. **`ConfigurationService` (compartido GTK, §18.4)**: round-trip `<HintPath>`.
+- **Superficie slice F conservada** (e2e intacto): ctor `(projectPath, solutionPath)`, `TryAddReference`, `TryAddProjectReference`, `TryRemoveReference`, `AddedReference`, `KnownPackages`.
+
+**Divergencias documentadas (verificadas por QA):** Avalonia sin HPaned (Grid+GridSplitter); `TryAddReference` QA = PackageReference (GUI resuelve por TFM); regla TFM simplificada (sin RequiredTargetFramework); icono único md-project (el legacy usa iconos por tipo); sin SpecificVersion.
+
+**Validación**: builds Avalonia (125 warns/0 err) + GTK (252/0); oráculo `--addref2` verde (`packages=183 projects=2 cyclic=2` · `tab0=185 tab1=183 tab2=2 tab3=0` · `filter(Newton)=1 System=167 cleared=183` · Assembly-tab insensitive rows=0 · recents assemblies=1 · add/remove/restore `True` + `baselineIntact=True`); e2e slice F **ALL_PASS / EXIT=0** (20/20 aserciones + `dotnet build` App exit 0 + fixture real intact); visual `shots/ar2dlg.png` fiel al legacy; 4 scripts de título actualizados a `"References"`. **QA** Tester QA Senior (brief `oleada5_addref_port_qa_brief.md`): **QA APROBADO 0 P1–P4** (0 `assert FAIL`/`FATAL`/`Unhandled Exception` en los logs).
+
+**Archivos** (4 M + 1 eliminado, sin submódulos): `Views/AddReferenceDialog.axaml.cs`, `Views/MainWindow.axaml.cs`, `Program.cs`, `Services/ConfigurationService.cs` (+ `Views/AddReferenceDialog.axaml` eliminado).
+
+**Cierre**: commit de código por nombre (4) + commit `Docs:` por nombre (docs ×3). Push a `origin/agents/sub-agent-senior-dev-role-report`. **Sin submódulos, sin PRs.** Artefactos: `~/opencode/oleada5_addref_port_qa_brief.md`, `~/opencode/docfood_qa/` (`ar2.log`, `shots/ar2dlg.png`), `~/opencode/oleada4_sliceF_e2e*.log`.
