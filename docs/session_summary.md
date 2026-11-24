@@ -5993,3 +5993,39 @@ El bugfix anterior dejaba el log Build Output alimentándose solo de líneas NO-
 ### Corrección (2026-11-23) — Build Output: rastro garbado "A(b)" al final del log
 
 Captura del operador: tras un build con error, debajo del informe aparecía un rastro garbado "A(b)" (GTK limpio). **Causa**: MSBuild emite cada diagnóstico duplicado en el stream crudo — pasada del compilador en el idioma de la UI (es) + pasada del resumen siempre en inglés (SDK) — y el LogView legacy se alimentaba del log ESTRUCTURADO de MSBuild (un id por diagnóstico → una línea), mientras el port mandaba el texto crudo a doble: la copia inglesa (larguísima, terminando en `[…/LibB.csproj]`) hacía wrap en el panel y su final se pintaba garbado. **Fix** (`Views/MainWindow.axaml.cs`): (1) `RunProcessAsync.OnLine` divide cada línea del proceso por CR (comportamiento de terminal) y descarta segmentos vacíos; (2) el log DEDUPA líneas de diagnóstico por firma de localización `file|line|col|severity|code` (sin mensaje → el par bilingüe cuenta una vez) con `buildLogDiagSigs` reseteado en los 5 puntos de BeginBuild; la dedupe de filas (con mensaje) no cambia. **Verificado**: build 0 errores; `--build` → `logLines=44` (antes 71) + `log dedup MSB3245=1 CS0103=1` (antes 2/2); `--errorspad` → `logLines=4` + `rows=3`; `--packageconsole` → `logLines=0` (fix 1 intacto); fixture intacto. **QA Senior APROBADO 0 P1–P4** (brief `~/opencode/oleada5_buildoutput_qa_brief.md`, sección Corrección 3).
+
+## 2026-11-24 (54) — Errors pad Build Output: modo de informe fiel al LogView GTK — CERRADO (QA VERDE, 0 hallazgos)
+
+**Estado: CERRADO (QA APROBADO, 0 hallazgos abiertos §18.5; subagente Tester QA Senior, 1 pase: ROJO 0 → VERDE 0).** El panel derecho "Build Output" del pad Errors de la shell Avalonia usaba un `TextBox` plano (`logText`) con `AppendLogLine` que escribía texto plano sin distinguir severidad — el "modo de informe incorrecto". En GTK el panel es un `LogView` (`MonoDevelop.Ide.Gui.Components/LogView.cs`) que colorea cada línea por severidad (`errorTag` rojo+negrita, `debugTag` azul info, `consoleLogTag` gris secundario, `normalTag` fg), con saneado ANSI/backspace, autoscroll al final y buffer capped a `MAX_BUFFER_LENGTH = 4000*1024`. El port ahora replica ese comportamiento.
+
+### Qué se hizo
+
+- **`ErrorsPad.cs` (`MonoDevelop.Startup.Avalonia/Views/`)** — reemplazo del `TextBox` plano del log por el equivalente del `LogView` legacy:
+  - `enum ColorMode { Normal, Error, Warning, Info, Debug }` — modo de informe por línea, espejo de los tags del `LogView` (error rojo/negrita, warning ámbar/negrita, info gris secundario, debug azul, normal fg).
+  - `AppendLogLine(string)` deriva el modo de `LogColorModeFor(line)` (detecta `: error `: `/: warning `:/` y `Build FAILED`) y delega a `AddLogLine`.
+  - `AddLogLine(text, mode)`: `SanitizeConsoleText` (regex `(\e[[0-9]*m)|(\b)` — igual que el legacy), `TextBlock` con `Tag=modo`, fuente monospace 12, `TextWrapping.Wrap`, `Foreground=LogBrush(mode)`, `FontWeight.Bold` para Error/Warning (legacy `errorTag.Weight = Bold`), buffer capped a `MaxLogBufferLength = 4000*1024` descartando las líneas más antiguas, y `ScrollLogToEnd` (autoscroll al tail, legacy `ShouldAutoScroll`+`ScrollToMark`).
+  - `ClearLog()` (legacy `LogView.Clear`), `ApplyLogTheme()` pública (re-resuelve brushes por tema claro/oscuro, llamada en el ctor y en `MainWindow.RefreshPadIcons`).
+  - QA helpers: `QaLogTail(n)`, `QaLogLineMode(i)` (etiqueta de color de la línea i), `QaLogModeCounts()` (conteo por modo), `LogLineCount()`.
+- **`MainWindow.axaml.cs`** — `RefreshPadIcons` llama `errorsPad?.ApplyLogTheme()` (re-pintado del log en cada cambio de tema, igual que los iconos del tab).
+- **Regresión GTK**: `LogView.cs` y `ErrorListPad.cs` sin tocar — solo `ErrorsPad.cs` y `MainWindow.axaml.cs` (§18.4).
+
+### Por qué (decisiones clave)
+
+- **Reutilización del patrón existente**: `PackageConsolePad` ya implementaba este mismo modelo (`ColorMode`, `SanitizeConsoleText`, `MaxBufferLength = 4000*1024`, `ScrollViewer`+`StackPanel`, `ApplyLogTheme`) — el port del Errors pad reusa exactamente ese enfoque en vez de crear un módulo nuevo (§18.4 reutilización obligatoria).
+- **Warning sin tag en el legacy**: el `LogView` GTK no tiene tag dedicado para warning (las líneas de warning llegan por `WriteText`, fg normal). El port les asigna ámbar+negrita para que el reporte sea legible — desviación documentada, no hallazgo.
+- **Colores por tema**: error `#c42c3e` (light) / `#f48771` (dark), warning `#c07f00` / `#e2c08d`, info `#767676` / `#a0a0a0`, debug `#5785bd` / `#9cc8ff`, fg = `IdeFgBrush` del tema actual (mismos valores que `Styles` legacy).
+
+### Validación (valores medidos)
+
+- **Build 0 errores**: shell Avalonia (`net10.0` y `net10.0-windows`) — solo warnings preexistentes (MSB3277 SQLitePCLRaw, VSTHRD). GTK `MonoDevelop.Ide` sin cambios (build verde, §18.4).
+- **QA §18.5 (subagente Tester QA Senior)**: **QA VERDE, 0 hallazgos abiertos** — 12/12 puntos PASS (compilación, no-quedan-referencias-a-logText, ColorMode, AppendLogLine→LogColorModeFor→AddLogLine, sanitize/clip/cap/scroll, ClearLog, regex ANSI/backspace, ApplyLogTheme, QA helpers, BeginBuild→ClearLog, MainWindow→ApplyLogTheme, regresión GTK). Probe funcional de modos + ANSI/backspace verificado; `new ErrorsPad()` no instancia sin `Application.Current` (entorno headless, limitación del entorno, no del código — se recomienda validar `QaLogLineMode`/`QaLogModeCounts`/`ScrollLogToEnd` en sesión con UI real de Avalonia).
+- Reporte QA: `~/opencode/ERRORSPAD_QA_INFORME.md`; probe: `~/opencode/errors_pad_probe/` (fuera del repo, no commiteado).
+
+### Archivos (2 M, sin submódulos)
+
+- `main/src/core/MonoDevelop.Startup.Avalonia/Views/ErrorsPad.cs` (M) — `ColorMode`, `LogColorModeFor`, `AddLogLine`, `ClearLog`, `SanitizeConsoleText`, `MaxLogBufferLength`, `logLines`/`logScroll`/`logHost`, `ApplyLogTheme`, QA helpers.
+- `main/src/core/MonoDevelop.Startup.Avalonia/Views/MainWindow.axaml.cs` (M) — `errorsPad?.ApplyLogTheme()` en `RefreshPadIcons`.
+
+### Cierre
+
+QA §18.5: **QA VERDE, 0 hallazgos abiertos**. Builds Avalonia + GTK **0 errores** (§18.4). Commit de código por nombre (2) + commit `Docs:` por nombre (docs ×3: `session_summary.md` §54, `interfaz-plan.md`, `migration-status-report.md`). Push a `origin/agents/sub-agent-senior-dev-role-report`. **Sin submódulos, sin PRs.** Artefactos de QA: `~/opencode/ERRORSPAD_QA_INFORME.md`, `~/opencode/errors_pad_probe/` (fuera del repo).
