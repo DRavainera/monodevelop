@@ -11,6 +11,7 @@ using Avalonia.Input.Platform;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
+using Avalonia.Styling;
 using Avalonia.Threading;
 using MonoDevelop.Ide.Services;
 
@@ -84,6 +85,13 @@ public class ErrorsPad
 		public bool Completed;        // the "Marked" checkbox (CellRendererToggle)
 	}
 
+	/// <summary>Report mode of a Build Output log line — mirrors the legacy LogView
+	/// tags: error (rojo, negrita, errorTag), warning (ámbar), info (gris secundario,
+	/// consoleLogTag), debug (azul, debugTag), normal (foreground). The GTK LogView
+	/// colours every line of the build stream by severity; the Avalonia port kept a
+	/// plain TextBox, so every line looked the same — this restores the GTK reporting.</summary>
+	public enum ColorMode { Normal, Error, Warning, Info, Debug }
+
 	// ---- Public surface (wired by MainWindow) ----
 
 	public Control Root { get; }
@@ -111,7 +119,9 @@ public class ErrorsPad
 		allRows.Clear ();
 		rowToView.Clear ();
 		errorCount = warningCount = messageCount = 0;
-		logText.Text = "";
+		// Legacy OnBuildStarted → buildOutput.Clear() + LogView.Clear(): the log
+		// starts empty for the new cycle.
+		ClearLog ();
 		UpdateCounts ();
 		UpdatePadIcon ();
 		RebuildRows ();
@@ -121,11 +131,41 @@ public class ErrorsPad
 	/// LogView). Capped: the tail is what the user reads.</summary>
 	public void AppendLogLine (string line)
 	{
-		logText.Text += line + "\n";
-		if (logText.Text.Length > 300_000)
-			logText.Text = logText.Text.Substring (logText.Text.Length - 150_000);
-		if (logText.Text.Length > 0)
-			logText.CaretIndex = logText.Text.Length; // auto-scroll to the tail, like the LogView
+		AppendLogLine (line, LogColorModeFor (line));
+	}
+
+	/// <summary>Appends one build output line with an explicit report mode (legacy
+	/// LogView.WriteText / WriteError / WriteConsoleLogText / WriteDebug — each one
+	/// writes with its own tag: normal foreground, error red bold, console-log
+	/// secondary gray, debug information blue).</summary>
+	public void AppendLogLine (string line, ColorMode mode)
+	{
+		AddLogLine (line, mode);
+	}
+
+	/// <summary>The report mode the legacy build monitor would give this line: an
+	/// error/warning line is written with the error/debug tags, everything else with
+	/// the normal tag (legacy LogViewProgressMonitor.OnWriteErrorLog → WriteText +
+	/// the final summary errors → WriteError).</summary>
+	static ColorMode LogColorModeFor (string line)
+	{
+		if (string.IsNullOrWhiteSpace (line))
+			return ColorMode.Normal;
+		// The diagnostic shape the shell parses elsewhere: "file(line,col): error CODE: msg".
+		int severity = line.IndexOf (": error ", StringComparison.OrdinalIgnoreCase);
+		if (severity >= 0)
+			return ColorMode.Error;
+		severity = line.IndexOf (": warning ", StringComparison.OrdinalIgnoreCase);
+		if (severity >= 0)
+			return ColorMode.Warning;
+		if (line.StartsWith ("error ", StringComparison.OrdinalIgnoreCase)
+			|| line.Contains (": error ", StringComparison.Ordinal)
+			|| line.StartsWith ("Build FAILED", StringComparison.OrdinalIgnoreCase))
+			return ColorMode.Error;
+		if (line.StartsWith ("warning ", StringComparison.OrdinalIgnoreCase)
+			|| line.Contains (": warning ", StringComparison.Ordinal))
+			return ColorMode.Warning;
+		return ColorMode.Normal;
 	}
 
 	/// <summary>Adds a row from the live build parsing (legacy TaskAdded →
@@ -226,9 +266,45 @@ public class ErrorsPad
 	/// lets an oracle assert the log holds the build stream, not just its size.</summary>
 	public string QaLogTail (int n = 20)
 	{
-		var lines = logText.Text.Split ('\n');
-		return string.Join ("\n", lines.Skip (Math.Max (0, lines.Length - n)));
+		var lines = LogTextLines ();
+		return string.Join ("\n", lines.Skip (Math.Max (0, lines.Count - n)));
 	}
+
+	/// <summary>QA: the number of lines the log holds (legacy LogView buffer lines).</summary>
+	public int LogLineCount () => LogTextLines ().Count;
+
+	/// <summary>QA: the report mode (color) of the log line at the given index, as the
+	/// legacy LogView tag it would carry ("error" / "warning" / "info" / "debug" /
+	/// "normal"). Lets an oracle assert the build log is REPORTED by severity and
+	/// not a flat text dump.</summary>
+	public string QaLogLineMode (int index)
+	{
+		var children = logLines.Children.OfType<TextBlock> ().ToList ();
+		if (index < 0 || index >= children.Count)
+			return "";
+		var tb = children [index];
+		if (tb.Tag is ColorMode mode)
+			return mode.ToString ().ToLowerInvariant ();
+		return "normal";
+	}
+
+	/// <summary>QA: the number of log lines per report mode (error/warning/info/debug/
+	/// normal) — the summary of how the build was reported.</summary>
+	public string QaLogModeCounts ()
+	{
+		var counts = new Dictionary<string, int> {
+			["error"] = 0, ["warning"] = 0, ["info"] = 0, ["debug"] = 0, ["normal"] = 0,
+		};
+		foreach (var tb in logLines.Children.OfType<TextBlock> ()) {
+			string key = tb.Tag is ColorMode mode ? mode.ToString ().ToLowerInvariant () : "normal";
+			counts [key] = counts.GetValueOrDefault (key) + 1;
+		}
+		return string.Join (",", counts.Select (kv => kv.Key + "=" + kv.Value));
+	}
+
+	/// <summary>The log as plain text lines (the legacy LogView buffer content).</summary>
+	List<string> LogTextLines ()
+		=> logLines.Children.OfType<TextBlock> ().Select (t => t.Text ?? "").ToList ();
 
 	public string DumpStatus ()
 	{
@@ -237,7 +313,7 @@ public class ErrorsPad
 			$"filters={errorBtn.IsChecked},{warnBtn.IsChecked},{msgBtn.IsChecked} " +
 			$"sort={(sortKey ?? "none")}:{(sortAsc ? "asc" : "desc")} " +
 			$"cols=[{string.Join (",", visibleKeys)}] " +
-			$"logLines={(int)(logText.Text.Length == 0 ? 0 : logText.Text.Split ('\n').Length - 1)}";
+			$"logLines={LogLineCount ()}";
 	}
 
 	/// <summary>QA double-click path: activate the first visible row (the owner opens
@@ -265,7 +341,107 @@ public class ErrorsPad
 		msgImg.Source = severityIcons.Item3;
 		foreach (var view in rowToView.Values)
 			view.Apply (view.Tag as ErrorRow, visibleKeys, severityIcons);
+		ApplyLogTheme ();
 	}
+
+	// ---- Build Output log (legacy LogView) ----
+
+	/// <summary>Appends one line to the Build Output log with the legacy LogView
+	/// report mode: each line is a TextBlock whose color follows its tag (error red
+	/// bold, warning amber bold, info secondary gray, debug information blue, normal
+	/// foreground), in the legacy monospace font, wrapping like the legacy LogView.
+	/// The buffer is capped at the legacy MAX_BUFFER_LENGTH (4 MB), dropping the
+	/// OLDEST lines.</summary>
+	void AddLogLine (string text, ColorMode mode)
+	{
+		if (text is null)
+			return;
+		// Legacy LogView.SanitizeConsoleText: strip the ANSI color escapes and the
+		// backspace control character before writing.
+		text = SanitizeConsoleText (text);
+		// An empty line still belongs to the log (it separates the sections the
+		// build writes: the task header and its output).
+		var line = new TextBlock {
+			Text = text,
+			Tag = mode,
+			FontFamily = new FontFamily ("Monospace,DejaVu Sans Mono,Consolas"),
+			FontSize = 12,
+			TextWrapping = TextWrapping.Wrap,
+			Foreground = LogBrush (mode),
+		};
+		if (mode == ColorMode.Error || mode == ColorMode.Warning)
+			line.FontWeight = FontWeight.Bold; // legacy errorTag.Weight = Bold
+		logLines.Children.Add (line);
+		logTotalLength += text.Length;
+
+		// Legacy MAX_BUFFER_LENGTH: drop the oldest lines until the tail fits.
+		while (logTotalLength > MaxLogBufferLength && logLines.Children.Count > 1) {
+			var first = logLines.Children [0];
+			if (first is TextBlock ft)
+				logTotalLength -= (ft.Text ?? "").Length;
+			logLines.Children.RemoveAt (0);
+		}
+
+		ScrollLogToEnd ();
+	}
+
+	/// <summary>Legacy LogView.Clear: empties the Build Output log.</summary>
+	public void ClearLog ()
+	{
+		logLines.Children.Clear ();
+		logTotalLength = 0;
+	}
+
+	void ScrollLogToEnd ()
+	{
+		// Legacy ShouldAutoScroll + ScrollToMark(endMark): follow the tail of the
+		// log. Posted so it applies after the new line is measured.
+		Dispatcher.UIThread.Post (() => logScroll?.ScrollToEnd (), DispatcherPriority.Background);
+	}
+
+	/// <summary>Legacy LogView.SanitizeConsoleText (consoleTextSanitizerRegex): strip
+	/// the ANSI color escapes (\e[...m) and the backspace control character.</summary>
+	static string SanitizeConsoleText (string text) => ConsoleSanitizer.Replace (text, string.Empty);
+
+	static readonly System.Text.RegularExpressions.Regex ConsoleSanitizer = new (
+		"(\\e[[0-9]*m)|(\b)", System.Text.RegularExpressions.RegexOptions.Compiled);
+
+	/// <summary>Applies the legacy LogView tag colors to the log lines for the
+	/// current theme variant (the shell calls this on theme changes).</summary>
+	public void ApplyLogTheme ()
+	{
+		bool dark = Application.Current?.ActualThemeVariant == ThemeVariant.Dark;
+		// Legacy Styles: error #c42c3e (light) / status-error red (dark),
+		// information #5785bd (light) / #9cc8ff (dark), secondary #767676.
+		errorBrush = new SolidColorBrush (dark ? Color.Parse ("#f48771") : Color.Parse ("#c42c3e"));
+		// The legacy LogView has no warning tag: a warning line reaches the log
+		// through WriteText (normal foreground) — but the GTK build output shows
+		// warnings in the warning color, so the port keeps them amber to make the
+		// report readable (documented deviation).
+		warningBrush = new SolidColorBrush (dark ? Color.Parse ("#e2c08d") : Color.Parse ("#c07f00"));
+		infoBrush = new SolidColorBrush (Color.Parse (dark ? "#a0a0a0" : "#767676"));
+		debugBrush = new SolidColorBrush (dark ? Color.Parse ("#9cc8ff") : Color.Parse ("#5785bd"));
+		if (Application.Current is { } app
+			&& app.TryGetResource ("IdeFgBrush", app.ActualThemeVariant, out var f)
+			&& f is SolidColorBrush sb)
+			fgBrush = sb;
+
+		foreach (var tb in logLines.Children.OfType<TextBlock> ()) {
+			var mode = tb.Tag is ColorMode m ? m : ColorMode.Normal;
+			tb.Foreground = LogBrush (mode);
+			tb.FontWeight = mode == ColorMode.Error || mode == ColorMode.Warning
+				? FontWeight.Bold
+				: FontWeight.Normal;
+		}
+	}
+
+	ISolidColorBrush LogBrush (ColorMode mode) => mode switch {
+		ColorMode.Error => errorBrush ?? new SolidColorBrush (Color.Parse ("#c42c3e")),
+		ColorMode.Warning => warningBrush ?? new SolidColorBrush (Color.Parse ("#c07f00")),
+		ColorMode.Info => infoBrush ?? new SolidColorBrush (Color.Parse ("#767676")),
+		ColorMode.Debug => debugBrush ?? new SolidColorBrush (Color.Parse ("#5785bd")),
+		_ => fgBrush ?? new SolidColorBrush (Colors.Gray),
+	};
 
 	// ---- State ----
 
@@ -288,7 +464,8 @@ public class ErrorsPad
 	readonly Dictionary<string, TextBlock> headerLabels = new ();
 	ListBox rowsList;
 	Border logHost;
-	TextBox logText;
+	StackPanel logLines;
+	ScrollViewer logScroll;
 	GridSplitter logSplitter;
 	Control tableHost;
 	// Legacy initialLogShow: the first REAL allocation of the body applies the
@@ -296,6 +473,11 @@ public class ErrorsPad
 	// sees width 0 — same problem the legacy solved with SizeAllocated).
 	bool initialLogShow = true;
 	List<string> visibleKeys = new ();
+	// Legacy LogView tag colors (error red-bold, warning amber, info secondary gray,
+	// debug information blue, normal foreground), resolved on theme changes.
+	ISolidColorBrush errorBrush, warningBrush, infoBrush, debugBrush, fgBrush;
+	int logTotalLength;
+	const int MaxLogBufferLength = 4000 * 1024; // legacy LogView.MAX_BUFFER_LENGTH
 
 	public IReadOnlyList<string> VisibleKeys => visibleKeys;
 
@@ -354,17 +536,18 @@ public class ErrorsPad
 		toolbar.Children.Add (leftTools);
 
 		// --- Body (legacy HPaned: table | build log; log hidden until "Build Output") ---
-		logText = new TextBox {
-			AcceptsReturn = true,
-			IsReadOnly = true,
-			FontSize = 12,
-			Padding = new Thickness (8),
-			Background = Brushes.Transparent,
-			BorderThickness = new Thickness (0),
+		logLines = new StackPanel {
+			Orientation = Orientation.Vertical,
 		};
-		logText.Bind (TextBox.ForegroundProperty, Application.Current.GetResourceObservable ("IdeFgBrush"));
+		logScroll = new ScrollViewer {
+			Content = logLines,
+			HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
+			VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+			BorderThickness = new Thickness (0),
+			Padding = new Thickness (0, 6, 0, 6),
+		};
 		logHost = new Border {
-			Child = logText,
+			Child = logScroll,
 			IsVisible = false,
 			MinWidth = 120,
 			BorderBrush = (Brush)Application.Current.FindResource ("IdeBorderBrush")!,
@@ -412,6 +595,7 @@ public class ErrorsPad
 		logBtn.IsChecked = SettingsStore.GetBool (OutputVisibleKey, false);
 		UpdateCounts ();
 		RebuildRows ();
+		ApplyLogTheme ();
 	}
 
 	// ---- Table (header + rows) ----

@@ -9536,6 +9536,7 @@ public partial class MainWindow : Window
 		RightPads.RefreshIcons ();
 		BottomPads.RefreshIcons ();
 		errorsPad?.RefreshIcons ();
+		errorsPad?.ApplyLogTheme ();
 		packageConsolePad?.RefreshIcons ();
 	}
 
@@ -13537,13 +13538,24 @@ public partial class MainWindow : Window
 		var projs = SolutionProjects (sln);
 		if (projectFilter is not null)
 			projs = projs.Where (p => Path.GetFullPath (p) == Path.GetFullPath (projectFilter)).ToList ();
-		var failed = false;
+		int succeeded = 0, failed = 0;
+		bool canceled = false;
+		var operation = clean ? "Clean" : "Build";
+		var task = clean ? "Cleaning" : "Building";
+		var verbosity = SettingsStore.GetString ("MonoDevelop.Ide.MSBuildVerbosity");
+		if (verbosity is not ("Quiet" or "Minimal" or "Detailed" or "Diagnostic"))
+			verbosity = "Normal";
 		// Legacy ProjectOperations build the active configuration (SelectActiveConfiguration).
 		var config = !string.IsNullOrEmpty (loadedSolutionPath) && File.Exists (loadedSolutionPath)
 			? MonoDevelop.Ide.Services.ConfigurationService.GetActiveConfiguration (loadedSolutionPath)
 			: activeConfiguration;
 		Output ($"[build] configuration {config}");
-		foreach (var proj in projs.ToList ()) {
+		// Legacy SolutionFolder.OnBuild: a whole-solution operation opens with
+		// one bold task line ("Building solution X (config)"); a single-project
+		// build does not.
+		if (projectFilter is null)
+			errorsPad?.AppendLogLine ($"\n{task} solution {Path.GetFileNameWithoutExtension (sln)} ({config})\n");
+		foreach (var proj in projs) {
 			// Oleada 4 (slice E): the solution configuration maps to a
 			// per-project configuration through the .sln
 			// ProjectConfigurationPlatforms section (model) — a project may
@@ -13551,11 +13563,33 @@ public partial class MainWindow : Window
 			var mapped = MonoDevelop.Ide.Services.ConfigurationService.GetProjectConfigurationFor (sln, config, proj);
 			var platArg = IsAnyCpuPlatform (mapped.Platform) ? "" : $" -p:Platform=\"{mapped.Platform}\"";
 			Output ($"[build] project {Path.GetFileName (proj)} cfg={mapped.Configuration} plat={mapped.Platform}");
-			await RunProcessAsync ("dotnet", $"{target} -c \"{mapped.Configuration}\"{platArg} \"{proj}\"");
-			if (runningProc is { HasExited: true } p && p.ExitCode != 0)
-				failed = true;
+			var projectConfig = IsAnyCpuPlatform (mapped.Platform) ? mapped.Configuration : $"{mapped.Configuration}|{mapped.Platform}";
+			// Legacy SolutionItem.OnBuild: one bold task line per project, then the
+			// project's own ConsoleLogger output.
+			errorsPad?.AppendLogLine ($"\n{task} {Path.GetFileNameWithoutExtension (proj)} ({projectConfig})\n");
+			// Use the text ConsoleLogger, not the SDK terminal display. BuildDone
+			// supplies the summary once for the whole operation, as in GTK.
+			var command = clean ? "clean" : rebuild ? "build -t:Rebuild" : "build";
+			var result = await RunProcessAsync ("dotnet", $"{command} -c \"{mapped.Configuration}\"{platArg} -v:{verbosity} --tl:off -clp:NoSummary \"{proj}\"");
+			if (result.Stopped) {
+				canceled = true;
+				break;
+			}
+			if (result.ExitCode == 0)
+				succeeded++;
+			else
+				failed++;
 		}
-		Output ($"[build] {target} done failed={failed}");
+		var skipped = projs.Count - succeeded - failed;
+		// Legacy ProjectOperations.BuildDone/CleanDone: the summary line plus
+		// the outcome line the monitor writes when the operation completes.
+		errorsPad?.AppendLogLine ($"\n========== {operation}: {succeeded} succeeded, {failed} failed, 0 up-to-date, {skipped} skipped ==========");
+		var errors = errorsPad?.ErrorCount ?? 0;
+		var warnings = errorsPad?.WarningCount ?? 0;
+		errorsPad?.AppendLogLine (canceled ? $"{operation} canceled." : errors + warnings > 0
+			? $"{operation}: {errors} {(errors == 1 ? "error" : "errors")}, {warnings} {(warnings == 1 ? "warning" : "warnings")}"
+			: failed > 0 ? $"{operation} failed." : $"{operation} successful.");
+		Output ($"[build] {target} done failed={failed > 0}");
 		buildsCounter.Inc (target);
 	}
 
@@ -14613,7 +14647,7 @@ public partial class MainWindow : Window
 		}
 	}
 
-	async System.Threading.Tasks.Task RunProcessAsync (string exe, string args, string? workingDir = null)
+	async System.Threading.Tasks.Task<(int ExitCode, bool Stopped)> RunProcessAsync (string exe, string args, string? workingDir = null)
 	{
 		try {
 			var psi = new System.Diagnostics.ProcessStartInfo (exe, args) {
@@ -14628,7 +14662,7 @@ public partial class MainWindow : Window
 			runningProc = proc;
 			if (proc is null) {
 				Output ("[process] failed to start " + exe);
-				return;
+				return (-1, false);
 			}
 			// Oleada 3 (slice 5): the build/run menu gates (Stop, the busy
 			// guards of Build/Rebuild Solution, Run, Run Entry) track this
@@ -14666,7 +14700,7 @@ public partial class MainWindow : Window
 			var wasStopped = ReferenceEquals (proc, stoppedByUserProc);
 			if (wasStopped)
 				stoppedByUserProc = null;
-			Avalonia.Threading.Dispatcher.UIThread.Post (() => {
+			await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync (() => {
 				Output (wasStopped ? $"[process] stopped by user (exit code {code})" : $"[process] exited with {code}");
 				// The Errors pad is filled live by ParseBuildMessage (legacy
 				// TaskAdded); the collection reset happens in the caller that
@@ -14682,8 +14716,10 @@ public partial class MainWindow : Window
 				// build/run gates and disable Stop.
 				NotifyCommandStateChanged ();
 			});
+			return (code, wasStopped);
 		} catch (Exception ex) {
 			Output ("[process] " + ex.Message);
+			return (-1, false);
 		}
 	}
 
@@ -14708,6 +14744,8 @@ public partial class MainWindow : Window
 	// the structured MSBuild log saw ONE line per diagnostic id, so the log
 	// dedupes by location signature (no message) instead.
 	readonly HashSet<string> buildLogDiagSigs = new ();
+	static readonly System.Text.RegularExpressions.Regex ConsoleChannelPrefix =
+		new (@"^\s*\d+>", System.Text.RegularExpressions.RegexOptions.Compiled);
 
 	/// <summary>Parses one build line into the Errors pad. With feedLog (default) the
 	/// line ALSO feeds the "Build Output" text log for BOTH diagnostics and plain
@@ -14725,6 +14763,10 @@ public partial class MainWindow : Window
 				errorsPad?.AppendLogLine (line);
 			return;
 		}
+		// The text ConsoleLogger prefixes compiler-pass lines with its channel
+		// ("     1>file.cs(…)"); the summary pass has no prefix. Without
+		// trimming it the same diagnostic signs twice and reaches the log twice.
+		issue = issue with { File = ConsoleChannelPrefix.Replace (issue.File, "").TrimStart () };
 		if (feedLog && buildLogDiagSigs.Add (issue.File + "|" + issue.Line + "|" + issue.Col + "|"
 			+ issue.Severity + "|" + issue.Code))
 			errorsPad?.AppendLogLine (line);
@@ -14734,9 +14776,11 @@ public partial class MainWindow : Window
 		// The message is part of the signature: distinct problems that share
 		// file/line/col/level/code — e.g. the three NU1101 "Unable to find package
 		// X" lines of a failed restore — each keep their own row (the legacy store
-		// held one row per diagnostic, not one per location).
+		// held one row per diagnostic, not one per location). The SDK's trailing
+		// " [/…/X.csproj]" is not part of the message (it comes and goes between
+		// the console and the summary pass), so it is trimmed before signing.
 		if (!errorRowSigs.Add (issue.File + "|" + issue.Line + "|" + issue.Col + "|"
-			+ issue.Severity + "|" + issue.Code + "|" + issue.Message))
+			+ issue.Severity + "|" + issue.Code + "|" + DiagnosticMessage (issue.Message)))
 			return;
 		buildErrors.Add ((issue.File, issue.Line, issue.Col, issue.Severity, issue.Code, issue.Message));
 		// Legacy TaskAdded: one row per diagnostic in the table. The Project/Path
@@ -14767,6 +14811,21 @@ public partial class MainWindow : Window
 				issue.Severity == "error");
 			bubbleEd.SetBubbles (new [] { entry });
 		}
+	}
+
+	// The message without the SDK's project bracket suffix ("… [path/proj.csproj]").
+	static string DiagnosticMessage (string message)
+	{
+		var trimmed = message.TrimEnd ();
+		if (trimmed.EndsWith (".csproj]", StringComparison.OrdinalIgnoreCase)
+			|| trimmed.EndsWith (".vbproj]", StringComparison.OrdinalIgnoreCase)
+			|| trimmed.EndsWith (".fsproj]", StringComparison.OrdinalIgnoreCase)
+			|| trimmed.EndsWith (".proj]", StringComparison.OrdinalIgnoreCase)) {
+			var open = trimmed.LastIndexOf ('[');
+			if (open > 0)
+				return trimmed.Substring (0, open).TrimEnd ();
+		}
+		return trimmed;
 	}
 
 	// Legacy TaskListEntry.GetProject: the name of the project the file belongs to
