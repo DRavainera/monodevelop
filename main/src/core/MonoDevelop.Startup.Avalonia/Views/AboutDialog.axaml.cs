@@ -330,8 +330,14 @@ public partial class AboutDialog : Window
 		var i = 0;
 		foreach (var child in SectionsPanel.Children) {
 			if (child is TextBlock tb && tb.Inlines is { Count: > 0 } inl
-				&& inl[0] is Run { Text: { } title })
+				&& inl[0] is Run { Text: { } title }) {
 				MainWindow.Instance?.Output ($"[about] section{i}={title}");
+				// The body is the last inline (after title, blank, blank).
+				if (inl[inl.Count - 1] is Run { Text: { } body })
+					foreach (var line in body.Split ('\n'))
+						if (line.Trim ().Length > 0)
+							MainWindow.Instance?.Output ($"[about] section{i} body: {line.TrimEnd ()}");
+			}
 			i++;
 		}
 

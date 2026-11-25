@@ -121,6 +121,26 @@
     <AvaloniaResource Include="Addins\web-search-16.png" />
     <AvaloniaResource Include="branding\welcome-tile@2x.png" />
   </ItemGroup>
+  <!-- The About dialog's "Build Information" section reads the `buildinfo` file
+       next to the entry assembly (SystemInformation.GetBuildInformation, same as
+       the legacy GTK About). MonoDevelop.Core generates it for the GTK build via
+       scripts/configure.dll gen-buildinfo, but its BeforeBuild target is skipped
+       here (BuildVariables.cs already exists, so the Inputs/Outputs up-to-date
+       check short-circuits) — leaving main/build without buildinfo and the About
+       dialog showing "Build information unavailable". Generate it for the shell
+       too, straight into the shared OutputPath (main/build), with the same
+       configure.dll the GTK build uses, so both UIs read the identical file. -->
+  <Target Name="GenerateShellBuildInfo" BeforeTargets="Build">
+    <PropertyGroup>
+      <!-- OutputPath is relative to the build's working directory (the repo
+           root when building from there), so resolve it against the project
+           directory to get an absolute path for configure.dll. -->
+      <ShellBuildInfoDir>$([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)/$(OutputPath)'))</ShellBuildInfoDir>
+      <ShellConfigureDll>$([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)/../../../../scripts/configure.dll'))</ShellConfigureDll>
+    </PropertyGroup>
+    <MakeDir Directories="$(ShellBuildInfoDir)" />
+    <Exec Command="dotnet $(ShellConfigureDll) gen-buildinfo $(ShellBuildInfoDir)" WorkingDirectory="$(MSBuildProjectDirectory)/../../../.." />
+  </Target>
   <ItemGroup>
     <!-- MonoDevelop.Core is part of the shell (same unified build tree): the non-GTK
          backend (commands, key bindings, options) lives there. -->
