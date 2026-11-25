@@ -3977,20 +3977,18 @@ public partial class MainWindow : Window
 						Output ($"[props] {r.Category}/{r.Name} = {r.Value}");
 				}
 			} else if (qa == "--filter") {
-				// QA: Solution pad incremental filter — non-matching nodes hide,
+				// QA: Solution pad incremental filter — non-matching rows hide,
 				// matches and their ancestors stay and expand; empty restores all.
-				if (solutionTreeView is not null) {
-					int CountVisible () => solutionTreeView.Items.OfType<TreeViewItem> ()
-						.Sum (r => CountVisibleNodes (r));
-					int total = CountVisible ();
+				if (xwtSolutionTree is not null) {
+					int total = SolutionVisibleRowCount ();
 					ApplySolutionTreeFilter ("Program");
-					int filtered = CountVisible ();
-					bool rootVisible = solutionTreeView.Items.OfType<TreeViewItem> ().First ().IsVisible;
-					Output ("[filter] nodes before: " + total);
-					Output ("[filter] nodes with 'Program': " + filtered + " (reduced: " + (filtered < total) + ")");
-					Output ("[filter] solution root stays visible: " + rootVisible);
+					int filtered = SolutionVisibleRowCount ();
+					Output ("[filter] rows before: " + total);
+					Output ("[filter] rows with 'Program': " + filtered + " (reduced: " + (filtered < total) + ")");
 					ApplySolutionTreeFilter ("");
-					Output ("[filter] empty restores all: " + (CountVisible () >= total));
+					Output ("[filter] empty restores all: " + (SolutionVisibleRowCount () >= total));
+				} else {
+					Output ("[filter] no solution tree (load a solution first)");
 				}
 			} else if (qa == "--fold") {
 				// QA: code folding — ToggleFolding at the outermost brace, hidden-line
@@ -6457,6 +6455,10 @@ public partial class MainWindow : Window
 			foreach (var root in roots)
 				AddXwtSolutionNode (rootPos, root);
 			xwtSolutionTree.ExpandRow (rootPos, false);
+			// The search box may hold a filter across a tree rebuild (project
+			// add/remove/rename): re-apply it over the new rows.
+			if (solutionFilter.Length > 0)
+				ApplySolutionTreeFilter (solutionFilter);
 		}
 	}
 
@@ -7491,9 +7493,12 @@ public partial class MainWindow : Window
 
 	// ---------- Solution loading ----------
 
-	TreeView? solutionTreeView;
 	TextBox? solutionSearchBox;
 	string? loadedSolutionPath;
+
+	// The current Solution pad filter text (kept so a tree rebuild, e.g. after
+	// add/remove/rename project, re-applies the same filter over the new rows).
+	string solutionFilter = "";
 
 	// F5 Code Generation: the panel edits the ACTIVE project's per-configuration
 	// compiler fields (the legacy panel is a project item-options panel). The
@@ -7556,52 +7561,42 @@ public partial class MainWindow : Window
 			OpenSolutionInWindow (loadedSolutionPath, forceRefresh: true);
 	}
 
-	// ----- Solution pad incremental search (legacy SearchEntry over the ProjectPad
-	// tree: a node is visible when it matches the filter or has a visible descendant;
-	// ancestors of matches are kept and expanded, like Gtk TreeModelFilter). -----
+	// ----- Solution pad incremental search (live filter over the ProjectPad
+	// tree: a node stays visible when it matches the filter or has a visible
+	// descendant; the ancestors of the matches stay and are expanded, like the
+	// Gtk TreeModelFilter behind the legacy pad's search entry). -----
 
-	// QA helper: counts visible nodes (self + visible descendants).
-	int CountVisibleNodes (TreeViewItem node) =>
-		(node.IsVisible ? 1 : 0)
-		+ node.Items.OfType<TreeViewItem> ().Where (c => c.IsVisible).Sum (CountVisibleNodes);
-
-	// Applies the filter in place over the current tree (no rebuild → selection and
-	// expansion survive, matching the legacy Refilter behaviour).
+	// The rows of the REAL Xwt tree (the pad hosts an Xwt.TreeView natively).
+	// The filter runs over the Xwt.TreeStore through the backend's ApplyFilter,
+	// so the non-matching rows are hidden without rebuilding the tree.
 	void ApplySolutionTreeFilter (string filter)
 	{
-		if (solutionTreeView is null)
+		solutionFilter = filter.Trim ();
+		if (xwtSolutionTree is null || xwtSolutionStore is null)
 			return;
-		var trimmed = filter.Trim ();
-		foreach (var root in solutionTreeView.Items.OfType<TreeViewItem> ())
-			FilterNode (root, trimmed);
+		if (solutionFilter.Length == 0) {
+			xwtSolutionTree.ApplyFilter (null);
+			return;
+		}
+		var needle = solutionFilter;
+		xwtSolutionTree.ApplyFilter (pos => {
+			// The node's visible text is the second column (the icon is the first).
+			var text = xwtSolutionStore.GetNavigatorAt (pos).GetValue (xwtSolTextField) as string ?? "";
+			var tag = xwtSolutionStore.GetNavigatorAt (pos).GetValue (xwtSolTagField) as string ?? "";
+			return text.IndexOf (needle, StringComparison.OrdinalIgnoreCase) >= 0
+				|| tag.IndexOf (needle, StringComparison.OrdinalIgnoreCase) >= 0;
+		});
 	}
 
-	// Returns true when the node (or any descendant) matches.
-	bool FilterNode (TreeViewItem node, string filter)
+	// QA: the number of rows the Solution pad currently shows (the rows the Xwt
+	// tree paints after the filter — read from the backend's row panel).
+	int SolutionVisibleRowCount ()
 	{
-		string NodeText (TreeViewItem n) =>
-			n.Header is StackPanel sp && sp.Children.OfType<TextBlock> ().FirstOrDefault () is { } tb
-				? tb.Text ?? ""
-				: n.Header?.ToString () ?? "";
-
-		bool selfMatch = filter.Length == 0
-			|| NodeText (node).IndexOf (filter, StringComparison.OrdinalIgnoreCase) >= 0
-			|| ((node.Tag as string) ?? "").IndexOf (filter, StringComparison.OrdinalIgnoreCase) >= 0;
-
-		bool anyChildVisible = false;
-		foreach (var child in node.Items.OfType<TreeViewItem> ()) {
-			if (FilterNode (child, filter)) {
-				anyChildVisible = true;
-				child.IsVisible = true;
-			} else {
-				child.IsVisible = false;
-			}
-		}
-		// Non-TreeViewItem children (headers, etc.) don't affect visibility.
-		node.IsVisible = selfMatch || anyChildVisible;
-		if (filter.Length > 0 && anyChildVisible)
-			node.IsExpanded = true; // ancestors of matches expand (legacy filter UX)
-		return node.IsVisible;
+		if (xwtSolutionTree is null)
+			return 0;
+		if (Xwt.Toolkit.GetBackend (xwtSolutionTree) is Xwt.AvaloniaBackend.TreeViewBackend tvb)
+			return tvb.VisibleRowCount;
+		return 0;
 	}
 
 	// Directory the context node maps to (project dir, folder node, or file's folder).
@@ -8229,7 +8224,11 @@ public partial class MainWindow : Window
 	void OnSolutionOpen (object? sender, RoutedEventArgs e)
 	{
 		// Legacy ProjectPad.OpenItem: double-click on a file node opens its editor.
-		if (solutionTreeView?.SelectedItem is TreeViewItem { Tag: string file }
+		// The real pad tree is the Xwt one: its selection lives in the backend.
+		if (xwtSolutionTree is not null
+			&& xwtSolutionTree.SelectedRow is { } pos
+			&& xwtSolutionStore is not null
+			&& xwtSolutionStore.GetNavigatorAt (pos).GetValue (xwtSolTagField) is string file
 			&& File.Exists (file)
 			&& !ConfigurationService.IsProjectFile (file)) {
 			OpenFileDocument (file);
