@@ -6029,3 +6029,42 @@ Captura del operador: tras un build con error, debajo del informe aparecía un r
 ### Cierre
 
 QA §18.5: **QA VERDE, 0 hallazgos abiertos**. Builds Avalonia + GTK **0 errores** (§18.4). Commit de código por nombre (2) + commit `Docs:` por nombre (docs ×3: `session_summary.md` §54, `interfaz-plan.md`, `migration-status-report.md`). Push a `origin/agents/sub-agent-senior-dev-role-report`. **Sin submódulos, sin PRs.** Artefactos de QA: `~/opencode/ERRORSPAD_QA_INFORME.md`, `~/opencode/errors_pad_probe/` (fuera del repo).
+
+## 2026-11-25 (55) — Solution pad: el textbox de filtro no filtraba (fix sobre el árbol Xwt real) — CERRADO (QA VERDE, 0 hallazgos)
+
+**Estado: CERRADO (QA APROBADO, 0 hallazgos abiertos §18.5; subagente Tester QA Senior, 1 pase: ROJO 0 → VERDE 0).** El search box del pad Solution no filtraba nada al escribir: las filas se quedaban todas visibles.
+
+### Qué se hizo
+
+- **Causa raíz**: `ApplySolutionTreeFilter` operaba sobre `solutionTreeView`, un `TreeView` de Avalonia que **nunca se asignaba** (siempre `null`) → `return` inmediato, filtro inerte. El pad Solution real aloja un **`Xwt.TreeView`** embebido nativamente (`xwtSolutionTree`/`xwtSolutionStore`, creado en `EnsureXwtSolutionTree`), no un `TreeView` de Avalonia: el filtro se escribió contra un árbol que ya no existía (restos del preview tree). El QA `--filter` estaba protegido por el mismo `solutionTreeView is not null`, así que **nunca se ejecutaba** — el fallo llevaba tiempo invisible para la QA.
+- **Submódulo `main/external/xwt`** (rama `net10`, commit `b05e05aa`): soporte de filtrado de filas en el árbol Xwt, como contrato **opcional** para no afectar a GTK:
+  - `Xwt/Xwt.Backends/ITreeViewBackend.cs`: nueva interfaz `ITreeViewFilterBackend { void ApplyFilter (Func<TreePosition, bool> match); }` (un `null` restaura todas las filas).
+  - `Xwt/Xwt/TreeView.cs`: `TreeView.ApplyFilter(...)` delega al backend cuando implementa esa interfaz (si no, no-op).
+  - `Xwt/Xwt.Avalonia/ListBackends.cs`: `TreeViewBackend` la implementa — una fila sigue visible si hace match o tiene un descendiente que hace match; los ancestros de los matches se expanden (`collapsed.Remove`); `FlattenTree` salta las filas ocultas (`hidden`); `VisibleRowCount` expone las filas pintadas para la QA.
+- **Shell Avalonia** (`Views/MainWindow.axaml.cs`):
+  - Eliminados `solutionTreeView`, `CountVisibleNodes` y `FilterNode` (código muerto del preview tree).
+  - `ApplySolutionTreeFilter(string)` ahora filtra sobre el árbol Xwt real: compara el texto del nodo (`xwtSolTextField`) y su tag (`xwtSolTagField`) con `OrdinalIgnoreCase`; filtro vacío → `ApplyFilter(null)` → restaura el árbol completo.
+  - El filtro activo se **re-aplica tras `RebuildXwtSolutionTree`** (add/remove/rename de proyecto) para que no se pierda.
+  - QA `--filter` reescrito: cuenta las filas pintadas vía el backend (`SolutionVisibleRowCount()` → `TreeViewBackend.VisibleRowCount`) y aserta `rows before` / `rows with 'Program'` / `empty restores all`.
+  - `OnSolutionOpen` lee la selección del árbol Xwt (`SelectedRow`) en lugar del `TreeView` de Avalonia eliminado.
+
+### Por qué (decisiones clave)
+
+- **Interfaz opcional en vez de tocar `ITreeViewBackend`**: el backend GTK resuelve el filtrado con su propio `Gtk.TreeModelFilter` (fuera de este port); añadir el método a `ITreeViewBackend` obligaría a implementarlo también en `Xwt.Gtk`. Con una interfaz aparte (`ITreeViewFilterBackend`) el contrato compartido queda intacto y GTK compila sin cambios (§18.4).
+- **Filtrar en el backend, no reconstruir el store**: el backend ya aplana el árbol respectando expansión (`FlattenTree`); ocultar filas ahí conserva selección, expansión y el store intacto — el equivalente del `TreeModelFilter` del legacy.
+- **Comparar texto + tag**: el tag lleva la ruta completa (`folder:/…`, `project:/…`, ruta del archivo), así que filtrar por tag hace que "Program" encuentre también los archivos cuyo nombre aparece en su ruta, no solo en la etiqueta visible.
+
+### Validación (valores medidos)
+
+- **Builds 0 errores**: shell Avalonia (`net10.0` y `net10.0-windows`), `Xwt.Avalonia`, `Xwt.Gtk` y `MonoDevelop.Ide` (ruta GTK). Nota: el build paralelo multi-TFM falla con `AVLN9999` (race conocido entre inner builds que comparten `OutputPath`, documentado en el csproj) — con `-m:1` compila limpio; no es relación con el fix.
+- **Prueba funcional real** (shell bajo Xvfb, fixture `/home/daniel/opencode/oleada4_e2e_slnmodel/Fixture.sln`): `[filter] rows before: 24` → `[filter] rows with 'Program': 3 (reduced: True)` → `[filter] empty restores all: True`. Las 3 filas son `Program.cs` + sus ancestros (solución + proyecto `App`), que permanecen visibles y expandidos; al vaciar el filtro vuelven las 24.
+- **QA §18.5 (subagente Tester QA Senior)**: **QA VERDE, 0 hallazgos abiertos** — compilación (5 proyectos), revisión estática 8/8 PASS (sin referencias a `solutionTreeView`/`CountVisibleNodes`/`FilterNode`; `ApplyFilter` sobre el árbol real; restauración con filtro vacío; re-aplicación tras rebuild; QA `--filter` sobre `SolutionVisibleRowCount`; delegación `TreeView.ApplyFilter`→`ITreeViewFilterBackend`; `hidden` respetado por `FlattenTree`; `VisibleRowCount`) y prueba funcional headless. Artefactos: `~/opencode/solfilter_qa/` (`REPORT.md`, `filter-run.log`, logs de build).
+
+### Archivos (1 M + 1 submódulo, sin addins)
+
+- `main/external/xwt` (submódulo, puntero actualizado a `b05e05aa`, rama `net10`, commit+push propios) — `Xwt/Xwt/TreeView.cs`, `Xwt/Xwt.Backends/ITreeViewBackend.cs`, `Xwt/Xwt.Avalonia/ListBackends.cs`.
+- `main/src/core/MonoDevelop.Startup.Avalonia/Views/MainWindow.axaml.cs` (M) — filtro sobre el árbol Xwt real, re-aplicación tras rebuild, QA `--filter`, `OnSolutionOpen` con la selección Xwt.
+
+### Cierre
+
+QA §18.5: **QA VERDE, 0 hallazgos abiertos**. Builds Avalonia + GTK **0 errores** (§18.4). Commit del **submódulo** (`b05e05aa`, push a `origin/net10` de `DRavainera/xwt`) + commit del repo principal por nombre (2) + commit `Docs:` por nombre (docs ×3: `session_summary.md` §55, `interfaz-plan.md`, `migration-status-report.md`). Push a `origin/agents/sub-agent-senior-dev-role-report`. **Sin PRs.** Artefactos de QA: `~/opencode/solfilter_qa/` (fuera del repo).
