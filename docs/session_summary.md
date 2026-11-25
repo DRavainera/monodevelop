@@ -6068,3 +6068,36 @@ QA §18.5: **QA VERDE, 0 hallazgos abiertos**. Builds Avalonia + GTK **0 errores
 ### Cierre
 
 QA §18.5: **QA VERDE, 0 hallazgos abiertos**. Builds Avalonia + GTK **0 errores** (§18.4). Commit del **submódulo** (`b05e05aa`, push a `origin/net10` de `DRavainera/xwt`) + commit del repo principal por nombre (2) + commit `Docs:` por nombre (docs ×3: `session_summary.md` §55, `interfaz-plan.md`, `migration-status-report.md`). Push a `origin/agents/sub-agent-senior-dev-role-report`. **Sin PRs.** Artefactos de QA: `~/opencode/solfilter_qa/` (fuera del repo).
+
+## 2026-11-25 (56) — About dialog: "Build information unavailable" — CERRADO (QA VERDE, 0 hallazgos)
+
+**Estado: CERRADO (QA APROBADO, 0 hallazgos abiertos §18.5).** El diálogo About (pestaña de detalles, sección "Build Information") no mostraba información de build: siempre caía al fallback "Build information unavailable".
+
+### Qué se hizo
+
+- **Causa raíz**: `SystemInformation.GetBuildInformation()` lee el archivo `buildinfo` junto al ensamblado de entrada (`Assembly.GetEntryAssembly().Location` → `main/build/buildinfo`). Ese archivo solo se generaba en el build GTK (target `BeforeBuild` de `MonoDevelop.Core.csproj`), que aquí se salta porque `BuildVariables.cs` ya existe (up-to-date) y además genera `buildinfo` en su propio `FullBuildInfo` temporal que luego borra (`RemoveDir`). Como el archivo nunca existía en `main/build/`, el About siempre mostraba el fallback.
+- **`main/src/core/MonoDevelop.Startup.Avalonia/MonoDevelop.Startup.Avalonia.csproj`**: nuevo target `GenerateShellBuildInfo` (`BeforeTargets="Build"`) que invoca el mismo `scripts/configure.dll gen-buildinfo` del build legacy, con rutas absolutas resueltas desde `MSBuildProjectDirectory` + `OutputPath`, directamente en `main/build/`. Así `main/build/buildinfo` acompaña al ejecutable y la shell y el legacy leen el mismo archivo.
+- **`main/src/core/MonoDevelop.Startup.Avalonia/Views/AboutDialog.axaml.cs`**: `QaAbout()` imprime ahora también el cuerpo de cada sección (`[about] sectionN body: ...`) para que el oráculo sea verificable por el subagente QA.
+
+### Por qué (decisiones clave)
+
+- **Reutilizar `configure.dll gen-buildinfo`** (la misma herramienta que el build GTK) en vez de reimplementar la lógica en C# dentro del diálogo: tanto Avalonia como GTK leen exactamente el mismo archivo `buildinfo`, con el mismo formato (`Release ID`, `Git revision`, `Build date`, `Build branch` opcional). Un solo origen de verdad, sin duplicar la generación de versión/release-id ni el cálculo de `ReleaseId` (`ver.Major`+`ver.Minor`+`vbuild`+`vbrev`).
+- **Rutas absolutas en el target**: `OutputPath` es relativo al directorio de trabajo de `dotnet build` (repo root), no al csproj, así que se resuelve con `$([System.IO.Path]::GetFullPath(...))` sobre `MSBuildProjectDirectory` + `OutputPath`; `configure.dll` recibe el directorio absoluto y puede crear el fichero sin fallos de "path not found".
+- **No tocar `MonoDevelop.Core.csproj` ni el submódulo xwt**: el fix está contenido en el csproj de la shell y no afecta al build GTK (§18.4 intacto).
+
+### Validación (valores medidos)
+
+- **Builds 0 errores**: shell Avalonia (`net10.0` y `net10.0-windows`, 3066 warnings preexistentes, 0 errores).
+- **`main/build/buildinfo` presente tras el build** con `Release ID: 900000328`, `Git revision: 701c153b311d62f07f19cb3d51adde89259cb44b`, `Build date: ...`.
+- **Prueba funcional real** (oráculo `--about`, shell bajo Xvfb): `[about] section1=Build Information` + `section1 body: Release ID: 900000328` / `section1 body: Git revision: ...` / `section1 body: Build date: ...`; **sin** "Build information unavailable".
+- **QA §18.5 (subagente Tester QA Senior)**: **QA VERDE, 0 hallazgos abiertos**. Artefactos: `~/opencode/ABOUT_QA_INFORME.md` y `~/opencode/aboutqa2_qa.log`.
+
+### Archivos (2 M, sin submódulos, sin addins)
+
+- `main/src/core/MonoDevelop.Startup.Avalonia/MonoDevelop.Startup.Avalonia.csproj` (M) — target `GenerateShellBuildInfo`.
+- `main/src/core/MonoDevelop.Startup.Avalonia/Views/AboutDialog.axaml.cs` (M) — `QaAbout` imprime cuerpos de sección.
+- `main/build/buildinfo` — artefacto de build, **gitignored** (`/main/build/*`), no commiteado.
+
+### Cierre
+
+QA §18.5: **QA VERDE, 0 hallazgos abiertos**. Builds Avalonia + GTK **0 errores** (§18.4). Commit por nombre (2 archivos) + commit `Docs:` por nombre (docs ×3: `session_summary.md` §56, `interfaz-plan.md`, `migration-status-report.md`). Push a `origin/agents/sub-agent-senior-dev-role-report`. **Sin PRs.**
