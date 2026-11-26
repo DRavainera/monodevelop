@@ -6101,3 +6101,49 @@ QA §18.5: **QA VERDE, 0 hallazgos abiertos**. Builds Avalonia + GTK **0 errores
 ### Cierre
 
 QA §18.5: **QA VERDE, 0 hallazgos abiertos**. Builds Avalonia + GTK **0 errores** (§18.4). Commit por nombre (2 archivos) + commit `Docs:` por nombre (docs ×3: `session_summary.md` §56, `interfaz-plan.md`, `migration-status-report.md`). Push a `origin/agents/sub-agent-senior-dev-role-report`. **Sin PRs.**
+## 2026-11-25 (57) — Localización gettext de la shell Avalonia (menús, ventana, diálogos y selector de idioma)
+
+**Estado: CERRADO (QA VERDE, 0 hallazgos abiertos §18.5).**
+
+### Qué se hizo
+
+- **`main/src/core/MonoDevelop.Ide/Services/GettextService.cs`** (backend compartido): `LanguageKey` público, `T(msgid)` / `T(msgid, args)`, `N()` con reglas plurales, `HasCatalog`, evento `LanguageChanged` y `SetLanguage()` con log de diagnóstico. **Corrección de causa raíz**: el lector `.mo` leía el número de cadenas en el offset 4 (revisión) en vez del 8 (count) y las tablas en 8/12 en vez de 12/16 → el catálogo cargaba 0 entradas; ahora carga 6.056 para `es`.
+- **`main/src/core/MonoDevelop.Ide/Controls/XamlTranslation.cs`** (nuevo, backend): traductor del árbol visual en tiempo de ejecución. Registra por control/propiedad el msgid original y el valor aplicado; en cada cambio de idioma re-traduce desde el msgid (nunca desde una traducción). Cubre `Window.Title`, `TextBlock.Text`, `ContentControl.Content`, headers, `TextBox.Watermark` y ToolTips; no adopta valores dinámicos escritos por código (rutas de archivo, mensajes de estado) para no traducir datos. Se attacha en `DialogWindow.Apply` y en el constructor de `MainWindow`.
+- **`MainWindow.axaml.cs`**: se re-suscribe a `LanguageChanged` para reconstruir el menú principal (sus etiquetas se traducen al construirse).
+- **`PreferencesDialog.axaml.cs`**: `Cat`/`Leaf` traducen el árbol de secciones; el combo `User Interface Language` aplica `SetLanguage` en `OnLanguageChanged`, persiste en `OnOk` y restaura en `OnCancel`; el árbol se reconstruye en caliente al cambiar de idioma, preservando la selección y des-suscribiendo el handler al cerrar.
+- **`MonoDevelop.Startup.Avalonia.csproj`**: target `CompileShellTranslations` que compila `.po` → `.mo` con `msgfmt` en `build/locale` (los `.mo` son gitignored; sin este target un checkout limpio no tendría catálogo). Incremental por Inputs/Outputs y tolerante a `msgfmt` ausente.
+- **`main/po/*.po`** (25 archivos): +219 msgids del shell, conservando las entradas GTK existentes (6.052 en `es.po` → 6.271). Entradas obsoletas (`#~`) con el mismo msgid se reactivan en vez de duplicarse. `es.po` incorpora traducciones nuevas (`Ready→Listo`, `User Interface Language→Idioma de la interfaz de usuario`, etc.); el resto de idiomas quedan con `msgstr ""`. `.mo` regenerados en `build/locale` (artefacto ignorado).
+
+### Por qué (decisiones clave)
+
+- **Servicios y controles en `MonoDevelop.Ide`** (§18.4): el shell compila los globs `Services/**` y `Controls/**`; el `MonoDevelop.Ide.csproj` GTK no los compila → `--old-gui` intacto. Solo `.axaml`/`.axaml.cs` quedan en el proyecto de arranque.
+- **Traducción en tiempo de ejecución, no MarkupExtension**: se probó `{i18n:Tr msgid}` en 10 vistas, pero los msgids con apóstrofes, comillas y entidades XML rompían el parser XAML (AXN0003 → pérdida de campos `x:Name`, 1.304 errores CS0103). Se descartó y se revirtieron los `.axaml`; el walker en backend maneja texto arbitrario sin tocar el XAML.
+- **Mismo catálogo que GTK**: no se crea un catálogo paralelo; los textos nuevos se añaden a los `.po` compartidos. La preferencia `MonoDevelop.Ide.UserInterfaceLanguage` es la misma que usa la UI GTK.
+- **Cambio en caliente**: el evento `LanguageChanged` permite que ventanas abiertas, menús y árbol de preferencias se re-traduzcan sin reinicio; el botón `Restart MonoDevelop` se mantiene por fidelidad al legacy.
+
+### Validación (valores medidos)
+
+- **Build 0 errores** (`net10.0` + `net10.0-windows`): `~/opencode/gettext-build22.log`; warnings preexistentes ~3.086.
+- **Perfil por defecto (sin idioma)**: `[gettext] language=(default) catalog=(none)`; `--menudump` `menus=11 items=273 cmds=0 bindings=239` con `_File`…`_Help` y `--prefs-tree` `Environment`… — idéntico al estado previo, sin regresión.
+- **Perfil `es`**: `[gettext] language=es catalog=6056 entries`; menús `_Archivo`, `_Editar`, `_Ver`, `Bu_scar`, `_Proyecto`, `_Compilar`, `Ejecuta_r`, `Co_ntrol de versiones`, `_Herramientas`, `_Ventana`, `Ay_uda` (mismos 11/273/0/239); `--prefs-tree` `Entorno`, `Estilo visual`, `Editor de texto`, `Cargar/guardar`, `Errores y advertencias`, etc. (mismos ids). Captura real `~/opencode/gettext_probe/shots/main_es.png`: estado `Listo` y pad `SOLUCIÓN`.
+- **Catálogos**: `msgfmt --check-format` pasa en los 25 `.po` modificados; `es.po` conserva `Cancel→Cancelar`, `File→Archivo` y añade `Ready→Listo`; `Cancel`, `Preferences`, `Browse` siguen traducidos en el `.mo` compartido.
+- **Target `.mo`**: borrando `build/locale/es/LC_MESSAGES/monodevelop.mo`, `dotnet msbuild -t:CompileShellTranslations` lo regenera con `Ready→Listo`; segunda pasada sin recompilación.
+- **QA §18.5 (Tester QA Senior)**: **QA VERDE, 0 hallazgos abiertos**. Ciclo 1: FAIL con P1 (pérdida de 4 paneles de Preferences en español) y P2 (4 msgids con doble codificación); ambos corregidos. Ciclo 2: PASS — estructura idéntica (62 filas, `merged=4` en ambos perfiles), los 4 paneles `codestylepanel`/`codeactions`/`codegeneration`/`coderules` presentes en español, `msgfmt --check-format` sin fallos, 0 mojibake en los msgids nuevos, builds Avalonia y GTK 0 errores, sin excepciones en los oráculos. Artefactos: `~/opencode/qa_gettext_report.md`, `~/opencode/gettext_qa/`, `~/opencode/qa_gettext/`.
+
+### Correcciones del ciclo QA (2026-11-26)
+
+El primer ciclo del Tester QA Senior devolvió **FAIL** con dos hallazgos; ambos corregidos y re-verificados:
+
+- **P1 — pérdida de 4 secciones de Preferences en español.** `Cat()`/`Leaf()` traducían la etiqueta en el momento de construir el esqueleto, y `MergeAddonSections()` buscaba la categoría comparando `Label` contra los nombres legacy ingleses (`"Text Editor"`, `"Version Control"`, `"Other"`). En español la comparación fallaba y los paneles aportados por addins (`codestylepanel`, `codeactions`, `codegeneration`, `coderules`) desaparecían: 62 → 58 filas y `merged=4` → `0`. **Fix**: `PrefsNode.SourceLabel` guarda la etiqueta original sin traducir (`init` = `Label`); `Cat`/`Leaf` la fijan y traducen solo `Label`; `MergeAddonSections` y `AddSection` comparan `SourceLabel`. **Verificado**: `controlled_tree.sh` → `ctrl_en filas=62`, `ctrl_es filas=62`, `merged=4` en ambos perfiles, 0 excepciones.
+- **P2 — 4 msgids con doble codificación** (`Addâ¦`, `Browseâ¦`, `â`, título con `â`): UTF-8 leído como Latin-1 al generar los msgids, por lo que no coincidían con los literales del XAML y esos textos nunca se traducían (incluido el título de la ventana). **Fix**: reparados los 4 msgids en los 25 `.po` (`Add…`, `Browse…`, `→`, `—`) y añadidas sus traducciones a `es.po` (`Añadir…`, `Examinar…`, `MonoDevelop — Shell de Avalonia`). **Verificado**: `grep -P '[âÃ]' main/po/es.po` → 0; el `.mo` español contiene las tres entradas.
+- Build tras las correcciones: 0 errores (`~/opencode/gettext-build23.log`). Re-validación completa del Tester QA Senior en curso.
+
+### Archivos (1 M de csproj + 4 M de código + 25 `.po`; sin submódulos ni addins)
+
+- `main/src/core/MonoDevelop.Ide/Services/GettextService.cs` (M), `main/src/core/MonoDevelop.Ide/Controls/XamlTranslation.cs` (nuevo), `main/src/core/MonoDevelop.Ide/Controls/DialogWindow.cs` (M).
+- `main/src/core/MonoDevelop.Startup.Avalonia/MonoDevelop.Startup.Avalonia.csproj` (M), `Views/MainWindow.axaml.cs` (M), `Views/PreferencesDialog.axaml.cs` (M).
+- `main/po/*.po` (25 M), `main/build/locale/**/*.mo` (regenerados, gitignored).
+
+### Cierre
+
+QA §18.5: **QA VERDE, 0 hallazgos abiertos**. Build shell + GTK **0 errores** (§18.4). Commit de código por nombre + commit `Docs:` por nombre (docs ×3). Push a `origin/agents/sub-agent-senior-dev-role-report`. **Sin PRs.** Artefactos: `~/opencode/gettext_probe/`, `~/opencode/qa_gettext_report.md`, `~/opencode/gettext_qa/`, logs `~/opencode/gettext-build*.log`.
