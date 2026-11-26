@@ -174,6 +174,9 @@ public partial class MainWindow : Window
 		InitializeComponent ();
 		Instance = this;
 		Output ("MonoDevelop Avalonia shell initialized.");
+		// Gettext: translate the chrome, pads and menus in place; re-applied on a
+		// language change (Preferences > Environment > Visual Style).
+		MonoDevelop.Ide.Controls.XamlTranslation.Attach (this);
 
 		BuildPads ();
 		// Restore the persisted pad layout (visible tabs, collapse, active tab,
@@ -303,6 +306,14 @@ public partial class MainWindow : Window
 
 		// Full legacy main menu: same structure/order/labels/icons/shortcuts as the GTK UI.
 		BuildMenu ();
+		// Gettext: rebuild the menu (labels are translated at build time) when the
+		// user switches the UI language in Preferences.
+		MonoDevelop.Ide.Services.GettextService.LanguageChanged += (_, _) => {
+			if (Avalonia.Threading.Dispatcher.UIThread.CheckAccess ())
+				BuildMenu ();
+			else
+				Avalonia.Threading.Dispatcher.UIThread.Post (BuildMenu);
+		};
 
 		// Window drag on the chrome rows (menu bar + toolbar), except over interactive
 		// controls; those handle their own input first.

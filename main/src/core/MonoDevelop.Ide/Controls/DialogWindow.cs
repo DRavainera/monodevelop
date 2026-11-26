@@ -203,6 +203,10 @@ public class DialogWindow : Window
 		if (window is DialogWindow || window.Content is not Control oldContent)
 			return;
 
+		// Gettext: the dialogs author English msgids; the shared catalog translates
+		// them in place and re-applies on a language change.
+		XamlTranslation.Attach (window);
+
 		window.SystemDecorations = Avalonia.Controls.WindowDecorations.None;
 		window.ExtendClientAreaToDecorationsHint = true;
 		window.TransparencyLevelHint = [Avalonia.Controls.WindowTransparencyLevel.Transparent];

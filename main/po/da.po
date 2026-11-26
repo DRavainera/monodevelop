@@ -31833,8 +31833,8 @@ msgstr ""
 #~ msgid "A_uto insert curly braces"
 #~ msgstr "Indsæt a_utomatisk tuborg-parenteser"
 
-#~ msgid "About MonoDevelop"
-#~ msgstr "Om MonoDevelop"
+msgid "About MonoDevelop"
+msgstr "Om MonoDevelop"
 
 #~ msgid "Abstract Content"
 #~ msgstr "Abstraktindhold"
@@ -33756,8 +33756,8 @@ msgstr ""
 #~ msgid "FilePathNotExist"
 #~ msgstr "Enhedssti"
 
-#~ msgid "Find"
-#~ msgstr "Søg"
+msgid "Find"
+msgstr "Søg"
 
 #~ msgid "Find Dialog"
 #~ msgstr "Find-dialog"
@@ -34606,8 +34606,8 @@ msgstr ""
 #~ msgid "New Project Features"
 #~ msgstr "Nyt projekt"
 
-#~ msgid "New Solution"
-#~ msgstr "Ny løsning"
+msgid "New Solution"
+msgstr "Ny løsning"
 
 #, fuzzy
 #~ msgid "New Source Code Editor"
@@ -34933,8 +34933,8 @@ msgstr ""
 #~ msgid "Readonly fields"
 #~ msgstr "Byg egenskaber"
 
-#~ msgid "Ready"
-#~ msgstr "Klar"
+msgid "Ready"
+msgstr "Klar"
 
 #, fuzzy
 #~ msgid "Recent"
@@ -37329,3 +37329,637 @@ msgstr ""
 #, fuzzy
 #~ msgid "{0}Error: the help topic '{2}' could not be loaded.{1}"
 #~ msgstr "Filen \"{0}\" kunne ikke indlæses."
+
+# Textos de la interfaz del shell Avalonia
+msgid "(none)"
+msgstr ""
+
+msgid "/usr/bin/dotnet"
+msgstr ""
+
+msgid "Acronyms"
+msgstr ""
+
+msgid "Active configuration"
+msgstr ""
+
+msgid "Add an undo step for formatting changes"
+msgstr ""
+
+msgid "Add one line per file changed"
+msgstr ""
+
+msgid "Add to open solution"
+msgstr ""
+
+msgid "Add to project:"
+msgstr ""
+
+msgid "Add…"
+msgstr ""
+
+msgid "Advance to the next line when sending a line to the F# Interactive"
+msgstr ""
+
+msgid "Align the message text"
+msgstr ""
+
+msgid "All words that consist of only consonants (like sql) and/or upper case letters (like HTML) are treated as acronyms. However the acronym recognition can be improved by defining acronyms."
+msgstr ""
+
+msgid "Apply to open editors"
+msgstr ""
+
+msgid "Associate namespaces with directory names"
+msgstr ""
+
+msgid "Automatic source download"
+msgstr ""
+
+msgid "Automatically check for updates"
+msgstr ""
+
+msgid "Automatically complete elements"
+msgstr ""
+
+msgid "Automatically insert braces"
+msgstr ""
+
+msgid "Automatically insert closing fragments"
+msgstr ""
+
+msgid "Automatically restore packages when opening a solution."
+msgstr ""
+
+msgid "Automatically set search pattern case sensitivity"
+msgstr ""
+
+msgid "Available color themes"
+msgstr ""
+
+msgid "Before compiling"
+msgstr ""
+
+msgid "Browse…"
+msgstr ""
+
+msgid "Build before executing"
+msgstr ""
+
+msgid "Build before running tests"
+msgstr ""
+
+msgid "Build multiple projects in parallel"
+msgstr ""
+
+msgid "C# code actions (refactorings). Uncheck an action to disable it (same CodeActions.C#.* keys the GTK UI writes; enabled by default)."
+msgstr ""
+
+msgid "C# code style options (stored with the same Roslyn keys the GTK UI writes; the live preview shows the selected style)."
+msgstr ""
+
+msgid "ChangeLog update mode"
+msgstr ""
+
+msgid "Check for package updates when opening a solution."
+msgstr ""
+
+msgid "Code snippets"
+msgstr ""
+
+msgid "Colors for user-defined tasks, as #RRGGBB."
+msgstr ""
+
+msgid "Company"
+msgstr ""
+
+msgid "Compiler path"
+msgstr ""
+
+msgid "Count"
+msgstr ""
+
+msgid "Create a New Solution"
+msgstr ""
+
+msgid "Create a directory for the solution"
+msgstr ""
+
+msgid "Create backup copies of files before saving"
+msgstr ""
+
+msgid "Default project directory"
+msgstr ""
+
+msgid "Define Symbols:"
+msgstr ""
+
+msgid "Do not generate ChangeLog entries"
+msgstr ""
+
+msgid "Do nothing"
+msgstr ""
+
+msgid "Draw indentation markers"
+msgstr ""
+
+msgid "Editor"
+msgstr ""
+
+msgid "Email"
+msgstr ""
+
+msgid "Empty environment"
+msgstr ""
+
+msgid "Enable animations in the text editor"
+msgstr ""
+
+msgid "Enable automated testing"
+msgstr ""
+
+msgid "Enable automatic code completion"
+msgstr ""
+
+msgid "Enable instrumentation"
+msgstr ""
+
+msgid "Enable optimizations"
+msgstr ""
+
+msgid "Enable selection surrounding keys"
+msgstr ""
+
+msgid "Enable some diagnostic logging"
+msgstr ""
+
+msgid "Evaluation"
+msgstr ""
+
+msgid "Evaluation timeout (ms)"
+msgstr ""
+
+msgid "Expansions"
+msgstr ""
+
+msgid "Expansions map an abbreviation to its full word (e.g. 'arg' → 'argument') so the generator reads 'arguments' instead of 'arg'."
+msgstr ""
+
+msgid "F# Compiler"
+msgstr ""
+
+msgid "File extensions bound to XML schemas"
+msgstr ""
+
+msgid "File format default"
+msgstr ""
+
+msgid "File name"
+msgstr ""
+
+msgid "File width (ruler column)"
+msgstr ""
+
+msgid "Filter"
+msgstr ""
+
+msgid "Filter the completion list by browsable members"
+msgstr ""
+
+msgid "Flat folder structure"
+msgstr ""
+
+msgid "Fold comments by default"
+msgstr ""
+
+msgid "Fold regions by default"
+msgstr ""
+
+msgid "Generate overflow checks"
+msgstr ""
+
+msgid "Group non-public members in the Variables windows"
+msgstr ""
+
+msgid "Group static members in the Variables windows"
+msgstr ""
+
+msgid "Header text"
+msgstr ""
+
+msgid "Hierarchical folder structure"
+msgstr ""
+
+msgid "High priority"
+msgstr ""
+
+msgid "Highlight changed lines"
+msgstr ""
+
+msgid "Highlight current line"
+msgstr ""
+
+msgid "Highlight identifier references"
+msgstr ""
+
+msgid "Highlight matching brackets"
+msgstr ""
+
+msgid "Highlight mutable bindings in the editor (underlined)"
+msgstr ""
+
+msgid "Ignore warnings:"
+msgstr ""
+
+msgid "Include code snippets in the completion list"
+msgstr ""
+
+msgid "Include keywords in the completion list"
+msgstr ""
+
+msgid "Include the standard header in newly created files"
+msgstr ""
+
+msgid "Indent each entry"
+msgstr ""
+
+msgid "Indent width"
+msgstr ""
+
+msgid "Indent with spaces"
+msgstr ""
+
+msgid "Indent with tabs"
+msgstr ""
+
+msgid "Indentation mode"
+msgstr ""
+
+msgid "Initial Directory"
+msgstr ""
+
+msgid "Installed language bundles"
+msgstr ""
+
+msgid "Installed runtimes"
+msgstr ""
+
+msgid "Integrate with version control"
+msgstr ""
+
+msgid "Jump to first"
+msgstr ""
+
+msgid "Keep the file name and messages on separate lines"
+msgstr ""
+
+msgid "Last"
+msgstr ""
+
+msgid "Line endings"
+msgstr ""
+
+msgid "Lists the runtimes registered by the runtime service; the default is stored with the legacy MonoDevelop.Ide.DefaultTargetRuntime key."
+msgstr ""
+
+msgid "Load previous solution"
+msgstr ""
+
+msgid "Load previous user properties when opening documents"
+msgstr ""
+
+msgid "Low priority"
+msgstr ""
+
+msgid "MSBuild verbosity"
+msgstr ""
+
+msgid "Macros"
+msgstr ""
+
+msgid "Macros expand as ${Tag} in the documentation templates. Stored in the DocFood config (Macros), the same XML the generator reads."
+msgstr ""
+
+msgid "Margin and folding"
+msgstr ""
+
+msgid "Maximize"
+msgstr ""
+
+msgid "Menu Command"
+msgstr ""
+
+msgid "Message header"
+msgstr ""
+
+msgid "Microsoft .NET Core SDK location"
+msgstr ""
+
+msgid "MonoDevelop — Avalonia Shell"
+msgstr ""
+
+msgid "Move Down"
+msgstr ""
+
+msgid "Move Up"
+msgstr ""
+
+msgid "No tabs after non-tab characters"
+msgstr ""
+
+msgid "Normal priority"
+msgstr ""
+
+msgid "On startup"
+msgstr ""
+
+msgid "Open folder"
+msgstr ""
+
+msgid "Output Pad"
+msgstr ""
+
+msgid "Package Restore"
+msgstr ""
+
+msgid "Package Updates"
+msgstr ""
+
+msgid "Package sources"
+msgstr ""
+
+msgid "Pad"
+msgstr ""
+
+msgid "Prefix words for the reordering"
+msgstr ""
+
+msgid "Prompt to save"
+msgstr ""
+
+msgid "Re_gular expression"
+msgstr ""
+
+msgid "Reads/writes NuGet.Config through NuGet.Configuration Settings (same backend as the GTK UI)."
+msgstr ""
+
+msgid "Reformat document when saving"
+msgstr ""
+
+msgid "Report errors and usage information to help MonoDevelop improve my experience."
+msgstr ""
+
+msgid "Require ChangeLog entries for all files when committing"
+msgstr ""
+
+msgid "Reset to defaults"
+msgstr ""
+
+msgid "Resource naming"
+msgstr ""
+
+msgid "Restart MonoDevelop"
+msgstr ""
+
+msgid "Run even when there are warnings"
+msgstr ""
+
+msgid "Save all files"
+msgstr ""
+
+msgid "Schemas live in XmlSchemas under the MonoDevelop data folder; extensions are stored as Association* properties under XmlEditor.AddIn.Options (same as the GTK UI)."
+msgstr ""
+
+msgid "Search (:commands, :files)"
+msgstr ""
+
+msgid "Show column ruler"
+msgstr ""
+
+msgid "Show error pad after build"
+msgstr ""
+
+msgid "Show folding margin"
+msgstr ""
+
+msgid "Show function type signatures in the editor"
+msgstr ""
+
+msgid "Show invisible characters"
+msgstr ""
+
+msgid "Show items from unimported namespaces"
+msgstr ""
+
+msgid "Show line numbers"
+msgstr ""
+
+msgid "Show loaded assemblies"
+msgstr ""
+
+msgid "Show procedure line separators"
+msgstr ""
+
+msgid "Show schema annotations"
+msgstr ""
+
+msgid "Show start window"
+msgstr ""
+
+msgid "Since"
+msgstr ""
+
+msgid "Smart semicolon placement"
+msgstr ""
+
+msgid "Solution name:"
+msgstr ""
+
+msgid "Source URL"
+msgstr ""
+
+msgid "Start Debugging (F5)"
+msgstr ""
+
+msgid "Start Without Debugging (Ctrl F5)"
+msgstr ""
+
+msgid "Step Into (F11)"
+msgstr ""
+
+msgid "Step Out (Shift F11)"
+msgstr ""
+
+msgid "Step Over (F10)"
+msgstr ""
+
+msgid "Stored as ColorScheme (light) / ColorScheme-Dark (dark) in MonoDevelopProperties.xml, same keys as the GTK UI. User themes live in the ColorThemes folder."
+msgstr ""
+
+msgid "Stored as DotNetCoreRuntimeFileName (same key as the GTK UI); changing it re-evaluates open .NET Core projects."
+msgstr ""
+
+msgid "Stored as FontProperties (nested) in MonoDevelopProperties.xml, same keys as the GTK UI."
+msgstr ""
+
+msgid "Stored as nested properties under PackageManagementSettings in MonoDevelopProperties.xml, same as the GTK UI."
+msgstr ""
+
+msgid "Stored as nested properties under XmlEditor.AddIn.Options, same as the GTK UI."
+msgstr ""
+
+msgid "Stored as the ChangeLogPolicy entry of the global policy set, same as the GTK UI."
+msgstr ""
+
+msgid "Stored as the DotNetNamingPolicy entry of the global policy set (Policies/UserDefault.mdpolicy.xml), same as the GTK UI."
+msgstr ""
+
+msgid "Stored as the StandardHeader entry of the global policy set (Policies/UserDefault.mdpolicy.xml), same as the GTK UI."
+msgstr ""
+
+msgid "Stored as the TextStylePolicy entry of the global policy set (same keys as the GTK UI). The per-MimeType policy-set selection tree needs the add-in engine."
+msgstr ""
+
+msgid "Stored as the VersionControlPolicy entry of the global policy set, same as the GTK UI."
+msgstr ""
+
+msgid "Stored in VersionControl.config (same file the GTK UI reads; repositories are preserved)."
+msgstr ""
+
+msgid "Stored with the legacy CompletionOptionsHideAdvancedMembers key."
+msgstr ""
+
+msgid "Stored with the legacy MonoDevelop.Debugger.DebuggingService.* keys in MonoDevelopProperties.xml."
+msgstr ""
+
+msgid "Stored with the legacy PerformanceDiagnosticsAddIn.OutputPath key."
+msgstr ""
+
+msgid "Stored with the legacy keys MonoDevelop.AnalysisCore.AnalysisEnabled_V2 and Testing.EnableUnitTestEditorIntegration. 'Whole solution' depends on a Roslyn per-language option key and stays disabled until the Roslyn reference is wired."
+msgstr ""
+
+msgid "Stored with the legacy keys MonoDevelop.VersionControl.Git.* in MonoDevelopProperties.xml."
+msgstr ""
+
+msgid "Stored with the same Roslyn per-language keys the GTK UI computes via OptionKey.GetPropertyName()."
+msgstr ""
+
+msgid "System"
+msgstr ""
+
+msgid "System follows the operating system light/dark setting. The legacy GTK dialog listed the installed GTK themes; the new UI maps them to the Fluent variants."
+msgstr ""
+
+msgid "Tab key reindents the selection"
+msgstr ""
+
+msgid "Tab width"
+msgstr ""
+
+msgid "Tabs"
+msgstr ""
+
+msgid "Target framework"
+msgstr ""
+
+msgid "Text file formatting"
+msgstr ""
+
+msgid "The debugger will step into code and hit exceptions in dependencies that aren't considered part of your project, like packages and references."
+msgstr ""
+
+msgid "The documentation rules are defined using XML. Click Help for a full explanation."
+msgstr ""
+
+msgid "The news feed service is no longer available."
+msgstr ""
+
+msgid "These preferences will take effect next time you start MonoDevelop"
+msgstr ""
+
+msgid "This options panel is provided by an add-in and has not been wired to the new UI yet."
+msgstr ""
+
+msgid "Trademark"
+msgstr ""
+
+msgid "Treat warnings as errors"
+msgstr ""
+
+msgid "Uninstall..."
+msgstr ""
+
+msgid "Use bullets for each entry"
+msgstr ""
+
+msgid "Use git for version control"
+msgstr ""
+
+msgid "Use suggestion mode (do not commit on typing)"
+msgstr ""
+
+msgid "Use the default F# compiler"
+msgstr ""
+
+msgid "Use the default namespace as the root of all namespaces"
+msgstr ""
+
+msgid "Use the nearest ChangeLog file"
+msgstr ""
+
+msgid "Use the new variables tree view"
+msgstr ""
+
+msgid "User Interface Language"
+msgstr ""
+
+msgid "User Interface Theme"
+msgstr ""
+
+msgid "User XML schemas"
+msgstr ""
+
+msgid "User bundles live in the LanguageBundles folder; built-in bundles are provided by the IDE."
+msgstr ""
+
+msgid "View Conflicts"
+msgstr ""
+
+msgid "Visual Studio style (MSBuild)"
+msgstr ""
+
+msgid "Warning Level:"
+msgstr ""
+
+msgid "Warnings"
+msgstr ""
+
+msgid "Word break mode"
+msgstr ""
+
+msgid "Word wrap"
+msgstr ""
+
+msgid "Words that may be reordered with the leading 'of the' (e.g. 'a list of the items') and the prefix words that trigger the reordering."
+msgstr ""
+
+msgid "Words that never take the 'the' prefix in generated summaries (e.g. 'the index' becomes 'the index' only if 'index' is not in this list)."
+msgstr ""
+
+msgid "Wrap the lines at 60 characters"
+msgstr ""
+
+msgid "_Scope:"
+msgstr ""
+
+msgid "mono projects news"
+msgstr ""
+
+msgid "~/Desktop"
+msgstr ""
+
+msgid "ð"
+msgstr ""
+
+msgid "ð"
+msgstr ""

@@ -35,6 +35,10 @@ public partial class PreferencesDialog : Window
 	sealed record PrefsNode (string Id, string Label, string Icon, List<PrefsNode> Children)
 	{
 		public bool IsCategory => string.IsNullOrEmpty (Id);
+
+		// Authored (untranslated) label. Add-in merge lookups compare against the
+		// legacy English names, so they must not see the translated Label.
+		public string SourceLabel { get; init; } = Label;
 	}
 
 	// Legacy language list (LocalizationService.defaultLocaleSet, same order/cultures).
@@ -108,6 +112,20 @@ public partial class PreferencesDialog : Window
 	{
 		InitializeComponent ();
 		MonoDevelop.Ide.Controls.DialogWindow.Apply (this);
+		// Gettext: the section tree labels are translated when the model is built,
+		// so it is rebuilt when the user switches the UI language. The handler is
+		// detached on close so the static event does not keep the dialog alive.
+		EventHandler onLanguageChanged = (_, _) => {
+			if (!Avalonia.Threading.Dispatcher.UIThread.CheckAccess ())
+				return;
+			var selected = (SectionTree?.SelectedItem as TreeViewItem)?.Tag as PrefsNode;
+			SectionTree?.Items.Clear ();
+			BuildSectionTree ();
+			if (selected is not null)
+				SelectPanel (selected.Id);
+		};
+		MonoDevelop.Ide.Services.GettextService.LanguageChanged += onLanguageChanged;
+		Closed += (_, _) => MonoDevelop.Ide.Services.GettextService.LanguageChanged -= onLanguageChanged;
 		ThemeDarkRadio!.IsCheckedChanged += OnThemeRadioChecked;
 		ThemeLightRadio!.IsCheckedChanged += OnThemeRadioChecked;
 		ThemeSystemRadio!.IsCheckedChanged += OnThemeRadioChecked;
@@ -170,8 +188,8 @@ public partial class PreferencesDialog : Window
 
 	// ---------- Section tree (legacy GlobalOptionsDialog.addin.xml + addin extensions) ----------
 
-	static PrefsNode Cat (string label, params PrefsNode[] children) => new ("", label, "", children.ToList ());
-	static PrefsNode Leaf (string id, string label, string icon) => new (id, label, icon, new List<PrefsNode> ());
+	static PrefsNode Cat (string label, params PrefsNode[] children) => new ("", GettextService.T (label), "", children.ToList ()) { SourceLabel = label };
+	static PrefsNode Leaf (string id, string label, string icon) => new (id, GettextService.T (label), icon, new List<PrefsNode> ()) { SourceLabel = label };
 
 	// Legacy section id → Avalonia panel id, per extension point. Keyed by point because
 	// the legacy ids are only unique inside their parent: "General" under
@@ -256,7 +274,7 @@ public partial class PreferencesDialog : Window
 		var rootNodes = reg.GetExtensionNodes (RootOptionsPoint).ToList ();
 		foreach (var node in rootNodes.Where (n => string.IsNullOrEmpty (n.ChildId) || rootNodes.All (p => p.Id != n.ChildId))) {
 			var label = string.IsNullOrEmpty (node.Label) ? node.Id : node.Label;
-			var cat = tree.FirstOrDefault (c => string.Equals (c.Label, label, StringComparison.OrdinalIgnoreCase));
+			var cat = tree.FirstOrDefault (c => string.Equals (c.SourceLabel, label, StringComparison.OrdinalIgnoreCase));
 			if (cat is null) {
 				cat = new PrefsNode ("", label, "", new List<PrefsNode> ());
 				tree.Add (cat);
@@ -270,7 +288,7 @@ public partial class PreferencesDialog : Window
 
 		foreach (var (point, category, parentId) in MergePoints) {
 			var nodes = reg.GetExtensionNodes (point).ToList ();
-			var cat = tree.FirstOrDefault (c => c.Label == category);
+			var cat = tree.FirstOrDefault (c => string.Equals (c.SourceLabel, category, StringComparison.OrdinalIgnoreCase));
 			if (cat is null)
 				continue;
 			// The parent may be nested inside the category (e.g. analysis-csharp
@@ -309,7 +327,7 @@ public partial class PreferencesDialog : Window
 		var label = string.IsNullOrEmpty (node.Label) ? node.Id : node.Label;
 		var id = (LegacySectionMap.TryGetValue (point, out var pointMap) && pointMap.TryGetValue (node.Id, out var mapped)) ? mapped
 			: node.Id.ToLowerInvariant ().Replace (" ", "").Replace (".", "").Replace ("#", "");
-		var existing = target.Children.FirstOrDefault (ch => ch.Id == id || ch.Label == label);
+		var existing = target.Children.FirstOrDefault (ch => ch.Id == id || string.Equals (ch.SourceLabel, label, StringComparison.OrdinalIgnoreCase));
 		if (existing is not null)
 			return existing;
 		var leaf = new PrefsNode (id, label, node.Icon ?? "md-prefs-generic", new List<PrefsNode> ());
@@ -512,6 +530,7 @@ public partial class PreferencesDialog : Window
 		if (updatingDetails || LanguageCombo?.SelectedItem is not ComboBoxItem item)
 			return;
 		pendingLanguage = item.Tag as string;
+		GettextService.SetLanguage (pendingLanguage);
 		UpdateLanguageRestartUi ();
 	}
 
@@ -2693,8 +2712,11 @@ public partial class PreferencesDialog : Window
 	void OnOk (object? sender, RoutedEventArgs e)
 	{
 		// OptionsDialog.ApplyChanges: every visible panel stores its settings.
-		if (!string.Equals (pendingLanguage, storedLanguage, StringComparison.Ordinal))
+		if (!string.Equals (pendingLanguage, storedLanguage, StringComparison.Ordinal)) {
 			SettingsStore.SetString (LanguageKey, pendingLanguage);
+			GettextService.SetLanguage (pendingLanguage);
+			storedLanguage = pendingLanguage;
+		}
 		StoreAuthorPanel ();
 		StoreUpdatesPanel ();
 		StoreTasksPanel ();
@@ -3247,5 +3269,10 @@ public partial class PreferencesDialog : Window
 		}
 	}
 
-	void OnCancel (object? sender, RoutedEventArgs e) => Close ();
+	void OnCancel (object? sender, RoutedEventArgs e)
+	{
+		if (!string.Equals (pendingLanguage, storedLanguage, StringComparison.Ordinal))
+			GettextService.SetLanguage (storedLanguage);
+		Close ();
+	}
 }

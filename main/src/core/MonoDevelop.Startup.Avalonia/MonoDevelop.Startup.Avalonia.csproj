@@ -141,6 +141,46 @@
     <MakeDir Directories="$(ShellBuildInfoDir)" />
     <Exec Command="dotnet $(ShellConfigureDll) gen-buildinfo $(ShellBuildInfoDir)" WorkingDirectory="$(MSBuildProjectDirectory)/../../../.." />
   </Target>
+  <!-- Gettext: the .mo catalogs are gitignored build outputs. The legacy build
+       compiles them via main/po/Makefile (msgfmt); the standalone shell build
+       must do the same, otherwise a clean checkout has no catalog to load and
+       the UI language selector has no effect. Incremental: a .mo is rebuilt only
+       when its .po changes. msgfmt missing (Windows) leaves GettextService on the
+       untranslated fallback instead of breaking the build. -->
+  <Target Name="CompileShellTranslations" BeforeTargets="Build" DependsOnTargets="DetectShellMsgfmt">
+    <PropertyGroup>
+      <ShellLocaleDir>$([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)/$(OutputPath)locale'))</ShellLocaleDir>
+      <ShellPoDir>$([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)/../../../po'))</ShellPoDir>
+    </PropertyGroup>
+    <ItemGroup>
+      <ShellPoFile Include="$(ShellPoDir)/*.po" Exclude="$(ShellPoDir)/messages.po" />
+    </ItemGroup>
+    <!-- Batch target: MSBuild compares each .po with its .mo and skips the
+         up-to-date ones; a missing .mo is always compiled. -->
+    <MSBuild Projects="$(MSBuildProjectFullPath)"
+             Targets="CompileShellOneTranslation"
+             Properties="TargetFramework=$(TargetFramework);ShellPo=%(ShellPoFile.FullPath);ShellLocaleDir=$(ShellLocaleDir);ShellHaveMsgfmt=$(ShellHaveMsgfmt)"
+             Condition="'@(ShellPoFile)' != ''" />
+  </Target>
+  <Target Name="DetectShellMsgfmt">
+    <Exec Command="msgfmt --version" IgnoreExitCode="true" ConsoleToMSBuild="true" StandardOutputImportance="low">
+      <Output TaskParameter="ExitCode" PropertyName="ShellMsgfmtExit" />
+    </Exec>
+    <PropertyGroup>
+      <ShellHaveMsgfmt Condition="'$(ShellMsgfmtExit)' == '0'">true</ShellHaveMsgfmt>
+      <ShellHaveMsgfmt Condition="'$(ShellHaveMsgfmt)' == ''">false</ShellHaveMsgfmt>
+    </PropertyGroup>
+  </Target>
+  <Target Name="CompileShellOneTranslation"
+          Inputs="$(ShellPo)"
+          Outputs="$(ShellLocaleDir)/$([System.IO.Path]::GetFileNameWithoutExtension('$(ShellPo)'))/LC_MESSAGES/monodevelop.mo"
+          Condition="'$(ShellHaveMsgfmt)' == 'true'">
+    <PropertyGroup>
+      <ShellMoDir>$(ShellLocaleDir)/$([System.IO.Path]::GetFileNameWithoutExtension('$(ShellPo)'))/LC_MESSAGES</ShellMoDir>
+    </PropertyGroup>
+    <MakeDir Directories="$(ShellMoDir)" />
+    <Exec Command="msgfmt &quot;$(ShellPo)&quot; -o &quot;$(ShellMoDir)/monodevelop.mo&quot;" />
+  </Target>
   <ItemGroup>
     <!-- MonoDevelop.Core is part of the shell (same unified build tree): the non-GTK
          backend (commands, key bindings, options) lives there. -->
