@@ -6147,3 +6147,22 @@ El primer ciclo del Tester QA Senior devolvió **FAIL** con dos hallazgos; ambos
 ### Cierre
 
 QA §18.5: **QA VERDE, 0 hallazgos abiertos**. Build shell + GTK **0 errores** (§18.4). Commit de código por nombre + commit `Docs:` por nombre (docs ×3). Push a `origin/agents/sub-agent-senior-dev-role-report`. **Sin PRs.** Artefactos: `~/opencode/gettext_probe/`, `~/opencode/qa_gettext_report.md`, `~/opencode/gettext_qa/`, logs `~/opencode/gettext-build*.log`.
+
+## 58. Corrección: `(Default)` no reconocía el idioma del sistema (2026-11-26)
+
+**Bug.** En `Preferences > Environment > Visual Style > User Interface Language`, seleccionar `(Default)` dejaba la UI en inglés aunque el sistema estuviera en español. Causa: `GettextService.SetLanguage(null)` trataba la preferencia vacía como «sin catálogo» (`catalog = null`), mientras el IDE GTK legacy resuelve el idioma del sistema desde `CultureInfo.CurrentUICulture` y las variables `LANGUAGE`/`LC_ALL`/`LANG` de GNU gettext.
+
+**Fix (backend compartido).** `main/src/core/MonoDevelop.Ide/Services/GettextService.cs`:
+- `SetLanguage(null)` ya no desactiva la traducción: resuelve el idioma del sistema con el nuevo `ResolveSystemLanguage()` y carga su catálogo.
+- Orden de precedencia, fiel a `GettextCatalog`/GNU gettext: `MONODEVELOP_STUB_LANGUAGE`, `LANGUAGE` (lista separada por `:`), `LC_ALL`, `LC_MESSAGES`, `LANG`, y por último `CultureInfo.CurrentUICulture.Name`.
+- `NormalizeLocale()` recorta el modificador `@...` y la codificación `.UTF-8`, normaliza `-` → `_`, descarta `C`/`POSIX`, y prueba la forma exacta (`es_ES`, `pt_BR`, `zh_CN`) antes que la base (`es`, `pt`, `zh`); solo se acepta un candidato si existe su `.mo`.
+- Nueva propiedad `EffectiveLanguage`; `PluralIndex()` usa el idioma efectivo para las reglas plurales (antes veía la preferencia vacía con `(Default)`) y comprueba la forma completa y la base del locale (`ru_RU` → reglas de `ru`), preservando `zh_CN`/`zh_TW`.
+- Log ampliado: `[gettext] language=(default) effective=es_ES catalog=6060 entries`.
+
+**Fix (vista).** `Views/PreferencesDialog.axaml.cs`: `UpdateDefaultLanguageLabel()` sustituye el `Content` del primer item del combo por un `StackPanel` con dos `TextBlock`: el msgid `(Default)` (traducible por `XamlTranslation`, p. ej. `(Predeterminado)`) y el nombre legible del idioma resuelto entre paréntesis (`Español`) vía `SystemLanguageDisplayName()`, que mapea `es_ES`/`es_MX` al `LocaleSet` legacy para no mostrar tags BCP-47 crudos.
+
+**Validación.** Builds shell y GTK 0 errores (`~/opencode/defaultlang-build3.log`, `~/opencode/defaultlang-gtk-build.log`). Con preferencia vacía: `LANG=es_ES.UTF-8` y `LANG=es_MX.UTF-8` → `effective=es_ES`/`es_MX`, 6060 entradas y menús `_Archivo`/`_Editar`; `LANGUAGE=ca:es` → `ca`; `LC_ALL=ru_RU.UTF-8` → `ru_RU`; `MONODEVELOP_STUB_LANGUAGE=de_DE.UTF-8` → `de_DE`; `LANG=C`/`LANG=en_US.UTF-8` → `effective=(none)` sin catálogo (inglés, sin regresión). Preferencia explícita `en` + `LANG=es_ES.UTF-8` → `language=en`, inglés: la preferencia gana. Captura Xvfb con OCR: «Idioma de la interfaz de usuario» / «(Predeterminado) (Español)». Regresión gettext: `run_oracles.sh`, `compare_oracles.py` (62/62 filas, estructura idéntica), `controlled_tree.sh` (62 filas y `merged=4` en ambos perfiles), `prefs_hot.sh` — todo OK.
+
+**Archivos tocados:** `main/src/core/MonoDevelop.Ide/Services/GettextService.cs` (M), `main/src/core/MonoDevelop.Startup.Avalonia/Views/PreferencesDialog.axaml.cs` (M).
+
+**QA §18.5 (tercer ciclo): APROBADO, 0 hallazgos.** Oráculos de precedencia (`LANG`/`LANGUAGE`/`LC_ALL`/`LC_MESSAGES`/stub), casos límite (`C`, `en_US`, `xx_XX`, `@euro`, BCP-47), preferencia explícita prevaleciendo, regresión gettext (62/62 filas, `merged=4`) y builds shell/GTK 0 errores. Informe actualizado en `~/opencode/qa_gettext_report.md` (sección «Ciclo 3»). Artefactos: `~/opencode/defaultlang_probe/`, `~/opencode/qa_gettext/cycle3_*`, logs `~/opencode/defaultlang-*.log`.
