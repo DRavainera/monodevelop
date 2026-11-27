@@ -42,6 +42,8 @@ public partial class PreferencesDialog : Window
 	}
 
 	// Legacy language list (LocalizationService.defaultLocaleSet, same order/cultures).
+	// The (Default) entry uses the system locale; its runtime label is refreshed
+	// from GettextService.ResolveSystemLanguage() in LoadLanguagePanel.
 	static readonly (string Culture, string DisplayName)[] LocaleSet = {
 		("", "(Default)"),
 		("ca", "Català"),
@@ -517,6 +519,7 @@ public partial class PreferencesDialog : Window
 		storedLanguage = SettingsStore.GetString (LanguageKey);
 		foreach (var locale in LocaleSet)
 			LanguageCombo!.Items.Add (new ComboBoxItem { Content = locale.DisplayName, Tag = locale.Culture });
+		UpdateDefaultLanguageLabel ();
 		var index = Array.FindIndex (LocaleSet, l => l.Culture == storedLanguage);
 		if (index < 0) index = 0;
 		LanguageCombo!.SelectedIndex = index;
@@ -525,6 +528,39 @@ public partial class PreferencesDialog : Window
 		UpdateLanguageRestartUi ();
 	}
 
+	// The (Default) entry follows the system locale. Show which one it resolves to,
+	// so the user can tell that the system language was picked up (and not "no
+	// language at all", which was the bug). The resolved name is a separate TextBlock:
+	// a composed string would be an unknown msgid and "(Default)" would stop being
+	// translated by XamlTranslation.
+	void UpdateDefaultLanguageLabel ()
+	{
+		if (LanguageCombo?.Items is null || LanguageCombo.Items.Count == 0)
+			return;
+		if (LanguageCombo.Items [0] is not ComboBoxItem item)
+			return;
+		var label = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4 };
+		label.Children.Add (new TextBlock { Text = "(Default)", VerticalAlignment = VerticalAlignment.Center });
+		var system = GettextService.ResolveSystemLanguage ();
+		if (!string.IsNullOrEmpty (system)) {
+			var name = SystemLanguageDisplayName (system);
+			label.Children.Add (new TextBlock {
+				Text = "(" + name + ")",
+				Opacity = 0.7,
+				VerticalAlignment = VerticalAlignment.Center,
+			});
+		}
+		item.Content = label;
+	}
+
+	// Human-readable name for the system locale, using the legacy locale set so
+	// "es_ES" / "es_MX" both show "Español" instead of a raw BCP-47 tag.
+	static string SystemLanguageDisplayName (string culture)
+	{
+		var match = LocaleSet.FirstOrDefault (l => string.Equals (l.Culture, culture, StringComparison.OrdinalIgnoreCase)
+			|| string.Equals (l.Culture, culture.Split ('_') [0], StringComparison.OrdinalIgnoreCase));
+		return string.IsNullOrEmpty (match.DisplayName) ? culture : match.DisplayName;
+	}
 	void OnLanguageChanged (object? sender, SelectionChangedEventArgs e)
 	{
 		if (updatingDetails || LanguageCombo?.SelectedItem is not ComboBoxItem item)

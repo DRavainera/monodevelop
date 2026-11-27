@@ -27,6 +27,7 @@ public static class GettextService
 	// "singular\x00plural" (the gettext convention for msgid_plural entries).
 	static Dictionary<string, string>? catalog;
 	static string? currentLang;
+	static string? effectiveLang;
 	static bool catalogLoaded;
 
 	/// <summary>Raised after the language (and therefore the catalog) changed.
@@ -35,6 +36,13 @@ public static class GettextService
 
 	/// <summary>The active language ("" when the default/system language is used).</summary>
 	public static string CurrentLanguage => currentLang ?? "";
+
+	/// <summary>
+	/// Effective language: the explicit preference when set, otherwise the system
+	/// language resolved from the environment (gettext's LANGUAGE/LC_ALL/LANG plus
+	/// the .NET UI culture). "" when no catalog matches the system locale.
+	/// </summary>
+	public static string EffectiveLanguage => effectiveLang ?? "";
 
 	/// <summary>True when a catalog with translations is loaded.</summary>
 	public static bool HasCatalog => catalog is { Count: > 0 };
@@ -48,8 +56,8 @@ public static class GettextService
 
 	/// <summary>
 	/// Switches the UI language and reloads the catalog. Passing null/empty selects
-	/// the default (untranslated) language. Raises <see cref="LanguageChanged"/> when
-	/// the effective language changes.
+	/// the default (system) language, resolved the same way the legacy GettextCatalog
+	/// does. Raises <see cref="LanguageChanged"/> when the effective language changes.
 	/// </summary>
 	public static void SetLanguage (string? lang)
 	{
@@ -58,10 +66,71 @@ public static class GettextService
 			return;
 		currentLang = lang;
 		catalogLoaded = true;
-		catalog = lang is null ? null : LoadCatalog (lang);
+		var effective = lang ?? ResolveSystemLanguage ();
+		effectiveLang = effective;
+		catalog = effective is null ? null : LoadCatalog (effective);
 		Console.WriteLine ("[gettext] language=" + (lang ?? "(default)")
+			+ " effective=" + (effective ?? "(none)")
 			+ " catalog=" + (catalog is { Count: > 0 } ? catalog.Count + " entries" : "(none)"));
 		LanguageChanged?.Invoke (null, EventArgs.Empty);
+	}
+
+	/// <summary>
+	/// Resolves the system UI language in the same order the legacy GettextCatalog /
+	/// GNU gettext uses: MONODEVELOP_STUB_LANGUAGE, the LANGUAGE list, LC_ALL,
+	/// LC_MESSAGES, LANG, then .NET's UI culture. A locale such as "es_ES.UTF-8@euro"
+	/// is normalized to "es_ES" / "es" and matched against the available catalogs,
+	/// so (Default) actually translates the UI.
+	/// </summary>
+	public static string? ResolveSystemLanguage ()
+	{
+		foreach (var candidate in SystemLanguageCandidates ()) {
+			if (FindMo (candidate) is not null)
+				return candidate;
+		}
+		return null;
+	}
+
+	static IEnumerable<string> SystemLanguageCandidates ()
+	{
+		var seen = new HashSet<string> (StringComparer.OrdinalIgnoreCase);
+		// The legacy GettextCatalog uses MONODEVELOP_STUB_LANGUAGE as an override
+		// when no language is persisted, then lets gettext resolve the system one.
+		foreach (var envName in new[] { "MONODEVELOP_STUB_LANGUAGE", "LANGUAGE", "LC_ALL", "LC_MESSAGES", "LANG" }) {
+			var value = Environment.GetEnvironmentVariable (envName);
+			if (string.IsNullOrWhiteSpace (value))
+				continue;
+			// LANGUAGE is a colon-separated preference list; the others are single.
+			foreach (var part in value.Split (new[] { ':', ',' }, StringSplitOptions.RemoveEmptyEntries))
+				foreach (var form in NormalizeLocale (part))
+					if (seen.Add (form))
+						yield return form;
+		}
+		foreach (var form in NormalizeLocale (CultureInfo.CurrentUICulture.Name))
+			if (seen.Add (form))
+				yield return form;
+		// Never pick "en" by default: an untranslated UI is the expected fallback.
+	}
+
+	static IEnumerable<string> NormalizeLocale (string locale)
+	{
+		if (string.IsNullOrWhiteSpace (locale))
+			yield break;
+		var value = locale.Trim ();
+		int at = value.IndexOf ('@');
+		if (at > 0)
+			value = value [..at];
+		int dot = value.IndexOf ('.');
+		if (dot > 0)
+			value = value [..dot];
+		value = value.Replace ('-', '_');
+		if (value.Length == 0 || value.Equals ("C", StringComparison.OrdinalIgnoreCase)
+			|| value.Equals ("POSIX", StringComparison.OrdinalIgnoreCase))
+			yield break;
+		yield return value; // exact form first (zh_CN, pt_BR)
+		int underscore = value.IndexOf ('_');
+		if (underscore > 0)
+			yield return value [..underscore]; // base language (zh, pt)
 	}
 
 	/// <summary>Translates msgid with the loaded catalog (returns msgid if missing).</summary>
@@ -110,9 +179,16 @@ public static class GettextService
 	// Plural form selection per language (the common gettext rule sets).
 	static int PluralIndex (int n)
 	{
-		var lang = currentLang ?? "";
+		// The effective language drives the plural rules: with (Default) it is the
+		// resolved system locale, not the empty preference.
+		var lang = effectiveLang ?? currentLang ?? "";
+		// Plural rules are per language, so a regional locale ("ru_RU") must also
+		// match its base rule set ("ru"); the full form is tried first because the
+		// Chinese rules are keyed by script/region ("zh_CN").
+		int separator = lang.IndexOf ('_');
+		var baseLang = separator > 0 ? lang [..separator] : lang;
 		// 3 forms: Slavic (ru, uk, pl, cs, sk, hr, sr, be, lt...).
-		if (lang is "ru" or "uk" or "pl" or "cs" or "sk" or "hr" or "sr" or "be" or "lt") {
+		if (IsSlavic (lang) || IsSlavic (baseLang)) {
 			if (n % 10 == 1 && n % 100 != 11)
 				return 0;
 			if (n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20))
@@ -120,10 +196,16 @@ public static class GettextService
 			return 2;
 		}
 		// 2 forms but the singular is used for 0 too (fr, pt, tr, zh, ja, ko, id, vi).
-		if (lang is "fr" or "pt" or "pt_BR" or "tr" or "zh_CN" or "zh_TW" or "ja" or "ko" or "id" or "vi")
+		if (IsZeroSingular (lang) || IsZeroSingular (baseLang))
 			return n == 0 || n == 1 ? 0 : 1;
 		return n == 1 ? 0 : 1;
 	}
+
+	static bool IsSlavic (string lang)
+		=> lang is "ru" or "uk" or "pl" or "cs" or "sk" or "hr" or "sr" or "be" or "lt";
+
+	static bool IsZeroSingular (string lang)
+		=> lang is "fr" or "pt" or "pt_BR" or "tr" or "zh_CN" or "zh_TW" or "ja" or "ko" or "id" or "vi";
 
 	static Dictionary<string, string>? LoadCatalog (string lang)
 	{
