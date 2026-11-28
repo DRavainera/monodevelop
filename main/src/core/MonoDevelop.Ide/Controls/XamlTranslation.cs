@@ -71,7 +71,9 @@ public static class XamlTranslation
 		GettextService.LanguageChanged += OnLanguageChanged;
 
 		// Templates and item containers do not exist until the window is laid out,
-		// so translate on open and once more after the first layout pass.
+		// so translate on open and once more after the first layout pass. Dialogs
+		// that rebuild lists afterwards call Translate(Control) on the rebuilt
+		// subtree (see NewFileDialog/NewSolutionDialog).
 		window.Opened += (_, _) => {
 			TranslateWindow (window);
 			Avalonia.Threading.Dispatcher.UIThread.Post (() => TranslateWindow (window),
@@ -94,6 +96,31 @@ public static class XamlTranslation
 	public static void RefreshAll ()
 	{
 		OnLanguageChanged (null, EventArgs.Empty);
+	}
+
+	/// <summary>Assigns an authored msgid to a text control and translates it in
+	/// one step. Plain <c>control.Text = msgid</c> leaves XamlTranslation's
+	/// recorded Applied value stale, so the next pass treats the new text as an
+	/// external mutation and refuses to translate it.</summary>
+	public static void SetText (TextBlock control, string msgId)
+	{
+		control.Text = GettextService.T (msgId);
+		var map = GetEntryMap (control);
+		if (!map.TryGetValue (TextBlock.TextProperty, out var entry)) {
+			entry = new Entry ();
+			map [TextBlock.TextProperty] = entry;
+		}
+		entry.MsgId = msgId;
+		entry.Applied = control.Text;
+	}
+
+	/// <summary>Translates a subtree that was rebuilt after the window's initial
+	/// passes (e.g. a dialog's template list). Safe to call before the control is
+	/// attached: the visual and logical trees are both walked.</summary>
+	public static void Translate (Control control)
+	{
+		var visited = new HashSet<Visual> ();
+		Translate (control, visited);
 	}
 
 	/// <summary>Translates the window's content plus the code-built children of items controls.</summary>

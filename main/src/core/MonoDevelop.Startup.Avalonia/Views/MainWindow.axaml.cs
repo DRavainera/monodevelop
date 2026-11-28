@@ -1360,6 +1360,14 @@ public partial class MainWindow : Window
 					}
 				}
 				RefreshSolutionTree ();
+			} else if (qa == "--newfile-lang") {
+				// QA: language survives a category/template change in New File.
+				_ = Avalonia.Threading.Dispatcher.UIThread.InvokeAsync (() => {
+					var activeProj = ResolveActiveProject ();
+					var dlg = new NewFileDialog (GetSolutionProjectPaths (), activeProj);
+					dlg.Opened += (_, _) => dlg.QaSwitchAndDump ("EmptyFSharpSource");
+					_ = dlg.ShowDialog (this);
+				});
 			} else if (qa == "--newfile-visual") {
 				// QA: abre el diálogo New File (free mode) con una template
 				// preseleccionada y LO DEJA ABIERTO (ShowDialog modal bloquea) para
@@ -2729,6 +2737,13 @@ public partial class MainWindow : Window
 				ShowWelcomePage ();
 			} else if (qa == "--newsolution") {
 				_ = OpenNewSolutionDialogAsync ();
+			} else if (qa == "--newsolution-lang") {
+				// QA: language survives a category change in New Solution.
+				_ = Avalonia.Threading.Dispatcher.UIThread.InvokeAsync (() => {
+					var dlg = new NewSolutionDialog ();
+					dlg.Opened += (_, _) => dlg.QaSwitchCategoryAndDump ("F#");
+					_ = dlg.ShowDialog (this);
+				});
 			} else if (qa == "--find") {
 				// QA: open Find in Files pre-loaded and run it against the solution.
 				var fd = new FindInFilesDialog { SearchTextOverride = "Hello" };

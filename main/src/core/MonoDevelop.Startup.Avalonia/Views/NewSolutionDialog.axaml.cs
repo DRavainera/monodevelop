@@ -240,6 +240,9 @@ public partial class NewSolutionDialog : Window
 		}
 		if (TemplateList.Items.Count > 0)
 			TemplateList.SelectedIndex = 0;
+		// New ListBoxItem/TextBlock controls were created above, after the
+		// dialog's initial gettext passes: translate them before they paint.
+		MonoDevelop.Ide.Controls.XamlTranslation.Translate (TemplateList);
 	}
 
 	void OnTemplateSelected (object? sender, SelectionChangedEventArgs e)
@@ -247,8 +250,8 @@ public partial class NewSolutionDialog : Window
 		if (TemplateList.SelectedItem is not ListBoxItem item || item.Tag is not string tag)
 			return;
 		var t = CurrentTemplates.FirstOrDefault (x => x.Tag == tag);
-		TemplateTitle.Text = t.Title;
-		TemplateDescription.Text = t.Desc;
+		MonoDevelop.Ide.Controls.XamlTranslation.SetText (TemplateTitle, t.Title);
+		MonoDevelop.Ide.Controls.XamlTranslation.SetText (TemplateDescription, t.Desc);
 		SelectedTemplateId = t.Tag;
 	}
 
@@ -441,6 +444,25 @@ public partial class NewSolutionDialog : Window
 	/// <summary>QA auto-create: fires OnCreate as soon as the dialog opens
 	/// (deterministic --newproject without synthetic input).</summary>
 	public bool AutoCreateForQa { get; set; }
+
+	/// <summary>QA: switch category and dump the painted template text, to verify
+	/// gettext survives a category change (English msgid stays translated).</summary>
+	public void QaSwitchCategoryAndDump (string categoryName)
+	{
+		SetCategory (categoryName);
+		Avalonia.Threading.Dispatcher.UIThread.RunJobs ();
+		var texts = new List<string> ();
+		void Walk (Avalonia.Visual v, List<string> acc)
+		{
+			if (v is TextBlock { Text.Length: > 0 } tb)
+				acc.Add (tb.Text);
+			foreach (var c in Avalonia.VisualTree.VisualExtensions.GetVisualChildren (v))
+				Walk (c, acc);
+		}
+		Walk (TemplateList, texts);
+		MainWindow.Instance?.Output ($"[newsolution-qa-lang] category={categoryName} title='{TemplateTitle.Text}' desc='{TemplateDescription.Text}' items=[{string.Join ("|", texts)}]");
+		Close ();
+	}
 
 	// "F# Tutorial" scaffold: the legacy template (FSharpTutorialProject.xpt)
 	// is a console project around the 976-line Tutorial.fs walkthrough. The

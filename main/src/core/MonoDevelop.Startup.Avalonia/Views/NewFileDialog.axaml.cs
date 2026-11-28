@@ -720,6 +720,9 @@ type Test() =
 		} finally {
 			rebuilding = false;
 		}
+		// The FuncTreeDataTemplate creates fresh TextBlocks from English msgids
+		// on every rebuild; translate them before they paint.
+		MonoDevelop.Ide.Controls.XamlTranslation.Translate (CategoryTree);
 	}
 
 	/// <summary>Añade la categoría (con sus templates) a la raíz si no está
@@ -807,6 +810,7 @@ type Test() =
 			if (seen.Add (t.Name))
 				items.Add (t);
 		TemplateList.ItemsSource = items;
+		MonoDevelop.Ide.Controls.XamlTranslation.Translate (TemplateList);
 		if (items.Count > 0)
 			TemplateList.SelectedIndex = 0;
 		else {
@@ -831,8 +835,8 @@ type Test() =
 			return;
 		}
 
-		TemplateTitle.Text = item.Name;
-		TemplateDescription.Text = item.Description;
+		MonoDevelop.Ide.Controls.XamlTranslation.SetText (TemplateTitle, item.Name);
+		MonoDevelop.Ide.Controls.XamlTranslation.SetText (TemplateDescription, item.Description);
 
 		// En esta versión de Avalonia TextBox.Text puede devolver null antes de
 		// inicializar el texto (señal reentrante durante InitializeView en OnOpened).
@@ -1148,6 +1152,26 @@ type Test() =
 	public string? ProjectForQa { get; set; }
 	/// <summary>QA: auto-acepta al abrir (ciclos deterministas --newfile/--ctxnewfile).</summary>
 	public bool ConfirmForQa { get; set; }
+
+	/// <summary>QA: switch template/category and dump painted text, to verify
+	/// gettext survives a dialog option change.</summary>
+	public void QaSwitchAndDump (string templateId)
+	{
+		SelectTemplateById (templateId);
+		Avalonia.Threading.Dispatcher.UIThread.RunJobs ();
+		var texts = new List<string> ();
+		void Walk (Avalonia.Visual v, List<string> acc)
+		{
+			if (v is TextBlock { Text.Length: > 0 } tb)
+				acc.Add (tb.Text);
+			foreach (var c in Avalonia.VisualTree.VisualExtensions.GetVisualChildren (v))
+				Walk (c, acc);
+		}
+		Walk (CategoryTree, texts);
+		Walk (TemplateList, texts);
+		MainWindow.Instance?.Output ($"[newfile-qa-lang] template={templateId} cat={(CategoryTree.SelectedItem as NewFileCategory)?.Name} title='{TemplateTitle.Text}' desc='{TemplateDescription.Text}' texts=[{string.Join ("|", texts)}]");
+		Close ();
+	}
 
 	/// <summary>Ruta absoluta del fichero escrito al aceptar (null si cancela/unsaved).</summary>
 	public string? CreatedFilePath { get; private set; }
