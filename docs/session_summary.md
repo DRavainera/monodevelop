@@ -6210,3 +6210,15 @@ QA §18.5: **QA VERDE, 0 hallazgos abiertos**. Build shell + GTK **0 errores** (
 **Archivos tocados.** `MonoDevelop.Ide/Controls/XamlTranslation.cs`, `MonoDevelop.Startup.Avalonia/Program.cs`, `Views/MainWindow.axaml.cs`, `Views/NewFileDialog.axaml.cs`, `Views/NewSolutionDialog.axaml.cs`. Sin submódulos.
 
 **Cierre.** Commit de código por nombre + commit `Docs:` por nombre (docs ×3). Push a `origin/agents/sub-agent-senior-dev-role-report`. **Sin PRs.**
+
+## 62. Traducción completa de New File / New Solution en los 24 idiomas (2026-11-28)
+
+**Diagnóstico.** Auditoría de los 24 catálogos compilados (`build/locale/<lang>/LC_MESSAGES/monodevelop.mo`) contra el texto pintado por los oráculos `--newfile-lang`/`--newsolution-lang`. Tres grupos sin traducir: (A) msgids presentes en los `.po` con `msgstr ""`: `Create a New Solution`, `New Solution`, `Solution name:`, `Add to project:`, `Create a directory for the solution`, `Add to open solution`, `Use git for version control`; (B) msgids ausentes de todos los catálogos: las tres descripciones F#, `F# Test Fixture`, `Select a location for the new solution` y `A F# project for creating a command line application.`; (C) `General` y `Misc` vacíos en varios idiomas.
+
+**Cambios.** Los 24 `main/po/*.po` (excepto `messages.po`) se actualizaron con `~/opencode/qa_r4_fill_translations.py`: 159 msgstr vacíos rellenados y 144 entradas nuevas (6 msgids × 24 idiomas) añadidas al final; ninguna traducción preexistente fue sobreescrita. Los 24 `.mo` se recompilaron con `msgfmt` (gitignoreados; `Makefile.am` los regenera). Se ampliaron los helpers QA `DumpAllUiText` en `NewFileDialog.axaml.cs` y `NewSolutionDialog.axaml.cs` para volcar todo el texto pintado (`[newfile-qa-ui]`/`[newsolution-qa-ui]`). No se tocaron identificadores: `C#`, `F#`, `VB`, `ASP.NET`, `F# Tutorial` ni `NUnit` (nombre del framework).
+
+**Validación.** `msgfmt -o /dev/null --verbose`: 24/24 `.po` válidos; los 24 `.mo` traducen las 14 claves objetivo. Oráculos en es, fr, de, ja, zh_CN y ru: todas las etiquetas visibles traducidas (es: `Nombre de la solución:`, `Añadir al proyecto:`, descripciones F#; fr: `Nom de la solution :`, `Utiliser git pour le contrôle de versions`; ja: `ソリューション名:`). `General`/`Misc` verificados en catálogo y en la ruta `Translate(CategoryTree)`. Build `Main.sln` 0 errores; regresiones `--menudump` (11 menús/302 ítems), `--prefs-tree`, `--activeconfig` (`painted='Debug' tip='Configuración activa' persisted=Release`) y `--deps` intactas; ruta `--old-gui` sin impacto. **QA §18.5: VERDE, 0 hallazgos** (`~/opencode/qa_r4_lang_qa_report.md`; logs en `~/opencode/qa_r4_lang_qa/`). Notas de cobertura no bloqueantes: el dump no despliega los hijos del árbol de categorías (cubiertos por catálogo y por la ruta de traducción) y RC=124 es el watchdog de arranque preexistente.
+
+**Archivos tocados.** 24 `main/po/*.po` + `MonoDevelop.Startup.Avalonia/Views/NewFileDialog.axaml.cs` y `Views/NewSolutionDialog.axaml.cs`. Sin submódulos.
+
+**Cierre.** Commit de código por nombre + commit `Docs:` por nombre (docs ×3). Push a `origin/agents/sub-agent-senior-dev-role-report`. **Sin PRs.**
