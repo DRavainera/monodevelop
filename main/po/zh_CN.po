@@ -29014,3 +29014,42 @@ msgstr "选择新解决方案的位置"
 
 msgid "A F# project for creating a command line application."
 msgstr "用于创建命令行应用程序的 F# 项目"
+
+msgid "A project for creating a class library that targets .NET Standard or .NET Core."
+msgstr "用于创建面向 .NET Standard 或 .NET Core 的类库的项目"
+
+msgid "A project for creating a command-line application that can run on .NET on Windows, Linux and MacOS."
+msgstr "用于创建可在 Windows、Linux 和 MacOS 上的 .NET 中运行的命令行应用程序的项目"
+
+msgid "A project for creating an empty ASP.NET Core web application."
+msgstr "用于创建空的 ASP.NET Core Web 应用程序的项目"
+
+msgid "A project for creating an ASP.NET Core MVC application."
+msgstr "用于创建 ASP.NET Core MVC 应用程序的项目"
+
+msgid "A project for creating an ASP.NET Core web API service."
+msgstr "用于创建 ASP.NET Core Web API 服务的项目"
+
+msgid "A project for sharing source files between multiple projects via implicit linking."
+msgstr "用于通过隐式链接在多个项目之间共享源文件的项目"
+
+msgid "A project that contains unit tests that can run with NUnit / xUnit test runners."
+msgstr "一个包含可使用 NUnit / xUnit 测试运行程序运行的单元测试的项目"
+
+msgid "ASP.NET Core Empty"
+msgstr "ASP.NET Core 空"
+
+msgid "An F# project for creating an F# library."
+msgstr "用于创建 F# 库的 F# 项目"
+
+msgid "An F# tutorial project providing a walkthrough of the F# language."
+msgstr "提供 F# 语言入门教程的 F# 教程项目"
+
+msgid "Creates an F# NUnit library."
+msgstr "创建 F# NUnit 库"
+
+msgid "F# Tutorial"
+msgstr "F# 教程"
+
+msgid "Unit Test Project"
+msgstr "单元测试项目"

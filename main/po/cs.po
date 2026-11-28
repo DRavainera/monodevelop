@@ -29463,3 +29463,42 @@ msgstr "Vyberte umístění pro nové řešení"
 
 msgid "A F# project for creating a command line application."
 msgstr "Projekt F# pro vytvoření konzolové aplikace"
+
+msgid "A project for creating a class library that targets .NET Standard or .NET Core."
+msgstr "Projekt pro vytvoření knihovny tříd cílené na .NET Standard nebo .NET Core."
+
+msgid "A project for creating a command-line application that can run on .NET on Windows, Linux and MacOS."
+msgstr "Projekt pro vytvoření konzolové aplikace, kterou lze spustit v .NET ve Windows, Linuxu a MacOS."
+
+msgid "A project for creating an empty ASP.NET Core web application."
+msgstr "Projekt pro vytvoření prázdné webové aplikace ASP.NET Core."
+
+msgid "A project for creating an ASP.NET Core MVC application."
+msgstr "Projekt pro vytvoření aplikace ASP.NET Core MVC."
+
+msgid "A project for creating an ASP.NET Core web API service."
+msgstr "Projekt pro vytvoření služby webového API ASP.NET Core."
+
+msgid "A project for sharing source files between multiple projects via implicit linking."
+msgstr "Projekt pro sdílení zdrojových souborů mezi více projekty pomocí implicitního propojení."
+
+msgid "A project that contains unit tests that can run with NUnit / xUnit test runners."
+msgstr "Projekt obsahující jednotkové testy, které lze spustit s testovacími nástroji NUnit / xUnit."
+
+msgid "ASP.NET Core Empty"
+msgstr "Prázdná ASP.NET Core"
+
+msgid "An F# project for creating an F# library."
+msgstr "Projekt F# pro vytvoření knihovny F#."
+
+msgid "An F# tutorial project providing a walkthrough of the F# language."
+msgstr "Kurz F# projektu poskytující úvod do jazyka F#."
+
+msgid "Creates an F# NUnit library."
+msgstr "Vytvoří knihovnu NUnit v F#."
+
+msgid "F# Tutorial"
+msgstr "Kurz F#"
+
+msgid "Unit Test Project"
+msgstr "Projekt jednotkových testů"

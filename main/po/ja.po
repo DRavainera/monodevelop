@@ -29591,3 +29591,42 @@ msgstr "新しいソリューションの場所を選択"
 
 msgid "A F# project for creating a command line application."
 msgstr "コマンド ライン アプリケーションを作成するための F# プロジェクト"
+
+msgid "A project for creating a class library that targets .NET Standard or .NET Core."
+msgstr ".NET Standard または .NET Core を対象とするクラス ライブラリを作成するプロジェクト。"
+
+msgid "A project for creating a command-line application that can run on .NET on Windows, Linux and MacOS."
+msgstr ".NET で Windows、Linux、MacOS 上で実行できるコマンド ライン アプリケーションを作成するプロジェクト。"
+
+msgid "A project for creating an empty ASP.NET Core web application."
+msgstr "空の ASP.NET Core Web アプリケーションを作成するプロジェクト。"
+
+msgid "A project for creating an ASP.NET Core MVC application."
+msgstr "ASP.NET Core MVC アプリケーションを作成するプロジェクト。"
+
+msgid "A project for creating an ASP.NET Core web API service."
+msgstr "ASP.NET Core Web API サービスを作成するプロジェクト。"
+
+msgid "A project for sharing source files between multiple projects via implicit linking."
+msgstr "暗黙的なリンクを使用して複数のプロジェクト間でソース ファイルを共有するプロジェクト。"
+
+msgid "A project that contains unit tests that can run with NUnit / xUnit test runners."
+msgstr "NUnit / xUnit テスト ランナーで実行できる単体テストを含むプロジェクト。"
+
+msgid "ASP.NET Core Empty"
+msgstr "ASP.NET Core 空"
+
+msgid "An F# project for creating an F# library."
+msgstr "F# ライブラリを作成するための F# プロジェクト。"
+
+msgid "An F# tutorial project providing a walkthrough of the F# language."
+msgstr "F# 言語のチュートリアルを提供する F# チュートリアル プロジェクト。"
+
+msgid "Creates an F# NUnit library."
+msgstr "F# NUnit ライブラリを作成します。"
+
+msgid "F# Tutorial"
+msgstr "F# チュートリアル"
+
+msgid "Unit Test Project"
+msgstr "単体テスト プロジェクト"

@@ -2744,6 +2744,12 @@ public partial class MainWindow : Window
 					dlg.Opened += (_, _) => dlg.QaSwitchCategoryAndDump ("F#");
 					_ = dlg.ShowDialog (this);
 				});
+			} else if (qa == "--newsolution-lang-all") {
+				_ = Avalonia.Threading.Dispatcher.UIThread.InvokeAsync (() => {
+					var dlg = new NewSolutionDialog ();
+					dlg.Opened += (_, _) => dlg.QaDumpAllTemplates ();
+					_ = dlg.ShowDialog (this);
+				});
 			} else if (qa == "--find") {
 				// QA: open Find in Files pre-loaded and run it against the solution.
 				var fd = new FindInFilesDialog { SearchTextOverride = "Hello" };

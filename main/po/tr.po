@@ -29504,3 +29504,42 @@ msgstr "Yeni çözüm için bir konum seçin"
 
 msgid "A F# project for creating a command line application."
 msgstr "Komut satırı uygulaması oluşturmak için bir F# projesi"
+
+msgid "A project for creating a class library that targets .NET Standard or .NET Core."
+msgstr ".NET Standard veya .NET Core'u hedefleyen bir sınıf kitaplığı oluşturmak için bir proje."
+
+msgid "A project for creating a command-line application that can run on .NET on Windows, Linux and MacOS."
+msgstr ".NET üzerinde Windows, Linux ve MacOS'ta çalışabilen bir komut satırı uygulaması oluşturmak için bir proje."
+
+msgid "A project for creating an empty ASP.NET Core web application."
+msgstr "Boş bir ASP.NET Core web uygulaması oluşturmak için bir proje."
+
+msgid "A project for creating an ASP.NET Core MVC application."
+msgstr "Bir ASP.NET Core MVC uygulaması oluşturmak için bir proje."
+
+msgid "A project for creating an ASP.NET Core web API service."
+msgstr "Bir ASP.NET Core web API hizmeti oluşturmak için bir proje."
+
+msgid "A project for sharing source files between multiple projects via implicit linking."
+msgstr "Örtük bağlantı ile birden fazla proje arasında kaynak dosyaları paylaşmak için bir proje."
+
+msgid "A project that contains unit tests that can run with NUnit / xUnit test runners."
+msgstr "NUnit / xUnit test çalıştırıcılarıyla çalıştırılabilen birim testleri içeren bir proje."
+
+msgid "ASP.NET Core Empty"
+msgstr "Boş ASP.NET Core"
+
+msgid "An F# project for creating an F# library."
+msgstr "F# kitaplığı oluşturmak için bir F# projesi."
+
+msgid "An F# tutorial project providing a walkthrough of the F# language."
+msgstr "F# diline genel bir bakış sunan bir F# eğitim projesi."
+
+msgid "Creates an F# NUnit library."
+msgstr "Bir F# NUnit kitaplığı oluşturur."
+
+msgid "F# Tutorial"
+msgstr "F# eğitimi"
+
+msgid "Unit Test Project"
+msgstr "Birim testi projesi"

@@ -31500,9 +31500,9 @@ msgstr ""
 #~ msgid "A text paragraph."
 #~ msgstr "Paragraf Teks"
 
-#, fuzzy
-#~ msgid "ASP.NET Core Empty"
-#~ msgstr "Direktori ASP.NET"
+
+msgid "ASP.NET Core Empty"
+msgstr "ASP.NET Core kosong"
 
 #, fuzzy
 #~ msgid "ASP.NET Core Web API"
@@ -38475,3 +38475,39 @@ msgstr "Pilih lokasi untuk solusi baru"
 
 msgid "A F# project for creating a command line application."
 msgstr "Proyek F# untuk membuat aplikasi baris perintah"
+
+msgid "A project for creating a class library that targets .NET Standard or .NET Core."
+msgstr "Proyek untuk membuat pustaka kelas yang menargetkan .NET Standard atau .NET Core."
+
+msgid "A project for creating a command-line application that can run on .NET on Windows, Linux and MacOS."
+msgstr "Proyek untuk membuat aplikasi baris perintah yang dapat dijalankan di .NET pada Windows, Linux dan MacOS."
+
+msgid "A project for creating an empty ASP.NET Core web application."
+msgstr "Proyek untuk membuat aplikasi web ASP.NET Core kosong."
+
+msgid "A project for creating an ASP.NET Core MVC application."
+msgstr "Proyek untuk membuat aplikasi ASP.NET Core MVC."
+
+msgid "A project for creating an ASP.NET Core web API service."
+msgstr "Proyek untuk membuat layanan API web ASP.NET Core."
+
+msgid "A project for sharing source files between multiple projects via implicit linking."
+msgstr "Proyek untuk berbagi file sumber antar beberapa proyek melalui penautan implisit."
+
+msgid "A project that contains unit tests that can run with NUnit / xUnit test runners."
+msgstr "Proyek yang berisi pengujian unit yang dapat dijalankan dengan pelari uji NUnit / xUnit."
+
+msgid "An F# project for creating an F# library."
+msgstr "Proyek F# untuk membuat pustaka F#."
+
+msgid "An F# tutorial project providing a walkthrough of the F# language."
+msgstr "Proyek tutorial F# yang memberikan pengantar bahasa F#."
+
+msgid "Creates an F# NUnit library."
+msgstr "Membuat pustaka NUnit F#."
+
+msgid "F# Tutorial"
+msgstr "Tutorial F#"
+
+msgid "Unit Test Project"
+msgstr "Proyek uji unit"

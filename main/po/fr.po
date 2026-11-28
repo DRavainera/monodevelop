@@ -29903,3 +29903,42 @@ msgstr "Sélectionnez un emplacement pour la nouvelle solution"
 
 msgid "A F# project for creating a command line application."
 msgstr "Un projet F# pour créer une application en ligne de commande"
+
+msgid "A project for creating a class library that targets .NET Standard or .NET Core."
+msgstr "Un projet pour créer une bibliothèque de classes ciblant .NET Standard ou .NET Core."
+
+msgid "A project for creating a command-line application that can run on .NET on Windows, Linux and MacOS."
+msgstr "Un projet pour créer une application en ligne de commande pouvant s'exécuter sur .NET sous Windows, Linux et MacOS."
+
+msgid "A project for creating an empty ASP.NET Core web application."
+msgstr "Un projet pour créer une application web ASP.NET Core vide."
+
+msgid "A project for creating an ASP.NET Core MVC application."
+msgstr "Un projet pour créer une application ASP.NET Core MVC."
+
+msgid "A project for creating an ASP.NET Core web API service."
+msgstr "Un projet pour créer un service d'API web ASP.NET Core."
+
+msgid "A project for sharing source files between multiple projects via implicit linking."
+msgstr "Un projet pour partager des fichiers source entre plusieurs projets via une liaison implicite."
+
+msgid "A project that contains unit tests that can run with NUnit / xUnit test runners."
+msgstr "Un projet contenant des tests unitaires exécutables avec les exécuteurs de tests NUnit / xUnit."
+
+msgid "ASP.NET Core Empty"
+msgstr "ASP.NET Core vide"
+
+msgid "An F# project for creating an F# library."
+msgstr "Un projet F# pour créer une bibliothèque F#."
+
+msgid "An F# tutorial project providing a walkthrough of the F# language."
+msgstr "Un projet tutoriel F# présentant une introduction au langage F#."
+
+msgid "Creates an F# NUnit library."
+msgstr "Crée une bibliothèque NUnit F#."
+
+msgid "F# Tutorial"
+msgstr "Tutoriel F#"
+
+msgid "Unit Test Project"
+msgstr "Projet de test unitaire"

@@ -31228,9 +31228,9 @@ msgstr ""
 #~ msgstr ""
 #~ "En populär webbplats för artiklar, kodstycken och diskussioner om .NET."
 
-#, fuzzy
-#~ msgid "ASP.NET Core Empty"
-#~ msgstr "Katalog"
+
+msgid "ASP.NET Core Empty"
+msgstr "Tom ASP.NET Core"
 
 #, fuzzy
 #~ msgid "ASP.NET Core Web API"
@@ -37198,3 +37198,39 @@ msgstr "Välj en plats för den nya lösningen"
 
 msgid "A F# project for creating a command line application."
 msgstr "Ett F#-projekt för att skapa ett kommandoradsprogram"
+
+msgid "A project for creating a class library that targets .NET Standard or .NET Core."
+msgstr "Ett projekt för att skapa ett klassbibliotek för .NET Standard eller .NET Core."
+
+msgid "A project for creating a command-line application that can run on .NET on Windows, Linux and MacOS."
+msgstr "Ett projekt för att skapa ett kommandoradsprogram som kan köras på .NET i Windows, Linux och MacOS."
+
+msgid "A project for creating an empty ASP.NET Core web application."
+msgstr "Ett projekt för att skapa en tom ASP.NET Core-webbapplikation."
+
+msgid "A project for creating an ASP.NET Core MVC application."
+msgstr "Ett projekt för att skapa en ASP.NET Core MVC-applikation."
+
+msgid "A project for creating an ASP.NET Core web API service."
+msgstr "Ett projekt för att skapa en ASP.NET Core-web-API-tjänst."
+
+msgid "A project for sharing source files between multiple projects via implicit linking."
+msgstr "Ett projekt för att dela källfiler mellan flera projekt via implicit länkning."
+
+msgid "A project that contains unit tests that can run with NUnit / xUnit test runners."
+msgstr "Ett projekt som innehåller enhetstester som kan köras med NUnit / xUnit-testkörarna."
+
+msgid "An F# project for creating an F# library."
+msgstr "Ett F#-projekt för att skapa ett F#-bibliotek."
+
+msgid "An F# tutorial project providing a walkthrough of the F# language."
+msgstr "Ett F#-handledningsprojekt som ger en genomgång av F#-språket."
+
+msgid "Creates an F# NUnit library."
+msgstr "Skapar ett F#-NUnit-bibliotek."
+
+msgid "F# Tutorial"
+msgstr "F#-handledning"
+
+msgid "Unit Test Project"
+msgstr "Enhetstestprojekt"

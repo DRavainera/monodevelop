@@ -465,6 +465,8 @@ public partial class NewSolutionDialog : Window
 		Close ();
 	}
 
+	/// <summary>QA: dumps every painted string in the dialog(s) so missing
+	/// catalog entries are visible, for every template category.</summary>
 	internal void DumpAllUiText (string tag)
 	{
 		var texts = new List<string> ();
@@ -479,6 +481,23 @@ public partial class NewSolutionDialog : Window
 		}
 		Walk (this);
 		MainWindow.Instance?.Output ($"[{tag}] title='{Title}' all=[{string.Join ("|", texts)}]");
+	}
+
+	/// <summary>QA: walks every category/template and dumps the painted title
+	/// and description, so untranslated template strings are easy to spot.</summary>
+	public void QaDumpAllTemplates ()
+	{
+		foreach (var category in Categories) {
+			SetCategory (category);
+			Avalonia.Threading.Dispatcher.UIThread.RunJobs ();
+			var items = TemplateList.Items.OfType<Avalonia.Controls.ListBoxItem> ().ToList ();
+			foreach (var li in items) {
+				TemplateList.SelectedItem = li;
+				Avalonia.Threading.Dispatcher.UIThread.RunJobs ();
+				MainWindow.Instance?.Output ($"[newsolution-qa-all] cat={category} tag={li.Tag} title='{TemplateTitle.Text}' desc='{TemplateDescription.Text}'");
+			}
+		}
+		Close ();
 	}
 
 	// "F# Tutorial" scaffold: the legacy template (FSharpTutorialProject.xpt)

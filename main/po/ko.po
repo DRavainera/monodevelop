@@ -29403,3 +29403,42 @@ msgstr "새 솔루션의 위치 선택"
 
 msgid "A F# project for creating a command line application."
 msgstr "명령줄 애플리케이션을 만들기 위한 F# 프로젝트"
+
+msgid "A project for creating a class library that targets .NET Standard or .NET Core."
+msgstr ".NET Standard 또는 .NET Core를 대상으로 하는 클래스 라이브러리를 만드는 프로젝트입니다."
+
+msgid "A project for creating a command-line application that can run on .NET on Windows, Linux and MacOS."
+msgstr ".NET에서 Windows, Linux, MacOS로 실행할 수 있는 명령줄 애플리케이션을 만드는 프로젝트입니다."
+
+msgid "A project for creating an empty ASP.NET Core web application."
+msgstr "빈 ASP.NET Core 웹 애플리케이션을 만드는 프로젝트입니다."
+
+msgid "A project for creating an ASP.NET Core MVC application."
+msgstr "ASP.NET Core MVC 애플리케이션을 만드는 프로젝트입니다."
+
+msgid "A project for creating an ASP.NET Core web API service."
+msgstr "ASP.NET Core 웹 API 서비스를 만드는 프로젝트입니다."
+
+msgid "A project for sharing source files between multiple projects via implicit linking."
+msgstr "암시적 연결을 통해 여러 프로젝트 간에 소스 파일을 공유하는 프로젝트입니다."
+
+msgid "A project that contains unit tests that can run with NUnit / xUnit test runners."
+msgstr "NUnit / xUnit 테스트 실행기로 실행할 수 있는 단위 테스트가 포함된 프로젝트입니다."
+
+msgid "ASP.NET Core Empty"
+msgstr "빈 ASP.NET Core"
+
+msgid "An F# project for creating an F# library."
+msgstr "F# 라이브러리를 만들기 위한 F# 프로젝트입니다."
+
+msgid "An F# tutorial project providing a walkthrough of the F# language."
+msgstr "F# 언어에 대한 자습서를 제공하는 F# 자습서 프로젝트입니다."
+
+msgid "Creates an F# NUnit library."
+msgstr "F# NUnit 라이브러리를 만듭니다."
+
+msgid "F# Tutorial"
+msgstr "F# 자습서"
+
+msgid "Unit Test Project"
+msgstr "단위 테스트 프로젝트"

@@ -31501,9 +31501,9 @@ msgstr ""
 #~ msgstr ""
 #~ "Um site popular de artigos, extractos de código e discussões sobre o .NET."
 
-#, fuzzy
-#~ msgid "ASP.NET Core Empty"
-#~ msgstr "Directório"
+
+msgid "ASP.NET Core Empty"
+msgstr "ASP.NET Core vazio"
 
 #, fuzzy
 #~ msgid "ASP.NET Core Web API"
@@ -38027,3 +38027,39 @@ msgstr "Selecione um local para a nova solução"
 
 msgid "A F# project for creating a command line application."
 msgstr "Um projeto F# para criar um aplicativo de linha de comando"
+
+msgid "A project for creating a class library that targets .NET Standard or .NET Core."
+msgstr "Um projeto para criar uma biblioteca de classes destinada ao .NET Standard ou .NET Core."
+
+msgid "A project for creating a command-line application that can run on .NET on Windows, Linux and MacOS."
+msgstr "Um projeto para criar um aplicativo de linha de comando que pode ser executado no .NET no Windows, Linux e MacOS."
+
+msgid "A project for creating an empty ASP.NET Core web application."
+msgstr "Um projeto para criar um aplicativo Web vazio do ASP.NET Core."
+
+msgid "A project for creating an ASP.NET Core MVC application."
+msgstr "Um projeto para criar um aplicativo ASP.NET Core MVC."
+
+msgid "A project for creating an ASP.NET Core web API service."
+msgstr "Um projeto para criar um serviço de API Web do ASP.NET Core."
+
+msgid "A project for sharing source files between multiple projects via implicit linking."
+msgstr "Um projeto para compartilhar arquivos de origem entre vários projetos por vinculação implícita."
+
+msgid "A project that contains unit tests that can run with NUnit / xUnit test runners."
+msgstr "Um projeto que contém testes de unidade que podem ser executados com os executores de testes NUnit / xUnit."
+
+msgid "An F# project for creating an F# library."
+msgstr "Um projeto F# para criar uma biblioteca F#."
+
+msgid "An F# tutorial project providing a walkthrough of the F# language."
+msgstr "Um projeto de tutorial F# que oferece uma introdução à linguagem F#."
+
+msgid "Creates an F# NUnit library."
+msgstr "Cria uma biblioteca NUnit em F#."
+
+msgid "F# Tutorial"
+msgstr "Tutorial de F#"
+
+msgid "Unit Test Project"
+msgstr "Projeto de teste de unidade"

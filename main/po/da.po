@@ -31750,9 +31750,9 @@ msgstr ""
 #~ msgid "A blank solution"
 #~ msgstr "En blank løsning"
 
-#, fuzzy
-#~ msgid "ASP.NET Core Empty"
-#~ msgstr "Mappe:"
+
+msgid "ASP.NET Core Empty"
+msgstr "Tom ASP.NET Core"
 
 #, fuzzy
 #~ msgid "ASP.NET Core Web API"
@@ -37981,3 +37981,39 @@ msgstr "Vælg en placering til den nye løsning"
 
 msgid "A F# project for creating a command line application."
 msgstr "Et F#-projekt til oprettelse af en kommandolinjeapplikation"
+
+msgid "A project for creating a class library that targets .NET Standard or .NET Core."
+msgstr "Et projekt til at oprette et klassenbibliotek, der er målrettet .NET Standard eller .NET Core."
+
+msgid "A project for creating a command-line application that can run on .NET on Windows, Linux and MacOS."
+msgstr "Et projekt til at oprette en kommandolinjeapplikation, der kan køre på .NET i Windows, Linux og MacOS."
+
+msgid "A project for creating an empty ASP.NET Core web application."
+msgstr "Et projekt til at oprette en tom ASP.NET Core-webapplikation."
+
+msgid "A project for creating an ASP.NET Core MVC application."
+msgstr "Et projekt til at oprette en ASP.NET Core MVC-applikation."
+
+msgid "A project for creating an ASP.NET Core web API service."
+msgstr "Et projekt til at oprette en ASP.NET Core-web-API-tjeneste."
+
+msgid "A project for sharing source files between multiple projects via implicit linking."
+msgstr "Et projekt til at dele kildefiler mellem flere projekter via implicit linkning."
+
+msgid "A project that contains unit tests that can run with NUnit / xUnit test runners."
+msgstr "Et projekt der indeholder enhedstests, som kan køres med NUnit / xUnit-testkørerne."
+
+msgid "An F# project for creating an F# library."
+msgstr "Et F#-projekt til oprettelse af et F#-bibliotek."
+
+msgid "An F# tutorial project providing a walkthrough of the F# language."
+msgstr "Et F#-vejledningsprojekt der giver en gennemgang af F#-sproget."
+
+msgid "Creates an F# NUnit library."
+msgstr "Opretter et F#-NUnit-bibliotek."
+
+msgid "F# Tutorial"
+msgstr "F#-vejledning"
+
+msgid "Unit Test Project"
+msgstr "Enhedstestprojekt"

@@ -31112,9 +31112,9 @@ msgstr ""
 #~ msgid "A text paragraph."
 #~ msgstr "Egy szöveges bekezdés."
 
-#, fuzzy
-#~ msgid "ASP.NET Core Empty"
-#~ msgstr "ASP.NET könyvtár"
+
+msgid "ASP.NET Core Empty"
+msgstr "Üres ASP.NET Core"
 
 #, fuzzy
 #~ msgid "ASP.NET Core Web API"
@@ -38362,3 +38362,39 @@ msgstr "Válasszon helyet az új megoldáshoz"
 
 msgid "A F# project for creating a command line application."
 msgstr "F# projekt parancssori alkalmazás létrehozásához"
+
+msgid "A project for creating a class library that targets .NET Standard or .NET Core."
+msgstr "Projekt osztálykönyvtár létrehozásához .NET Standard vagy .NET Core célra."
+
+msgid "A project for creating a command-line application that can run on .NET on Windows, Linux and MacOS."
+msgstr "Projekt parancssori alkalmazás létrehozásához, amely .NET-en futtatható Windowson, Linuxon és MacOS-en."
+
+msgid "A project for creating an empty ASP.NET Core web application."
+msgstr "Projekt üres ASP.NET Core webalkalmazás létrehozásához."
+
+msgid "A project for creating an ASP.NET Core MVC application."
+msgstr "Projekt ASP.NET Core MVC alkalmazás létrehozásához."
+
+msgid "A project for creating an ASP.NET Core web API service."
+msgstr "Projekt ASP.NET Core web API szolgáltatás létrehozásához."
+
+msgid "A project for sharing source files between multiple projects via implicit linking."
+msgstr "Projekt forrásfájlok több projekt közötti megosztására implicit hivatkozással."
+
+msgid "A project that contains unit tests that can run with NUnit / xUnit test runners."
+msgstr "Projekt egységtesztekkel, amelyek futtathatók az NUnit / xUnit tesztfuttatókkal."
+
+msgid "An F# project for creating an F# library."
+msgstr "F# projekt F# könyvtár létrehozásához."
+
+msgid "An F# tutorial project providing a walkthrough of the F# language."
+msgstr "F# oktatóprojekt, amely bemutatja az F# nyelvet."
+
+msgid "Creates an F# NUnit library."
+msgstr "F# NUnit könyvtárat hoz létre."
+
+msgid "F# Tutorial"
+msgstr "F# oktatóanyag"
+
+msgid "Unit Test Project"
+msgstr "Egységteszt projekt"

@@ -31623,9 +31623,9 @@ msgstr ""
 #~ msgid "A blank solution"
 #~ msgstr "Prazna rešitev"
 
-#, fuzzy
-#~ msgid "ASP.NET Core Empty"
-#~ msgstr "Direktorij"
+
+msgid "ASP.NET Core Empty"
+msgstr "Prazna ASP.NET Core"
 
 #, fuzzy
 #~ msgid "ASP.NET Core Web API"
@@ -37589,3 +37589,39 @@ msgstr "Izberite mesto za novo rešitev"
 
 msgid "A F# project for creating a command line application."
 msgstr "Projekt F# za ustvarjanje ukaznovrstne aplikacije"
+
+msgid "A project for creating a class library that targets .NET Standard or .NET Core."
+msgstr "Projekt za ustvarjanje knjižnice razredov, namenjene .NET Standard ali .NET Core."
+
+msgid "A project for creating a command-line application that can run on .NET on Windows, Linux and MacOS."
+msgstr "Projekt za ustvarjanje ukaznovrstne aplikacije, ki lahko deluje na .NET v sistemu Windows, Linux in MacOS."
+
+msgid "A project for creating an empty ASP.NET Core web application."
+msgstr "Projekt za ustvarjanje prazne spletne aplikacije ASP.NET Core."
+
+msgid "A project for creating an ASP.NET Core MVC application."
+msgstr "Projekt za ustvarjanje aplikacije ASP.NET Core MVC."
+
+msgid "A project for creating an ASP.NET Core web API service."
+msgstr "Projekt za ustvarjanje storitve spletnega API ASP.NET Core."
+
+msgid "A project for sharing source files between multiple projects via implicit linking."
+msgstr "Projekt za skupno rabo izvornih datotek med več projekti z implicitno povezavo."
+
+msgid "A project that contains unit tests that can run with NUnit / xUnit test runners."
+msgstr "Projekt z enotnimi testi, ki jih je mogoče zagnati s testnimi tekalci NUnit / xUnit."
+
+msgid "An F# project for creating an F# library."
+msgstr "Projekt F# za ustvarjanje knjižnice F#."
+
+msgid "An F# tutorial project providing a walkthrough of the F# language."
+msgstr "Učni projekt F# z uvodom v jezik F#."
+
+msgid "Creates an F# NUnit library."
+msgstr "Ustvari knjižnico F# NUnit."
+
+msgid "F# Tutorial"
+msgstr "Vadnik po F#"
+
+msgid "Unit Test Project"
+msgstr "Projekt enotnih testov"
