@@ -20,6 +20,18 @@ namespace MonoDevelop.Ide.Controls;
 /// </summary>
 public static class XamlTranslation
 {
+	/// <summary>Opt-out for controls whose text is data rather than UI copy —
+	/// e.g. the toolbar configuration/run/TFM combos, whose items are solution
+	/// configuration names (Debug/Release) and target framework monikers. The
+	/// GTK toolbar never translates those either; translating them makes the
+	/// painted label disagree with the SelectedItem value used for persistence.
+	/// Set on a control to skip it and its whole subtree.</summary>
+	public static readonly AvaloniaProperty SkipProperty =
+		AvaloniaProperty.RegisterAttached<StyledElement, bool> ("Skip", typeof (XamlTranslation));
+
+	public static void SetSkip (StyledElement element, bool value) => element.SetValue (SkipProperty, value);
+	public static bool GetSkip (StyledElement element) => (bool)element.GetValue (SkipProperty)!;
+
 	sealed class Entry
 	{
 		public string MsgId = "";
@@ -96,15 +108,24 @@ public static class XamlTranslation
 		if (!visited.Add (visual))
 			return;
 
+		// Data-bearing controls (toolbar config/TFM/run combos) opt out for their
+		// painted content: their item strings are configuration ids, not UI copy.
+		// The control itself is still translated so its tooltip keeps working;
+		// only its visual/logical children (the item text) are skipped.
+		bool skipChildren = visual is StyledElement element && GetSkip (element);
+
 		if (visual is Control control)
 			TranslateProperties (control);
+
+		if (skipChildren)
+			return;
 
 		foreach (var child in visual.GetVisualChildren ())
 			Translate (child, visited);
 
 		// Item containers and template children live in the logical tree only on
 		// the first pass; walk it too so combo boxes and lists get their labels.
-		if (visual is ILogical logical)
+		if (!skipChildren && visual is ILogical logical)
 			foreach (var child in logical.LogicalChildren)
 				if (child is Visual v)
 					Translate (v, visited);

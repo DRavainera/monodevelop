@@ -382,6 +382,9 @@ public partial class MainWindow : Window
 		RunConfigCombo!.PlaceholderText = "Default";
 		RunConfigCombo.Items.Add ("Default");
 		RunConfigCombo.IsVisible = false;
+		MonoDevelop.Ide.Controls.XamlTranslation.SetSkip (ConfigCombo, true);
+		MonoDevelop.Ide.Controls.XamlTranslation.SetSkip (TfmCombo, true);
+		MonoDevelop.Ide.Controls.XamlTranslation.SetSkip (RunConfigCombo, true);
 		// Default toolbar configs (the legacy combo shows the workspace configs when
 		// a solution opens — see RefreshConfigurationSelectors).
 		ConfigCombo!.Items.Add ("Debug");
@@ -1477,6 +1480,30 @@ public partial class MainWindow : Window
 					Output ("[activeconfig] after-switch=" + after + " persisted=" + File.ReadAllText (loadedSolutionPath.Substring (0, loadedSolutionPath.Length - 4) + ".userprefs").Contains ("Release") + " combo=" + (ConfigCombo?.SelectedItem as string ?? "?"));
 					OnMenuCommand ("MonoDevelop.Ide.Commands.ProjectCommands.SelectActiveConfiguration:Debug");
 					Output ("[activeconfig] restored=" + MonoDevelop.Ide.Services.ConfigurationService.GetActiveConfiguration (loadedSolutionPath));
+					// QA regresión: el combo pinta el msgid sin traducir y la
+					// selección cambia la configuración activa persistida.
+					if (ConfigCombo is { } qaCombo) {
+						static string PaintedText (Avalonia.Visual v)
+						{
+							foreach (var child in v.GetVisualChildren ()) {
+								if (child is TextBlock { Text.Length: > 0 } tb) return tb.Text;
+								var nested = PaintedText (child);
+								if (nested.Length > 0) return nested;
+							}
+							return "";
+						}
+						var sln = loadedSolutionPath!;
+						var paintedDebug = PaintedText (qaCombo);
+						Output ($"[activeconfig] qa-debug painted='{paintedDebug}' selected={qaCombo.SelectedItem as string} tip='{ToolTip.GetTip (qaCombo)}'");
+						MonoDevelop.Ide.Controls.XamlTranslation.RefreshAll ();
+						Avalonia.Threading.Dispatcher.UIThread.RunJobs ();
+						var paintedAfterLang = PaintedText (qaCombo);
+						Output ($"[activeconfig] qa-after-lang painted='{paintedAfterLang}' selected={qaCombo.SelectedItem as string}");
+						qaCombo.SelectedItem = "Release";
+						Avalonia.Threading.Dispatcher.UIThread.RunJobs ();
+						Output ($"[activeconfig] qa-release painted='{PaintedText (qaCombo)}' selected={qaCombo.SelectedItem as string} persisted={MonoDevelop.Ide.Services.ConfigurationService.GetActiveConfiguration (sln)}");
+						qaCombo.SelectedItem = "Debug";
+					}
 				}
 			} else if (qa == "--tfmcombo") {
 				// QA (toolbar TFM combo, the GTK runtimeCombo port): the 1st combo
