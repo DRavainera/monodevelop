@@ -6196,3 +6196,17 @@ QA §18.5: **QA VERDE, 0 hallazgos abiertos**. Build shell + GTK **0 errores** (
 **Archivos tocados.** `MonoDevelop.Ide/Controls/XamlTranslation.cs` (M) y `MonoDevelop.Startup.Avalonia/Views/MainWindow.axaml.cs` (M). Además se trackean los recursos creados por el operador: `MonoDevelop.Ide/MonoDevelop.Avaloniia.branding/` (6 imágenes) y `theme-icons-avalonia/` (37 archivos de iconos/Makefiles). Sin submódulos.
 
 **Cierre.** Commit de código por nombre + commit `Docs:` por nombre (docs ×3). Push a `origin/agents/sub-agent-senior-dev-role-report`. **Sin PRs.**
+
+## 61. Corrección: diálogos New File y New Solution volvían al inglés al cambiar de opción (2026-11-28)
+
+**Bug.** Con el idioma español activo, al cambiar de categoría/template en los diálogos New File y New Solution, los textos de las listas y del título/descripción de la plantilla pasaban al inglés. `XamlTranslation` traduce en `Opened` y en un `Dispatcher.Post` posterior, pero los diálogos reconstruyen `TemplateList.ItemsSource`, `CategoryTree.ItemsSource` y `TemplateTitle.Text` **después** de esa pasada: los `TextBlock` nuevos nunca se traducían. Además `TranslateProperty` rechaza re-traducir un control cuando el código le asigna un msgid distinto de su `Entry.Applied` registrado (lo interpreta como mutación externa), por lo que el título/descripción tampoco se corregían.
+
+**Fix (capa compartida).** `Controls/XamlTranslation.cs`: nueva API pública `Translate(Control control)`, que traduce un subárbol reconstruido recorriendo visual y logical tree (respetando `Skip`), y `SetText(TextBlock control, string msgId)`, que asigna el msgid, aplica `GettextService.T` y actualiza `Entry.MsgId`/`Entry.Applied` juntos para evitar el rechazo por mutación externa.
+
+**Fix (diálogos).** `NewSolutionDialog`: `Translate(TemplateList)` tras `SetCategory`; `SetText` para título/descripción en `OnTemplateSelected`. `NewFileDialog`: `Translate(CategoryTree)` tras `RebuildCatalog`, `Translate(TemplateList)` en `FillTemplates` y `SetText` en `OnTemplateSelected`. Nuevos oráculos QA `--newsolution-lang` y `--newfile-lang` (flags en `Program.cs`) que cambian de opción y vuelcan los textos pintados.
+
+**Validación.** Español: `--newsolution-lang` → `title='Proyecto de consola'`, ítems `Proyecto de consola|Biblioteca|Proyecto de biblioteca NUnit|F# Tutorial`; `--newfile-lang` → `title='Archivo de origen de F#'`, lista `C#|F#|VB|Archivo de origen de F#|F#|Archivo de script de F#|F#|Archivo de signatura de F#|F#`. Inglés (`LANG=C LC_ALL=C`): msgids originales. Captura/OCR del diálogo New File en español (`Archivo vacío`, `Crea un archivo de C# vacío.`, `Ruta de acceso:`). Builds shell y `Main.sln` 0 errores; regresiones `--menudump`, `--prefs-tree`, `--activeconfig` (combo sin traducir/tooltip traducido) y `--deps` sin cambios. **QA §18.5: VERDE, 0 hallazgos bloqueantes** (`~/opencode/qa_r3_lang_qa_report.md`; logs en `~/opencode/qa_r3_lang_qa/`). Notas no bloqueantes: cobertura visual indirecta del cambio de F# en New Solution (el oráculo cierra el diálogo tras el dump) y dos descripciones F# sin msgid en `es.po` (gettext correcto).
+
+**Archivos tocados.** `MonoDevelop.Ide/Controls/XamlTranslation.cs`, `MonoDevelop.Startup.Avalonia/Program.cs`, `Views/MainWindow.axaml.cs`, `Views/NewFileDialog.axaml.cs`, `Views/NewSolutionDialog.axaml.cs`. Sin submódulos.
+
+**Cierre.** Commit de código por nombre + commit `Docs:` por nombre (docs ×3). Push a `origin/agents/sub-agent-senior-dev-role-report`. **Sin PRs.**
