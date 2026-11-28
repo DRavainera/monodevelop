@@ -43,7 +43,7 @@ public static class MenuService
 		public bool AutoHide { get; set; }
 	}
 
-	public static IReadOnlyList<MenuEntry> BuildMainMenu (IReadOnlyList<string>? recentSolutions = null)
+	public static IReadOnlyList<MenuEntry> BuildMainMenu (IReadOnlyList<string>? recentSolutions = null, bool includeAddinCommands = true)
 	{
 		var menu = new List<MenuEntry> {
 			BuildFile (recentSolutions),
@@ -54,7 +54,7 @@ public static class MenuService
 			BuildBuild (),
 			BuildRun (),
 			BuildVersionControl (),
-			BuildToolsWithExternal (),
+			BuildToolsWithExternal (includeAddinCommands),
 			BuildWindow (),
 			BuildHelp (),
 		};
@@ -605,7 +605,7 @@ public static class MenuService
 	// built-in items (legacy ToolService.AddMenuItems inserted them before the
 	// Preferences item — the shell's Tools menu has no Preferences entry, so
 	// they land at the end, after a separator). Called from BuildMainMenu.
-	internal static MenuEntry BuildToolsWithExternal ()
+	internal static MenuEntry BuildToolsWithExternal (bool includeAddinCommands = true)
 	{
 		var tools = BuildTools ();
 		var children = new List<MenuEntry> (tools.Children);
@@ -619,7 +619,35 @@ public static class MenuService
 		}
 		tools.Children.Clear ();
 		tools.Children.AddRange (children);
+		var contributed = includeAddinCommands ? AddinCommandItems () : new List<MenuEntry> ();
+		if (contributed.Count > 0) {
+			tools.Children.Add (Sep ());
+			tools.Children.Add (Sub ("Add-in Commands", contributed));
+		}
 		return tools;
+	}
+
+	/// <summary>Commands published by enabled add-ins through the contribution
+	/// registry (manifest /MonoDevelop/Ide/Commands or ICommandService.RegisterCommand)
+	/// that are not already reachable from the literal menus. This is the VS
+	/// "Extensions" command group, refreshed on every menu build; it stays empty (and
+	/// the submenu is omitted) when every contributed command already has a menu entry.
+	/// </summary>
+	static List<MenuEntry> AddinCommandItems ()
+	{
+		var result = new List<MenuEntry> ();
+		var registered = new HashSet<string> (StringComparer.Ordinal);
+		// Ids the literal menus already expose: a contributed command with a menu
+		// entry is not repeated under the Extensions group.
+		var inMenus = new HashSet<string> (StringComparer.Ordinal);
+		foreach (var (id, _) in MainWindow.Instance?.MenuCommandBindings () ?? System.Array.Empty<(string, string)> ())
+			inMenus.Add (id);
+		foreach (var command in App.UIServices.Commands) {
+			if (!command.Id.Contains ('.') || !registered.Add (command.Id) || inMenus.Contains (command.Id))
+				continue;
+			result.Add (Item (command.Label, icon: command.Icon, click: Command (command.Id)));
+		}
+		return result;
 	}
 
 	// ---------- Window ----------

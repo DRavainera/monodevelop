@@ -12,6 +12,12 @@ public partial class App : Application
 	/// <summary>Add-ins for the Avalonia shell (loaded from Program.AddonsDirectory).</summary>
 	public static MonoDevelop.AvaloniaAddons.AddonHost? Addins { get; private set; }
 
+	/// <summary>Observable registry of the UI contributions (commands, toolbar, pads,
+	/// option pages) the enabled add-ins publish. The shell renders its chrome from
+	/// it and refreshes live on <see cref="MonoDevelop.AvaloniaAddons.ExtensionModel.IExtensionUIServices.Changed"/>.</summary>
+	public static MonoDevelop.AvaloniaAddons.ExtensionModel.IExtensionUIServices UIServices { get; private set; }
+		= new MonoDevelop.AvaloniaAddons.ExtensionModel.ExtensionUIServices ();
+
 	/// <summary>Platform hooks contributed by the host's platform add-in
 	/// (Mac/Windows/LinuxPlatform via IPlatformHooks); null when the add-in tree
 	/// has no platform add-in for this OS. The shell routes its desktop
@@ -40,8 +46,10 @@ public partial class App : Application
 		var addons = new MonoDevelop.AvaloniaAddons.AddonHost (Program.AddonsDirectory, Program.UserAddinsDirectory);
 		// Persist the disabled/uninstalled ids in the same per-user property store as
 		// the rest of the settings (MonoDevelopProperties.xml), so the choices survive
-		// a restart.
+		// a restart. The UI registry is bound BEFORE LoadAll so every add-in's
+		// manifest and code contributions land in it as they are composed.
 		addons.StateStore = new ShellAddonUserState ();
+		addons.UIServices = UIServices;
 		addons.Discover ();
 		addons.LoadAll ();
 		Addins = addons;
@@ -60,6 +68,7 @@ public partial class App : Application
 			Console.WriteLine ($"[avalonia-addons] {a.Manifest.Identity.Id} v{a.Manifest.Identity.Version} loaded={a.Loaded} enabled={a.Enabled}{(a.Superseded ? " superseded" : "")}{(a.Error is null ? "" : " error=" + a.Error)}");
 		foreach (var path in addons.Extensions.ExtensionPoints)
 			Console.WriteLine ($"[avalonia-addons] ep {path} nodes={addons.Extensions.GetExtensionNodes (path).Count}");
+		Console.WriteLine ($"[avalonia-addons] ui commands={UIServices.Commands.Count} toolbar={UIServices.ToolbarItems.Count} pads={UIServices.Pads.Count} pages={UIServices.OptionPages.Count}");
 
 
 		// Apply the stored User Interface Theme (legacy key MonoDevelop.Ide.UserInterfaceTheme:

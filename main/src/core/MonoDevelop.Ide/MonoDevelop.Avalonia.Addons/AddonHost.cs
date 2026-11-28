@@ -9,6 +9,7 @@ using System.Text.RegularExpressions;
 using System.Text.Json;
 using MonoDevelop.AvaloniaAddons.Extensions;
 using MonoDevelop.AvaloniaAddons.Manifests;
+using MonoDevelop.AvaloniaAddons.ExtensionModel;
 using MonoDevelop.AvaloniaAddons.Packages;
 
 namespace MonoDevelop.AvaloniaAddons
@@ -61,6 +62,12 @@ namespace MonoDevelop.AvaloniaAddons
 		/// <summary>Optional persistence for the disabled/uninstalled sets. Wired by the
 		/// shell (e.g. to SettingsStore); null when the host runs standalone.</summary>
 		public IAddonUserState StateStore { get; set; }
+
+		/// <summary>Observed registry of the UI contributions (commands, toolbars, pads,
+		/// option pages) the enabled add-ins publish. The shell binds its menus, toolbar
+		/// and pads to it; null keeps the host usable standalone (contributions are then
+		/// just not surfaced).</summary>
+		public IExtensionUIServices? UIServices { get; set; }
 
 		public IReadOnlyList<AddonLoadState> Addons => addons;
 		public IAddonExtensionRegistry Extensions => extensions;
@@ -398,6 +405,36 @@ namespace MonoDevelop.AvaloniaAddons
 		{
 			UnloadAddon (state);
 			var id = state.Manifest.Identity.Id;
+			var nodes = new List<(string Path, AddonExtensionNode Node)> ();
+			if (state.Manifest.AutoLoad) {
+				foreach (var (path, nodesList) in state.Manifest.Extensions) {
+					if (!extensions.HasExtensionPoint (path)) extensions.DeclareExtensionPoint (path);
+					foreach (var node in nodesList ?? new List<AddonExtensionNode> ()) {
+						extensions.AddNode (path, node);
+						nodes.Add ((path, node));
+					}
+				}
+			}
+			nodesByAddon [id] = nodes;
+
+			// Publish manifest contributions first; packages registering from code
+			// below add on top of the same add-in's snapshot.
+			List<ContributedCommand>? manifestCommands = null;
+			List<ToolbarItem>? manifestToolbar = null;
+			List<ContributedPad>? manifestPads = null;
+			List<ContributedOptionPage>? manifestPages = null;
+			if (UIServices is not null) {
+				ManifestContributionParser.Parse (id, state.Manifest.Extensions,
+					out manifestCommands, out manifestToolbar, out manifestPads, out manifestPages);
+				UIServices.Publish (id, manifestCommands, manifestToolbar, manifestPads, manifestPages);
+			}
+
+			// The context hands the add-in real shell services seeded with the
+			// manifest contributions, so a runtime registration adds to them instead
+			// of replacing them. When the registry is not bound the services stay null.
+			var services = UIServices is null ? null : new AddonShellServices (id, UIServices,
+				manifestCommands, manifestToolbar, manifestPads, manifestPages);
+			IAddonContext context = new Context (root, extensions, composition, id, Note, services, services);
 			var parts = new List<object> ();
 			if (state.Context is { } alc) {
 				foreach (var t in SafeGetTypes (alc.Assembly)) {
@@ -411,29 +448,17 @@ namespace MonoDevelop.AvaloniaAddons
 					parts.Add (inst);
 
 					if (inst is IAvaloniaAddon addon) {
-						addon.Initialize (new Context (root, extensions, composition, id, Note));
+						addon.Initialize (context);
 						if (addon.GetType ().GetCustomAttribute<ProvideAutoLoadAttribute> () is not null) addon.Load ();
 					}
 
 					if (inst is IPackage pkg) {
-						pkg.Initialize (new Context (root, extensions, composition, id, Note));
+						pkg.Initialize (context);
 						if (pkg.GetType ().GetCustomAttribute<ProvideAutoLoadAttribute> () is not null) pkg.Load ();
 					}
 				}
 			}
 			partsByAddon [id] = parts;
-
-			var nodes = new List<(string Path, AddonExtensionNode Node)> ();
-			if (state.Manifest.AutoLoad) {
-				foreach (var (path, nodesList) in state.Manifest.Extensions) {
-					if (!extensions.HasExtensionPoint (path)) extensions.DeclareExtensionPoint (path);
-					foreach (var node in nodesList ?? new List<AddonExtensionNode> ()) {
-						extensions.AddNode (path, node);
-						nodes.Add ((path, node));
-					}
-				}
-			}
-			nodesByAddon [id] = nodes;
 		}
 
 		/// <summary>Reverts <see cref="ComposeAddon"/>: unloads the add-in's packages,
@@ -458,6 +483,7 @@ namespace MonoDevelop.AvaloniaAddons
 					extensions.RemoveNode (path, node);
 				nodesByAddon.Remove (id);
 			}
+			UIServices?.Remove (id);
 		}
 
 		/// <summary>The active (non-superseded) state of an add-in, or null.</summary>
@@ -795,8 +821,10 @@ namespace MonoDevelop.AvaloniaAddons
 
 		sealed class Context : IAddonContext {
 			readonly Action<string> note;
-			public Context (string root, IAddonExtensionRegistry ext, ICompositionHost comp, string addonId, Action<string> note) {
+			public Context (string root, IAddonExtensionRegistry ext, ICompositionHost comp, string addonId, Action<string> note,
+				ICommandService? commands = null, IPadRegistry? pads = null) {
 				this.RootDirectory = root; this.Extensions = ext; this.Composition = comp; this.AddonId = addonId; this.note = note;
+				CommandService = commands; PadRegistry = pads;
 			}
 			public string AddonId { get; }
 			public string RootDirectory { get; }

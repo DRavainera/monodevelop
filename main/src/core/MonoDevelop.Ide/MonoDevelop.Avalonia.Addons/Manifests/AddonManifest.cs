@@ -121,6 +121,10 @@ namespace MonoDevelop.AvaloniaAddons.Manifests
 		[JsonPropertyName ("icon")] public string Icon { get; set; } = "";
 		[JsonPropertyName ("className")] public string ClassName { get; set; }
 		[JsonPropertyName ("childId")] public string ChildId { get; set; }
+		// Legacy pad <Pad group="Logs">: the layout group decides the dock edge
+		// (Logs → bottom, 1Solution → left, Properties → right). Kept on the node
+		// so the shell can place contributed pads where the GTK IDE placed them.
+		[JsonPropertyName ("group")] public string Group { get; set; }
 
 		// The node's enable condition, mirroring the legacy add-in <Condition>
 		// attribute. It is a boolean expression the shell's extension consumers

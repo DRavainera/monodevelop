@@ -88,6 +88,9 @@
                   ToolTip.Tip="Active configuration" SelectionChanged="OnToolbarConfigChanged" />
         <ComboBox x:Name="TfmCombo" Width="150" Height="22" FontSize="12" Margin="8,0"
                   ToolTip.Tip="Target framework" SelectionChanged="OnToolbarConfigChanged" />
+        <!-- Add-in contributed command bar: buttons declared through the
+             /MonoDevelop/Ide/Toolbar extension point, populated at runtime. -->
+        <StackPanel x:Name="AddinToolbarItems" Orientation="Horizontal" Spacing="2" Margin="4,0,0,0" />
         <!-- Right cluster: the search box is right-most, ':' selects a category (":c"
              commands, ":f" files) and Enter runs the search like SearchPopupWindow. -->
         <Grid DockPanel.Dock="Right" Width="220" Height="22">

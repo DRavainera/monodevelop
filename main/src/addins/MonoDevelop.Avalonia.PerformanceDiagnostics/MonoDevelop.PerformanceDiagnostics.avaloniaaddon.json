@@ -48,7 +48,7 @@
       { "id": "PerformanceDiagnosticsGeneral", "label": "General", "icon": "md-prefs-performance", "className": "PerformanceDiagnosticsAddIn.GlobalOptionsPanel" }
     ],
     "/MonoDevelop/Ide/Pads": [
-      { "id": "PerformanceDiagnosticsAddIn.LeakTrackerPad", "label": "Leak Tracker", "icon": "md-errors-list", "className": "PerformanceDiagnosticsAddIn.LeakTrackerPad" }
+      { "id": "PerformanceDiagnosticsAddIn.LeakTrackerPad", "label": "Leak Tracker", "icon": "md-errors-list", "className": "PerformanceDiagnosticsAddIn.LeakTrackerPad", "group": "Logs" }
     ],
     "/MonoDevelop/Ide/WorkbenchLayouts/Solution": [
       { "id": "PerformanceDiagnosticsAddIn.LeakTrackerPad", "label": "Leak Tracker", "icon": "md-errors-list" }

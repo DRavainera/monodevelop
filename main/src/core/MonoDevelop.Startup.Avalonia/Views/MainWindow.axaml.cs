@@ -16,6 +16,7 @@ using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Styling;
 using Avalonia.VisualTree;
+using MonoDevelop.AvaloniaAddons.ExtensionModel;
 using MonoDevelop.Ide.Controls;
 using MonoDevelop.Ide.Services;
 using MonoDevelop.AvaloniaShell.Views;
@@ -178,6 +179,14 @@ public partial class MainWindow : Window
 		// language change (Preferences > Environment > Visual Style).
 		MonoDevelop.Ide.Controls.XamlTranslation.Attach (this);
 
+		// Add-in pads (VS-style): content factories are registered for the pads the
+		// shell implements for real; the registry's Changed event keeps the tabs in
+		// sync when add-ins are enabled/disabled at runtime.
+		AddinPadContentFactory.Register ("MonoDevelop.RegexToolkit.RegexPad", () => new RegexTesterPad (), "MonoDevelop.RegexToolkit.Open");
+		AddinPadContentFactory.Register ("PerformanceDiagnosticsAddIn.LeakTrackerPad", () => new LeakTrackerPad ());
+		App.UIServices.Changed += OnAddinContributionsChanged;
+		SyncAddinToolbar ();
+
 		BuildPads ();
 		// Restore the persisted pad layout (visible tabs, collapse, active tab,
 		// row height) once the dispatcher runs — hosts exist and settings are loaded.
@@ -193,7 +202,10 @@ public partial class MainWindow : Window
 		// F# Interactive (F# port, phase 4): the dotnet-fsi child must not outlive
 		// the window — kill it when the window is actually destroyed (Closed
 		// always fires, unlike Closing which the dirty-files gate can cancel).
-		Closed += (_, _) => FsiKillSession ();
+		Closed += (_, _) => {
+			FsiKillSession ();
+			App.UIServices.Changed -= OnAddinContributionsChanged;
+		};
 
 		// Tab clicks swap the mounted document in DocContent (and show the empty
 		// host when the selection is cleared).
@@ -438,6 +450,21 @@ public partial class MainWindow : Window
 			var qa = Program.QaDialogArg;
 			if (qa == "--prefs") {
 				new PreferencesDialog { WindowStartupLocation = WindowStartupLocation.CenterOwner }.ShowDialog (this);
+			} else if (qa == "--addin-contrib") {
+				Output ("[addin-contrib] " + AddinContributionProbe.Run ().Replace ("\n", " | "));
+				Output ("[addin-contrib] " + AddinContributionProbe.RegexProbe ());
+				Output ("[addin-contrib] paddocks=" + string.Join (",", App.UIServices.Pads.Select (p => p.Id + ":" + p.Dock)));
+				Output ("[addin-contrib] tabs=" + string.Join (",", LeftPads.Tabs.Select (t => t.Id + ":" + t.Label).Concat (RightPads.Tabs.Select (t => t.Id + ":" + t.Label)).Concat (BottomPads.Tabs.Select (t => t.Id + ":" + t.Label))));
+				Output ("[addin-contrib] toolbarButtons=" + AddinToolbarItems.Children.Count);
+				foreach (var item in AddinToolbarItems.Children.OfType<Button> ())
+					Output ("[addin-contrib] button=" + item.GetValue (ToolTip.TipProperty));
+				if (App.Addins is not null) {
+					App.Addins.SetEnabled ("MonoDevelop.QAToolbar", false, out var errOff);
+					Output ($"[addin-contrib] after-disable toolbar={App.UIServices.ToolbarItems.Count} error={errOff ?? "-"}");
+					App.Addins.SetEnabled ("MonoDevelop.QAToolbar", true, out var errOn);
+					Output ($"[addin-contrib] after-enable toolbar={App.UIServices.ToolbarItems.Count} error={errOn ?? "-"}");
+				}
+				Avalonia.Threading.Dispatcher.UIThread.Post (Close, Avalonia.Threading.DispatcherPriority.Background);
 			} else if (qa == "--prefs-tree") {
 				// QA: dump the Preferences section tree (ids/labels/icons) and show it.
 				var dlg = new PreferencesDialog { WindowStartupLocation = WindowStartupLocation.CenterOwner };
@@ -6204,6 +6231,80 @@ public partial class MainWindow : Window
 		LeftPads.Hidden += (_, _) => UpdateRestoreStrip ();
 		RightPads.Hidden += (_, _) => UpdateRestoreStrip ();
 		BottomPads.Hidden += (_, _) => UpdateRestoreStrip ();
+		SyncAddinPads ();
+	}
+
+	/// <summary>Adds/removes pad tabs from the observable add-in registry. Tabs are
+	/// created with real content from <see cref="AddinPadContentFactory"/>; a pad
+	/// whose add-in is later disabled is removed again (VS-style live update).
+	/// </summary>
+	void SyncAddinPads ()
+	{
+		foreach (var pad in App.UIServices.Pads) {
+			// These manifests describe pads the shell already builds with their
+			// real content (the Unit Tests port in BuildPads), so only keep their
+			// native tab in sync instead of adding a duplicate.
+			if (pad.Id is "MonoDevelop.UnitTesting.TestPad" or "MonoDevelop.UnitTesting.TestResultsPad")
+				continue;
+			var host = pad.Dock switch {
+				PadDock.Left => LeftPads,
+				PadDock.Right => RightPads,
+				_ => BottomPads,
+			};
+			var existing = host.Tabs.FirstOrDefault (t => t.Id == pad.Id);
+			if (existing is not null) {
+				existing.Label = pad.Label;
+				existing.Icon = pad.Icon ?? existing.Icon;
+				continue;
+			}
+			host.AddTab (new PadHost.PadTab {
+				Id = pad.Id,
+				Label = pad.Label,
+				Icon = pad.Icon,
+				Content = AddinPadContentFactory.Create (pad),
+				Visible = false,
+			});
+		}
+		var contributed = new HashSet<string> (App.UIServices.Pads.Select (p => p.Id), StringComparer.Ordinal);
+		foreach (var host in new [] { LeftPads, RightPads, BottomPads })
+			foreach (var tab in host.Tabs.Where (t => t.Id.Contains ('.') && !contributed.Contains (t.Id)).ToList ())
+				host.RemoveTab (tab.Id);
+	}
+
+	void OnAddinContributionsChanged (object? sender, EventArgs e)
+	{
+		Avalonia.Threading.Dispatcher.UIThread.Post (() => {
+			SyncAddinToolbar ();
+			if (App.UIServices.Pads.Count > 0)
+				SyncAddinPads ();
+			BuildMenu ();
+		});
+	}
+
+	/// <summary>Rebuilds the add-in toolbar strip from the shared contribution
+	/// registry. Buttons dispatch through MenuService.RunCommand so contributed
+	/// buttons behave exactly like menu items (catalog commands first, then the
+	/// window's legacy dispatcher).
+	/// </summary>
+	void SyncAddinToolbar ()
+	{
+		var strip = AddinToolbarItems;
+		if (strip is null)
+			return;
+		strip.Children.Clear ();
+		foreach (var item in App.UIServices.ToolbarItems) {
+			var button = new Button {
+				Content = new TextBlock { Text = item.Label, FontSize = 11 },
+				Padding = new Thickness (6, 2),
+				MinHeight = 22,
+				Background = Brushes.Transparent,
+			};
+			ToolTip.SetTip (button, item.Label);
+			var command = item.CommandId;
+			button.Click += (_, _) => MenuService.RunCommand (command);
+			strip.Children.Add (button);
+		}
+		strip.IsVisible = strip.Children.Count > 0;
 	}
 
 	// Edge restore strip: one chip per hidden pad host, like the GTK restore handles.
@@ -6280,7 +6381,10 @@ public partial class MainWindow : Window
 			or "callstack" or "locals" or "watch" or "breakpoints" or "threads" or "bookmarks"
 			or "attach" or "fsi" or "packageconsole"
 			=> (BottomPads, BottomPads.Tabs.FirstOrDefault (t => t.Id == padId)),
-		_ => (null, null),
+		_ => (App.UIServices.Pads.Any (p => p.Id == padId)
+			? (App.UIServices.Pads.First (p => p.Id == padId).Dock switch {
+				PadDock.Left => LeftPads, PadDock.Right => RightPads, _ => BottomPads })
+			: null, null),
 	};
 
 	// Legacy group-level ids kept for the restore strip / old dispatch entries.
@@ -12013,7 +12117,10 @@ public partial class MainWindow : Window
 					list.Add ((id!, e.Label.Replace ("_", "")));
 			}
 		}
-		Walk (MenuService.BuildMainMenu (RecentSolutions.GetAll ().Select (r => r.Path).ToList ()));
+		// Build WITHOUT the add-in group: AddinCommandItems itself calls this to
+		// learn which ids the literal menus already expose, so including it here
+		// would recurse forever.
+		Walk (MenuService.BuildMainMenu (RecentSolutions.GetAll ().Select (r => r.Path).ToList (), includeAddinCommands: false));
 		return list;
 	}
 

@@ -403,6 +403,27 @@ public class PadHost : Border
 			SelectionChanged?.Invoke (tabId);
 	}
 
+	/// <summary>Removes a contributed tab (add-in disabled/uninstalled). Kept in
+	/// PadHost because the tab's chrome and rail button live here; existing tabs
+	/// are only hidden on close, so this is used exclusively for add-in tabs.
+	/// </summary>
+	public void RemoveTab (string id)
+	{
+		var tab = tabs.FirstOrDefault (t => t.Id == id);
+		if (tab is null)
+			return;
+		tabBar.Children.Remove (tab.HeaderButton);
+		railBar.Children.Remove (tab.RailButton);
+		tabs.Remove (tab);
+		if (SelectedId == id) {
+			SelectedId = null;
+			content.Content = null;
+			var next = tabs.FirstOrDefault (t => t.Visible);
+			if (next is not null)
+				Select (next.Id);
+		}
+	}
+
 	/// <summary>Shows/hides the whole pad host (ViewCommands Single/SideBySide mode).</summary>
 	public void SetHostVisible (bool visible) => IsVisible = visible;
 
