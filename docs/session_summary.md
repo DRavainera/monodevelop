@@ -6222,3 +6222,15 @@ QA §18.5: **QA VERDE, 0 hallazgos abiertos**. Build shell + GTK **0 errores** (
 **Archivos tocados.** 24 `main/po/*.po` + `MonoDevelop.Startup.Avalonia/Views/NewFileDialog.axaml.cs` y `Views/NewSolutionDialog.axaml.cs`. Sin submódulos.
 
 **Cierre.** Commit de código por nombre + commit `Docs:` por nombre (docs ×3). Push a `origin/agents/sub-agent-senior-dev-role-report`. **Sin PRs.**
+
+## 63. Traducción de las plantillas F# y ASP.NET Core en New Solution (2026-11-28)
+
+**Diagnóstico.** El operador reportó `F#` y `ASP.NET Core` sin traducir en New Solution. Los nombres de categoría ya están en los 24 catálogos con msgstr idéntico (como `C#`/`VB`), igual que en el diálogo GTK. Lo que seguía en inglés eran los **títulos y descripciones de las plantillas** de esas categorías: 15 msgids visibles en español, entre ellos `ASP.NET Core Empty`, `A project for creating an empty ASP.NET Core web application.`, `An F# project for creating an F# library.`, `An F# tutorial project providing a walkthrough of the F# language.`, `Creates an F# NUnit library.`, `F# Tutorial` y descripciones/títulos de las plantillas C# (`Unit Test Project`, `A project for creating a class library...`).
+
+**Cambios.** Los 24 `main/po/*.po` se actualizaron con `~/opencode/qa_r5_patch_po.py` (parser de bloques que maneja msgids multilínea y entradas obsoletas `#~`): 11 msgstr vacíos rellenados y 301 entradas nuevas (13 msgids × 24 idiomas), sin sobreescribir traducciones existentes. En `ca.po` la entrada obsoleta `#~ msgid "ASP.NET Core Empty"` se activó como `ASP.NET Core buit` en lugar de duplicarla. Los 24 `.mo` se recompilaron con `msgfmt` (gitignoreados; `Makefile.am` los regenera). Oráculo nuevo `--newsolution-lang-all` (`Program.cs`, `QaDumpAllTemplates()` en `NewSolutionDialog.axaml.cs`) que itera las 5 categorías y vuelca título/descripción pintados de cada plantilla.
+
+**Validación.** `msgfmt -o /dev/null` 24/24 sin errores; `git diff --check` limpio; 0 msgids duplicados, 0 traducciones sobreescritas; los 24 `.mo` traducen los 13 msgids nuevos y no traducen `F#`/`ASP.NET Core` (coherente con GTK). Oráculos en es, fr, de, ja, zh_CN y ru: 96/96 plantillas con título y descripción traducidos (es `ASP.NET Core vacío`, `Tutorial de F#`; fr `ASP.NET Core vide`, `Tutoriel F#`; ja `ASP.NET Core 空`, `F# チュートリアル`). Builds shell y `Main.sln` 0 errores; regresiones `--menudump` (11 menús/302 ítems), `--activeconfig` (`Debug` sin traducir, tooltip traducido, `Release` persistido), `--deps` y `--newfile-lang` intactas. **QA §18.5: VERDE, 0 hallazgos** (`~/opencode/qa_r5_qa_report.md`; logs en `~/opencode/qa_r5_qa/`). Nota: el primer `Main.sln` falló por colisión de MSBuild en `obj/` con la instancia del operador; recompilado limpio con `-m:1 -nodeReuse:false`, sin tocar dicha instancia.
+
+**Archivos tocados.** 24 `main/po/*.po`, `MonoDevelop.Startup.Avalonia/Program.cs`, `Views/MainWindow.axaml.cs`, `Views/NewSolutionDialog.axaml.cs`. Sin submódulos.
+
+**Cierre.** Commit de código por nombre + commit `Docs:` por nombre (docs ×3). Push a `origin/agents/sub-agent-senior-dev-role-report`. **Sin PRs.**
