@@ -28852,10 +28852,10 @@ msgid "Add one line per file changed"
 msgstr ""
 
 msgid "Add to open solution"
-msgstr ""
+msgstr "Açık çözüme ekle"
 
 msgid "Add to project:"
-msgstr ""
+msgstr "Projeye ekle:"
 
 msgid "Add-in Manager"
 msgstr ""
@@ -28945,10 +28945,10 @@ msgid "Count"
 msgstr ""
 
 msgid "Create a New Solution"
-msgstr ""
+msgstr "Yeni bir çözüm oluştur"
 
 msgid "Create a directory for the solution"
-msgstr ""
+msgstr "Çözüm için bir dizin oluştur"
 
 msgid "Create backup copies of files before saving"
 msgstr ""
@@ -29176,7 +29176,7 @@ msgid "Move Up"
 msgstr ""
 
 msgid "New Solution"
-msgstr ""
+msgstr "Yeni çözüm"
 
 msgid "No tabs after non-tab characters"
 msgstr ""
@@ -29290,7 +29290,7 @@ msgid "Smart semicolon placement"
 msgstr ""
 
 msgid "Solution name:"
-msgstr ""
+msgstr "Çözüm adı:"
 
 msgid "Source URL"
 msgstr ""
@@ -29416,7 +29416,7 @@ msgid "Use bullets for each entry"
 msgstr ""
 
 msgid "Use git for version control"
-msgstr ""
+msgstr "Sürüm kontrolü için git kullan"
 
 msgid "Use suggestion mode (do not commit on typing)"
 msgstr ""
@@ -29486,3 +29486,21 @@ msgstr ""
 
 msgid "ð"
 msgstr ""
+
+msgid "Creates an empty F# source file."
+msgstr "Boş bir F# kaynak dosyası oluşturur"
+
+msgid "Creates an empty F# script file."
+msgstr "Boş bir F# betik dosyası oluşturur"
+
+msgid "Creates an empty F# signature file.\n\nA signature file contains information about the public signatures of a set of F# program elements, such as types, namespaces, and modules.\n\nIt can be used to specify the accessibility of these program elements."
+msgstr "Boş bir F# imza dosyası oluşturur.\n\nBir imza dosyası, türler, ad alanları ve modüller gibi F# program öğeleri kümesinin genel imzaları hakkında bilgi içerir.\n\nBu program öğelerinin erişilebilirliğini belirtmek için kullanılabilir."
+
+msgid "F# Test Fixture"
+msgstr "F# test sabiti"
+
+msgid "Select a location for the new solution"
+msgstr "Yeni çözüm için bir konum seçin"
+
+msgid "A F# project for creating a command line application."
+msgstr "Komut satırı uygulaması oluşturmak için bir F# projesi"

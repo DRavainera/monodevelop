@@ -15054,7 +15054,7 @@ msgstr ""
 #: ../src/addins/MonoDevelop.DesignerSupport/MonoDevelop.DesignerSupport.Projects/WorkspaceItemDescriptor.cs:62
 #: ../src/addins/MonoDevelop.DesignerSupport/MonoDevelop.DesignerSupport.Projects/WorkspaceItemDescriptor.cs:75
 msgid "Misc"
-msgstr ""
+msgstr "Diversos"
 
 #: ../src/core/MonoDevelop.Ide/ExtensionModel/Templates.addin.xml:139
 msgid "Miscellaneous"
@@ -37211,10 +37211,10 @@ msgid "Add one line per file changed"
 msgstr ""
 
 msgid "Add to open solution"
-msgstr ""
+msgstr "Engadir á solución aberta"
 
 msgid "Add to project:"
-msgstr ""
+msgstr "Engadir ao proxecto:"
 
 msgid "Add…"
 msgstr ""
@@ -37301,10 +37301,10 @@ msgid "Count"
 msgstr ""
 
 msgid "Create a New Solution"
-msgstr ""
+msgstr "Crear unha solución nova"
 
 msgid "Create a directory for the solution"
-msgstr ""
+msgstr "Crear un directorio para a solución"
 
 msgid "Create backup copies of files before saving"
 msgstr ""
@@ -37634,7 +37634,7 @@ msgid "Smart semicolon placement"
 msgstr ""
 
 msgid "Solution name:"
-msgstr ""
+msgstr "Nome da solución:"
 
 msgid "Source URL"
 msgstr ""
@@ -37754,7 +37754,7 @@ msgid "Use bullets for each entry"
 msgstr ""
 
 msgid "Use git for version control"
-msgstr ""
+msgstr "Usar git para o control de versións"
 
 msgid "Use suggestion mode (do not commit on typing)"
 msgstr ""
@@ -37824,3 +37824,21 @@ msgstr ""
 
 msgid "ð"
 msgstr ""
+
+msgid "Creates an empty F# source file."
+msgstr "Crea un ficheiro de orixe F# baleiro"
+
+msgid "Creates an empty F# script file."
+msgstr "Crea un ficheiro de script F# baleiro"
+
+msgid "Creates an empty F# signature file.\n\nA signature file contains information about the public signatures of a set of F# program elements, such as types, namespaces, and modules.\n\nIt can be used to specify the accessibility of these program elements."
+msgstr "Crea un ficheiro de sinatura F# baleiro.\n\nUn ficheiro de sinatura contén información sobre as sinaturas públicas dun conxunto de elementos de programa F#, como tipos, espazos de nomes e módulos.\n\nPode usarse para especificar a accesibilidade destes elementos de programa."
+
+msgid "F# Test Fixture"
+msgstr "Fixture de proba F#"
+
+msgid "Select a location for the new solution"
+msgstr "Seleccione unha localización para a solución nova"
+
+msgid "A F# project for creating a command line application."
+msgstr "Un proxecto F# para crear unha aplicación de liña de comandos"

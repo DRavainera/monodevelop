@@ -28751,10 +28751,10 @@ msgid "Add one line per file changed"
 msgstr ""
 
 msgid "Add to open solution"
-msgstr ""
+msgstr "열린 솔루션에 추가"
 
 msgid "Add to project:"
-msgstr ""
+msgstr "프로젝트에 추가:"
 
 msgid "Add-in Manager"
 msgstr ""
@@ -28844,10 +28844,10 @@ msgid "Count"
 msgstr ""
 
 msgid "Create a New Solution"
-msgstr ""
+msgstr "새 솔루션 만들기"
 
 msgid "Create a directory for the solution"
-msgstr ""
+msgstr "솔루션용 디렉터리 만들기"
 
 msgid "Create backup copies of files before saving"
 msgstr ""
@@ -29075,7 +29075,7 @@ msgid "Move Up"
 msgstr ""
 
 msgid "New Solution"
-msgstr ""
+msgstr "새 솔루션"
 
 msgid "No tabs after non-tab characters"
 msgstr ""
@@ -29189,7 +29189,7 @@ msgid "Smart semicolon placement"
 msgstr ""
 
 msgid "Solution name:"
-msgstr ""
+msgstr "솔루션 이름:"
 
 msgid "Source URL"
 msgstr ""
@@ -29315,7 +29315,7 @@ msgid "Use bullets for each entry"
 msgstr ""
 
 msgid "Use git for version control"
-msgstr ""
+msgstr "버전 관리에 Git 사용"
 
 msgid "Use suggestion mode (do not commit on typing)"
 msgstr ""
@@ -29385,3 +29385,21 @@ msgstr ""
 
 msgid "ð"
 msgstr ""
+
+msgid "Creates an empty F# source file."
+msgstr "빈 F# 소스 파일을 만듭니다."
+
+msgid "Creates an empty F# script file."
+msgstr "빈 F# 스크립트 파일을 만듭니다."
+
+msgid "Creates an empty F# signature file.\n\nA signature file contains information about the public signatures of a set of F# program elements, such as types, namespaces, and modules.\n\nIt can be used to specify the accessibility of these program elements."
+msgstr "빈 F# 시그니처 파일을 만듭니다.\n\n시그니처 파일에는 형식, 네임스페이스, 모듈과 같은 F# 프로그램 요소의 공개 시그니처에 대한 정보가 포함됩니다.\n\n이러한 프로그램 요소의 접근성을 지정하는 데 사용할 수 있습니다."
+
+msgid "F# Test Fixture"
+msgstr "F# 테스트 픽스처"
+
+msgid "Select a location for the new solution"
+msgstr "새 솔루션의 위치 선택"
+
+msgid "A F# project for creating a command line application."
+msgstr "명령줄 애플리케이션을 만들기 위한 F# 프로젝트"

@@ -28939,10 +28939,10 @@ msgid "Add one line per file changed"
 msgstr ""
 
 msgid "Add to open solution"
-msgstr ""
+msgstr "開いているソリューションに追加"
 
 msgid "Add to project:"
-msgstr ""
+msgstr "プロジェクトに追加:"
 
 msgid "Add-in Manager"
 msgstr ""
@@ -29032,10 +29032,10 @@ msgid "Count"
 msgstr ""
 
 msgid "Create a New Solution"
-msgstr ""
+msgstr "新しいソリューションを作成"
 
 msgid "Create a directory for the solution"
-msgstr ""
+msgstr "ソリューション用のディレクトリを作成"
 
 msgid "Create backup copies of files before saving"
 msgstr ""
@@ -29263,7 +29263,7 @@ msgid "Move Up"
 msgstr ""
 
 msgid "New Solution"
-msgstr ""
+msgstr "新しいソリューション"
 
 msgid "No tabs after non-tab characters"
 msgstr ""
@@ -29377,7 +29377,7 @@ msgid "Smart semicolon placement"
 msgstr ""
 
 msgid "Solution name:"
-msgstr ""
+msgstr "ソリューション名:"
 
 msgid "Source URL"
 msgstr ""
@@ -29503,7 +29503,7 @@ msgid "Use bullets for each entry"
 msgstr ""
 
 msgid "Use git for version control"
-msgstr ""
+msgstr "バージョン管理に Git を使用する"
 
 msgid "Use suggestion mode (do not commit on typing)"
 msgstr ""
@@ -29573,3 +29573,21 @@ msgstr ""
 
 msgid "ð"
 msgstr ""
+
+msgid "Creates an empty F# source file."
+msgstr "空の F# ソース ファイルを作成します。"
+
+msgid "Creates an empty F# script file."
+msgstr "空の F# スクリプト ファイルを作成します。"
+
+msgid "Creates an empty F# signature file.\n\nA signature file contains information about the public signatures of a set of F# program elements, such as types, namespaces, and modules.\n\nIt can be used to specify the accessibility of these program elements."
+msgstr "空の F# シグネチャ ファイルを作成します。\n\nシグネチャ ファイルには、型、名前空間、モジュールなどの F# プログラム要素の公開シグネチャに関する情報が含まれています。\n\nこれらのプログラム要素のアクセシビリティを指定するために使用できます。"
+
+msgid "F# Test Fixture"
+msgstr "F# テスト フィクスチャ"
+
+msgid "Select a location for the new solution"
+msgstr "新しいソリューションの場所を選択"
+
+msgid "A F# project for creating a command line application."
+msgstr "コマンド ライン アプリケーションを作成するための F# プロジェクト"

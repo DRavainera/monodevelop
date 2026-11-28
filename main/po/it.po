@@ -29377,10 +29377,10 @@ msgid "Add one line per file changed"
 msgstr ""
 
 msgid "Add to open solution"
-msgstr ""
+msgstr "Aggiungi alla soluzione aperta"
 
 msgid "Add to project:"
-msgstr ""
+msgstr "Aggiungi al progetto:"
 
 msgid "Add-in Manager"
 msgstr ""
@@ -29470,10 +29470,10 @@ msgid "Count"
 msgstr ""
 
 msgid "Create a New Solution"
-msgstr ""
+msgstr "Crea una nuova soluzione"
 
 msgid "Create a directory for the solution"
-msgstr ""
+msgstr "Crea una directory per la soluzione"
 
 msgid "Create backup copies of files before saving"
 msgstr ""
@@ -29701,7 +29701,7 @@ msgid "Move Up"
 msgstr ""
 
 msgid "New Solution"
-msgstr ""
+msgstr "Nuova soluzione"
 
 msgid "No tabs after non-tab characters"
 msgstr ""
@@ -29815,7 +29815,7 @@ msgid "Smart semicolon placement"
 msgstr ""
 
 msgid "Solution name:"
-msgstr ""
+msgstr "Nome della soluzione:"
 
 msgid "Source URL"
 msgstr ""
@@ -29941,7 +29941,7 @@ msgid "Use bullets for each entry"
 msgstr ""
 
 msgid "Use git for version control"
-msgstr ""
+msgstr "Usa git per il controllo delle versioni"
 
 msgid "Use suggestion mode (do not commit on typing)"
 msgstr ""
@@ -30011,3 +30011,21 @@ msgstr ""
 
 msgid "ð"
 msgstr ""
+
+msgid "Creates an empty F# source file."
+msgstr "Crea un file sorgente F# vuoto"
+
+msgid "Creates an empty F# script file."
+msgstr "Crea un file script F# vuoto"
+
+msgid "Creates an empty F# signature file.\n\nA signature file contains information about the public signatures of a set of F# program elements, such as types, namespaces, and modules.\n\nIt can be used to specify the accessibility of these program elements."
+msgstr "Crea un file di firma F# vuoto.\n\nUn file di firma contiene informazioni sulle firme pubbliche di un insieme di elementi di programma F#, come tipi, spazi dei nomi e moduli.\n\nPuò essere usato per specificare l'accessibilità di questi elementi di programma."
+
+msgid "F# Test Fixture"
+msgstr "Fixture di test F#"
+
+msgid "Select a location for the new solution"
+msgstr "Seleziona un percorso per la nuova soluzione"
+
+msgid "A F# project for creating a command line application."
+msgstr "Un progetto F# per creare un'applicazione da riga di comando"

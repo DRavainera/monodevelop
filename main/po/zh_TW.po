@@ -28205,10 +28205,10 @@ msgid "Add one line per file changed"
 msgstr ""
 
 msgid "Add to open solution"
-msgstr ""
+msgstr "加入已開啟的方案"
 
 msgid "Add to project:"
-msgstr ""
+msgstr "加入專案:"
 
 msgid "Add-in Manager"
 msgstr ""
@@ -28298,10 +28298,10 @@ msgid "Count"
 msgstr ""
 
 msgid "Create a New Solution"
-msgstr ""
+msgstr "建立新方案"
 
 msgid "Create a directory for the solution"
-msgstr ""
+msgstr "為方案建立目錄"
 
 msgid "Create backup copies of files before saving"
 msgstr ""
@@ -28529,7 +28529,7 @@ msgid "Move Up"
 msgstr ""
 
 msgid "New Solution"
-msgstr ""
+msgstr "新增方案"
 
 msgid "No tabs after non-tab characters"
 msgstr ""
@@ -28643,7 +28643,7 @@ msgid "Smart semicolon placement"
 msgstr ""
 
 msgid "Solution name:"
-msgstr ""
+msgstr "方案名稱:"
 
 msgid "Source URL"
 msgstr ""
@@ -28769,7 +28769,7 @@ msgid "Use bullets for each entry"
 msgstr ""
 
 msgid "Use git for version control"
-msgstr ""
+msgstr "使用 git 進行版本控制"
 
 msgid "Use suggestion mode (do not commit on typing)"
 msgstr ""
@@ -28839,3 +28839,21 @@ msgstr ""
 
 msgid "ð"
 msgstr ""
+
+msgid "Creates an empty F# source file."
+msgstr "建立空的 F# 原始檔"
+
+msgid "Creates an empty F# script file."
+msgstr "建立空的 F# 指令檔"
+
+msgid "Creates an empty F# signature file.\n\nA signature file contains information about the public signatures of a set of F# program elements, such as types, namespaces, and modules.\n\nIt can be used to specify the accessibility of these program elements."
+msgstr "建立空的 F# 簽章檔。\n\n簽章檔包含一組 F# 程式元素 (例如類型、命名空間和模組) 的公開簽章資訊。\n\n它可用於指定這些程式元素的存取範圍。"
+
+msgid "F# Test Fixture"
+msgstr "F# 測試夾具"
+
+msgid "Select a location for the new solution"
+msgstr "選取新方案的位置"
+
+msgid "A F# project for creating a command line application."
+msgstr "用來建立命令列應用程式的 F# 專案"

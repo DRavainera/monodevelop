@@ -15198,7 +15198,7 @@ msgstr ""
 #: ../src/addins/MonoDevelop.DesignerSupport/MonoDevelop.DesignerSupport.Projects/WorkspaceItemDescriptor.cs:62
 #: ../src/addins/MonoDevelop.DesignerSupport/MonoDevelop.DesignerSupport.Projects/WorkspaceItemDescriptor.cs:75
 msgid "Misc"
-msgstr ""
+msgstr "Diverse"
 
 #: ../src/core/MonoDevelop.Ide/ExtensionModel/Templates.addin.xml:139
 msgid "Miscellaneous"
@@ -37350,10 +37350,10 @@ msgid "Add one line per file changed"
 msgstr ""
 
 msgid "Add to open solution"
-msgstr ""
+msgstr "Føj til åben løsning"
 
 msgid "Add to project:"
-msgstr ""
+msgstr "Føj til projekt:"
 
 msgid "Add…"
 msgstr ""
@@ -37440,10 +37440,10 @@ msgid "Count"
 msgstr ""
 
 msgid "Create a New Solution"
-msgstr ""
+msgstr "Opret en ny løsning"
 
 msgid "Create a directory for the solution"
-msgstr ""
+msgstr "Opret en mappe til løsningen"
 
 msgid "Create backup copies of files before saving"
 msgstr ""
@@ -37773,7 +37773,7 @@ msgid "Smart semicolon placement"
 msgstr ""
 
 msgid "Solution name:"
-msgstr ""
+msgstr "Løsningens navn:"
 
 msgid "Source URL"
 msgstr ""
@@ -37893,7 +37893,7 @@ msgid "Use bullets for each entry"
 msgstr ""
 
 msgid "Use git for version control"
-msgstr ""
+msgstr "Brug git til versionskontrol"
 
 msgid "Use suggestion mode (do not commit on typing)"
 msgstr ""
@@ -37963,3 +37963,21 @@ msgstr ""
 
 msgid "ð"
 msgstr ""
+
+msgid "Creates an empty F# source file."
+msgstr "Opretter en tom F#-kildefil"
+
+msgid "Creates an empty F# script file."
+msgstr "Opretter en tom F#-skriptdatei"
+
+msgid "Creates an empty F# signature file.\n\nA signature file contains information about the public signatures of a set of F# program elements, such as types, namespaces, and modules.\n\nIt can be used to specify the accessibility of these program elements."
+msgstr "Opretter en tom F#-signaturfil.\n\nEn signaturfil indeholder oplysninger om de offentlige signaturer for et sæt F#-programelementer, såsom typer, navneområder og moduler.\n\nDen kan bruges til at angive tilgængeligheden af disse programelementer."
+
+msgid "F# Test Fixture"
+msgstr "F#-testfixture"
+
+msgid "Select a location for the new solution"
+msgstr "Vælg en placering til den nye løsning"
+
+msgid "A F# project for creating a command line application."
+msgstr "Et F#-projekt til oprettelse af en kommandolinjeapplikation"

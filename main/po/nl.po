@@ -37549,10 +37549,10 @@ msgid "Add one line per file changed"
 msgstr ""
 
 msgid "Add to open solution"
-msgstr ""
+msgstr "Toevoegen aan geopende oplossing"
 
 msgid "Add to project:"
-msgstr ""
+msgstr "Toevoegen aan project:"
 
 msgid "Add…"
 msgstr ""
@@ -37639,10 +37639,10 @@ msgid "Count"
 msgstr ""
 
 msgid "Create a New Solution"
-msgstr ""
+msgstr "Een nieuwe oplossing maken"
 
 msgid "Create a directory for the solution"
-msgstr ""
+msgstr "Map voor de oplossing maken"
 
 msgid "Create backup copies of files before saving"
 msgstr ""
@@ -37972,7 +37972,7 @@ msgid "Smart semicolon placement"
 msgstr ""
 
 msgid "Solution name:"
-msgstr ""
+msgstr "Naam van de oplossing:"
 
 msgid "Source URL"
 msgstr ""
@@ -38092,7 +38092,7 @@ msgid "Use bullets for each entry"
 msgstr ""
 
 msgid "Use git for version control"
-msgstr ""
+msgstr "Git gebruiken voor versiebeheer"
 
 msgid "Use suggestion mode (do not commit on typing)"
 msgstr ""
@@ -38162,3 +38162,21 @@ msgstr ""
 
 msgid "ð"
 msgstr ""
+
+msgid "Creates an empty F# source file."
+msgstr "Maakt een leeg F#-bronbestand aan"
+
+msgid "Creates an empty F# script file."
+msgstr "Maakt een leeg F#-scriptbestand aan"
+
+msgid "Creates an empty F# signature file.\n\nA signature file contains information about the public signatures of a set of F# program elements, such as types, namespaces, and modules.\n\nIt can be used to specify the accessibility of these program elements."
+msgstr "Maakt een leeg F#-handtekeningbestand aan.\n\nEen handtekeningbestand bevat informatie over de openbare handtekeningen van een reeks F#-programelementen, zoals typen, naamruimten en modules.\n\nHet kan worden gebruikt om de toegankelijkheid van deze programelementen op te geven."
+
+msgid "F# Test Fixture"
+msgstr "F#-testfixture"
+
+msgid "Select a location for the new solution"
+msgstr "Selecteer een locatie voor de nieuwe oplossing"
+
+msgid "A F# project for creating a command line application."
+msgstr "Een F#-project voor het maken van een opdrachtregeltoepassing"

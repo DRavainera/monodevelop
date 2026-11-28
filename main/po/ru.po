@@ -28981,10 +28981,10 @@ msgid "Add one line per file changed"
 msgstr ""
 
 msgid "Add to open solution"
-msgstr ""
+msgstr "Добавить в открытое решение"
 
 msgid "Add to project:"
-msgstr ""
+msgstr "Добавить в проект:"
 
 msgid "Add-in Manager"
 msgstr ""
@@ -29074,10 +29074,10 @@ msgid "Count"
 msgstr ""
 
 msgid "Create a New Solution"
-msgstr ""
+msgstr "Создать новое решение"
 
 msgid "Create a directory for the solution"
-msgstr ""
+msgstr "Создать каталог для решения"
 
 msgid "Create backup copies of files before saving"
 msgstr ""
@@ -29305,7 +29305,7 @@ msgid "Move Up"
 msgstr ""
 
 msgid "New Solution"
-msgstr ""
+msgstr "Новое решение"
 
 msgid "No tabs after non-tab characters"
 msgstr ""
@@ -29419,7 +29419,7 @@ msgid "Smart semicolon placement"
 msgstr ""
 
 msgid "Solution name:"
-msgstr ""
+msgstr "Имя решения:"
 
 msgid "Source URL"
 msgstr ""
@@ -29545,7 +29545,7 @@ msgid "Use bullets for each entry"
 msgstr ""
 
 msgid "Use git for version control"
-msgstr ""
+msgstr "Использовать git для контроля версий"
 
 msgid "Use suggestion mode (do not commit on typing)"
 msgstr ""
@@ -29615,3 +29615,21 @@ msgstr ""
 
 msgid "ð"
 msgstr ""
+
+msgid "Creates an empty F# source file."
+msgstr "Создает пустой исходный файл F#"
+
+msgid "Creates an empty F# script file."
+msgstr "Создает пустой файл скрипта F#"
+
+msgid "Creates an empty F# signature file.\n\nA signature file contains information about the public signatures of a set of F# program elements, such as types, namespaces, and modules.\n\nIt can be used to specify the accessibility of these program elements."
+msgstr "Создает пустой файл сигнатур F#.\n\nФайл сигнатур содержит информацию об открытых сигнатурах набора элементов программы F#, таких как типы, пространства имен и модули.\n\nОн может использоваться для указания доступности этих элементов программы."
+
+msgid "F# Test Fixture"
+msgstr "Тестовый фикстур F#"
+
+msgid "Select a location for the new solution"
+msgstr "Выберите расположение для нового решения"
+
+msgid "A F# project for creating a command line application."
+msgstr "Проект F# для создания консольного приложения"

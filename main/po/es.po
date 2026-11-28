@@ -29833,3 +29833,21 @@ msgstr ""
 
 msgid "ð"
 msgstr ""
+
+msgid "Creates an empty F# source file."
+msgstr "Crea un archivo de origen de F# vacío"
+
+msgid "Creates an empty F# script file."
+msgstr "Crea un archivo de script de F# vacío"
+
+msgid "Creates an empty F# signature file.\n\nA signature file contains information about the public signatures of a set of F# program elements, such as types, namespaces, and modules.\n\nIt can be used to specify the accessibility of these program elements."
+msgstr "Crea un archivo de signatura de F# vacío.\n\nUn archivo de signatura contiene información sobre las firmas públicas de un conjunto de elementos de programa de F#, como tipos, espacios de nombres y módulos.\n\nSe puede usar para especificar la accesibilidad de estos elementos de programa."
+
+msgid "F# Test Fixture"
+msgstr "Accesorio de prueba de F#"
+
+msgid "Select a location for the new solution"
+msgstr "Selecciona una ubicación para la solución nueva"
+
+msgid "A F# project for creating a command line application."
+msgstr "Un proyecto de F# para crear una aplicación de línea de comandos"

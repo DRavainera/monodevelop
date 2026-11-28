@@ -15110,7 +15110,7 @@ msgstr ""
 #: ../src/addins/MonoDevelop.DesignerSupport/MonoDevelop.DesignerSupport.Projects/WorkspaceItemDescriptor.cs:62
 #: ../src/addins/MonoDevelop.DesignerSupport/MonoDevelop.DesignerSupport.Projects/WorkspaceItemDescriptor.cs:75
 msgid "Misc"
-msgstr ""
+msgstr "Lain-lain"
 
 #: ../src/core/MonoDevelop.Ide/ExtensionModel/Templates.addin.xml:139
 #, fuzzy
@@ -37844,10 +37844,10 @@ msgid "Add one line per file changed"
 msgstr ""
 
 msgid "Add to open solution"
-msgstr ""
+msgstr "Tambahkan ke solusi yang terbuka"
 
 msgid "Add to project:"
-msgstr ""
+msgstr "Tambahkan ke proyek:"
 
 msgid "Add…"
 msgstr ""
@@ -37934,10 +37934,10 @@ msgid "Count"
 msgstr ""
 
 msgid "Create a New Solution"
-msgstr ""
+msgstr "Buat solusi baru"
 
 msgid "Create a directory for the solution"
-msgstr ""
+msgstr "Buat direktori untuk solusi"
 
 msgid "Create backup copies of files before saving"
 msgstr ""
@@ -38267,7 +38267,7 @@ msgid "Smart semicolon placement"
 msgstr ""
 
 msgid "Solution name:"
-msgstr ""
+msgstr "Nama solusi:"
 
 msgid "Source URL"
 msgstr ""
@@ -38387,7 +38387,7 @@ msgid "Use bullets for each entry"
 msgstr ""
 
 msgid "Use git for version control"
-msgstr ""
+msgstr "Gunakan git untuk kontrol versi"
 
 msgid "Use suggestion mode (do not commit on typing)"
 msgstr ""
@@ -38457,3 +38457,21 @@ msgstr ""
 
 msgid "ð"
 msgstr ""
+
+msgid "Creates an empty F# source file."
+msgstr "Membuat file sumber F# kosong"
+
+msgid "Creates an empty F# script file."
+msgstr "Membuat file skrip F# kosong"
+
+msgid "Creates an empty F# signature file.\n\nA signature file contains information about the public signatures of a set of F# program elements, such as types, namespaces, and modules.\n\nIt can be used to specify the accessibility of these program elements."
+msgstr "Membuat file tanda tangan F# kosong.\n\nFile tanda tangan berisi informasi tentang tanda tangan publik dari sekumpulan elemen program F#, seperti tipe, namespace, dan modul.\n\nFile ini dapat digunakan untuk menentukan aksesibilitas elemen-elemen program tersebut."
+
+msgid "F# Test Fixture"
+msgstr "Fixture pengujian F#"
+
+msgid "Select a location for the new solution"
+msgstr "Pilih lokasi untuk solusi baru"
+
+msgid "A F# project for creating a command line application."
+msgstr "Proyek F# untuk membuat aplikasi baris perintah"

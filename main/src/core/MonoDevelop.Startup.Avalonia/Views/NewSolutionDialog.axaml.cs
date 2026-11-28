@@ -461,7 +461,24 @@ public partial class NewSolutionDialog : Window
 		}
 		Walk (TemplateList, texts);
 		MainWindow.Instance?.Output ($"[newsolution-qa-lang] category={categoryName} title='{TemplateTitle.Text}' desc='{TemplateDescription.Text}' items=[{string.Join ("|", texts)}]");
+		DumpAllUiText ("newsolution-qa-ui");
 		Close ();
+	}
+
+	internal void DumpAllUiText (string tag)
+	{
+		var texts = new List<string> ();
+		void Walk (Avalonia.Visual v)
+		{
+			if (v is TextBlock { Text.Length: > 0 } tb)
+				texts.Add (tb.Text);
+			if (v is Avalonia.Controls.ContentControl { Content: string s } && s.Length > 0)
+				texts.Add (s);
+			foreach (var c in Avalonia.VisualTree.VisualExtensions.GetVisualChildren (v))
+				Walk (c);
+		}
+		Walk (this);
+		MainWindow.Instance?.Output ($"[{tag}] title='{Title}' all=[{string.Join ("|", texts)}]");
 	}
 
 	// "F# Tutorial" scaffold: the legacy template (FSharpTutorialProject.xpt)

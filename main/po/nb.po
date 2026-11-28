@@ -10818,7 +10818,7 @@ msgstr "Samler informasjon om klassen.."
 #: ../src/addins/MonoDevelop.DotNetCore/Properties/MonoDevelop.DotNetCore.addin.xml:16
 #: ../src/addins/MonoDevelop.DotNetCore/Properties/MonoDevelop.DotNetCore.addin.xml:19
 msgid "General"
-msgstr ""
+msgstr "Generelt"
 
 #: ../src/addins/VBNetBinding/VBNetBinding.addin.xml:33
 #: ../src/addins/AspNet/Execution/XspOptionsPanelWidget.cs:100
@@ -13913,7 +13913,7 @@ msgstr ""
 #: ../src/addins/MonoDevelop.DesignerSupport/MonoDevelop.DesignerSupport.Projects/WorkspaceItemDescriptor.cs:62
 #: ../src/addins/MonoDevelop.DesignerSupport/MonoDevelop.DesignerSupport.Projects/WorkspaceItemDescriptor.cs:75
 msgid "Misc"
-msgstr ""
+msgstr "Diverse"
 
 #: ../src/core/MonoDevelop.Ide/ExtensionModel/Templates.addin.xml:139
 msgid "Miscellaneous"
@@ -29568,10 +29568,10 @@ msgid "Add one line per file changed"
 msgstr ""
 
 msgid "Add to open solution"
-msgstr ""
+msgstr "Legg til i åpen løsning"
 
 msgid "Add to project:"
-msgstr ""
+msgstr "Legg til i prosjekt:"
 
 msgid "Add-in Manager"
 msgstr ""
@@ -29661,10 +29661,10 @@ msgid "Count"
 msgstr ""
 
 msgid "Create a New Solution"
-msgstr ""
+msgstr "Opprett en ny løsning"
 
 msgid "Create a directory for the solution"
-msgstr ""
+msgstr "Opprett en mappe for løsningen"
 
 msgid "Create backup copies of files before saving"
 msgstr ""
@@ -29889,7 +29889,7 @@ msgid "Move Up"
 msgstr ""
 
 msgid "New Solution"
-msgstr ""
+msgstr "Ny løsning"
 
 msgid "No tabs after non-tab characters"
 msgstr ""
@@ -30003,7 +30003,7 @@ msgid "Smart semicolon placement"
 msgstr ""
 
 msgid "Solution name:"
-msgstr ""
+msgstr "Navn på løsningen:"
 
 msgid "Source URL"
 msgstr ""
@@ -30129,7 +30129,7 @@ msgid "Use bullets for each entry"
 msgstr ""
 
 msgid "Use git for version control"
-msgstr ""
+msgstr "Bruk git til versjonskontroll"
 
 msgid "Use suggestion mode (do not commit on typing)"
 msgstr ""
@@ -30199,3 +30199,21 @@ msgstr ""
 
 msgid "ð"
 msgstr ""
+
+msgid "Creates an empty F# source file."
+msgstr "Oppretter en tom F#-kildefil"
+
+msgid "Creates an empty F# script file."
+msgstr "Oppretter en tom F#-skriptdatei"
+
+msgid "Creates an empty F# signature file.\n\nA signature file contains information about the public signatures of a set of F# program elements, such as types, namespaces, and modules.\n\nIt can be used to specify the accessibility of these program elements."
+msgstr "Oppretter en tom F#-signaturfil.\n\nEn signaturfil inneholder informasjon om de offentlige signaturene til et sett med F#-programelementer, som typer, navneområder og moduler.\n\nDen kan brukes til å angi tilgjengeligheten til disse programelementene."
+
+msgid "F# Test Fixture"
+msgstr "F#-testfixture"
+
+msgid "Select a location for the new solution"
+msgstr "Velg et sted for den nye løsningen"
+
+msgid "A F# project for creating a command line application."
+msgstr "Et F#-prosjekt for å lage en kommandolinjeapplikasjon"
